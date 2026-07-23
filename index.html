@@ -117,6 +117,9 @@
   }
   .tb-btn:hover{ background:rgba(255,255,255,0.16); }
   .tb-btn.is-on{ background:var(--gold); border-color:var(--gold); color:var(--navy-deep); }
+  /* 웹서치 버튼 전용 — 이 버튼은 기본이 "켜짐"이라 평소엔 다른 버튼과 똑같이 무채색으로 두고,
+     사용자가 눌러서 껐을 때만 회색으로 흐리게 표시해 "지금 꺼져있다"는 걸 알려준다. */
+  .tb-btn.is-off{ background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.15); color:rgba(232,232,236,0.4); }
   .tb-btn .sep{ color:rgba(255,255,255,0.4); }
 
   /* ===== 상단바 그루핑 팝업 (report-writer의 popupMenu와 같은 방식) ===== */
@@ -691,7 +694,7 @@
          작업폴더(customerSelect) 바로 오른쪽에 위치, 항상 상단바에 남아있고 하단으로 안 내려감. -->
     <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span></button>
     <button type="button" id="btnModeAutoRef" class="tb-btn" title="자동참조: AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인">🔗 <span class="tool-menu-label">자동참조</span></button>
-    <button type="button" id="btnModeWebSearch" class="tb-btn" title="웹서치: AI가 필요하면 인터넷에서 검색">🌐 <span class="tool-menu-label">웹서치</span></button>
+    <button type="button" id="btnModeWebSearch" class="tb-btn" title="웹서치: 기본으로 항상 켜져 있습니다(다른 버튼과 같은 색 = 켜짐). 누르면 회색으로 바뀌며 꺼집니다.">🌐 <span class="tool-menu-label">웹서치</span></button>
     <button type="button" id="btnModeWebFetch" class="tb-btn" title="웹페이지 가져오기: URL이 있으면 자동으로 켜집니다. 이 버튼은 항상 켜두고 싶을 때만 수동으로 누르세요.">📥 <span class="tool-menu-label">가져오기</span></button>
     <button type="button" id="btnExternalSites" class="tb-btn" title="NETAX Desk(desk.netax.kr)를 새 탭으로 엽니다 — 홈택스·국토부 등 자주 쓰는 외부 사이트 모음">🔗 <span class="tool-menu-label">Desk</span></button>
     <div class="layout-buttons-wide">
@@ -2926,7 +2929,8 @@ graph TD
     effort: 'medium',
     temperature: null,          // null이면 요청에 아예 안 실어서 모델 기본값 사용
     maxTokens: null,            // null이면 강도(effort)별 기본 상한 사용
-    enableWebSearch: false,
+    enableWebSearch: true,  // 서버가 명시적으로 false를 안 보내면 항상 웹검색을 켜므로, 화면 기본 표시도 "켜짐"에 맞춘다.
+                             // 이 버튼은 이제 "켜는 버튼"이 아니라 "끄는 버튼"이다 — 기본은 항상 노랗게(켜짐), 눌러야 회색(꺼짐)이 된다.
     enableWebFetch: false,
     enableCodeExecution: false,
     enableAdvisor: false,
@@ -2937,7 +2941,19 @@ graph TD
   function loadAiSettings(){
     try{
       const raw = localStorage.getItem(AI_SETTINGS_KEY);
-      if (raw) return Object.assign({}, DEFAULT_AI_SETTINGS, JSON.parse(raw));
+      if (raw){
+        const parsed = JSON.parse(raw);
+        // 웹서치 기본값이 false→true로 바뀌면서, 예전에 저장해둔 enableWebSearch:false가
+        // 새 기본값(true)을 덮어써 버리면 오히려 "항상 꺼짐"으로 굳어버린다. 이걸 막기 위해
+        // 딱 한 번, 예전 설정을 새 기본값으로 밀어준다(사용자가 이후에 버튼을 직접 눌러 끄면
+        // 그 뒤로는 정상적으로 그 선택이 유지된다).
+        const MIGRATION_FLAG = 'nx_websearch_default_migrated_v1';
+        if (!localStorage.getItem(MIGRATION_FLAG)){
+          delete parsed.enableWebSearch; // 있던 값 버리고 DEFAULT_AI_SETTINGS의 새 기본값(true)을 따르게 함
+          localStorage.setItem(MIGRATION_FLAG, '1');
+        }
+        return Object.assign({}, DEFAULT_AI_SETTINGS, parsed);
+      }
     }catch(err){ console.warn('AI 설정 로드 실패, 기본값 사용', err); }
     return Object.assign({}, DEFAULT_AI_SETTINGS);
   }
@@ -3024,7 +3040,9 @@ graph TD
   const btnModeWebFetch = document.getElementById('btnModeWebFetch');
   function refreshModeButtonStates(){
     btnModeAutoRef.classList.toggle('is-on', autoRefMode);
-    btnModeWebSearch.classList.toggle('is-on', !!aiSettings.enableWebSearch);
+    // 웹서치는 기본이 "켜짐"이라 다른 버튼과 반대로 표시한다: 켜져 있을 땐 특별한 색 없이
+    // 다른 버튼들과 똑같이 두고, 꺼졌을 때만 회색으로 흐리게 표시한다.
+    btnModeWebSearch.classList.toggle('is-off', aiSettings.enableWebSearch === false);
     btnModeWebFetch.classList.toggle('is-on', !!aiSettings.enableWebFetch);
   }
   btnModeAutoRef.addEventListener('click', ()=>{
@@ -3078,7 +3096,10 @@ graph TD
     const payload = { model: aiSettings.model, effort: aiSettings.effort };
     if (aiSettings.temperature !== null && aiSettings.temperature !== undefined) payload.temperature = aiSettings.temperature;
     if (aiSettings.maxTokens !== null && aiSettings.maxTokens !== undefined) payload.maxTokens = aiSettings.maxTokens;
-    if (aiSettings.enableWebSearch) payload.enableWebSearch = true;
+    // 웹서치는 이제 서버 기본값이 "항상 켜짐"이라, 켜진 상태(true)는 굳이 안 보내도 되지만
+    // 꺼진 상태(false)는 반드시 명시적으로 보내야 서버가 진짜로 꺼준다(값을 아예 안 보내면
+    // 서버는 "명시적으로 끄지 않았다"고 판단해서 계속 켠 채로 처리하기 때문).
+    if (aiSettings.enableWebSearch === false) payload.enableWebSearch = false;
     if (aiSettings.enableWebFetch || forceWebFetch) payload.enableWebFetch = true;
     if (aiSettings.enableCodeExecution) payload.enableCodeExecution = true;
     if (aiSettings.enableAdvisor){
