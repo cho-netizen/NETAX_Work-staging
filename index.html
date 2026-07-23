@@ -914,6 +914,8 @@
       <div class="modal-head" id="fullEditorHead">
         <span id="fullEditorTitle">전체화면 편집</span>
         <div class="spacer"></div>
+        <span class="win-btn" id="btnReloadFullEditor" title="탐색기 등 다른 곳에서 이 파일이 바뀌었으면 눌러서 최신 내용으로 다시 엽니다">🔄</span>
+        <span class="win-btn" id="btnRefFullEditor" title="지금 이 문서 내용을 채팅 참조로 가져오기">📎</span>
         <span class="win-btn" id="btnMaximizeFullEditor" title="최대화/복원">⬜</span>
         <span class="modal-close" id="btnCloseFullEditor" title="닫기">✕</span>
       </div>
@@ -2476,20 +2478,36 @@ graph TD
   });
 
   // 지금 편집기(report-writer)에 실제로 타이핑되어 있는(저장 전 포함) 내용을 물어봄
+  // 좁은 편집창(editorFrame)과 전체화면 편집창(fullEditorFrame) 중 "지금 실제로 화면에 보이는 쪽"을
+  // 골라주는 공통 헬퍼. 이걸 통해서 참조/새로고침 등을 구현하면, 앞으로는 어느 화면 크기에서
+  // 기능을 써도 항상 똑같이 동작한다(예전처럼 화면마다 따로 처리해서 하나씩 빠뜨리는 문제 방지).
+  function isFullEditorVisible(){
+    return !!(fullEditorOverlay && fullEditorOverlay.style.display !== 'none');
+  }
+  function getActiveEditorFrame(){
+    return isFullEditorVisible() ? fullEditorFrame : editorFrame;
+  }
+
   function getEditorLiveContent(){
     return new Promise((resolve)=>{
-      if (!isReportWriterOpen || !editorFrame.contentWindow){ resolve(null); return; }
+      const frame = getActiveEditorFrame();
+      const full = isFullEditorVisible();
+      // 전체화면은 항상 report-writer만 띄우므로 report-writer 열림 여부를 따로 확인할 필요 없음.
+      // 좁은 편집창일 때만 isReportWriterOpen(이미지·PDF 미리보기가 아닌지) 확인이 필요하다.
+      if ((!full && !isReportWriterOpen) || !frame || !frame.contentWindow){ resolve(null); return; }
       const requestId = 'req' + (++msgReqCounter);
       const timer = setTimeout(()=>{ delete pendingContentRequests[requestId]; resolve(null); }, 1500);
       pendingContentRequests[requestId] = (content)=>{ clearTimeout(timer); resolve(content); };
-      editorFrame.contentWindow.postMessage({ type: 'nx-get-content', requestId }, '*');
+      frame.contentWindow.postMessage({ type: 'nx-get-content', requestId }, '*');
     });
   }
 
   // AI가 제안한 새 문서 내용을 편집기에 실제로 적용
   function applyEditorContent(newContent){
-    if (!isReportWriterOpen || !editorFrame.contentWindow) return;
-    editorFrame.contentWindow.postMessage({ type: 'nx-set-content', content: newContent }, '*');
+    const frame = getActiveEditorFrame();
+    const full = isFullEditorVisible();
+    if ((!full && !isReportWriterOpen) || !frame || !frame.contentWindow) return;
+    frame.contentWindow.postMessage({ type: 'nx-set-content', content: newContent }, '*');
   }
 
   // report-writer가 아니라 구글드라이브 자체 미리보기(이미지·PDF)로 열려 있는 파일은
@@ -4259,6 +4277,26 @@ graph TD
   }
   document.getElementById('btnOpenFullEditor').addEventListener('click', openFullEditor);
   document.getElementById('btnCloseFullEditor').addEventListener('click', (e)=>{ e.stopPropagation(); closeFullEditor(); });
+
+  document.getElementById('btnReloadFullEditor').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
+    if (!confirm('탐색기 등 다른 곳에서 바뀐 최신 내용으로 다시 엽니다.\n지금 편집창에 저장하지 않은 내용이 있다면 사라집니다. 계속할까요?')) return;
+    if (fullEditorFrame.contentWindow){
+      fullEditorFrame.contentWindow.postMessage({ type: 'nx-reload-file' }, '*');
+      showToast('최신 내용으로 새로고침했습니다.', 'success');
+    }
+  });
+
+  document.getElementById('btnRefFullEditor').addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
+    // 전체화면 편집은 항상 report-writer(텍스트 렌더러)만 띄우므로, 좁은 편집창의 이미지/PDF
+    // 참조 분기(getOpenFileMediaBlock)는 여기선 해당 사항이 없다 — 텍스트 내용만 가져오면 된다.
+    const content = await getEditorLiveContent();
+    if (content === null){ showToast('편집기 내용을 가져오지 못했습니다. 잠시 후 다시 시도해주세요.', 'error'); return; }
+    addTextAttachment(currentOpenFile.name, content);
+  });
 
   // 최대화 ↔ 복원 토글
   btnMaximizeFullEditor.addEventListener('click', (e)=>{
