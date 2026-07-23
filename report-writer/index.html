@@ -957,6 +957,7 @@
 <div id="appRoot">
 
 <div id="toolbar">
+  <button id="btnRefToParent" class="iconbtn" title="지금 이 문서 내용을 채팅 참조로 가져오기 (NX 작업실 안에서 열었을 때만 보임)" style="display:none;">📎</button>
   <div id="docStepper" style="position:relative; display:flex; border:1px solid #4a5268; border-radius:4px; overflow:visible;">
     <button id="btnDocMinus" class="stepper-btn" title="현재 문서 삭제">−</button>
     <span style="width:1px; background:#4a5268;"></span>
@@ -969,6 +970,7 @@
   </div>
   <select id="docSelect"></select>
   <input type="file" id="fileInput" accept=".md,.txt,.html,.htm" multiple style="display:none;">
+  <button id="btnReloadFromDrive" class="iconbtn" title="드라이브에 저장된 최신 내용으로 다시 불러오기 (fileId로 연 문서일 때만 동작)">🔄</button>
   <span class="sep"></span>
   <select id="themeSelect">
     <option value="appeal">청구서</option>
@@ -977,11 +979,7 @@
     <option value="translation">번역본</option>
   </select>
   <button id="btnRender" class="primary iconbtn" title="렌더링 (편집한 내용을 미리보기에 반영)">⟳</button>
-  <div id="layoutToggle" style="display:flex;">
-    <button id="layoutEditor" class="layout-btn" title="편집창">◧</button>
-    <button id="layoutBoth" class="layout-btn active" title="모아보기 (스크롤 동기화 켜짐)">◫</button>
-    <button id="layoutPreview" class="layout-btn" title="미리보기">◨</button>
-  </div>
+  <button id="btnLayoutToggle" class="iconbtn" title="창보기: 클릭할 때마다 편집창→모아보기→미리보기 순으로 전환 (모아보기 상태에서 더블클릭하면 스크롤 동기화 켜기/끄기)">◫</button>
   <button id="btnNewWindow" class="iconbtn" title="완성된 문서만 새 창(탭)에서 보기 (편집 도구 없이)">↗</button>
   <div id="downloadWrap" style="position:relative; display:inline-flex;">
     <button id="btnDownload" class="iconbtn" title="다운로드 (DOC・MD・HTML・Print)">⬇</button>
@@ -2511,8 +2509,48 @@ refreshDocSelect();
 loadSelectedIntoEditor();
 document.getElementById('btnRender').addEventListener('click', render);
 
+// ---------- 참조 버튼: NX 작업실(부모창) 안에서 열렸을 때만 보이고, 지금 편집 중인 내용을
+// 부모창 채팅의 참조 첨부로 바로 넘긴다. 독립된 탭에서 report-writer만 단독으로 열었을 때는
+// 넘길 부모 채팅 자체가 없으므로 버튼을 아예 숨긴다. ----------
+(function(){
+  const btnRef = document.getElementById('btnRefToParent');
+  const isEmbedded = (window.self !== window.top);
+  if (!isEmbedded){ btnRef.style.display = 'none'; return; }
+  btnRef.style.display = '';
+  btnRef.addEventListener('click', () => {
+    const mdInputEl = document.getElementById('mdInput');
+    const d = docs.find(x => x.id === selectedId);
+    const name = (d && d.name) ? d.name : '문서';
+    window.parent.postMessage({
+      type: 'nx-request-attach',
+      name: name,
+      content: mdInputEl ? mdInputEl.value : ''
+    }, '*');
+    flashSaveState('채팅에 참조로 보냈습니다');
+  });
+})();
+
+// ---------- 새로고침 버튼: 지금 열려 있는 문서가 fileId로 드라이브에서 불러온 것이면,
+// 탐색기 등 다른 경로에서 바뀐 최신 내용을 다시 읽어온다(부모창을 거치지 않고 report-writer가
+// 직접 처리 — 어느 화면(좁은 편집창/전체화면/독립탭)에서 열려도 항상 똑같이 동작한다). ----------
+document.getElementById('btnReloadFromDrive').addEventListener('click', () => {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('fileId')){
+    flashSaveState('드라이브에서 불러온 문서가 아니라 새로고침할 대상이 없습니다');
+    return;
+  }
+  if (!confirm('탐색기 등 다른 곳에서 바뀐 최신 내용으로 다시 불러옵니다.\n지금 편집창에 저장하지 않은 내용이 있다면 사라집니다. 계속할까요?')) return;
+  loadFromUrlFileId();
+});
+
 // ---------- 편집창/미리보기 레이아웃 3단계 전환 (편집창만 / 둘 다 / 미리보기만) ----------
+// 예전엔 버튼 3개(◧◫◨)가 각자 하나의 모드를 담당했는데, 버튼 하나로 통합해서 누를 때마다
+// editor → both → preview → editor 순서로 순환하도록 바꿨다. 아이콘 자체가 지금 모드를 보여준다.
+const LAYOUT_ICON = { editor: '◧', both: '◫', preview: '◨' };
+const LAYOUT_NEXT = { editor: 'both', both: 'preview', preview: 'editor' };
+let currentLayoutMode = 'both';
 function setLayoutMode(mode){
+  currentLayoutMode = mode;
   const ws = document.getElementById('workspace');
   ws.classList.remove('editor-only', 'preview-only');
   if (mode === 'editor') ws.classList.add('editor-only');
@@ -2525,27 +2563,21 @@ function setLayoutMode(mode){
     document.getElementById('editorPane').style.flex = '';
   }
 
-  document.getElementById('layoutEditor').classList.toggle('active', mode === 'editor');
-  document.getElementById('layoutBoth').classList.toggle('active', mode === 'both');
-  document.getElementById('layoutPreview').classList.toggle('active', mode === 'preview');
+  const btn = document.getElementById('btnLayoutToggle');
+  btn.textContent = LAYOUT_ICON[mode];
+  const modeLabel = mode === 'editor' ? '편집창' : (mode === 'preview' ? '미리보기' : ('모아보기 (스크롤 동기화 ' + (scrollSyncEnabled ? '켜짐' : '꺼짐') + ')'));
+  btn.title = '창보기: ' + modeLabel + ' (클릭하면 다음 모드로, 모아보기 중 더블클릭하면 스크롤 동기화 전환)';
 }
-document.getElementById('layoutEditor').addEventListener('click', () => setLayoutMode('editor'));
-document.getElementById('layoutBoth').addEventListener('click', () => {
-  const ws = document.getElementById('workspace');
-  const alreadyBoth = !ws.classList.contains('editor-only') && !ws.classList.contains('preview-only');
-  if (alreadyBoth) {
-    // 이미 "둘 다 보기"인 상태에서 다시 누르면 스크롤 동기화 켜기/끄기 토글
-    scrollSyncEnabled = !scrollSyncEnabled;
-    document.getElementById('layoutBoth').classList.toggle('sync-off', !scrollSyncEnabled);
-    document.getElementById('layoutBoth').title = scrollSyncEnabled
-      ? '모아보기 (스크롤 동기화 켜짐)'
-      : '모아보기 (스크롤 동기화 꺼짐)';
-    flashSaveState(scrollSyncEnabled ? '스크롤 동기화 켜짐' : '스크롤 동기화 꺼짐');
-  } else {
-    setLayoutMode('both');
-  }
+document.getElementById('btnLayoutToggle').addEventListener('click', () => {
+  setLayoutMode(LAYOUT_NEXT[currentLayoutMode]);
 });
-document.getElementById('layoutPreview').addEventListener('click', () => setLayoutMode('preview'));
+document.getElementById('btnLayoutToggle').addEventListener('dblclick', (e) => {
+  if (currentLayoutMode !== 'both') return; // 모아보기 상태일 때만 스크롤 동기화 토글 의미가 있음
+  e.preventDefault();
+  scrollSyncEnabled = !scrollSyncEnabled;
+  setLayoutMode('both'); // 제목·아이콘 갱신
+  flashSaveState(scrollSyncEnabled ? '스크롤 동기화 켜짐' : '스크롤 동기화 꺼짐');
+});
 
 // ---------- 편집창/미리보기 좌우 폭 드래그로 조절 (끝까지 밀면 전용모드로 자동전환) ----------
 (function(){

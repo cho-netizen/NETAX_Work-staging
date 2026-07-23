@@ -912,10 +912,7 @@
   <div class="floating-layer" id="fullEditorOverlay" style="display:none;">
     <div class="full-editor-panel" id="fullEditorPanel">
       <div class="modal-head" id="fullEditorHead">
-        <span id="fullEditorTitle">전체화면 편집</span>
         <div class="spacer"></div>
-        <span class="win-btn" id="btnReloadFullEditor" title="탐색기 등 다른 곳에서 이 파일이 바뀌었으면 눌러서 최신 내용으로 다시 엽니다">🔄</span>
-        <span class="win-btn" id="btnRefFullEditor" title="지금 이 문서 내용을 채팅 참조로 가져오기">📎</span>
         <span class="win-btn" id="btnMaximizeFullEditor" title="최대화/복원">⬜</span>
         <span class="modal-close" id="btnCloseFullEditor" title="닫기">✕</span>
       </div>
@@ -1610,6 +1607,11 @@ graph TD
       // 이미지・PDF・기타 파일: 구글드라이브 자체 미리보기 사용 (별도 뷰어를 만들 필요 없음)
       editorFrame.src = 'https://drive.google.com/file/d/' + encodeURIComponent(file.id) + '/preview';
     }
+    // report-writer로 열린 경우엔 report-writer 자체 툴바에 이미 새로고침(🔄)·참조(📎) 버튼이
+    // 있으므로, 바깥(이 화면)의 예전 버튼은 중복이라 숨긴다. 이미지·PDF 미리보기일 때만
+    // (report-writer가 아니므로) 바깥 버튼이 계속 필요해서 보여준다.
+    document.getElementById('btnEditorReload').style.display = isReportWriterOpen ? 'none' : '';
+    document.getElementById('btnEditorRef').style.display = isReportWriterOpen ? 'none' : '';
   }
 
   document.getElementById('btnBack').addEventListener('click', ()=>{
@@ -2474,6 +2476,11 @@ graph TD
     if (msg.type === 'nx-content-response' && pendingContentRequests[msg.requestId]){
       pendingContentRequests[msg.requestId](msg.content);
       delete pendingContentRequests[msg.requestId];
+    }
+    if (msg.type === 'nx-request-attach'){
+      // report-writer 자체 툴바의 "📎 참조" 버튼에서 온 요청 — 좁은 편집창/전체화면 어느 쪽이든
+      // 똑같이 여기서 처리된다(화면별로 따로 처리하지 않아도 됨).
+      addTextAttachment(msg.name || (currentOpenFile && currentOpenFile.name) || '문서', msg.content || '');
     }
   });
 
@@ -4211,7 +4218,6 @@ graph TD
   const fullEditorOverlay = document.getElementById('fullEditorOverlay');
   const fullEditorPanel = document.getElementById('fullEditorPanel');
   const fullEditorFrame = document.getElementById('fullEditorFrame');
-  const fullEditorTitle = document.getElementById('fullEditorTitle');
   const fullEditorHead = document.getElementById('fullEditorHead');
   const btnMaximizeFullEditor = document.getElementById('btnMaximizeFullEditor');
   const fullEditorResizeHandle = document.getElementById('fullEditorResizeHandle');
@@ -4262,10 +4268,8 @@ graph TD
 
   function openFullEditor(){
     if (currentOpenFile){
-      fullEditorTitle.textContent = '전체화면 편집 — ' + currentOpenFile.name;
       fullEditorFrame.src = REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id);
     } else {
-      fullEditorTitle.textContent = '전체화면 편집';
       fullEditorFrame.src = REPORT_WRITER_URL;
     }
     applyRect(clampRect(loadEditorRect()));
@@ -4277,26 +4281,6 @@ graph TD
   }
   document.getElementById('btnOpenFullEditor').addEventListener('click', openFullEditor);
   document.getElementById('btnCloseFullEditor').addEventListener('click', (e)=>{ e.stopPropagation(); closeFullEditor(); });
-
-  document.getElementById('btnReloadFullEditor').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
-    if (!confirm('탐색기 등 다른 곳에서 바뀐 최신 내용으로 다시 엽니다.\n지금 편집창에 저장하지 않은 내용이 있다면 사라집니다. 계속할까요?')) return;
-    if (fullEditorFrame.contentWindow){
-      fullEditorFrame.contentWindow.postMessage({ type: 'nx-reload-file' }, '*');
-      showToast('최신 내용으로 새로고침했습니다.', 'success');
-    }
-  });
-
-  document.getElementById('btnRefFullEditor').addEventListener('click', async (e)=>{
-    e.stopPropagation();
-    if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
-    // 전체화면 편집은 항상 report-writer(텍스트 렌더러)만 띄우므로, 좁은 편집창의 이미지/PDF
-    // 참조 분기(getOpenFileMediaBlock)는 여기선 해당 사항이 없다 — 텍스트 내용만 가져오면 된다.
-    const content = await getEditorLiveContent();
-    if (content === null){ showToast('편집기 내용을 가져오지 못했습니다. 잠시 후 다시 시도해주세요.', 'error'); return; }
-    addTextAttachment(currentOpenFile.name, content);
-  });
 
   // 최대화 ↔ 복원 토글
   btnMaximizeFullEditor.addEventListener('click', (e)=>{
