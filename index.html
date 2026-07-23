@@ -701,6 +701,7 @@
     <button type="button" id="btnModeAutoRef" class="tb-btn" title="자동참조: AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인">🔗 <span class="tool-menu-label">자동참조</span></button>
     <button type="button" id="btnModeWebSearch" class="tb-btn" title="웹서치: 기본으로 항상 켜져 있습니다(다른 버튼과 같은 색 = 켜짐). 누르면 회색으로 바뀌며 꺼집니다.">🌐 <span class="tool-menu-label">웹서치</span></button>
     <button type="button" id="btnModeWebFetch" class="tb-btn" title="웹페이지 가져오기: URL이 있으면 자동으로 켜집니다. 이 버튼은 항상 켜두고 싶을 때만 수동으로 누르세요.">📥 <span class="tool-menu-label">가져오기</span></button>
+    <button type="button" id="btnNewChat" class="tb-btn" title="지금 이 사건의 대화기록을 지우고 새로 시작합니다 (되돌릴 수 없음)">🗑 <span class="tool-menu-label">새 대화</span></button>
     <button type="button" id="btnExternalSites" class="tb-btn" title="NETAX Desk(desk.netax.kr)를 새 탭으로 엽니다 — 홈택스·국토부 등 자주 쓰는 외부 사이트 모음">🔗 <span class="tool-menu-label">Desk</span></button>
     <div class="layout-buttons-wide">
       <button type="button" id="btnLayoutRow" class="tb-btn" data-mode="row" title="좌우 배치">⬓ 좌우</button>
@@ -3337,6 +3338,22 @@ graph TD
       saveChatHistoryNow();
     }
   });
+
+  // "새 대화" 버튼 — 지금 이 사건의 대화기록을 화면에서도, 드라이브에 저장된
+  // _대화기록.json 파일에서도 함께 지운다. 사건 폴더가 아닌 곳(고객목록 최상위 등)에서는
+  // 애초에 저장되는 대화기록이 없으므로 화면만 비운다.
+  async function startNewConversation(){
+    if (!chatMessages.length){ showToast('이미 대화가 비어 있습니다.', 'info'); return; }
+    if (!confirm('지금 이 사건의 대화 기록을 전부 지우고 새로 시작합니다.\n되돌릴 수 없습니다. 계속할까요?')) return;
+    if (chatHistorySaveTimer){ clearTimeout(chatHistorySaveTimer); chatHistorySaveTimer = null; }
+    chatMessages = [];
+    chatBody.innerHTML = '';
+    if (chatHistoryCaseKey){
+      await saveChatHistoryNow(); // 빈 배열로 덮어써서 드라이브의 _대화기록.json도 함께 비움
+    }
+    showToast('새 대화를 시작합니다.', 'success');
+  }
+  document.getElementById('btnNewChat').addEventListener('click', startNewConversation);
 
   function renderAttachBar(){
     attachBar.innerHTML = '';
