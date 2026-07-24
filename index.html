@@ -1485,6 +1485,12 @@ graph TD
     explorerBody.appendChild(div);
   }
 
+  function formatFileSize(bytes){
+    if (bytes === undefined || bytes === null || isNaN(bytes)) return '';
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+  }
   function iconForFile(mimeType){
     if (mimeType && mimeType.indexOf('folder') !== -1) return '📁';
     if (mimeType && mimeType.indexOf('image/') === 0) return '🖼️';
@@ -1579,7 +1585,7 @@ graph TD
       row.dataset.itemId = f.id;
       row.innerHTML = '<input type="checkbox" class="file-check" title="여러 개 선택해서 한 번에 첨부하려면 체크하세요">'
         + '<span class="icon">' + iconForFile(f.mimeType) + '</span> '
-        + escapeHtml(f.name) + '<span class="meta">' + escapeHtml(f.modifiedDate || '') + '</span>';
+        + escapeHtml(f.name) + '<span class="meta">' + escapeHtml(f.modifiedDate || '') + (f.sizeBytes !== undefined ? ' · ' + formatFileSize(f.sizeBytes) : '') + '</span>';
 
       row.addEventListener('click', ()=> openEditor(f));
 
