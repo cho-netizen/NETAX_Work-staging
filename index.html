@@ -193,6 +193,13 @@
   }
   body.stage-compact .topbar .spacer{ flex:0 0 8px; min-width:0; }
 
+  /* 폰 세로모드에서만 새대화·설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게 한다.
+     가로모드나 PC(stage-compact 아님)에서는 그대로 보인다. */
+  @media (orientation: portrait){
+    body.stage-compact #btnNewChat,
+    body.stage-compact #btnOpenSettings{ display:none; }
+  }
+
   /* 상단 모드버튼 4개(탐색작업창·자동참조·웹서치·가져오기)의 글자 라벨은 화면에 여유가 있을
      때만 보여준다 — 예전엔 폰이면 무조건 아이콘만 남겨서, 화면이 넓은 폰(가로모드 등)에서도
      불필요하게 작게 고정돼 있었다. JS(updateModeButtonsLabeled)가 "customerSelect+이 4버튼이
