@@ -517,8 +517,10 @@
   body.flip-mode #btnWorkspaceMode,
   body.flip-mode #btnModeAutoRef,
   body.flip-mode #btnModeWebSearch,
-  body.flip-mode #btnModeWebFetch{ display:none !important; } /* 플립모드에선 탐색기 자체가 의미 없으므로 다 숨김 */
-  body.flip-mode #btnVoiceInputFlip{ display:inline-flex !important; flex:1 1 0; min-width:0; justify-content:center; }
+  body.flip-mode #btnModeWebFetch,
+  body.flip-mode #customerSelect{ display:none !important; } /* 플립모드에선 탐색기 자체가 의미 없고, 음성명령(AI의 navigate_to_folder)으로 이미 자유롭게 폴더 이동이 되므로 다 숨김 */
+  body.flip-mode #btnVoiceInputFlip{ display:none !important; } /* 하단 버튼 없앰 — 화면 전체를 눌러서 켜고 끄는 방식으로 통합(아래 참고) */
+  body.flip-mode .panel.chat{ cursor:pointer; }
   body.flip-mode #btnNewChat,
   body.flip-mode #btnOpenSettings{ display:none !important; }
   body.flip-mode #topbarActionCluster .mobile-group{ display:none !important; } /* 파일·기록·분석·캡처·설정 아이콘묶음만 숨김 — 음성마이크(#btnVoiceInputFlip)는 같은 컨테이너 안에 있으므로 컨테이너 자체를 숨기면 안 됨 */
@@ -4198,6 +4200,11 @@ graph TD
   } else {
     btnVoiceInput.addEventListener('click', toggleVoiceMode);
     btnVoiceInputFlip.addEventListener('click', toggleVoiceMode);
+    // 플립모드에서는 화면(채팅패널) 어디를 눌러도 음성모드가 켜지고 꺼진다 — 작은 아이콘만
+    // 정확히 눌러야 하는 부담을 없애기 위해 탭 영역을 화면 전체로 넓혔다.
+    chatPanelEl.addEventListener('click', ()=>{
+      if (document.body.classList.contains('flip-mode')) toggleVoiceMode();
+    });
     // 메시지창에 직접 타이핑을 시작하면 음성모드를 자동으로 끈다 — 켜진 채로 타이핑하면
     // 다음 인식 재시작 때 타이핑한 걸 지워버릴 수 있어서 그 사고를 막는다.
     chatInputEl.addEventListener('input', ()=>{ if (voiceModeOn) stopVoiceMode(); });
