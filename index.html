@@ -2774,6 +2774,10 @@ graph TD
     }
 
     let currentStage = null;
+    const debugBadge = document.createElement('div');
+    debugBadge.id = 'nxDebugBadge';
+    debugBadge.style.cssText = 'position:fixed; top:2px; right:2px; z-index:99999; background:#ff0; color:#000; font-size:10px; padding:2px 4px; border-radius:3px; font-family:monospace; pointer-events:none;';
+    document.body.appendChild(debugBadge);
     function update(){
       const stage = resolveStage();
       if (stage !== currentStage){
@@ -2790,6 +2794,7 @@ graph TD
       // 이벤트로 알려준다 — 음성모드 섹션이 자기 준비가 끝난 뒤 그 이벤트를 받아 처리함).
       const flip = (stage === 'compact') && window.innerWidth <= FLIP_MODE_MAX_WIDTH;
       bodyEl.classList.toggle('flip-mode', flip);
+      debugBadge.textContent = 'w:' + window.innerWidth + ' stage:' + stage + ' flip:' + flip + ' cls:' + (bodyEl.classList.contains('flip-mode') ? 'Y' : 'N');
       if (flip !== wasFlip){
         wasFlip = flip;
         document.dispatchEvent(new CustomEvent('nx:flipmode', { detail: { on: flip } }));
