@@ -519,6 +519,8 @@
   body.flip-mode #btnModeWebSearch,
   body.flip-mode #btnModeWebFetch{ display:none !important; } /* 플립모드에선 탐색기 자체가 의미 없으므로 다 숨김 */
   body.flip-mode #btnVoiceInputFlip{ display:inline-flex !important; flex:1 1 0; min-width:0; justify-content:center; }
+  body.flip-mode #btnNewChat,
+  body.flip-mode #btnOpenSettings{ display:none !important; } /* 화면이 아주 좁으니 여기서도 숨김 — orientation 미디어쿼리 대신 JS 판정 기준을 그대로 씀 */
 
   /* ===== 파일 드래그&드롭 첨부 ===== */
   .chat-body.drag-over{ background:#eef3fb; outline:2px dashed var(--gold); outline-offset:-6px; }
