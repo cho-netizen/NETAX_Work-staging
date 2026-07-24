@@ -702,7 +702,6 @@
     <button type="button" id="btnModeWebSearch" class="tb-btn" title="웹서치: 기본으로 항상 켜져 있습니다(다른 버튼과 같은 색 = 켜짐). 누르면 회색으로 바뀌며 꺼집니다.">🌐 <span class="tool-menu-label">웹서치</span></button>
     <button type="button" id="btnModeWebFetch" class="tb-btn" title="웹페이지 가져오기: URL이 있으면 자동으로 켜집니다. 이 버튼은 항상 켜두고 싶을 때만 수동으로 누르세요.">📥 <span class="tool-menu-label">가져오기</span></button>
     <button type="button" id="btnNewChat" class="tb-btn" title="지금 이 사건의 대화기록을 지우고 새로 시작합니다 (되돌릴 수 없음)">🗑 <span class="tool-menu-label">새 대화</span></button>
-    <button type="button" id="btnExternalSites" class="tb-btn" title="NETAX Desk(desk.netax.kr)를 새 탭으로 엽니다 — 홈택스·국토부 등 자주 쓰는 외부 사이트 모음">🔗 <span class="tool-menu-label">Desk</span></button>
     <div class="layout-buttons-wide">
       <button type="button" id="btnLayoutRow" class="tb-btn" data-mode="row" title="좌우 배치">⬓ 좌우</button>
       <button type="button" id="btnLayoutCol" class="tb-btn" data-mode="col" title="상하 배치">⬒ 상하</button>
@@ -2573,12 +2572,6 @@ graph TD
 
   loadCustomers();
 
-  // ---- 외부사이트(Desk) — 예전엔 여기서 자체 링크 목록(localStorage)을 따로 관리했으나,
-  // 이미 desk.netax.kr(NETAX Desk)이 구글시트 CSV 기반으로 똑같은 역할(폴더별 링크 모음,
-  // 검색, 앱/웹 자동연결)을 팀 전체가 공유하는 형태로 하고 있어서 완전히 중복이었다.
-  // 그래서 별도 목록을 만드는 대신 Desk를 새 탭으로 여는 버튼 하나로 대체한다.
-  const btnExternalSites = document.getElementById('btnExternalSites');
-  btnExternalSites.addEventListener('click', ()=> window.open('https://desk.netax.kr', '_blank', 'noopener'));
 
   // ---- 좁은 화면(PC/탭, grouped 단계)용 도구 그룹 팝업 — 도구1/도구2 2그룹 ----
   const TOOL_GROUP_1 = [
@@ -2612,11 +2605,8 @@ graph TD
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '📸', label: '캡처', handler: captureScreen }
   ];
-  // 예전엔 여기 [편집, 설정]이었는데, 설정은 항상 상단바 우측에 고정 표시되므로 뺐고
-  // 그 자리엔 Desk(desk.netax.kr) 바로가기를 넣었다.
   const MOBILE_GROUP_CONFIG = [
-    { icon: '🖋', label: '편집', handler: openFullEditor },
-    { icon: '🔗', label: 'Desk', handler: () => window.open('https://desk.netax.kr', '_blank', 'noopener') }
+    { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
 
   function fillToolPopup(popupEl, items){
