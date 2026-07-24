@@ -4203,15 +4203,13 @@ graph TD
     chatInputEl.addEventListener('input', ()=>{ if (voiceModeOn) stopVoiceMode(); });
 
     // 플립모드(아주 작은 폰) 진입/이탈 — 상단바 반응형 로직이 쏘는 이벤트를 받아서 처리.
-    // 진입하면 무조건 음성모드로(버튼·채팅목록이 없으니 음성 말고는 쓸 방법이 없음),
-    // 이탈하면 자동으로 꺼서(화면이 커졌는데 마이크가 계속 켜진 채로 남는 놀람 방지) 준다.
+    // 예전엔 진입하는 순간 자동으로 듣기 시작했으나(마이크가 계속 켜진 채 대기하는 게 불편하다는
+    // 피드백으로 2026.07 변경), 이제는 화면(마이크 버튼 하나만 있는 음성전용 레이아웃)만 자동으로
+    // 바뀌고, 실제로 듣기 시작하는 건 사용자가 마이크 버튼을 직접 눌렀을 때뿐이다.
+    // 이탈 시에는 여전히 자동으로 꺼준다(화면이 커졌는데 마이크가 계속 켜진 채로 남는 놀람 방지).
     document.addEventListener('nx:flipmode', (e)=>{
-      if (e.detail.on){ if (!voiceModeOn) toggleVoiceMode(); }
-      else { if (voiceModeOn) stopVoiceMode(); }
+      if (!e.detail.on){ if (voiceModeOn) stopVoiceMode(); }
     });
-    // 이 리스너가 등록되기 전에 이미 플립모드로 판정났을 수 있으니(예: 처음부터 아주 좁은 화면),
-    // 지금 상태를 한 번 직접 확인해서 놓친 이벤트를 보정한다.
-    if (document.body.classList.contains('flip-mode') && !voiceModeOn) toggleVoiceMode();
   }
 
   // ============================================================
