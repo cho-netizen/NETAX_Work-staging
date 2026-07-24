@@ -3225,34 +3225,52 @@ graph TD
 
   function connectNxExtension(){
     const extId = (window.NX_CONFIG && window.NX_CONFIG.EXTENSION_ID) || '';
-    if (!extId || !window.chrome || !chrome.runtime || !chrome.runtime.connect){
-      updateExtStatusUi();
-      return; // 크롬/엣지 계열이 아니거나 확장프로그램 ID 미설정 — 조용히 포기(기존 클립보드 방식으로 대체 가능)
-    }
-    try{
-      nxExtPort = chrome.runtime.connect(extId, { name: 'nx-work' });
-      nxExtPort.onMessage.addListener((msg)=>{
-        if (!msg || !msg.type) return;
-        if (msg.type === 'NX_HELLO_ACK'){
-          nxExtConnected = true;
+
+    // 1) 크롬·엣지·웨일 등 크로미움 계열: externally_connectable로 확장프로그램에 직접 연결
+    if (extId && window.chrome && chrome.runtime && chrome.runtime.connect){
+      try{
+        nxExtPort = chrome.runtime.connect(extId, { name: 'nx-work' });
+        nxExtPort.onMessage.addListener((msg)=>{
+          if (!msg || !msg.type) return;
+          if (msg.type === 'NX_HELLO_ACK'){
+            nxExtConnected = true;
+            updateExtStatusUi();
+          } else if (msg.type === 'NX_CAPTURE'){
+            insertCapturedText(msg.text, msg);
+          }
+        });
+        nxExtPort.onDisconnect.addListener(()=>{
+          nxExtConnected = false;
+          nxExtPort = null;
           updateExtStatusUi();
-        } else if (msg.type === 'NX_CAPTURE'){
-          insertCapturedText(msg.text, msg);
-        }
-      });
-      nxExtPort.onDisconnect.addListener(()=>{
+          // 확장프로그램이 나중에 설치/갱신되는 경우를 대비해 잠시 후 재시도
+          setTimeout(connectNxExtension, 4000);
+        });
+        nxExtPort.postMessage({ type: 'NX_HELLO' });
+        return;
+      }catch(e){
         nxExtConnected = false;
-        nxExtPort = null;
-        updateExtStatusUi();
-        // 확장프로그램이 나중에 설치/갱신되는 경우를 대비해 잠시 후 재시도
-        setTimeout(connectNxExtension, 4000);
-      });
-      nxExtPort.postMessage({ type: 'NX_HELLO' });
-    }catch(e){
-      nxExtConnected = false;
-      updateExtStatusUi();
+      }
     }
+
+    // 2) 파이어폭스 등 externally_connectable이 없는 브라우저: 확장프로그램이 심어둔
+    // 콘텐츠스크립트(bridge-firefox.js)가 있으면 window.postMessage로 같은 핸드셰이크를 시도한다.
+    // 브리지가 없으면(그 확장프로그램 자체가 미설치) 그냥 응답이 안 올 뿐 다른 부작용은 없다.
+    window.postMessage({ source: 'nx-page', type: 'NX_HELLO' }, '*');
+    updateExtStatusUi();
   }
+  // 파이어폭스 브리지(bridge-firefox.js)가 window.postMessage로 보내주는 응답을 받는다.
+  window.addEventListener('message', (event)=>{
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.source !== 'nx-bridge' || !data.type) return;
+    if (data.type === 'NX_HELLO_ACK'){
+      nxExtConnected = true;
+      updateExtStatusUi();
+    } else if (data.type === 'NX_CAPTURE'){
+      insertCapturedText(data.text, data);
+    }
+  });
   if (btnExtStatus){
     btnExtStatus.addEventListener('click', ()=>{
       if (!nxExtConnected) connectNxExtension();
