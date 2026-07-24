@@ -2698,11 +2698,9 @@ graph TD
     const topbarEl = document.querySelector('.topbar');
     const bodyEl = document.body;
     const cluster = document.getElementById('topbarActionCluster');
-    // 플립폰 커버화면처럼 아주 작은 폰 판정 기준(가로 px). 처음엔 280으로 좁게 잡았더니
-    // 실기기·브라우저 테스트에서 거의 도달하지 않는 극단값이라 전혀 안 걸렸다 — 일반 폰도
-    // 세로모드에서 보통 320~430px는 되므로, 테스트가 실제로 되는 값(340)으로 올려둔다.
-    // 실기기 확인 후 이 숫자만 바꾸면 된다.
-    const FLIP_MODE_MAX_WIDTH = 340;
+    // 플립폰 커버화면처럼 아주 작은 폰 판정 기준(가로 px). 실기기 실측 결과 커버화면 352px,
+    // 펼친 상태 세로모드 360px로 확인되어(2026.07), 그 사이 값인 356으로 조정함.
+    const FLIP_MODE_MAX_WIDTH = 356;
     let wasFlip = false; // 플립모드 여부가 "바뀔 때만" 이벤트를 쏘기 위한 이전 상태 기억
     // max-height 트랜지션이 끝나는 순간에도 한 번 더 정확히 재서, setTimeout 타이밍이
     // 살짝 어긋나는 경우(기기 성능 편차 등)까지 이중으로 보정한다.
@@ -2774,10 +2772,6 @@ graph TD
     }
 
     let currentStage = null;
-    const debugBadge = document.createElement('div');
-    debugBadge.id = 'nxDebugBadge';
-    debugBadge.style.cssText = 'position:fixed; top:2px; right:2px; z-index:99999; background:#ff0; color:#000; font-size:10px; padding:2px 4px; border-radius:3px; font-family:monospace; pointer-events:none;';
-    document.body.appendChild(debugBadge);
     function update(){
       const stage = resolveStage();
       if (stage !== currentStage){
@@ -2794,7 +2788,6 @@ graph TD
       // 이벤트로 알려준다 — 음성모드 섹션이 자기 준비가 끝난 뒤 그 이벤트를 받아 처리함).
       const flip = (stage === 'compact') && window.innerWidth <= FLIP_MODE_MAX_WIDTH;
       bodyEl.classList.toggle('flip-mode', flip);
-      debugBadge.textContent = 'w:' + window.innerWidth + ' h:' + window.innerHeight + ' stage:' + stage + ' flip:' + flip + ' cls:' + (bodyEl.classList.contains('flip-mode') ? 'Y' : 'N');
       if (flip !== wasFlip){
         wasFlip = flip;
         document.dispatchEvent(new CustomEvent('nx:flipmode', { detail: { on: flip } }));
