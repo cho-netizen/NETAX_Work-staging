@@ -2794,7 +2794,7 @@ graph TD
       // 이벤트로 알려준다 — 음성모드 섹션이 자기 준비가 끝난 뒤 그 이벤트를 받아 처리함).
       const flip = (stage === 'compact') && window.innerWidth <= FLIP_MODE_MAX_WIDTH;
       bodyEl.classList.toggle('flip-mode', flip);
-      debugBadge.textContent = 'w:' + window.innerWidth + ' stage:' + stage + ' flip:' + flip + ' cls:' + (bodyEl.classList.contains('flip-mode') ? 'Y' : 'N');
+      debugBadge.textContent = 'w:' + window.innerWidth + ' h:' + window.innerHeight + ' stage:' + stage + ' flip:' + flip + ' cls:' + (bodyEl.classList.contains('flip-mode') ? 'Y' : 'N');
       if (flip !== wasFlip){
         wasFlip = flip;
         document.dispatchEvent(new CustomEvent('nx:flipmode', { detail: { on: flip } }));
