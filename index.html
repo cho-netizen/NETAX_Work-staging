@@ -715,7 +715,7 @@
     <datalist id="customerListOptions"></datalist>
     <!-- 폰(compact) 전용 모드버튼들: 탐색작업창(레이아웃 순환) · 자동참조 · 웹서치 · 가져오기 · 외부조회.
          작업폴더(customerSelect) 바로 오른쪽에 위치, 항상 상단바에 남아있고 하단으로 안 내려감. -->
-    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span></button>
+    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span></button>
     <button type="button" id="btnModeAutoRef" class="tb-btn" title="자동참조: AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인">🔗 <span class="tool-menu-label">자동참조</span></button>
     <button type="button" id="btnModeWebSearch" class="tb-btn" title="웹서치: 기본으로 항상 켜져 있습니다(다른 버튼과 같은 색 = 켜짐). 누르면 회색으로 바뀌며 꺼집니다.">🌐 <span class="tool-menu-label">웹서치</span></button>
     <button type="button" id="btnModeWebFetch" class="tb-btn" title="웹페이지 가져오기: URL이 있으면 자동으로 켜집니다. 이 버튼은 항상 켜두고 싶을 때만 수동으로 누르세요.">📥 <span class="tool-menu-label">가져오기</span></button>
@@ -725,7 +725,7 @@
       <button type="button" id="btnLayoutCol" class="tb-btn" data-mode="col" title="상하 배치">⬒ 상하</button>
       <button type="button" id="btnLayoutHide" class="tb-btn" data-mode="hide" title="탐색기 생략 · 채팅만">💬 생략</button>
       <button type="button" id="btnLayoutFloat" class="tb-btn" data-mode="float" title="탐색기 띄우기 · 채팅 위에 잠깐 보기">🗗 띄우기</button>
-      <button type="button" id="btnToggleChat" class="tb-btn" title="채팅창 끄기 · 도구화면만 전체로 보기">💬 채팅 끄기</button>
+      <button type="button" id="btnLayoutMax" class="tb-btn" data-mode="max" title="채팅 끄기 · 탐색작업창 최대화 (편집창을 크게 보는 용도)">⛶ 최대</button>
     </div>
     <div class="spacer"></div>
     <div id="selectionInline" class="selection-inline" style="display:none;">
@@ -1157,27 +1157,33 @@ graph TD
   const btnWorkspaceMode = document.getElementById('btnWorkspaceMode');
   const workspaceModeIcon = document.getElementById('workspaceModeIcon');
   const workspaceModeLabel = document.getElementById('workspaceModeLabel');
-  const WORKSPACE_MODE_KEY = 'nx_workspace_mode'; // 'row' | 'col' | 'hide' | 'float'
-  const WORKSPACE_MODES = ['row', 'col', 'hide', 'float'];
+  const WORKSPACE_MODE_KEY = 'nx_workspace_mode'; // 'row' | 'col' | 'hide' | 'float' | 'max'
+  const WORKSPACE_MODES = ['row', 'col', 'hide', 'float', 'max'];
   const WORKSPACE_MODE_META = {
-    row:   { icon: '⬓', label: '좌우', title: '좌우 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기)' },
-    col:   { icon: '⬒', label: '상하', title: '상하 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기)' },
-    hide:  { icon: '💬', label: '생략', title: '탐색기 생략 · 채팅만 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기)' },
-    float: { icon: '🗗', label: '띄우기', title: '탐색기 띄우기 · 채팅 위에 잠깐 보기 (클릭하면 다시 좌우 배치로)' }
+    row:   { icon: '⬓', label: '좌우', title: '좌우 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    col:   { icon: '⬒', label: '상하', title: '상하 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    hide:  { icon: '💬', label: '생략', title: '탐색기 생략 · 채팅만 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    float: { icon: '🗗', label: '띄우기', title: '탐색기 띄우기 · 채팅 위에 잠깐 보기 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    max:   { icon: '⛶', label: '최대', title: '채팅 끄기 · 탐색작업창 최대화, 편집창을 크게 보는 용도 (클릭하면 다시 좌우 배치로)' }
   };
-  // 넓은 화면에서 보이는 4개 버튼(직접 선택용) — 지금 모드에 해당하는 것만 강조 표시
+  // 넓은 화면에서 보이는 5개 버튼(직접 선택용) — 지금 모드에 해당하는 것만 강조 표시
   const layoutModeButtons = {
     row: document.getElementById('btnLayoutRow'),
     col: document.getElementById('btnLayoutCol'),
     hide: document.getElementById('btnLayoutHide'),
-    float: document.getElementById('btnLayoutFloat')
+    float: document.getElementById('btnLayoutFloat'),
+    max: document.getElementById('btnLayoutMax')
   };
 
   function applyWorkspaceMode(mode){
-    workspace.classList.toggle('layout-row', mode === 'row' || mode === 'hide' || mode === 'float');
+    workspace.classList.toggle('layout-row', mode === 'row' || mode === 'hide' || mode === 'float' || mode === 'max');
     workspace.classList.toggle('layout-col', mode === 'col');
     workspace.classList.toggle('explorer-collapsed', mode === 'hide' || mode === 'float');
     workspace.classList.toggle('explorer-floating', mode === 'float');
+    // '최대'(채팅 끄고 탐색작업창을 꽉 채움)는 예전엔 별도의 독립된 스위치(chat-collapsed)였는데,
+    // 그래서 분리대를 왼쪽 끝까지 밀면 이 스위치만 조용히 켜지고 창전환 버튼(⬓)은 그걸 모르는
+    // 상태가 되어 "분리대가 죽은 것처럼" 보였다. 이제 이 모드 체계 안으로 완전히 합쳤다.
+    workspace.classList.toggle('chat-collapsed', mode === 'max');
     workspaceModeIcon.textContent = WORKSPACE_MODE_META[mode].icon;
     workspaceModeLabel.textContent = WORKSPACE_MODE_META[mode].label;
     btnWorkspaceMode.title = WORKSPACE_MODE_META[mode].title;
@@ -1203,35 +1209,23 @@ graph TD
   function setWorkspaceMode(mode){
     // 지금 방향에서 못 쓰는 배치를 요청받으면(음성명령 등 어디서 오든) "생략"으로 안전하게 대체
     const safeMode = isModeAvailable(mode) ? mode : 'hide';
-    // 탐색기를 생략/띄우기 하는 순간 채팅이 이미 꺼져 있으면 화면이 통째로 비게 되므로 먼저 채팅을 되돌린다.
-    if ((safeMode === 'hide' || safeMode === 'float') && workspace.classList.contains('chat-collapsed')){
-      setChatCollapsed(false);
-    }
-    applyWorkspaceMode(safeMode);
+    applyWorkspaceMode(safeMode); // chat-collapsed 등은 여기서 mode 기준으로 전부 선언적으로 정해지므로, 예전처럼 따로 되돌려줄 필요가 없어졌다.
     localStorage.setItem(WORKSPACE_MODE_KEY, safeMode);
     applySavedSplit();
   }
 
-  // ---- 채팅창 끄기/보이기 (탐색기 "생략"의 반대 방향 — 도구화면만 전체로 보기) ----
-  const CHAT_COLLAPSED_KEY = 'nx_chat_collapsed';
-  const btnToggleChat = document.getElementById('btnToggleChat');
-  function updateChatToggleButton(){
-    const collapsed = workspace.classList.contains('chat-collapsed');
-    btnToggleChat.textContent = collapsed ? '💬 채팅 보이기' : '💬 채팅 끄기';
-    btnToggleChat.classList.toggle('is-on', collapsed);
-  }
+  // ---- 채팅창 끄기(= '최대' 모드)의 예전 이름 호환용 헬퍼 ----
+  // 2026.07: 예전엔 이게 창전환(⬓) 체계와 완전히 분리된 독립 버튼·스위치였다. 그래서 분리대를
+  // 왼쪽 끝까지 밀면 이 스위치만 조용히 켜지고 ⬓ 버튼은 그걸 몰라서, 분리대가 사라진 채
+  // "죽은 것처럼" 보이는 문제가 있었다. 이제 '최대(max)' 모드로 완전히 합쳐서(전용 버튼은
+  // ⛶ 최대 하나로 통일), 어느 경로로 들어오든(버튼 클릭이든 분리대를 끝까지 밀든) 항상 같은
+  // 상태·같은 버튼 표시로 수렴한다. 예전 독립 버튼(💬 채팅 끄기)은 중복이라 제거했다.
+  const CHAT_COLLAPSED_KEY = 'nx_chat_collapsed'; // 예전 버전 데이터 이전(마이그레이션) 용도로만 유지
   function setChatCollapsed(collapsed){
-    // 탐색기가 이미 생략/띄우기 상태에서 채팅까지 끄면 화면이 통째로 비므로, 먼저 탐색기 쪽을 되돌린다.
-    if (collapsed && workspace.classList.contains('explorer-collapsed')){
-      setWorkspaceMode(detectDefaultMode());
-    }
-    workspace.classList.toggle('chat-collapsed', collapsed);
-    localStorage.setItem(CHAT_COLLAPSED_KEY, collapsed ? '1' : '0');
-    updateChatToggleButton();
+    setWorkspaceMode(collapsed ? 'max' : detectDefaultMode());
   }
-  btnToggleChat.addEventListener('click', ()=> setChatCollapsed(!workspace.classList.contains('chat-collapsed')));
-  if (localStorage.getItem(CHAT_COLLAPSED_KEY) === '1') workspace.classList.add('chat-collapsed');
-  updateChatToggleButton();
+  // (예전 버전 데이터 마이그레이션은 아래 최종 초기화 지점에서 한 번에 처리한다 — 여기서
+  // 클래스를 미리 건드리면 나중에 applyWorkspaceMode가 그대로 덮어써서 의미가 없어짐)
 
   // ---- 채팅↔도구화면 경계선 드래그로 크기 조절 (끝까지 밀면 그 쪽이 닫힘) ----
   const panelResizer = document.getElementById('panelResizer');
@@ -1309,18 +1303,19 @@ graph TD
     }
     setWorkspaceMode('hide'); // 이론상 도달 안 하지만 안전장치
   });
-  // 넓은 화면의 4개 버튼은 순환이 아니라 각자 자기 모드로 바로 전환
+  // 넓은 화면의 5개 버튼은 순환이 아니라 각자 자기 모드로 바로 전환
   Object.keys(layoutModeButtons).forEach(mode=>{
     layoutModeButtons[mode].addEventListener('click', ()=> setWorkspaceMode(mode));
   });
-  applyWorkspaceMode(localStorage.getItem(WORKSPACE_MODE_KEY) || detectDefaultMode());
-  // 저장된 값들의 조합이 꼬여서(예: 예전 버전 데이터) 채팅·탐색기가 동시에 접힌 상태로 시작되면
-  // 화면이 통째로 비게 되므로, 그 경우엔 채팅을 강제로 되돌린다.
-  if (workspace.classList.contains('chat-collapsed') && workspace.classList.contains('explorer-collapsed')){
-    workspace.classList.remove('chat-collapsed');
-    localStorage.setItem(CHAT_COLLAPSED_KEY, '0');
-    updateChatToggleButton();
-  }
+  // 초기 모드 결정: 저장된 모드가 있으면 그걸, 없는데 예전 버전의 "채팅 끄기" 데이터만 남아있으면
+  // 그걸 '최대' 모드로 이전(migration)해서 반영, 둘 다 없으면 화면 크기 기준 스마트 디폴트.
+  let initialMode = localStorage.getItem(WORKSPACE_MODE_KEY);
+  if (!initialMode) initialMode = (localStorage.getItem(CHAT_COLLAPSED_KEY) === '1') ? 'max' : detectDefaultMode();
+  applyWorkspaceMode(initialMode);
+  // 새 모드 체계에서는 chat-collapsed(최대)와 explorer-collapsed(생략/띄우기)가 서로 다른
+  // mode 값에서만 켜지도록 선언적으로 짜여 있어 두 상태가 동시에 켜지는 경우 자체가 구조적으로
+  // 불가능해졌다(예전엔 별도 스위치라 꼬일 수 있었음) — 그래서 예전에 있던 "둘 다 접힌 경우"
+  // 보정 코드는 더 이상 필요 없어 제거함.
   applySavedSplit(); // layout-row/col 클래스가 확정된 뒤에 호출해야 올바른 저장키를 참조함
   // 폰을 회전시켜서 지금 쓰던 배치가 못 쓰게 되면(예: 좌우배치 중 세로로 돌림) 자동으로 안전한
   // 배치로 바꿔준다.
