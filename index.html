@@ -4920,7 +4920,11 @@ graph TD
   function setupScanStage(img){
     scanImageEl = img;
     scanStageWrap.style.display = 'flex';
-    const maxW = 480, maxH = 480;
+    // 2026.07: 예전엔 480px로 고정해뒀는데, 그보다 화면이 좁은 폰에서는 우측이 화면 밖으로
+    // 넘쳤다 — 실제 컨테이너 폭을 재서, 그 폭을 넘지 않게 고친다.
+    const containerW = scanStageWrap.clientWidth || 480;
+    const maxW = Math.min(480, containerW - 4); // 좌우 여백 약간
+    const maxH = Math.min(480, Math.round(window.innerHeight * 0.45));
     const iw = img.naturalWidth, ih = img.naturalHeight;
     scanDisplayScale = Math.min(1, maxW / iw, maxH / ih);
     scanDW = Math.max(1, Math.round(iw * scanDisplayScale));
