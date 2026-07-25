@@ -810,12 +810,8 @@
         <button type="button" id="btnMgAnalysis" class="tb-btn" title="계산기 · 관계도">🧮 <span class="tool-menu-label">분석</span></button>
         <div id="mgAnalysisPopup" class="nx-popup"></div>
       </div>
-      <div class="topbar-item mobile-group" id="mgCaptureWrap">
-        <button type="button" id="btnMgCapture" class="tb-btn" title="스캔 · 캡처">📷 <span class="tool-menu-label">캡처</span></button>
-        <div id="mgCapturePopup" class="nx-popup"></div>
-      </div>
       <div class="topbar-item mobile-group" id="mgConfigWrap">
-        <button type="button" id="btnMgConfig" class="tb-btn" title="편집 · 상담메모">🛠 <span class="tool-menu-label">도구</span></button>
+        <button type="button" id="btnMgConfig" class="tb-btn" title="스캔 · 편집 · 상담메모">🛠 <span class="tool-menu-label">도구</span></button>
         <div id="mgConfigPopup" class="nx-popup"></div>
       </div>
       <!-- 커버화면모드(화면이 아주 작은 폰) 전용 마이크 — 채팅창·입력란이 없는 대신 이 버튼 하나로
@@ -939,6 +935,7 @@
           <input type="file" id="scanGalleryInput" accept="image/*" style="display:none;">
           <div class="scan-source-actions">
             <button type="button" id="btnScanCapture" class="ghost-btn scan-action-btn">촬영</button>
+            <button type="button" id="btnScanScreenCapture" class="ghost-btn scan-action-btn">캡처</button>
             <button type="button" id="btnScanGallery" class="ghost-btn scan-action-btn">파일</button>
           </div>
           <div id="scanStageWrap" class="scan-stage-wrap" style="display:none;">
@@ -2699,11 +2696,9 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView }
   ];
-  const MOBILE_GROUP_CAPTURE = [
-    { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📸', label: '캡처', handler: captureScreen }
-  ];
   const MOBILE_GROUP_CONFIG = [
+    { icon: '📷', label: '스캔', handler: openScanModal },
+    { icon: '📸', label: '캡처', handler: captureScreen },
     { icon: '🖋', label: '편집', handler: openFullEditor },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() }
   ];
@@ -2733,12 +2728,10 @@ graph TD
   const mgFilesBtn = document.getElementById('btnMgFiles');
   const mgRecordsBtn = document.getElementById('btnMgRecords');
   const mgAnalysisBtn = document.getElementById('btnMgAnalysis');
-  const mgCaptureBtn = document.getElementById('btnMgCapture');
   const mgConfigBtn = document.getElementById('btnMgConfig');
   const mgFilesPopup = document.getElementById('mgFilesPopup');
   const mgRecordsPopup = document.getElementById('mgRecordsPopup');
   const mgAnalysisPopup = document.getElementById('mgAnalysisPopup');
-  const mgCapturePopup = document.getElementById('mgCapturePopup');
   const mgConfigPopup = document.getElementById('mgConfigPopup');
 
   fillToolPopup(toolGroup1Popup, TOOL_GROUP_1);
@@ -2746,13 +2739,12 @@ graph TD
   fillToolPopup(mgFilesPopup, MOBILE_GROUP_FILES);
   fillToolPopup(mgRecordsPopup, MOBILE_GROUP_RECORDS);
   fillToolPopup(mgAnalysisPopup, MOBILE_GROUP_ANALYSIS);
-  fillToolPopup(mgCapturePopup, MOBILE_GROUP_CAPTURE);
   fillToolPopup(mgConfigPopup, MOBILE_GROUP_CONFIG);
 
   const ALL_GROUP_POPUPS = [
     [toolGroup1Popup, btnToolGroup1], [toolGroup2Popup, btnToolGroup2],
     [mgFilesPopup, mgFilesBtn], [mgRecordsPopup, mgRecordsBtn], [mgAnalysisPopup, mgAnalysisBtn],
-    [mgCapturePopup, mgCaptureBtn], [mgConfigPopup, mgConfigBtn]
+    [mgConfigPopup, mgConfigBtn]
   ];
 
   function wireGroupToggle(btn, popup){
@@ -3613,7 +3605,7 @@ graph TD
   // ---- 화면 캡처: 다른 창(홈택스 등)을 한 장 찍어서 바로 첨부 ----
   const btnScreenCapture = document.getElementById('btnScreenCapture');
 
-  async function captureScreen(){
+  async function captureScreen(mode){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
       showToast('이 브라우저는 화면 캡처를 지원하지 않습니다.', 'error');
       return;
@@ -3642,7 +3634,15 @@ graph TD
       canvas.getContext('2d').drawImage(bitmapSource, 0, 0, width, height);
       const dataUrl = canvas.toDataURL('image/png');
 
-      openCaptureView(dataUrl); // 바로 첨부하지 않고, 오른쪽에 크게 보여줘서 뭘 찍었는지 확인부터
+      if (mode === 'scan'){
+        // 스캔창 안에서 눌렀을 때는 "채팅에 붙일지 확인" 절차 없이, 곧바로 귀퉁이 보정 단계로
+        // 이어준다 — 이미 스캔 작업 중이라는 맥락 자체가 확인을 대신한다.
+        const img = new Image();
+        img.onload = () => setupScanStage(img);
+        img.src = dataUrl;
+      } else {
+        openCaptureView(dataUrl); // 바로 첨부하지 않고, 오른쪽에 크게 보여줘서 뭘 찍었는지 확인부터
+      }
     }catch(err){
       if (err && err.name !== 'NotAllowedError'){
         showToast('화면 캡처 중 오류: ' + (err && err.message ? err.message : err), 'error');
@@ -3652,7 +3652,9 @@ graph TD
     }
   }
 
-  if (btnScreenCapture) btnScreenCapture.addEventListener('click', captureScreen);
+  if (btnScreenCapture) btnScreenCapture.addEventListener('click', () => captureScreen());
+  const btnScanScreenCapture = document.getElementById('btnScanScreenCapture');
+  if (btnScanScreenCapture) btnScanScreenCapture.addEventListener('click', () => captureScreen('scan'));
 
   // ---- 화면캡처 확인 뷰 (오른쪽 패널에 크게 보여주고 첨부/재촬영/취소/스캔연결 선택) ----
   const captureView = document.getElementById('captureView');
@@ -4764,7 +4766,7 @@ graph TD
         resizeCanvasToWrap();
       });
     }
-    window.openNoteModal = openNoteModalImpl; // TOOL_GROUP_2/MOBILE_GROUP_CAPTURE 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
+    window.openNoteModal = openNoteModalImpl; // TOOL_GROUP_2/MOBILE_GROUP_CONFIG 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
     window.addEventListener('resize', ()=>{ if (noteOverlay.style.display !== 'none') resizeCanvasToWrap(); });
 
     btnCloseNote.addEventListener('click', ()=>{ noteOverlay.style.display = 'none'; });
