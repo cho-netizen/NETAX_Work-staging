@@ -286,7 +286,16 @@
     flex:1 1 auto; position:relative; width:100%; min-height:0;
     background:#fff; overflow:hidden; touch-action:none;
   }
-  #noteCanvas{ width:100%; height:100%; display:block; cursor:crosshair; }
+  #noteCanvasWrap.note-zoomed{ overflow:auto; }
+  #noteCanvasWrap.note-bg-ruled{ background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, #cfd8e8 28px); }
+  #noteCanvasWrap.note-bg-grid{
+    background-image:
+      repeating-linear-gradient(to bottom, transparent, transparent 27px, #cfd8e8 28px),
+      repeating-linear-gradient(to right, transparent, transparent 27px, #cfd8e8 28px);
+  }
+  #noteZoomInner{ position:relative; width:100%; height:100%; transform-origin: top left; }
+  #noteBgCanvas, #noteCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; }
+  #noteBgCanvas{ pointer-events:none; } /* 배경은 그리기 대상이 아니므로 포인터 이벤트를 밑에 있는 캔버스로 넘길 필요 없이 그냥 무시 */
   .modal-head{
     display:flex; align-items:center; justify-content:space-between;
     padding:14px 18px; background:var(--navy); color:#fff;
@@ -970,11 +979,15 @@
   <div class="modal-overlay" id="noteOverlay" style="display:none; padding:0;">
     <div class="note-fullscreen-panel" id="notePanel">
       <div class="note-titlebar" id="noteTitlebar">
+        <button id="btnNoteToolMode" class="note-tb-btn" title="펜 (누르면 형광펜→지우개→직선→사각형 순서로 바뀝니다)">✏️</button>
         <input type="color" id="notePenColor" value="#1a1a2e" title="색상" class="note-tb-color">
         <input type="range" id="notePenSize" min="1" max="10" value="3" title="굵기" class="note-tb-range">
-        <button id="btnNoteEraser" class="note-tb-btn" title="지우개">🧹</button>
         <button id="btnNoteUndo" class="note-tb-btn" title="되돌리기">↩</button>
+        <button id="btnNoteRedo" class="note-tb-btn" title="다시실행">↪</button>
         <button id="btnNoteClear" class="note-tb-btn" title="전체지우기">🗑</button>
+        <button id="btnNoteBgImage" class="note-tb-btn" title="배경 이미지 불러오기(그 위에 필기)">📎</button>
+        <button id="btnNoteBgPattern" class="note-tb-btn" title="배경 무늬 없음(누르면 줄노트→모눈 순서로 바뀝니다)">▦</button>
+        <button id="btnNoteZoom" class="note-tb-btn" title="확대 100%(누르면 150%→200%로 바뀝니다)">🔍</button>
         <button id="btnNotePrevPage" class="note-tb-btn" title="이전 페이지">◀</button>
         <span id="notePageIndicator" class="note-tb-page">1/1</span>
         <button id="btnNoteNextPage" class="note-tb-btn" title="다음 페이지(마지막 장이면 새 페이지 추가)">▶</button>
@@ -982,8 +995,12 @@
         <button id="btnCloseNote" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
       <div id="noteCanvasWrap">
-        <canvas id="noteCanvas"></canvas>
+        <div id="noteZoomInner">
+          <canvas id="noteBgCanvas"></canvas>
+          <canvas id="noteCanvas"></canvas>
+        </div>
       </div>
+      <input type="file" id="noteBgFileInput" accept="image/*" style="display:none;">
     </div>
   </div>
 
@@ -4382,23 +4399,48 @@ graph TD
   (function setupNoteModal(){
     const noteOverlay = document.getElementById('noteOverlay');
     const noteCanvasWrap = document.getElementById('noteCanvasWrap');
+    const noteZoomInner = document.getElementById('noteZoomInner');
+    const noteBgCanvas = document.getElementById('noteBgCanvas');
+    const bgCtx = noteBgCanvas.getContext('2d');
     const noteCanvas = document.getElementById('noteCanvas');
     const ctx = noteCanvas.getContext('2d');
     const notePenColor = document.getElementById('notePenColor');
     const notePenSize = document.getElementById('notePenSize');
-    const btnNoteEraser = document.getElementById('btnNoteEraser');
+    const btnNoteToolMode = document.getElementById('btnNoteToolMode');
     const btnNoteUndo = document.getElementById('btnNoteUndo');
+    const btnNoteRedo = document.getElementById('btnNoteRedo');
     const btnNoteClear = document.getElementById('btnNoteClear');
+    const btnNoteBgImage = document.getElementById('btnNoteBgImage');
+    const noteBgFileInput = document.getElementById('noteBgFileInput');
+    const btnNoteBgPattern = document.getElementById('btnNoteBgPattern');
+    const btnNoteZoom = document.getElementById('btnNoteZoom');
     const btnNotePrevPage = document.getElementById('btnNotePrevPage');
     const btnNoteNextPage = document.getElementById('btnNoteNextPage');
     const notePageIndicator = document.getElementById('notePageIndicator');
     const btnNoteSave = document.getElementById('btnNoteSave');
     const btnCloseNote = document.getElementById('btnCloseNote');
 
-    let drawing = false, eraserOn = false, lastX = 0, lastY = 0;
-    let undoStack = []; // 스냅샷(dataURL) 배열 — 획을 시작하기 전 상태를 저장해뒀다가 되돌리기용(페이지 전환 시 초기화됨)
-    let notePages = ['']; // 페이지별 저장된 내용(dataURL). 빈 문자열 = 아직 안 그린 빈 페이지
+    // ---- 도구 모드: 펜 → 형광펜 → 지우개 → 직선 → 사각형 순환(자리 절약을 위해 버튼 하나로 순환시킴) ----
+    const TOOL_MODES = ['pen', 'highlight', 'eraser', 'line', 'rect'];
+    const TOOL_MODE_ICON = { pen: '✏️', highlight: '🖍', eraser: '🧹', line: '📏', rect: '▭' };
+    const TOOL_MODE_LABEL = { pen: '펜', highlight: '형광펜', eraser: '지우개', line: '직선', rect: '사각형' };
+    let toolModeIndex = 0;
+    let toolMode = TOOL_MODES[0];
+
+    let drawing = false, lastX = 0, lastY = 0;
+    let lastPenTime = 0; // 손바닥 오작동 방지용 — 최근에 펜을 썼으면 손가락 터치는 무시
+    const PALM_REJECT_WINDOW_MS = 600;
+    let undoStack = []; // 스냅샷(dataURL) 배열 — 페이지 전환 시 초기화됨
+    let redoStack = [];
+    let shapeSnapshotImageData = null; // 직선/사각형 미리보기용 — 획 시작 시점의 픽셀 스냅샷
+    let shapeStartPoint = null;
+
+    let notePages = [''];          // 페이지별 잉크 내용(dataURL, 투명배경)
+    let notePageBackgrounds = [null]; // 페이지별 배경 이미지(dataURL) 또는 null
     let noteCurrentPageIndex = 0;
+
+    let bgPatternMode = 'none'; // 'none' | 'ruled' | 'grid'
+    let zoomLevel = 1; // 1 | 1.5 | 2
 
     function updatePageIndicator(){
       notePageIndicator.textContent = (noteCurrentPageIndex + 1) + '/' + notePages.length;
@@ -4408,10 +4450,21 @@ graph TD
       notePages[noteCurrentPageIndex] = noteCanvas.toDataURL('image/png');
     }
 
+    function renderCurrentBackground(){
+      bgCtx.clearRect(0, 0, noteBgCanvas.width, noteBgCanvas.height);
+      const bg = notePageBackgrounds[noteCurrentPageIndex];
+      if (bg){
+        const img = new Image();
+        img.onload = ()=> bgCtx.drawImage(img, 0, 0, noteCanvasWrap.clientWidth, noteCanvasWrap.clientHeight);
+        img.src = bg;
+      }
+    }
+
     function loadPage(index){
       saveCurrentPageSnapshot();
       noteCurrentPageIndex = index;
       undoStack = [];
+      redoStack = [];
       const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
       ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
       const saved = notePages[noteCurrentPageIndex];
@@ -4420,80 +4473,200 @@ graph TD
         img.onload = ()=> ctx.drawImage(img, 0, 0, w, h);
         img.src = saved;
       }
+      renderCurrentBackground();
       updatePageIndicator();
     }
 
     function resizeCanvasToWrap(){
       // 지금까지 그린 내용을 유지한 채로 캔버스 실제 픽셀 해상도만 화면 크기에 맞춘다
-      // (그냥 width/height를 새로 대입하면 그림이 다 지워지므로, 임시 캔버스에 옮겨뒀다가 복원)
-      const prev = noteCanvas.toDataURL ? noteCanvas.toDataURL('image/png') : null;
+      const prevInk = noteCanvas.toDataURL ? noteCanvas.toDataURL('image/png') : null;
       const dpr = window.devicePixelRatio || 1;
       const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+
       noteCanvas.width = Math.max(1, Math.round(w * dpr));
       noteCanvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      if (prev && prev.length > 100){ // 완전히 빈 캔버스의 dataURL도 항상 나오므로, 너무 짧으면(=빈 것) 복원 안 함
+      if (prevInk && prevInk.length > 100){
         const img = new Image();
         img.onload = ()=> ctx.drawImage(img, 0, 0, w, h);
-        img.src = prev;
+        img.src = prevInk;
       }
+
+      noteBgCanvas.width = Math.max(1, Math.round(w * dpr));
+      noteBgCanvas.height = Math.max(1, Math.round(h * dpr));
+      bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      renderCurrentBackground();
     }
 
     function getPoint(e){
       const rect = noteCanvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top, pressure: (e.pressure && e.pressure > 0) ? e.pressure : 0.5 };
+      const scaleX = rect.width ? (noteCanvasWrap.clientWidth / rect.width) : 1;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleX,
+        pressure: (e.pressure && e.pressure > 0) ? e.pressure : 0.5
+      };
     }
 
     function pushUndoSnapshot(){
       undoStack.push(noteCanvas.toDataURL('image/png'));
-      if (undoStack.length > 30) undoStack.shift(); // 메모리 보호 — 이 정도 용도엔 30단계면 충분
+      if (undoStack.length > 30) undoStack.shift();
+      redoStack = []; // 새 획을 그으면 지금까지의 redo 기록은 의미 없어지므로 비운다
+    }
+
+    function applyStrokeStyle(pressure){
+      const baseSize = Number(notePenSize.value) || 3;
+      if (toolMode === 'eraser'){
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = baseSize * 3;
+      } else if (toolMode === 'highlight'){
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = notePenColor.value;
+        ctx.lineWidth = baseSize * 4;
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = notePenColor.value;
+        ctx.lineWidth = Math.max(0.8, baseSize * (0.4 + (pressure || 0.5)));
+      }
     }
 
     noteCanvas.addEventListener('pointerdown', (e)=>{
+      // 손바닥 오작동 방지: 최근에 펜을 쓰고 있었는데 손가락(터치) 입력이 들어오면 무시한다.
+      if (e.pointerType === 'touch' && (Date.now() - lastPenTime) < PALM_REJECT_WINDOW_MS) return;
+      if (e.pointerType === 'pen') lastPenTime = Date.now();
+
       drawing = true;
-      pushUndoSnapshot();
       noteCanvas.setPointerCapture(e.pointerId);
       const p = getPoint(e);
+
+      if (toolMode === 'line' || toolMode === 'rect'){
+        pushUndoSnapshot();
+        shapeSnapshotImageData = ctx.getImageData(0, 0, noteCanvas.width, noteCanvas.height);
+        shapeStartPoint = p;
+        return;
+      }
+
+      pushUndoSnapshot();
       lastX = p.x; lastY = p.y;
     });
+
     noteCanvas.addEventListener('pointermove', (e)=>{
       if (!drawing) return;
+      if (e.pointerType === 'touch' && (Date.now() - lastPenTime) < PALM_REJECT_WINDOW_MS) return;
       const p = getPoint(e);
-      const baseSize = Number(notePenSize.value) || 3;
-      ctx.globalCompositeOperation = eraserOn ? 'destination-out' : 'source-over';
-      ctx.strokeStyle = notePenColor.value;
-      ctx.lineWidth = eraserOn ? baseSize * 3 : Math.max(0.8, baseSize * (0.4 + p.pressure)); // 필압 클수록 굵게
+
+      if (toolMode === 'line' || toolMode === 'rect'){
+        if (!shapeSnapshotImageData) return;
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        applyStrokeStyle(p.pressure);
+        ctx.beginPath();
+        if (toolMode === 'line'){
+          ctx.moveTo(shapeStartPoint.x, shapeStartPoint.y);
+          ctx.lineTo(p.x, p.y);
+        } else {
+          ctx.rect(shapeStartPoint.x, shapeStartPoint.y, p.x - shapeStartPoint.x, p.y - shapeStartPoint.y);
+        }
+        ctx.stroke();
+        return;
+      }
+
+      applyStrokeStyle(p.pressure);
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
       lastX = p.x; lastY = p.y;
     });
-    function endStroke(){ drawing = false; }
+
+    function endStroke(){
+      drawing = false;
+      shapeSnapshotImageData = null;
+      shapeStartPoint = null;
+      ctx.globalAlpha = 1; // 형광펜 등으로 낮춰둔 투명도가 다음 프레임에 영향 안 주도록 복원
+    }
     noteCanvas.addEventListener('pointerup', endStroke);
     noteCanvas.addEventListener('pointercancel', endStroke);
     noteCanvas.addEventListener('pointerleave', endStroke);
 
-    btnNoteEraser.addEventListener('click', ()=>{
-      eraserOn = !eraserOn;
-      btnNoteEraser.classList.toggle('is-on', eraserOn);
-      btnNoteEraser.textContent = eraserOn ? '✏️' : '🧹';
-      btnNoteEraser.title = eraserOn ? '다시 펜으로' : '지우개';
+    btnNoteToolMode.addEventListener('click', ()=>{
+      toolModeIndex = (toolModeIndex + 1) % TOOL_MODES.length;
+      toolMode = TOOL_MODES[toolModeIndex];
+      btnNoteToolMode.textContent = TOOL_MODE_ICON[toolMode];
+      const nextMode = TOOL_MODES[(toolModeIndex + 1) % TOOL_MODES.length];
+      btnNoteToolMode.title = TOOL_MODE_LABEL[toolMode] + ' (누르면 ' + TOOL_MODE_LABEL[nextMode] + '로 바뀝니다)';
     });
+
     btnNoteUndo.addEventListener('click', ()=>{
       if (!undoStack.length){ showToast('더 되돌릴 내용이 없습니다.', 'info'); return; }
+      redoStack.push(noteCanvas.toDataURL('image/png'));
       const prev = undoStack.pop();
       const img = new Image();
       const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
       img.onload = ()=>{ ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height); ctx.drawImage(img, 0, 0, w, h); };
       img.src = prev;
     });
+    btnNoteRedo.addEventListener('click', ()=>{
+      if (!redoStack.length){ showToast('다시 실행할 내용이 없습니다.', 'info'); return; }
+      undoStack.push(noteCanvas.toDataURL('image/png'));
+      const next = redoStack.pop();
+      const img = new Image();
+      const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      img.onload = ()=>{ ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height); ctx.drawImage(img, 0, 0, w, h); };
+      img.src = next;
+    });
     btnNoteClear.addEventListener('click', ()=>{
       if (!confirm('지금 페이지에 쓴 메모를 지웁니다. 계속할까요?')) return;
       pushUndoSnapshot();
       ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
+    });
+
+    // ---- 배경 이미지(기존 문서 위에 필기) ----
+    btnNoteBgImage.addEventListener('click', ()=> noteBgFileInput.click());
+    noteBgFileInput.addEventListener('change', (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        notePageBackgrounds[noteCurrentPageIndex] = reader.result;
+        renderCurrentBackground();
+        showToast('배경 이미지를 불러왔습니다. 그 위에 필기하세요.', 'success');
+      };
+      reader.readAsDataURL(file);
+      noteBgFileInput.value = '';
+    });
+
+    // ---- 배경 무늬(없음/줄노트/모눈) ----
+    btnNoteBgPattern.addEventListener('click', ()=>{
+      const modes = ['none', 'ruled', 'grid'];
+      bgPatternMode = modes[(modes.indexOf(bgPatternMode) + 1) % modes.length];
+      noteCanvasWrap.classList.remove('note-bg-ruled', 'note-bg-grid');
+      if (bgPatternMode === 'ruled') noteCanvasWrap.classList.add('note-bg-ruled');
+      if (bgPatternMode === 'grid') noteCanvasWrap.classList.add('note-bg-grid');
+      const icon = { none: '▦', ruled: '≡', grid: '⊞' }[bgPatternMode];
+      const label = { none: '없음', ruled: '줄노트', grid: '모눈' }[bgPatternMode];
+      const nextLabel = { none: '줄노트', ruled: '모눈', grid: '없음' }[bgPatternMode];
+      btnNoteBgPattern.textContent = icon;
+      btnNoteBgPattern.title = '배경 무늬 ' + label + ' (누르면 ' + nextLabel + '로 바뀝니다)';
+    });
+
+    // ---- 확대(100%→150%→200%) — 확대 중엔 손가락은 화면 이동, 정밀 필기는 S펜 권장 ----
+    btnNoteZoom.addEventListener('click', ()=>{
+      const levels = [1, 1.5, 2];
+      zoomLevel = levels[(levels.indexOf(zoomLevel) + 1) % levels.length];
+      noteZoomInner.style.transform = 'scale(' + zoomLevel + ')';
+      noteZoomInner.style.width = (100 / zoomLevel) + '%';
+      noteZoomInner.style.height = (100 / zoomLevel) + '%';
+      noteCanvasWrap.classList.toggle('note-zoomed', zoomLevel > 1);
+      // 확대 중엔 손가락 터치는 화면 이동(스크롤)에 쓰고, 필기는 펜으로만 정밀하게 하도록 안내
+      noteCanvas.style.touchAction = zoomLevel > 1 ? 'pan-x pan-y' : 'none';
+      const nextLevel = levels[(levels.indexOf(zoomLevel) + 1) % levels.length];
+      btnNoteZoom.title = '확대 ' + Math.round(zoomLevel * 100) + '%(누르면 ' + Math.round(nextLevel * 100) + '%로 바뀝니다)';
+      if (zoomLevel > 1) showToast('확대됨 — 손가락으로는 화면만 이동됩니다. 정밀한 필기는 S펜을 권장합니다.', 'info');
     });
 
     // 이전 페이지로. 다음 페이지는 "마지막 장에서 누르면 새 페이지 추가"로 동작(별도 + 버튼 없이 자리 절약).
@@ -4507,20 +4680,47 @@ graph TD
       } else {
         saveCurrentPageSnapshot();
         notePages.push('');
+        notePageBackgrounds.push(null);
         loadPage(notePages.length - 1);
       }
     });
+
+    function resetToolModeUi(){
+      toolModeIndex = 0;
+      toolMode = TOOL_MODES[0];
+      btnNoteToolMode.textContent = TOOL_MODE_ICON[toolMode];
+      btnNoteToolMode.title = TOOL_MODE_LABEL[toolMode] + ' (누르면 ' + TOOL_MODE_LABEL[TOOL_MODES[1]] + '로 바뀝니다)';
+    }
+
+    function resetZoomUi(){
+      zoomLevel = 1;
+      noteZoomInner.style.transform = 'scale(1)';
+      noteZoomInner.style.width = '100%';
+      noteZoomInner.style.height = '100%';
+      noteCanvasWrap.classList.remove('note-zoomed');
+      noteCanvas.style.touchAction = 'none';
+      btnNoteZoom.textContent = '🔍';
+      btnNoteZoom.title = '확대 100%(누르면 150%로 바뀝니다)';
+    }
+
+    function resetBgPatternUi(){
+      bgPatternMode = 'none';
+      noteCanvasWrap.classList.remove('note-bg-ruled', 'note-bg-grid');
+      btnNoteBgPattern.textContent = '▦';
+      btnNoteBgPattern.title = '배경 무늬 없음(누르면 줄노트→모눈 순서로 바뀝니다)';
+    }
 
     function openNoteModalImpl(){
       if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
       noteOverlay.style.display = 'flex';
       notePages = [''];
+      notePageBackgrounds = [null];
       noteCurrentPageIndex = 0;
       undoStack = [];
-      eraserOn = false;
-      btnNoteEraser.classList.remove('is-on');
-      btnNoteEraser.textContent = '🧹';
-      btnNoteEraser.title = '지우개';
+      redoStack = [];
+      resetToolModeUi();
+      resetZoomUi();
+      resetBgPatternUi();
       updatePageIndicator();
       requestAnimationFrame(()=>{
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -4533,22 +4733,61 @@ graph TD
 
     btnCloseNote.addEventListener('click', ()=>{ noteOverlay.style.display = 'none'; });
 
+    // 잉크(투명배경)와 배경이미지를 한 장으로 합쳐서(PDF에는 레이어 개념이 없으므로) dataURL로 만든다.
+    function flattenPage(inkDataUrl, bgDataUrl, w, h){
+      return new Promise((resolve)=>{
+        const dpr = window.devicePixelRatio || 1;
+        const off = document.createElement('canvas');
+        off.width = Math.max(1, Math.round(w * dpr));
+        off.height = Math.max(1, Math.round(h * dpr));
+        const octx = off.getContext('2d');
+        octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        octx.fillStyle = '#fff';
+        octx.fillRect(0, 0, w, h);
+
+        function drawInkThenResolve(){
+          if (inkDataUrl && inkDataUrl.length > 100){
+            const inkImg = new Image();
+            inkImg.onload = ()=>{ octx.drawImage(inkImg, 0, 0, w, h); resolve(off.toDataURL('image/png')); };
+            inkImg.src = inkDataUrl;
+          } else {
+            resolve(off.toDataURL('image/png'));
+          }
+        }
+        if (bgDataUrl){
+          const bgImg = new Image();
+          bgImg.onload = ()=>{ octx.drawImage(bgImg, 0, 0, w, h); drawInkThenResolve(); };
+          bgImg.src = bgDataUrl;
+        } else {
+          drawInkThenResolve();
+        }
+      });
+    }
+
     btnNoteSave.addEventListener('click', async ()=>{
       btnNoteSave.disabled = true; btnNoteSave.textContent = '⏳';
       try{
         saveCurrentPageSnapshot(); // 지금 보고 있는 페이지도 포함시킨다
-        const pages = notePages.filter(p => p && p.length > 100); // 완전히 빈 페이지는 제외
-        if (!pages.length){ showToast('작성된 내용이 없습니다.', 'warning'); return; }
+        const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
 
-        // 여러 페이지를 스캔 기능과 같은 방식(PDFLib)으로 한 PDF에 합친다.
+        // 잉크가 없어도 배경 이미지가 있으면 그 페이지는 유효한 페이지로 친다.
+        const pageIndexesToInclude = [];
+        for (let i = 0; i < notePages.length; i++){
+          const hasInk = notePages[i] && notePages[i].length > 100;
+          const hasBg = !!notePageBackgrounds[i];
+          if (hasInk || hasBg) pageIndexesToInclude.push(i);
+        }
+        if (!pageIndexesToInclude.length){ showToast('작성된 내용이 없습니다.', 'warning'); return; }
+
         const outDoc = await PDFLib.PDFDocument.create();
-        for (const dataUrl of pages){
-          const base64Png = dataUrl.split(',')[1];
+        for (const i of pageIndexesToInclude){
+          const flatDataUrl = await flattenPage(notePages[i], notePageBackgrounds[i], w, h);
+          const base64Png = flatDataUrl.split(',')[1];
           const pngBytes = Uint8Array.from(atob(base64Png), c => c.charCodeAt(0));
           const embedded = await outDoc.embedPng(pngBytes);
           const { width, height } = embedded;
           const page = outDoc.addPage([width, height]);
-          page.drawImage(embedded, { x:0, y:0, width, height });
+          page.drawImage(embedded, { x: 0, y: 0, width, height });
         }
         const pdfBytes = await outDoc.save();
         const base64Pdf = uint8ToBase64(pdfBytes);
@@ -4559,7 +4798,7 @@ graph TD
           showToast('저장 실패: ' + res.error, 'error');
           return;
         }
-        showToast('"' + explorerPath.join(' / ') + '" 폴더에 저장했습니다: ' + name + ' (' + pages.length + '페이지)', 'success');
+        showToast('"' + explorerPath.join(' / ') + '" 폴더에 저장했습니다: ' + name + ' (' + pageIndexesToInclude.length + '페이지)', 'success');
         addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'application/pdf' });
         chatInputEl.value = '방금 첨부한 상담메모를 읽어서, 이번 사건 파일에 이어서 추가해줘.';
         noteOverlay.style.display = 'none';
