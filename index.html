@@ -2885,18 +2885,36 @@ graph TD
       // 이 규칙은 그때 다시 다듬으면 됨).
       const vSplit = (stage === 'compact') && !cover && (window.innerHeight < window.innerWidth);
       bodyEl.classList.toggle('v-split', vSplit);
+
+      if (window.__nxDebugBadge) window.__nxDebugBadge();
     }
 
     let rafPending = false;
+    let __updateCallCount = 0;
     function scheduleUpdate(){
       if (rafPending) return;
       rafPending = true;
-      requestAnimationFrame(()=>{ rafPending = false; update(); });
+      requestAnimationFrame(()=>{ rafPending = false; __updateCallCount++; update(); });
     }
+
+    // ---- 임시 진단 배지 — 화면분할(v-split) 버그 원인 파악용. 확인되면 이 블록은 지워도 된다. ----
+    const nxDebugBadge = document.createElement('div');
+    nxDebugBadge.id = 'nxDebugBadge2';
+    nxDebugBadge.style.cssText = 'position:fixed; top:2px; left:2px; z-index:999999; background:#ff0; color:#000; font-size:9px; padding:3px 5px; border-radius:3px; font-family:monospace; line-height:1.5; pointer-events:none; max-width:70vw; white-space:pre-wrap;';
+    document.body.appendChild(nxDebugBadge);
+    window.__nxDebugBadge = function(){
+      nxDebugBadge.textContent =
+        'upd#' + __updateCallCount +
+        ' w:' + window.innerWidth + ' h:' + window.innerHeight +
+        '\ntbCW:' + topbarEl.clientWidth + ' tbSW:' + topbarEl.scrollWidth +
+        '\nstage:' + currentStage + ' cover:' + wasCover + ' vsplit:' + bodyEl.classList.contains('v-split') +
+        '\ncls:' + bodyEl.className;
+    };
 
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(scheduleUpdate).observe(topbarEl);
     window.addEventListener('resize', scheduleUpdate);
     update(); // 초기 1회
+    window.__nxDebugBadge();
 
     // 메시지 입력창에 포커스가 가 있는 동안(타이핑 중)에는 하단 고정바를 접어서
     // 그 공간을 채팅에 돌려준다 — 키보드가 올라오는 타이밍과 자연스럽게 맞물림.
