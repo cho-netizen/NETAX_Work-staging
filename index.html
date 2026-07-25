@@ -281,6 +281,7 @@
     flex:0 0 auto; width:28px; height:28px; padding:0; border:none; border-radius:6px; background:none;
   }
   .note-tb-range{ flex:0 0 60px; width:60px; }
+  .note-tb-page{ flex:0 0 auto; color:#fff; font-size:12px; padding:0 2px; }
   #noteCanvasWrap{
     flex:1 1 auto; position:relative; width:100%; min-height:0;
     background:#fff; overflow:hidden; touch-action:none;
@@ -974,6 +975,9 @@
         <button id="btnNoteEraser" class="note-tb-btn" title="지우개">🧹</button>
         <button id="btnNoteUndo" class="note-tb-btn" title="되돌리기">↩</button>
         <button id="btnNoteClear" class="note-tb-btn" title="전체지우기">🗑</button>
+        <button id="btnNotePrevPage" class="note-tb-btn" title="이전 페이지">◀</button>
+        <span id="notePageIndicator" class="note-tb-page">1/1</span>
+        <button id="btnNoteNextPage" class="note-tb-btn" title="다음 페이지(마지막 장이면 새 페이지 추가)">▶</button>
         <button id="btnNoteSave" class="note-tb-btn note-tb-save" title="저장하고 채팅에 첨부">💾</button>
         <button id="btnCloseNote" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
@@ -4385,11 +4389,39 @@ graph TD
     const btnNoteEraser = document.getElementById('btnNoteEraser');
     const btnNoteUndo = document.getElementById('btnNoteUndo');
     const btnNoteClear = document.getElementById('btnNoteClear');
+    const btnNotePrevPage = document.getElementById('btnNotePrevPage');
+    const btnNoteNextPage = document.getElementById('btnNoteNextPage');
+    const notePageIndicator = document.getElementById('notePageIndicator');
     const btnNoteSave = document.getElementById('btnNoteSave');
     const btnCloseNote = document.getElementById('btnCloseNote');
 
     let drawing = false, eraserOn = false, lastX = 0, lastY = 0;
-    let undoStack = []; // 스냅샷(dataURL) 배열 — 획을 시작하기 전 상태를 저장해뒀다가 되돌리기용
+    let undoStack = []; // 스냅샷(dataURL) 배열 — 획을 시작하기 전 상태를 저장해뒀다가 되돌리기용(페이지 전환 시 초기화됨)
+    let notePages = ['']; // 페이지별 저장된 내용(dataURL). 빈 문자열 = 아직 안 그린 빈 페이지
+    let noteCurrentPageIndex = 0;
+
+    function updatePageIndicator(){
+      notePageIndicator.textContent = (noteCurrentPageIndex + 1) + '/' + notePages.length;
+    }
+
+    function saveCurrentPageSnapshot(){
+      notePages[noteCurrentPageIndex] = noteCanvas.toDataURL('image/png');
+    }
+
+    function loadPage(index){
+      saveCurrentPageSnapshot();
+      noteCurrentPageIndex = index;
+      undoStack = [];
+      const w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
+      const saved = notePages[noteCurrentPageIndex];
+      if (saved && saved.length > 100){
+        const img = new Image();
+        img.onload = ()=> ctx.drawImage(img, 0, 0, w, h);
+        img.src = saved;
+      }
+      updatePageIndicator();
+    }
 
     function resizeCanvasToWrap(){
       // 지금까지 그린 내용을 유지한 채로 캔버스 실제 픽셀 해상도만 화면 크기에 맞춘다
@@ -4459,19 +4491,37 @@ graph TD
       img.src = prev;
     });
     btnNoteClear.addEventListener('click', ()=>{
-      if (!confirm('지금까지 쓴 메모를 전부 지웁니다. 계속할까요?')) return;
+      if (!confirm('지금 페이지에 쓴 메모를 지웁니다. 계속할까요?')) return;
       pushUndoSnapshot();
       ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
+    });
+
+    // 이전 페이지로. 다음 페이지는 "마지막 장에서 누르면 새 페이지 추가"로 동작(별도 + 버튼 없이 자리 절약).
+    btnNotePrevPage.addEventListener('click', ()=>{
+      if (noteCurrentPageIndex === 0) return;
+      loadPage(noteCurrentPageIndex - 1);
+    });
+    btnNoteNextPage.addEventListener('click', ()=>{
+      if (noteCurrentPageIndex < notePages.length - 1){
+        loadPage(noteCurrentPageIndex + 1);
+      } else {
+        saveCurrentPageSnapshot();
+        notePages.push('');
+        loadPage(notePages.length - 1);
+      }
     });
 
     function openNoteModalImpl(){
       if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
       noteOverlay.style.display = 'flex';
+      notePages = [''];
+      noteCurrentPageIndex = 0;
       undoStack = [];
       eraserOn = false;
       btnNoteEraser.classList.remove('is-on');
       btnNoteEraser.textContent = '🧹';
       btnNoteEraser.title = '지우개';
+      updatePageIndicator();
       requestAnimationFrame(()=>{
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         noteCanvas.width = 0; noteCanvas.height = 0; // 강제로 완전히 새로 시작(이전 사건의 메모가 이어지지 않도록)
@@ -4486,19 +4536,34 @@ graph TD
     btnNoteSave.addEventListener('click', async ()=>{
       btnNoteSave.disabled = true; btnNoteSave.textContent = '⏳';
       try{
-        const dataUrl = noteCanvas.toDataURL('image/png');
-        const base64 = dataUrl.split(',')[1];
-        const name = '상담메모_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.png';
-        const res = await callGas('uploadFile', { path: explorerPath, name: name, mimeType: 'image/png', base64Data: base64 });
+        saveCurrentPageSnapshot(); // 지금 보고 있는 페이지도 포함시킨다
+        const pages = notePages.filter(p => p && p.length > 100); // 완전히 빈 페이지는 제외
+        if (!pages.length){ showToast('작성된 내용이 없습니다.', 'warning'); return; }
+
+        // 여러 페이지를 스캔 기능과 같은 방식(PDFLib)으로 한 PDF에 합친다.
+        const outDoc = await PDFLib.PDFDocument.create();
+        for (const dataUrl of pages){
+          const base64Png = dataUrl.split(',')[1];
+          const pngBytes = Uint8Array.from(atob(base64Png), c => c.charCodeAt(0));
+          const embedded = await outDoc.embedPng(pngBytes);
+          const { width, height } = embedded;
+          const page = outDoc.addPage([width, height]);
+          page.drawImage(embedded, { x:0, y:0, width, height });
+        }
+        const pdfBytes = await outDoc.save();
+        const base64Pdf = uint8ToBase64(pdfBytes);
+
+        const name = '상담메모_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.pdf';
+        const res = await callGas('uploadFile', { path: explorerPath, name: name, mimeType: 'application/pdf', base64Data: base64Pdf });
         if (res.error){
           showToast('저장 실패: ' + res.error, 'error');
           return;
         }
-        showToast('"' + explorerPath.join(' / ') + '" 폴더에 저장했습니다: ' + name, 'success');
-        addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'image/png' });
+        showToast('"' + explorerPath.join(' / ') + '" 폴더에 저장했습니다: ' + name + ' (' + pages.length + '페이지)', 'success');
+        addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'application/pdf' });
         chatInputEl.value = '방금 첨부한 상담메모를 읽어서, 이번 사건 파일에 이어서 추가해줘.';
         noteOverlay.style.display = 'none';
-        navigateTo(explorerPath); // 방금 저장한 이미지가 탐색기에 바로 보이도록 새로고침
+        navigateTo(explorerPath); // 방금 저장한 파일이 탐색기에 바로 보이도록 새로고침
         chatInputEl.focus();
       }catch(err){
         showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error');
