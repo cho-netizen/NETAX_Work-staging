@@ -951,10 +951,10 @@
               <svg id="scanQuadSvg" class="scan-quad-svg"><polygon id="scanQuadPoly"></polygon></svg>
             </div>
             <div class="scan-controls">
-              <button id="btnAutoDetect" class="ghost-btn">자동 인식 다시</button>
+              <button id="btnAutoDetect" class="ghost-btn scan-action-btn">자동 인식 다시</button>
               <label class="scan-check"><input type="checkbox" id="scanGrayscale"> 흑백(문서용)</label>
               <label class="scan-slider">대비 <input type="range" id="scanContrast" min="0" max="100" value="20"></label>
-              <button id="btnWarpAndAdd" class="save-btn">펴서 페이지에 담기</button>
+              <button id="btnWarpAndAdd" class="ghost-btn scan-action-btn">펴서 페이지에 담기</button>
             </div>
           </div>
         </div>
@@ -971,7 +971,7 @@
         <div class="scan-export-actions">
           <button id="btnScanSummarize" class="ghost-btn scan-action-btn">🔎 AI 요약</button>
           <button id="btnDownloadPdf" class="ghost-btn scan-action-btn">⬇ PC에 다운로드</button>
-          <button id="btnSaveToFolder" class="save-btn scan-action-btn">💾 현재 폴더에 저장</button>
+          <button id="btnSaveToFolder" class="ghost-btn scan-action-btn">💾 현재 폴더에 저장</button>
         </div>
       </div>
     </div>
@@ -4953,21 +4953,36 @@ graph TD
   }
 
   function detectEdgeInset(gray, width, height){
-    const midX = Math.floor(width / 2), midY = Math.floor(height / 2);
     const marginLimit = 0.35; // 이보다 안쪽으로 못 들어오면(35% 이상) 신뢰 안 함 → 기본값 대체
     const THRESH = 15;        // 그레이스케일 차이가 이 정도는 돼야 "진짜 경계"로 인정
     const fallback = { top: height * 0.06, bottom: height * 0.06, left: width * 0.06, right: width * 0.06 };
+    const N_SAMPLES = 7; // 2026.07: 중앙선 1개만 보던 방식은 그 한 지점에 그림자·잡음이 있으면
+    // 통째로 틀어졌다 — 변을 따라 여러 지점(20%~80% 구간에 고르게)을 훑어서 중앙값을 쓰도록
+    // 바꿔서, 한두 지점이 흔들려도 전체 판단이 잘 안 틀어지게 했다.
 
-    const top = scanEdgeLine(y => gray[y * width + midX], height);
-    const bottom = scanEdgeLine(y => gray[(height - 1 - y) * width + midX], height);
-    const left = scanEdgeLine(x => gray[midY * width + x], width);
-    const right = scanEdgeLine(x => gray[midY * width + (width - 1 - x)], width);
+    function sampleMedian(getVal, perpLength, alongLength){
+      const hits = [];
+      for (let s = 1; s <= N_SAMPLES; s++){
+        const t = s / (N_SAMPLES + 1);
+        const along = Math.round(t * (alongLength - 1));
+        const { idx, strength } = scanEdgeLine(p => getVal(along, p), perpLength);
+        if (strength > THRESH && idx < perpLength * marginLimit) hits.push(idx);
+      }
+      if (!hits.length) return null;
+      hits.sort((a, b) => a - b);
+      return hits[Math.floor(hits.length / 2)]; // 중앙값(가장 튀는 값의 영향을 덜 받음)
+    }
+
+    const top = sampleMedian((along, p) => gray[p * width + along], height, width);
+    const bottom = sampleMedian((along, p) => gray[(height - 1 - p) * width + along], height, width);
+    const left = sampleMedian((along, p) => gray[along * width + p], width, height);
+    const right = sampleMedian((along, p) => gray[along * width + (width - 1 - p)], width, height);
 
     return {
-      top: (top.strength > THRESH && top.idx < height * marginLimit) ? top.idx : fallback.top,
-      bottom: (bottom.strength > THRESH && bottom.idx < height * marginLimit) ? bottom.idx : fallback.bottom,
-      left: (left.strength > THRESH && left.idx < width * marginLimit) ? left.idx : fallback.left,
-      right: (right.strength > THRESH && right.idx < width * marginLimit) ? right.idx : fallback.right
+      top: top !== null ? top : fallback.top,
+      bottom: bottom !== null ? bottom : fallback.bottom,
+      left: left !== null ? left : fallback.left,
+      right: right !== null ? right : fallback.right
     };
   }
 
