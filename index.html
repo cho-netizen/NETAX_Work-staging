@@ -2794,14 +2794,20 @@ graph TD
 
     // 지금 stage를 candidateStage로 잠깐 바꿔서(화면엔 안 그려짐 — 아래 설명 참고) 그 상태로
     // 한 줄로 쭉 펼쳤을 때 실제로 몇 px가 필요한지(scrollWidth)를 재고 원래 상태로 되돌린다.
+    // 2026.07: 되돌리는 줄이 try/finally 밖에 있으면, 이 사이에서 예외가 나거나(측정 도중 DOM이
+    // 바뀌는 등) 화면분할처럼 리사이즈가 짧은 시간에 몰아치는 상황에서 "원상복구가 스킵된 채
+    // 남는" 사고가 날 수 있다고 보고 finally로 감쌌다(화면분할 중 버튼이 잠깐 살아나 보이던
+    // 문제의 유력한 원인).
     function measureRequiredWidth(candidateStage){
       const prevBodyClass = bodyEl.className;
-      bodyEl.className = prevBodyClass.replace(/\bstage-\S+/g, '').trim() + ' stage-' + candidateStage;
-      topbarEl.classList.add('measuring'); // 이 순간만 줄바꿈을 강제로 꺼서 "진짜 필요한 폭"을 잼
-      const required = topbarEl.scrollWidth;
-      topbarEl.classList.remove('measuring');
-      bodyEl.className = prevBodyClass; // 측정 즉시 원상복구 — 동기 실행이라 화면엔 안 그려짐
-      return required;
+      try {
+        bodyEl.className = prevBodyClass.replace(/\bstage-\S+/g, '').trim() + ' stage-' + candidateStage;
+        topbarEl.classList.add('measuring'); // 이 순간만 줄바꿈을 강제로 꺼서 "진짜 필요한 폭"을 잼
+        return topbarEl.scrollWidth;
+      } finally {
+        topbarEl.classList.remove('measuring');
+        bodyEl.className = prevBodyClass; // 예외가 나든 안 나든 반드시 원상복구
+      }
     }
 
     function resolveStage(){
@@ -2822,13 +2828,17 @@ graph TD
         return;
       }
       const prevBodyClass = bodyEl.className;
-      bodyEl.className = prevBodyClass.includes('mode-buttons-labeled')
-        ? prevBodyClass
-        : prevBodyClass + ' mode-buttons-labeled';
-      topbarEl.classList.add('measuring');
-      const required = topbarEl.scrollWidth;
-      topbarEl.classList.remove('measuring');
-      bodyEl.className = prevBodyClass;
+      let required;
+      try {
+        bodyEl.className = prevBodyClass.includes('mode-buttons-labeled')
+          ? prevBodyClass
+          : prevBodyClass + ' mode-buttons-labeled';
+        topbarEl.classList.add('measuring');
+        required = topbarEl.scrollWidth;
+      } finally {
+        topbarEl.classList.remove('measuring');
+        bodyEl.className = prevBodyClass; // 예외가 나든 안 나든 반드시 원상복구
+      }
 
       const fits = required <= topbarEl.clientWidth - 4;
       if (fits !== modeButtonsLabeled){
@@ -2890,11 +2900,20 @@ graph TD
     }
 
     let rafPending = false;
+    let debounceTimer = null;
     let __updateCallCount = 0;
+    // 2026.07: 예전엔 리사이즈가 일어날 때마다 곧바로(rAF 한 프레임 뒤) 측정했는데, 화면분할처럼
+    // 리사이즈 이벤트가 아주 짧은 시간에 여러 번 몰아치는 상황에서는 측정(임시 클래스 교체)이
+    // 서로 겹칠 위험이 있었다(화면분할 중 버튼이 잠깐 살아나 보이던 문제의 유력한 원인 중 하나).
+    // 그래서 리사이즈가 잠깐이라도 멈출 때까지(120ms) 기다렸다가 딱 한 번만 재도록 바꿨다.
     function scheduleUpdate(){
-      if (rafPending) return;
-      rafPending = true;
-      requestAnimationFrame(()=>{ rafPending = false; __updateCallCount++; update(); });
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(()=>{
+        debounceTimer = null;
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(()=>{ rafPending = false; __updateCallCount++; update(); });
+      }, 120);
     }
 
     // ---- 임시 진단 배지 — 화면분할(v-split) 버그 원인 파악용. 확인되면 이 블록은 지워도 된다. ----
