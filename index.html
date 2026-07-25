@@ -404,20 +404,18 @@
 
   /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
      PC·태블릿에서는 이 오버레이를 아예 안 쓰고 진짜 브라우저 새 창(window.open)으로 연다
-     (크기조절·이동은 OS/브라우저가 처리 — 우리가 흉내낼 필요가 없어짐). ===== */
+     (크기조절·이동은 OS/브라우저가 처리 — 우리가 흉내낼 필요가 없어짐).
+     헤더줄을 따로 두지 않는다 — report-writer 자체 툴바가 이미 iframe 안에 있어서, 헤더줄을
+     더하면 "두 줄"이 되어버린다. 닫기 버튼도 report-writer 자체 툴바 안에 통합되어 있고
+     (embedded일 때만 노출, postMessage로 부모에게 닫아달라고 요청), 그래서 실제로 보이는 건
+     report-writer 자체 툴바 한 줄뿐이다. ===== */
   .floating-layer{ position:fixed; inset:0; z-index:100; pointer-events:none; }
   .full-editor-panel{
     position:absolute; inset:0; pointer-events:auto;
     width:100%; height:100%;
     background:#fff;
-    display:flex; flex-direction:column; overflow:hidden;
   }
-  .full-editor-panel .modal-head{
-    flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
-    padding:4px 8px; background:var(--navy); color:#fff; font-size:11.5px; min-height:0;
-  }
-  .full-editor-panel .modal-head .modal-close{ font-size:14px; line-height:1; cursor:pointer; }
-  .full-editor-frame{ flex:1; width:100%; border:none; }
+  .full-editor-frame{ position:absolute; inset:0; width:100%; height:100%; border:none; }
 
   /* ===== 작업 영역 ===== */
   .workspace{ display:flex; flex:1; min-height:0; }
@@ -1003,10 +1001,6 @@
 
   <div class="floating-layer" id="fullEditorOverlay" style="display:none;">
     <div class="full-editor-panel" id="fullEditorPanel">
-      <div class="modal-head" id="fullEditorHead">
-        <span>🖋 편집</span>
-        <span class="modal-close" id="btnCloseFullEditor" title="닫기">✕</span>
-      </div>
       <iframe id="fullEditorFrame" class="full-editor-frame" title="전체화면 문서 편집기"></iframe>
     </div>
   </div>
@@ -2573,6 +2567,11 @@ graph TD
       // report-writer 자체 툴바의 "📎 참조" 버튼에서 온 요청 — 좁은 편집창/전체화면 어느 쪽이든
       // 똑같이 여기서 처리된다(화면별로 따로 처리하지 않아도 됨).
       addTextAttachment(msg.name || (currentOpenFile && currentOpenFile.name) || '문서', msg.content || '');
+    }
+    if (msg.type === 'nx-close-editor' && fullEditorOverlay.style.display !== 'none'){
+      // 폰 전체화면 편집기가 열려있을 때만 반응한다(그 외의 경우 — 예: 탐색기 안 좁은 편집창
+      // 임베드 — 에는 이 버튼이 눌려도 닫을 오버레이가 없으므로 아무 일도 하지 않음).
+      closeFullEditor();
     }
   });
 
@@ -4872,7 +4871,8 @@ graph TD
     fullEditorFrame.src = 'about:blank';
   }
   document.getElementById('btnOpenFullEditor').addEventListener('click', openFullEditor);
-  document.getElementById('btnCloseFullEditor').addEventListener('click', (e)=>{ e.stopPropagation(); closeFullEditor(); });
+  // 닫기는 이제 report-writer 자체 툴바의 ✕ 버튼(embedded일 때만 보임)이 postMessage로
+  // 요청하면 위쪽 메시지 리스너에서 closeFullEditor()를 호출하는 방식으로 처리한다.
 
   document.getElementById('btnCloseScan').addEventListener('click', closeScanModal);
   scanOverlay.addEventListener('click', (e)=>{ if (e.target === scanOverlay) closeScanModal(); });
