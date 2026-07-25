@@ -3127,14 +3127,22 @@ graph TD
     renderVoiceCommandSettings();
     settingsOverlay.style.display = 'flex';
   }
-  function closeSettingsModal(){
+  // 닫는 방법(저장 버튼 / X 버튼 / 바깥 클릭)과 무관하게 항상 지금 폼 내용을 저장한다.
+  // 예전엔 "저장" 버튼을 직접 눌러야만 저장되고, X나 바깥 클릭으로 닫으면 조용히 사라져서
+  // "체크했는데 다시 들어가보면 꺼져있다"는 문제가 있었다 — 닫는 것 자체를 저장으로 취급한다.
+  function saveSettingsAndClose(){
+    aiSettings = readSettingsForm();
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
+    readVoiceCommandSettingsFromUi();
+    localStorage.setItem(VOICE_COMMANDS_KEY, JSON.stringify(voiceCommands));
     settingsOverlay.style.display = 'none';
+    updateChatModelBadge();
   }
 
   document.getElementById('btnOpenSettings').addEventListener('click', openSettingsModal);
-  document.getElementById('btnCloseSettings').addEventListener('click', closeSettingsModal);
+  document.getElementById('btnCloseSettings').addEventListener('click', saveSettingsAndClose);
   settingsOverlay.addEventListener('click', (e)=>{
-    if (e.target === settingsOverlay) closeSettingsModal(); // 바깥(어두운 영역) 클릭 시 닫기
+    if (e.target === settingsOverlay) saveSettingsAndClose(); // 바깥(어두운 영역) 클릭 시에도 저장 후 닫기
   });
   settingsAdvisor.addEventListener('change', ()=>{
     advisorModelRow.style.display = settingsAdvisor.checked ? 'block' : 'none';
@@ -3142,14 +3150,7 @@ graph TD
   document.getElementById('btnResetSettings').addEventListener('click', ()=>{
     populateSettingsForm(DEFAULT_AI_SETTINGS);
   });
-  document.getElementById('btnSaveSettings').addEventListener('click', ()=>{
-    aiSettings = readSettingsForm();
-    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
-    readVoiceCommandSettingsFromUi();
-    localStorage.setItem(VOICE_COMMANDS_KEY, JSON.stringify(voiceCommands));
-    closeSettingsModal();
-    updateChatModelBadge();
-  });
+  document.getElementById('btnSaveSettings').addEventListener('click', saveSettingsAndClose);
 
   // ---- 폰 상단 모드버튼 4개(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
   // 여기서) — 설정모달을 안 열어도 바로 켜고 끌 수 있고, 켜져 있으면 금색으로 표시된다. ----
