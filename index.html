@@ -396,38 +396,21 @@
     border:1px solid var(--line); border-radius:6px;
   }
 
-  /* ===== 전체화면 편집기: 배경을 가리지 않는 "뜨는 창" ===== */
+  /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
+     PC·태블릿에서는 이 오버레이를 아예 안 쓰고 진짜 브라우저 새 창(window.open)으로 연다
+     (크기조절·이동은 OS/브라우저가 처리 — 우리가 흉내낼 필요가 없어짐). ===== */
   .floating-layer{ position:fixed; inset:0; z-index:100; pointer-events:none; }
   .full-editor-panel{
-    position:absolute; pointer-events:auto;
-    background:#fff; border-radius:8px; box-shadow:0 14px 44px rgba(0,0,0,0.35);
+    position:absolute; inset:0; pointer-events:auto;
+    width:100%; height:100%;
+    background:#fff;
     display:flex; flex-direction:column; overflow:hidden;
-    min-width:380px; min-height:280px;
-  }
-  .full-editor-panel.maximized{
-    top:0 !important; left:0 !important; width:100vw !important; height:100vh !important;
-    border-radius:0;
   }
   .full-editor-panel .modal-head{
-    position:absolute; top:6px; right:10px; z-index:70;
-    display:flex; align-items:center; gap:10px;
-    background:rgba(10,20,40,0.55); padding:6px 10px; border-radius:6px;
-    cursor:move; user-select:none;
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; background:var(--navy); color:#fff; font-size:13.5px;
   }
-  /* 헤더가 작은 알약 모양으로 줄어들면서 드래그 가능 영역도 같이 줄어버렸던 문제 보완 —
-     창 위쪽 전체에 얇은 띠를 깔아서, 어디를 잡아도 창을 옮길 수 있게 한다.
-     report-writer 자체 툴바(iframe 안)는 이 띠보다 아래에서 시작하므로 클릭에 방해되지 않는다. */
-  .full-editor-drag-strip{
-    position:absolute; top:0; left:0; right:0; height:10px; z-index:65; cursor:move;
-  }
-  .win-btn{ cursor:pointer; color:rgba(255,255,255,0.85); font-size:13px; }
-  .win-btn:hover{ color:#fff; }
   .full-editor-frame{ flex:1; width:100%; border:none; }
-  .resize-handle{
-    position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize;
-    background:linear-gradient(135deg, transparent 0 50%, rgba(0,0,0,0.28) 50% 100%);
-  }
-  .full-editor-panel.maximized .resize-handle{ display:none; }
 
   /* ===== 작업 영역 ===== */
   .workspace{ display:flex; flex:1; min-height:0; }
@@ -1011,13 +994,11 @@
 
   <div class="floating-layer" id="fullEditorOverlay" style="display:none;">
     <div class="full-editor-panel" id="fullEditorPanel">
-      <div class="full-editor-drag-strip" id="fullEditorDragStrip" title="여기를 잡고 창을 옮길 수 있습니다"></div>
       <div class="modal-head" id="fullEditorHead">
-        <span class="win-btn" id="btnMaximizeFullEditor" title="최대화/복원">⬜</span>
+        <span>🖋 편집</span>
         <span class="modal-close" id="btnCloseFullEditor" title="닫기">✕</span>
       </div>
       <iframe id="fullEditorFrame" class="full-editor-frame" title="전체화면 문서 편집기"></iframe>
-      <div class="resize-handle" id="fullEditorResizeHandle"></div>
     </div>
   </div>
 
@@ -4840,64 +4821,32 @@ graph TD
 
   // ---- 전체화면 편집기 (AI 개입 없이, 드래그·크기조절·최대화 가능한 뜨는 창) ----
   const fullEditorOverlay = document.getElementById('fullEditorOverlay');
-  const fullEditorPanel = document.getElementById('fullEditorPanel');
   const fullEditorFrame = document.getElementById('fullEditorFrame');
-  const fullEditorHead = document.getElementById('fullEditorHead');
-  const btnMaximizeFullEditor = document.getElementById('btnMaximizeFullEditor');
-  const fullEditorResizeHandle = document.getElementById('fullEditorResizeHandle');
 
-  const FULL_EDITOR_RECT_KEY = 'nx_full_editor_rect';
-  let isFullEditorMaximized = false;
-  let preMaximizeRect = null; // 최대화 직전 크기·위치를 기억해뒀다가 복원할 때 씀
-
-  function defaultEditorRect(){
-    const w = Math.round(window.innerWidth * 0.78);
-    const h = Math.round(window.innerHeight * 0.8);
-    return { width: w, height: h, top: Math.round((window.innerHeight - h) / 2), left: Math.round((window.innerWidth - w) / 2) };
-  }
-
-  function loadEditorRect(){
-    try{
-      const raw = localStorage.getItem(FULL_EDITOR_RECT_KEY);
-      if (raw) return JSON.parse(raw);
-    }catch(err){ /* 저장된 값이 이상하면 그냥 기본값 사용 */ }
-    return defaultEditorRect();
-  }
-
-  function clampRect(rect){
-    const minVisible = 80; // 창의 최소 이 정도는 화면 안에 걸쳐 있게(완전히 화면 밖으로 나가서 못 찾는 상황 방지)
-    const width = Math.max(380, Math.min(rect.width, window.innerWidth));
-    const height = Math.max(280, Math.min(rect.height, window.innerHeight));
-    const left = Math.max(minVisible - width, Math.min(rect.left, window.innerWidth - minVisible));
-    const top = Math.max(0, Math.min(rect.top, window.innerHeight - minVisible));
-    return { width, height, top, left };
-  }
-
-  function applyRect(rect){
-    fullEditorPanel.style.width = rect.width + 'px';
-    fullEditorPanel.style.height = rect.height + 'px';
-    fullEditorPanel.style.top = rect.top + 'px';
-    fullEditorPanel.style.left = rect.left + 'px';
-  }
-
-  function saveCurrentRect(){
-    if (isFullEditorMaximized) return; // 최대화 상태에서의 좌표는 저장하지 않음(의미 없음)
-    localStorage.setItem(FULL_EDITOR_RECT_KEY, JSON.stringify({
-      width: fullEditorPanel.offsetWidth,
-      height: fullEditorPanel.offsetHeight,
-      top: parseInt(fullEditorPanel.style.top, 10) || 0,
-      left: parseInt(fullEditorPanel.style.left, 10) || 0
-    }));
-  }
-
+  // 편집창: 폰(좁은 화면)에서는 상담메모창과 똑같이 페이지 안에서 전체화면으로 띄우고,
+  // PC·태블릿에서는 진짜 브라우저 새 창(window.open)으로 연다 — 크기조절·이동·최대화를
+  // 우리가 직접 흉내내는 대신 OS/브라우저에게 그대로 맡긴다(훨씬 더 자연스럽고 안정적).
   function openFullEditor(){
-    if (currentOpenFile){
-      fullEditorFrame.src = REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id);
-    } else {
-      fullEditorFrame.src = REPORT_WRITER_URL;
+    const url = currentOpenFile
+      ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id))
+      : REPORT_WRITER_URL;
+
+    if (document.body.classList.contains('stage-compact')){
+      fullEditorFrame.src = url;
+      fullEditorOverlay.style.display = 'block';
+      return;
     }
-    applyRect(clampRect(loadEditorRect()));
-    fullEditorOverlay.style.display = 'block';
+
+    const w = Math.round(window.innerWidth * 0.75);
+    const h = Math.round(window.innerHeight * 0.85);
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const win = window.open(url, 'nxEditorWindow', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!win){
+      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
+    } else {
+      win.focus();
+    }
   }
   function closeFullEditor(){
     fullEditorOverlay.style.display = 'none';
@@ -4905,77 +4854,6 @@ graph TD
   }
   document.getElementById('btnOpenFullEditor').addEventListener('click', openFullEditor);
   document.getElementById('btnCloseFullEditor').addEventListener('click', (e)=>{ e.stopPropagation(); closeFullEditor(); });
-
-  // 최대화 ↔ 복원 토글
-  btnMaximizeFullEditor.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if (!isFullEditorMaximized){
-      preMaximizeRect = {
-        width: fullEditorPanel.offsetWidth, height: fullEditorPanel.offsetHeight,
-        top: parseInt(fullEditorPanel.style.top, 10) || 0, left: parseInt(fullEditorPanel.style.left, 10) || 0
-      };
-      fullEditorPanel.classList.add('maximized');
-      isFullEditorMaximized = true;
-    } else {
-      fullEditorPanel.classList.remove('maximized');
-      isFullEditorMaximized = false;
-      applyRect(clampRect(preMaximizeRect || defaultEditorRect()));
-    }
-  });
-  // 제목표시줄 더블클릭으로도 최대화/복원 (일반 창과 동일한 습관)
-  fullEditorHead.addEventListener('dblclick', ()=> btnMaximizeFullEditor.click());
-
-  // 제목표시줄 드래그로 창 이동 — 헤더(작은 알약)와 위쪽 드래그띠 둘 다 같은 방식으로 동작
-  function startFullEditorDrag(e){
-    if (e.target === btnMaximizeFullEditor || e.target.id === 'btnCloseFullEditor') return;
-    if (isFullEditorMaximized) return; // 최대화 상태에서는 이동 의미 없음
-    e.preventDefault();
-    const dragTarget = e.currentTarget;
-    const startX = e.clientX, startY = e.clientY;
-    const startTop = parseInt(fullEditorPanel.style.top, 10) || 0;
-    const startLeft = parseInt(fullEditorPanel.style.left, 10) || 0;
-    dragTarget.setPointerCapture(e.pointerId);
-
-    function onMove(ev){
-      const newLeft = startLeft + (ev.clientX - startX);
-      const newTop = startTop + (ev.clientY - startY);
-      fullEditorPanel.style.left = newLeft + 'px';
-      fullEditorPanel.style.top = Math.max(0, newTop) + 'px'; // 제목표시줄이 화면 위로 넘어가 못 찾는 상황 방지
-    }
-    function onUp(){
-      dragTarget.removeEventListener('pointermove', onMove);
-      dragTarget.removeEventListener('pointerup', onUp);
-      saveCurrentRect();
-    }
-    dragTarget.addEventListener('pointermove', onMove);
-    dragTarget.addEventListener('pointerup', onUp);
-  }
-  fullEditorHead.addEventListener('pointerdown', startFullEditorDrag);
-  document.getElementById('fullEditorDragStrip').addEventListener('pointerdown', startFullEditorDrag);
-
-  // 모서리 드래그로 창 크기 조절
-  fullEditorResizeHandle.addEventListener('pointerdown', (e)=>{
-    if (isFullEditorMaximized) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const startX = e.clientX, startY = e.clientY;
-    const startW = fullEditorPanel.offsetWidth, startH = fullEditorPanel.offsetHeight;
-    fullEditorResizeHandle.setPointerCapture(e.pointerId);
-
-    function onMove(ev){
-      const newW = Math.max(380, startW + (ev.clientX - startX));
-      const newH = Math.max(280, startH + (ev.clientY - startY));
-      fullEditorPanel.style.width = newW + 'px';
-      fullEditorPanel.style.height = newH + 'px';
-    }
-    function onUp(){
-      fullEditorResizeHandle.removeEventListener('pointermove', onMove);
-      fullEditorResizeHandle.removeEventListener('pointerup', onUp);
-      saveCurrentRect();
-    }
-    fullEditorResizeHandle.addEventListener('pointermove', onMove);
-    fullEditorResizeHandle.addEventListener('pointerup', onUp);
-  });
 
   document.getElementById('btnCloseScan').addEventListener('click', closeScanModal);
   scanOverlay.addEventListener('click', (e)=>{ if (e.target === scanOverlay) closeScanModal(); });
