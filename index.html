@@ -390,10 +390,16 @@
   .scan-tray-item button:hover{ color:var(--navy); border-color:var(--navy); }
   .scan-hint{ font-size:11px; color:var(--sub); }
 
-  .scan-export-foot{ justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .scan-export-foot{
+    flex-direction:column; align-items:stretch; gap:10px;
+  }
   .scan-name-input{
-    flex:1; min-width:160px; font-family:inherit; font-size:12.5px; padding:7px 9px;
-    border:1px solid var(--line); border-radius:6px;
+    width:100%; font-family:inherit; font-size:14px; padding:11px 12px;
+    border:1px solid var(--line); border-radius:8px; box-sizing:border-box;
+  }
+  .scan-export-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .scan-action-btn{
+    flex:1; min-width:120px; font-size:13.5px; padding:12px 14px; border-radius:8px;
   }
 
   /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
@@ -408,8 +414,9 @@
   }
   .full-editor-panel .modal-head{
     flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
-    padding:8px 12px; background:var(--navy); color:#fff; font-size:13.5px;
+    padding:4px 8px; background:var(--navy); color:#fff; font-size:11.5px; min-height:0;
   }
+  .full-editor-panel .modal-head .modal-close{ font-size:14px; line-height:1; cursor:pointer; }
   .full-editor-frame{ flex:1; width:100%; border:none; }
 
   /* ===== 작업 영역 ===== */
@@ -954,9 +961,11 @@
       </div>
       <div class="modal-foot scan-export-foot">
         <input type="text" id="scanOutputName" placeholder="파일 이름 (예: 계약서_스캔)" class="scan-name-input">
-        <button id="btnScanSummarize" class="ghost-btn">🔎 AI 요약</button>
-        <button id="btnDownloadPdf" class="ghost-btn">PC에 다운로드</button>
-        <button id="btnSaveToFolder" class="save-btn">현재 폴더에 저장</button>
+        <div class="scan-export-actions">
+          <button id="btnScanSummarize" class="ghost-btn scan-action-btn">🔎 AI 요약</button>
+          <button id="btnDownloadPdf" class="ghost-btn scan-action-btn">⬇ PC에 다운로드</button>
+          <button id="btnSaveToFolder" class="save-btn scan-action-btn">💾 현재 폴더에 저장</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1029,6 +1038,7 @@
         <div class="spacer"></div>
         <button type="button" id="btnNewFolder" class="ghost-btn" title="지금 보고 있는 폴더 안에 새 폴더를 만듭니다" style="padding:5px 10px; font-size:11.5px;">📁</button>
         <button type="button" id="btnNewDoc" class="ghost-btn" title="지금 보고 있는 폴더 안에 새 문서(.md)를 만들고 바로 편집기로 엽니다" style="padding:5px 10px; font-size:11.5px;">📄</button>
+        <button type="button" id="btnRefreshExplorer" class="ghost-btn" title="지금 폴더 새로고침 (드라이브에서 직접 추가했거나 AI가 스스로 만든 파일이 안 보일 때)" style="padding:5px 10px; font-size:11.5px;">🔄</button>
       </div>
 
       <div id="diagramView" style="display:none; flex:1; flex-direction:column; min-height:0;">
@@ -2994,6 +3004,14 @@ graph TD
     }catch(err){
       showToast('문서 만들기 중 오류: ' + (err && err.message ? err.message : err), 'error');
     }
+  });
+
+  // 드라이브에서 직접 파일을 추가/삭제했거나, AI가 스스로(요청 없이) 파일을 만들거나 갱신했을 때
+  // 탐색기가 그걸 자동으로는 알 방법이 없는 경우가 있다(예: 검토서 자동갱신, 외부에서 직접 업로드
+  // 등) — 그럴 때 수동으로 다시 불러오는 버튼.
+  document.getElementById('btnRefreshExplorer').addEventListener('click', ()=>{
+    navigateTo(explorerPath);
+    showToast('새로고침했습니다.', 'info');
   });
 
   // 공유 — 퀵쉐어(윈도우/안드로이드 OS 기능)는 웹사이트가 직접 지정할 수 없어서,
