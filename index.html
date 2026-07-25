@@ -159,6 +159,11 @@
   /* 기본값(=stage-full, JS 실행 전에도 일단 이 형태로 보이도록): 개별 버튼 전부 표시 */
   .layout-buttons-wide{ display:contents; }
   .tool-buttons-wide{ display:contents; }
+  @media (max-width: 500px){
+    .tool-buttons-wide,
+    .tool-group-narrow,
+    .layout-buttons-wide{ display:none !important; }
+  }
   #btnWorkspaceMode{ display:none; }
   .tool-group-narrow{ display:none; }
   #btnModeAutoRef, #btnModeWebSearch, #btnModeWebFetch{ display:none; } /* 폰 전용 — full/grouped(PC·탭)에서는 숨김 */
