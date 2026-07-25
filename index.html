@@ -2900,7 +2900,7 @@ graph TD
     // ---- 임시 진단 배지 — 화면분할(v-split) 버그 원인 파악용. 확인되면 이 블록은 지워도 된다. ----
     const nxDebugBadge = document.createElement('div');
     nxDebugBadge.id = 'nxDebugBadge2';
-    nxDebugBadge.style.cssText = 'position:fixed; top:2px; left:2px; z-index:999999; background:#ff0; color:#000; font-size:9px; padding:3px 5px; border-radius:3px; font-family:monospace; line-height:1.5; pointer-events:none; max-width:70vw; white-space:pre-wrap;';
+    nxDebugBadge.style.cssText = 'position:fixed; bottom:2px; right:2px; z-index:999999; background:#ff0; color:#000; font-size:8px; padding:2px 4px; border-radius:3px; font-family:monospace; line-height:1.4; pointer-events:none; max-width:55vw; white-space:pre-wrap; opacity:0.85;';
     document.body.appendChild(nxDebugBadge);
     window.__nxDebugBadge = function(){
       nxDebugBadge.textContent =
