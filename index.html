@@ -403,6 +403,10 @@
   }
   .scan-source-actions{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
   .scan-source-actions .scan-action-btn{ min-width:140px; }
+  /* PC(stage-full)는 카메라가 없거나 있어도 브라우저가 capture 속성을 무시해서
+     "촬영하기"와 "파일 선택"이 결과적으로 똑같이 동작한다 — 그래서 PC에서만 이 버튼을
+     숨기고 "파일 선택" 하나만 남긴다. 폰·태블릿(compact/grouped)에서는 그대로 둘 다 보인다. */
+  body.stage-full #btnScanCapture{ display:none; }
 
   /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
      PC·태블릿에서는 이 오버레이를 아예 안 쓰고 진짜 브라우저 새 창(window.open)으로 연다
@@ -931,12 +935,11 @@
       <div class="modal-body scan-body">
 
         <div class="scan-section">
-          <div class="scan-section-title">① 스캔 (귀퉁이를 드래그해서 원근 보정)</div>
           <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
           <input type="file" id="scanGalleryInput" accept="image/*" style="display:none;">
           <div class="scan-source-actions">
-            <button type="button" id="btnScanCapture" class="ghost-btn scan-action-btn">📷 촬영하기</button>
-            <button type="button" id="btnScanGallery" class="ghost-btn scan-action-btn">🖼 갤러리에서 불러오기</button>
+            <button type="button" id="btnScanCapture" class="ghost-btn scan-action-btn">촬영</button>
+            <button type="button" id="btnScanGallery" class="ghost-btn scan-action-btn">파일</button>
           </div>
           <div id="scanStageWrap" class="scan-stage-wrap" style="display:none;">
             <div id="scanStage" class="scan-stage">
@@ -957,11 +960,9 @@
         </div>
 
         <div class="scan-section">
-          <div class="scan-section-title">② 페이지 모음 (순서·회전 조정 후 PDF로)</div>
           <input type="file" id="scanPdfInsertInput" accept="application/pdf" style="display:none;">
-          <button type="button" id="btnScanPdfInsert" class="ghost-btn scan-action-btn" title="기존 PDF 파일을 페이지 묶음 끝에 추가">📎 기존 PDF 추가</button>
+          <button type="button" id="btnScanPdfInsert" class="ghost-btn scan-action-btn">모음</button>
           <div id="scanTray" class="scan-tray"></div>
-          <div class="scan-hint">기존 PDF를 추가하면 그 PDF의 모든 페이지가 통째로 지금 순서 끝에 삽입됩니다.</div>
         </div>
 
       </div>
