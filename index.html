@@ -256,6 +256,36 @@
     width:min(420px, 92vw); max-height:86vh; overflow-y:auto;
     background:#fff; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.25);
   }
+  /* 상담메모(필기) — 안드로이드 전용, 화면이 좁은 게 전제라 안내문구 없이 타이틀행 하나 +
+     캔버스 전체로만 구성한다. 스크롤이 아예 필요 없게 만들어서 "스크롤바가 잘 안 잡히는"
+     문제 자체를 없앤다. */
+  .note-fullscreen-panel{
+    width:100vw; height:100dvh; max-height:100vh;
+    display:flex; flex-direction:column;
+    background:#fff; border-radius:0;
+  }
+  .note-titlebar{
+    flex:0 0 auto; display:flex; align-items:center; gap:5px;
+    padding:4px 6px; background:var(--navy);
+    overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap;
+  }
+  .note-tb-btn{
+    flex:0 0 auto; width:30px; height:30px; border:none; border-radius:6px;
+    background:rgba(255,255,255,0.12); color:#fff; font-size:15px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .note-tb-btn.is-on{ background:var(--gold); color:var(--navy-deep); }
+  .note-tb-save{ background:#1f8a4c; }
+  .note-tb-close{ background:#a83232; margin-left:auto; }
+  .note-tb-color{
+    flex:0 0 auto; width:28px; height:28px; padding:0; border:none; border-radius:6px; background:none;
+  }
+  .note-tb-range{ flex:0 0 60px; width:60px; }
+  #noteCanvasWrap{
+    flex:1 1 auto; position:relative; width:100%; min-height:0;
+    background:#fff; overflow:hidden; touch-action:none;
+  }
+  #noteCanvas{ width:100%; height:100%; display:block; cursor:crosshair; }
   .modal-head{
     display:flex; align-items:center; justify-content:space-between;
     padding:14px 18px; background:var(--navy); color:#fff;
@@ -936,30 +966,19 @@
   <!-- 상담메모(필기) 모달 — S펜 등 필압 인식 포인터로 손글씨를 쓰고, 저장하면 이미지로
        드라이브에 올라가는 동시에 채팅 첨부로도 붙어서, 바로 "이 메모 사건파일에 추가해줘"라고
        보낼 수 있게 이어준다. -->
-  <div class="modal-overlay" id="noteOverlay" style="display:none;">
-    <div class="modal-panel scan-panel">
-      <div class="modal-head">
-        <span>🖊 상담메모</span>
-        <span class="modal-close" id="btnCloseNote" title="닫기">✕</span>
+  <div class="modal-overlay" id="noteOverlay" style="display:none; padding:0;">
+    <div class="note-fullscreen-panel" id="notePanel">
+      <div class="note-titlebar" id="noteTitlebar">
+        <input type="color" id="notePenColor" value="#1a1a2e" title="색상" class="note-tb-color">
+        <input type="range" id="notePenSize" min="1" max="10" value="3" title="굵기" class="note-tb-range">
+        <button id="btnNoteEraser" class="note-tb-btn" title="지우개">🧹</button>
+        <button id="btnNoteUndo" class="note-tb-btn" title="되돌리기">↩</button>
+        <button id="btnNoteClear" class="note-tb-btn" title="전체지우기">🗑</button>
+        <button id="btnNoteSave" class="note-tb-btn note-tb-save" title="저장하고 채팅에 첨부">💾</button>
+        <button id="btnCloseNote" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
-      <div class="modal-body scan-body">
-        <div class="scan-section">
-          <div class="scan-section-title">필압 인식 필기(S펜 등 지원 기기에서는 굵기가 눌린 정도에 따라 자동으로 변합니다)</div>
-          <div id="noteCanvasWrap" style="position:relative; width:100%; aspect-ratio:4/3; background:#fff; border-radius:8px; overflow:hidden; touch-action:none;">
-            <canvas id="noteCanvas" style="width:100%; height:100%; display:block; cursor:crosshair;"></canvas>
-          </div>
-          <div class="scan-hint">손가락으로도 그릴 수 있지만, S펜 등 필압 지원 펜을 쓰면 필기감이 훨씬 좋습니다.</div>
-        </div>
-        <div class="scan-section" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label style="font-size:12.5px; color:var(--sub);">색상 <input type="color" id="notePenColor" value="#1a1a2e"></label>
-          <label style="font-size:12.5px; color:var(--sub);">굵기 <input type="range" id="notePenSize" min="1" max="10" value="3" style="vertical-align:middle;"></label>
-          <button id="btnNoteEraser" class="ghost-btn">🧹 지우개</button>
-          <button id="btnNoteUndo" class="ghost-btn">↩ 되돌리기</button>
-          <button id="btnNoteClear" class="ghost-btn">전체지우기</button>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button id="btnNoteSave" class="save-btn">저장하고 채팅에 첨부</button>
+      <div id="noteCanvasWrap">
+        <canvas id="noteCanvas"></canvas>
       </div>
     </div>
   </div>
@@ -4428,7 +4447,8 @@ graph TD
     btnNoteEraser.addEventListener('click', ()=>{
       eraserOn = !eraserOn;
       btnNoteEraser.classList.toggle('is-on', eraserOn);
-      btnNoteEraser.textContent = eraserOn ? '✏️ 다시 펜으로' : '🧹 지우개';
+      btnNoteEraser.textContent = eraserOn ? '✏️' : '🧹';
+      btnNoteEraser.title = eraserOn ? '다시 펜으로' : '지우개';
     });
     btnNoteUndo.addEventListener('click', ()=>{
       if (!undoStack.length){ showToast('더 되돌릴 내용이 없습니다.', 'info'); return; }
@@ -4450,7 +4470,8 @@ graph TD
       undoStack = [];
       eraserOn = false;
       btnNoteEraser.classList.remove('is-on');
-      btnNoteEraser.textContent = '🧹 지우개';
+      btnNoteEraser.textContent = '🧹';
+      btnNoteEraser.title = '지우개';
       requestAnimationFrame(()=>{
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         noteCanvas.width = 0; noteCanvas.height = 0; // 강제로 완전히 새로 시작(이전 사건의 메모가 이어지지 않도록)
@@ -4463,7 +4484,7 @@ graph TD
     btnCloseNote.addEventListener('click', ()=>{ noteOverlay.style.display = 'none'; });
 
     btnNoteSave.addEventListener('click', async ()=>{
-      btnNoteSave.disabled = true; btnNoteSave.textContent = '저장 중…';
+      btnNoteSave.disabled = true; btnNoteSave.textContent = '⏳';
       try{
         const dataUrl = noteCanvas.toDataURL('image/png');
         const base64 = dataUrl.split(',')[1];
@@ -4482,7 +4503,7 @@ graph TD
       }catch(err){
         showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error');
       }finally{
-        btnNoteSave.disabled = false; btnNoteSave.textContent = '저장하고 채팅에 첨부';
+        btnNoteSave.disabled = false; btnNoteSave.textContent = '💾';
       }
     });
   })();
