@@ -3201,15 +3201,50 @@ graph TD
   const btnExtStatus = document.getElementById('btnExtStatus');
   let nxExtPort = null;
   let nxExtConnected = false;
+  let nxCaptureCounter = 0; // 이번 입력창 세션에서 몇 번째 캡처인지 — 여러 건 순서대로 캡처할 때 구분용
 
   function insertCapturedText(text, meta){
     if (!text || !text.trim()) return;
-    const header = (meta && meta.title) ? ('[' + meta.title + '] ' + (meta.url || '') + '\n') : '';
+    nxCaptureCounter++;
+    const header = '[' + nxCaptureCounter + '] ' + ((meta && meta.title) ? (meta.title + ' ' + (meta.url || '')) : '') + '\n';
     const chunk = header + text.trim();
     chatInputEl.value = chatInputEl.value ? (chatInputEl.value + '\n\n' + chunk) : chunk;
     chatInputEl.focus();
     const modeLabel = meta && meta.mode === 'selection' ? '선택영역' : '전체 페이지';
-    showToast('확장프로그램에서 가져왔습니다 (' + modeLabel + (meta && meta.title ? (' · ' + meta.title) : '') + ')', 'success');
+    showToast('확장프로그램에서 가져왔습니다 (#' + nxCaptureCounter + ' · ' + modeLabel + (meta && meta.title ? (' · ' + meta.title) : '') + ')', 'success');
+  }
+
+  // 화면 캡처(스크린샷) 수신 — 이미지를 드라이브에 저장한 뒤 채팅 첨부로 붙인다(상담메모 기능과 동일한 방식).
+  async function insertCapturedImage(dataUrl, meta){
+    if (!dataUrl) return;
+    if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
+    try{
+      const base64 = dataUrl.split(',')[1];
+      const name = '화면캡처_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.png';
+      const res = await callGas('uploadFile', { path: explorerPath, name: name, mimeType: 'image/png', base64Data: base64 });
+      if (res.error){ showToast('화면 캡처 저장 실패: ' + res.error, 'error'); return; }
+      addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'image/png' });
+      showToast('화면 캡처를 저장하고 첨부했습니다' + (meta && meta.title ? (' · ' + meta.title) : ''), 'success');
+      navigateTo(explorerPath);
+    }catch(err){
+      showToast('화면 캡처 처리 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }
+  }
+
+  // PDF 다운로드 자동전송 수신 — PDF를 드라이브에 저장한 뒤 채팅 첨부로 붙인다.
+  async function insertCapturedPdf(base64, filename, meta){
+    if (!base64) return;
+    if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
+    try{
+      const name = filename || ('다운로드_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.pdf');
+      const res = await callGas('uploadFile', { path: explorerPath, name: name, mimeType: 'application/pdf', base64Data: base64 });
+      if (res.error){ showToast('PDF 저장 실패: ' + res.error, 'error'); return; }
+      addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'application/pdf' });
+      showToast('PDF를 자동으로 저장하고 첨부했습니다: ' + name, 'success');
+      navigateTo(explorerPath);
+    }catch(err){
+      showToast('PDF 처리 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }
   }
 
   function updateExtStatusUi(){
@@ -3237,6 +3272,10 @@ graph TD
             updateExtStatusUi();
           } else if (msg.type === 'NX_CAPTURE'){
             insertCapturedText(msg.text, msg);
+          } else if (msg.type === 'NX_CAPTURE_IMAGE'){
+            insertCapturedImage(msg.dataUrl, msg);
+          } else if (msg.type === 'NX_CAPTURE_PDF'){
+            insertCapturedPdf(msg.base64, msg.filename, msg);
           }
         });
         nxExtPort.onDisconnect.addListener(()=>{
@@ -3269,6 +3308,10 @@ graph TD
       updateExtStatusUi();
     } else if (data.type === 'NX_CAPTURE'){
       insertCapturedText(data.text, data);
+    } else if (data.type === 'NX_CAPTURE_IMAGE'){
+      insertCapturedImage(data.dataUrl, data);
+    } else if (data.type === 'NX_CAPTURE_PDF'){
+      insertCapturedPdf(data.base64, data.filename, data);
     }
   });
   if (btnExtStatus){
@@ -3845,6 +3888,7 @@ graph TD
 
     appendBubble('user', text + attachNote + captureNote + textAttachNote + refMediaNote);
     chatInputEl.value = '';
+    nxCaptureCounter = 0; // 이번 메시지를 보냈으니, 다음 캡처는 다시 1번부터
     chatInputEl.disabled = true;
     btnChatSend.textContent = '⏹'; // 요청 중엔 전송 버튼이 중지 버튼 역할을 함
     btnChatSend.title = '중지';
