@@ -952,6 +952,7 @@
             </div>
             <div class="scan-controls">
               <button id="btnAutoDetect" class="ghost-btn scan-action-btn">자동 인식 다시</button>
+              <button id="btnRotateScanSource" class="ghost-btn scan-action-btn">↻ 회전</button>
               <label class="scan-check"><input type="checkbox" id="scanGrayscale"> 흑백(문서용)</label>
               <label class="scan-slider">대비 <input type="range" id="scanContrast" min="0" max="100" value="20"></label>
               <button id="btnWarpAndAdd" class="ghost-btn scan-action-btn">펴서 페이지에 담기</button>
@@ -5001,6 +5002,23 @@ graph TD
     renderScanHandles();
   }
   btnAutoDetect.addEventListener('click', autoDetectCorners);
+
+  // ---- 보정 단계(귀퉁이 맞추기 전)에서 미리 돌리기 — 사진이 옆으로/거꾸로 찍혔을 때
+  // 귀퉁이 조정 자체가 헷갈리므로, 인식 전에 먼저 방향을 바로잡을 수 있게 한다.
+  // setupScanStage를 그대로 재사용하므로, 돌린 뒤 자동인식도 새 방향 기준으로 다시 돈다.
+  document.getElementById('btnRotateScanSource').addEventListener('click', ()=>{
+    if (!scanImageEl) return;
+    const off = document.createElement('canvas');
+    off.width = scanImageEl.naturalHeight;
+    off.height = scanImageEl.naturalWidth;
+    const octx = off.getContext('2d');
+    octx.translate(off.width / 2, off.height / 2);
+    octx.rotate(90 * Math.PI / 180);
+    octx.drawImage(scanImageEl, -scanImageEl.naturalWidth / 2, -scanImageEl.naturalHeight / 2);
+    const rotated = new Image();
+    rotated.onload = () => setupScanStage(rotated);
+    rotated.src = off.toDataURL('image/jpeg', 0.92);
+  });
 
   function renderScanHandles(){
     ['tl', 'tr', 'br', 'bl'].forEach(key=>{
