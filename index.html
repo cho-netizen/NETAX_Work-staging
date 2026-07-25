@@ -312,6 +312,16 @@
     width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
   }
   .modal-close:hover{ background:rgba(255,255,255,0.18); }
+  /* 스캔모달 타이틀행 — 상담메모·편집창처럼 버튼들을 타이틀행 하나에 압축해서 배치한다. */
+  .scan-modal-head{
+    padding:5px 8px; gap:5px; border-radius:10px 10px 0 0; flex-wrap:wrap;
+  }
+  .scan-tb-btn{
+    flex:0 0 auto; border:none; border-radius:6px; padding:6px 10px;
+    background:rgba(255,255,255,0.12); color:#fff; font-family:inherit; font-size:12px; font-weight:600;
+    cursor:pointer;
+  }
+  .scan-tb-btn:hover{ background:rgba(255,255,255,0.22); }
   .modal-body{ padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
   .modal-label{ font-size:12px; font-weight:700; color:var(--navy); margin-top:10px; margin-bottom:2px; }
   .modal-hint{ font-size:11px; color:var(--sub); line-height:1.5; margin-top:3px; }
@@ -401,11 +411,9 @@
   .scan-action-btn{
     flex:1; min-width:120px; font-size:13.5px; padding:12px 14px; border-radius:8px;
   }
-  .scan-source-actions{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
-  .scan-source-actions .scan-action-btn{ min-width:140px; }
   /* PC(stage-full)는 카메라가 없거나 있어도 브라우저가 capture 속성을 무시해서
-     "촬영하기"와 "파일 선택"이 결과적으로 똑같이 동작한다 — 그래서 PC에서만 이 버튼을
-     숨기고 "파일 선택" 하나만 남긴다. 폰·태블릿(compact/grouped)에서는 그대로 둘 다 보인다. */
+     "촬영"과 "파일"이 결과적으로 똑같이 동작한다 — 그래서 PC에서만 이 버튼을
+     숨긴다. 폰·태블릿(compact/grouped)에서는 그대로 보인다. */
   body.stage-full #btnScanCapture{ display:none; }
 
   /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
@@ -783,7 +791,6 @@
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
-      <button type="button" id="btnScreenCapture" class="tb-btn" title="다른 창(홈택스 등) 화면 캡처해서 첨부">📸 캡처</button>
       <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 상담메모</button>
       <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
@@ -924,20 +931,19 @@
 
   <div class="modal-overlay" id="scanOverlay" style="display:none;">
     <div class="modal-panel scan-panel">
-      <div class="modal-head">
-        <span>문서 스캔 · PDF 조립</span>
+      <div class="modal-head scan-modal-head">
+        <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+        <input type="file" id="scanGalleryInput" accept="image/*" style="display:none;">
+        <input type="file" id="scanPdfInsertInput" accept="application/pdf" style="display:none;">
+        <button type="button" id="btnScanCapture" class="scan-tb-btn">촬영</button>
+        <button type="button" id="btnScanScreenCapture" class="scan-tb-btn">캡처</button>
+        <button type="button" id="btnScanGallery" class="scan-tb-btn">파일</button>
+        <button type="button" id="btnScanPdfInsert" class="scan-tb-btn">모음</button>
         <span class="modal-close" id="btnCloseScan" title="닫기">✕</span>
       </div>
       <div class="modal-body scan-body">
 
         <div class="scan-section">
-          <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
-          <input type="file" id="scanGalleryInput" accept="image/*" style="display:none;">
-          <div class="scan-source-actions">
-            <button type="button" id="btnScanCapture" class="ghost-btn scan-action-btn">촬영</button>
-            <button type="button" id="btnScanScreenCapture" class="ghost-btn scan-action-btn">캡처</button>
-            <button type="button" id="btnScanGallery" class="ghost-btn scan-action-btn">파일</button>
-          </div>
           <div id="scanStageWrap" class="scan-stage-wrap" style="display:none;">
             <div id="scanStage" class="scan-stage">
               <canvas id="scanPreviewCanvas"></canvas>
@@ -958,8 +964,6 @@
         </div>
 
         <div class="scan-section">
-          <input type="file" id="scanPdfInsertInput" accept="application/pdf" style="display:none;">
-          <button type="button" id="btnScanPdfInsert" class="ghost-btn scan-action-btn">모음</button>
           <div id="scanTray" class="scan-tray"></div>
         </div>
 
@@ -2678,7 +2682,6 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📸', label: '캡처', handler: captureScreen },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
@@ -2698,7 +2701,6 @@ graph TD
   ];
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📸', label: '캡처', handler: captureScreen },
     { icon: '🖋', label: '편집', handler: openFullEditor },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() }
   ];
@@ -3602,8 +3604,7 @@ graph TD
     return { mimeType: m[1], base64: m[2] };
   }
 
-  // ---- 화면 캡처: 다른 창(홈택스 등)을 한 장 찍어서 바로 첨부 ----
-  const btnScreenCapture = document.getElementById('btnScreenCapture');
+  // ---- 화면 캡처: 다른 창(홈택스 등)을 한 장 찍기 — 이제 스캔창 안에서만 진입한다 ----
 
   async function captureScreen(mode){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
@@ -3652,7 +3653,6 @@ graph TD
     }
   }
 
-  if (btnScreenCapture) btnScreenCapture.addEventListener('click', () => captureScreen());
   const btnScanScreenCapture = document.getElementById('btnScanScreenCapture');
   if (btnScanScreenCapture) btnScanScreenCapture.addEventListener('click', () => captureScreen('scan'));
 
