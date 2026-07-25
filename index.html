@@ -401,6 +401,8 @@
   .scan-action-btn{
     flex:1; min-width:120px; font-size:13.5px; padding:12px 14px; border-radius:8px;
   }
+  .scan-source-actions{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  .scan-source-actions .scan-action-btn{ min-width:140px; }
 
   /* ===== 전체화면 편집기 — 폰(좁은 화면)에서만 씀. 이때는 상담메모창과 똑같이 화면을 꽉 채운다.
      PC·태블릿에서는 이 오버레이를 아예 안 쓰고 진짜 브라우저 새 창(window.open)으로 연다
@@ -930,7 +932,12 @@
 
         <div class="scan-section">
           <div class="scan-section-title">① 스캔 (귀퉁이를 드래그해서 원근 보정)</div>
-          <input type="file" id="scanFileInput" accept="image/*" capture="environment">
+          <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+          <input type="file" id="scanGalleryInput" accept="image/*" style="display:none;">
+          <div class="scan-source-actions">
+            <button type="button" id="btnScanCapture" class="ghost-btn scan-action-btn">📷 촬영하기</button>
+            <button type="button" id="btnScanGallery" class="ghost-btn scan-action-btn">🖼 갤러리에서 불러오기</button>
+          </div>
           <div id="scanStageWrap" class="scan-stage-wrap" style="display:none;">
             <div id="scanStage" class="scan-stage">
               <canvas id="scanPreviewCanvas"></canvas>
@@ -951,7 +958,8 @@
 
         <div class="scan-section">
           <div class="scan-section-title">② 페이지 모음 (순서·회전 조정 후 PDF로)</div>
-          <input type="file" id="scanPdfInsertInput" accept="application/pdf" title="기존 PDF 파일을 페이지 묶음 끝에 추가">
+          <input type="file" id="scanPdfInsertInput" accept="application/pdf" style="display:none;">
+          <button type="button" id="btnScanPdfInsert" class="ghost-btn scan-action-btn" title="기존 PDF 파일을 페이지 묶음 끝에 추가">📎 기존 PDF 추가</button>
           <div id="scanTray" class="scan-tray"></div>
           <div class="scan-hint">기존 PDF를 추가하면 그 PDF의 모든 페이지가 통째로 지금 순서 끝에 삽입됩니다.</div>
         </div>
@@ -4385,6 +4393,7 @@ graph TD
   // ============================================================
   const scanOverlay = document.getElementById('scanOverlay');
   const scanFileInput = document.getElementById('scanFileInput');
+  const scanGalleryInput = document.getElementById('scanGalleryInput');
   const scanStageWrap = document.getElementById('scanStageWrap');
   const scanStage = document.getElementById('scanStage');
   const scanPreviewCanvas = document.getElementById('scanPreviewCanvas');
@@ -4405,16 +4414,17 @@ graph TD
   let scanCorners = null;      // {tl,tr,br,bl} — 화면 표시 좌표계 기준
   let docPages = [];           // 페이지 모음: {type:'image', dataUrl, rotation, name} | {type:'pdf', name, bytes, pageCount}
 
-  // 스캔모드를 열면 "① 스캔" 섹션까지 따로 안 눌러도 되도록, 모달을 띄우는 동시에
-  // 카메라(scanFileInput, capture="environment")를 바로 실행한다 — 촬영을 취소하면
-  // 그냥 모달만 열린 상태로 남고, "② 페이지 모음"에서 기존 PDF 추가 등은 그대로 쓸 수 있다.
+  // 촬영하기·갤러리에서 불러오기 두 가지를 선택할 수 있으므로, 모달을 열 때 자동으로
+  // 카메라부터 실행하던 방식은 그만둔다 — 사용자가 버튼으로 직접 고르게 한다.
   function openScanModal(){
     scanOverlay.style.display = 'flex';
     scanOutputName.value = ''; // 이전 스캔 세션의 파일명이 그대로 남아있던 문제 — 새로 열 때마다 비움
-    scanFileInput.click();
   }
   function closeScanModal(){ scanOverlay.style.display = 'none'; }
   document.getElementById('btnOpenScan').addEventListener('click', openScanModal);
+  document.getElementById('btnScanCapture').addEventListener('click', ()=> scanFileInput.click());
+  document.getElementById('btnScanGallery').addEventListener('click', ()=> scanGalleryInput.click());
+  document.getElementById('btnScanPdfInsert').addEventListener('click', ()=> scanPdfInsertInput.click());
 
   // ---- 상담메모(필기) — S펜 등 필압 인식 포인터로 손글씨를 쓰고, 저장하면 이미지로
   // 드라이브에 올라가는 동시에 채팅 첨부로도 붙는다. AI에게 "이 메모 사건파일에 추가해줘"라고
@@ -4879,8 +4889,12 @@ graph TD
   // 다른 화면과 번갈아 볼 일이 없고, 손가락으로 작업하다 화면 가장자리를 살짝 벗어나기만 해도
   // 여기 걸려서 작업 내용이 통째로 날아가는 사고가 있었다(2026.07). ✕ 버튼으로만 닫는다.
 
-  // ---- 이미지 로드 ----
+  // ---- 이미지 로드 (촬영·갤러리 둘 다 같은 처리 로직을 공유) ----
   scanFileInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if (file) loadScanImage(file);
+  });
+  scanGalleryInput.addEventListener('change', (e)=>{
     const file = e.target.files[0];
     if (file) loadScanImage(file);
   });
@@ -5132,6 +5146,7 @@ graph TD
     renderTray();
 
     scanFileInput.value = '';
+    scanGalleryInput.value = '';
     scanStageWrap.style.display = 'none';
     scanImageEl = null;
   }
