@@ -4964,7 +4964,7 @@ graph TD
     const containerW = scanStageWrap.clientWidth || 400;
     const maxW = containerW - 4; // 480 상한을 없애고 컨테이너 폭을 그대로 다 쓴다
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    scanDisplayScale = Math.min(1, maxW / iw);
+    scanDisplayScale = maxW / iw; // 1배로 제한하지 않는다 — 원본이 작아도 폭에 꽉 차게 확대해서 보여줘야 정밀 작업이 가능함
     scanDW = Math.max(1, Math.round(iw * scanDisplayScale));
     scanDH = Math.max(1, Math.round(ih * scanDisplayScale));
     scanPreviewCanvas.width = scanDW;
