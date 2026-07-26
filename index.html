@@ -400,13 +400,21 @@
   .scan-btn-row{ display:flex; gap:6px; flex-wrap:nowrap; width:100%; }
   .scan-btn-row .scan-action-btn{ flex:1 1 0; min-width:0; padding:10px 4px; font-size:12.5px; }
 
-  .scan-tray{ display:flex; flex-direction:column; gap:4px; max-height:300px; overflow-y:auto; }
+  .scan-tray{ display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
   .scan-tray-item{
-    display:flex; align-items:center; gap:6px; padding:5px 6px; border:1px solid var(--gold); border-radius:6px;
+    display:flex; align-items:center; gap:6px; padding:5px 6px; border:2px solid var(--gold); border-radius:6px;
     background:rgba(200,162,68,0.14);
   }
-  .scan-tray-item.dragging{ opacity:0.4; }
+  /* 잡았을 때는 헷갈리지 않도록 색을 확실히 반전(연한 골드 바탕 ↔ 진한 골드 바탕+네이비 글자)한다 */
+  .scan-tray-item.dragging{
+    background:var(--gold); border-color:var(--navy); box-shadow:0 6px 18px rgba(0,0,0,0.35);
+  }
+  .scan-tray-item.dragging .name{ color:var(--navy-deep); }
+  body.dark-mode .scan-tray-item.dragging{ border-color:#fff; }
+  body.dark-mode .scan-tray-item.dragging .name{ color:var(--navy-deep); }
   .scan-tray-grip{ flex:1; min-width:0; display:flex; align-items:center; gap:6px; cursor:grab; touch-action:none; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; }
+  .pdf-mgr-check{ flex-shrink:0; display:flex; align-items:center; padding:0 2px; }
+  .pdf-mgr-check input{ width:22px; height:22px; cursor:pointer; }
   .scan-tray-grip img{ -webkit-user-drag:none; pointer-events:none; }
   .scan-tray-item img{ width:36px; height:48px; object-fit:cover; border-radius:3px; border:1px solid var(--line); }
   .scan-tray-item .pdf-chip-icon{ width:36px; height:48px; display:flex; align-items:center; justify-content:center; font-size:20px; background:#eef0f4; border-radius:3px; }
@@ -415,7 +423,7 @@
     flex-shrink:0; font-size:15px; border:none; background:var(--navy); border-radius:6px; padding:4px 25px; cursor:pointer; color:#fff; font-weight:700;
   }
   .scan-tray-item button:hover{ background:var(--navy-deep); }
-  body.dark-mode .scan-tray-item{ background:var(--navy); border-color:var(--navy); }
+  body.dark-mode .scan-tray-item{ background:var(--navy); border-color:var(--gold); }
   body.dark-mode .scan-tray-item button{ background:#fff; color:var(--navy); }
   body.dark-mode .scan-tray-item button:hover{ background:#e6e8ee; color:var(--navy); }
   .scan-hint{ font-size:11px; color:var(--sub); }
@@ -820,6 +828,7 @@
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
+      <button type="button" id="btnOpenPdfManager" class="tb-btn" title="이미 저장된 PDF들을 페이지 단위로 합치기·발췌·순서변경">📁 PDF관리</button>
       <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 상담메모</button>
       <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
@@ -1007,6 +1016,34 @@
           <button id="btnScanSummarize" class="ghost-btn scan-action-btn">🔎 AI 요약</button>
           <button id="btnDownloadPdf" class="ghost-btn scan-action-btn">⬇ PC다운</button>
           <button id="btnSaveToFolder" class="ghost-btn scan-action-btn">💾 저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF 관리 모달 — 이미 저장된 PDF들을 페이지 단위로 불러와서 합치기·발췌·순서변경.
+       스캔 바구니와 같은 드래그 재정렬 UI를 재사용하되, 페이지별 체크박스가 추가된다. -->
+  <div class="modal-overlay" id="pdfMgrOverlay" style="display:none;">
+    <div class="modal-panel scan-panel" id="pdfMgrPanel">
+      <div class="modal-head scan-modal-head">
+        <input type="file" id="pdfMgrFileInput" accept="application/pdf" multiple style="display:none;">
+        <button type="button" id="btnPdfMgrAdd" class="scan-tb-btn">PDF추가</button>
+        <button type="button" id="btnPdfMgrCheckAll" class="scan-tb-btn">전체선택</button>
+        <span class="modal-close" id="btnClosePdfMgr" title="닫기">✕</span>
+      </div>
+      <div class="modal-body scan-body">
+        <div class="scan-section">
+          <div id="pdfMgrList" class="scan-tray"></div>
+        </div>
+      </div>
+      <div class="modal-foot scan-export-foot">
+        <input type="text" id="pdfMgrExtractName" placeholder="추출할 파일 이름" class="scan-name-input">
+        <div class="scan-export-actions">
+          <button id="btnPdfMgrExtract" class="ghost-btn scan-action-btn">✂ 선택 추출</button>
+        </div>
+        <input type="text" id="pdfMgrSaveName" placeholder="전체 저장 파일 이름" class="scan-name-input">
+        <div class="scan-export-actions">
+          <button id="btnPdfMgrSaveAll" class="ghost-btn scan-action-btn">💾 전체 저장</button>
         </div>
       </div>
     </div>
@@ -2715,6 +2752,7 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
+    { icon: '📁', label: 'PDF관리', handler: () => openPdfManager() },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
@@ -2734,6 +2772,7 @@ graph TD
   ];
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
+    { icon: '📁', label: 'PDF관리', handler: () => openPdfManager() },
     { icon: '🖋', label: '편집', handler: openFullEditor },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() }
   ];
@@ -5394,6 +5433,165 @@ graph TD
       return closest;
     }, { offset: -Infinity, element: null }).element;
   }
+
+  // ============================================================
+  // PDF 관리 — 스캔과 별도 메뉴. 이미 저장된 PDF들을 페이지 단위로 불러와서
+  // 합치기·발췌·순서변경을 할 수 있다. 오늘 만든 바구니(드래그 재정렬) UI를 그대로 재사용하되,
+  // 페이지별 체크박스를 얹어서 "선택한 페이지만 따로 뽑아 저장"이 가능하게 한다.
+  // ============================================================
+  const pdfMgrOverlay = document.getElementById('pdfMgrOverlay');
+  const pdfMgrList = document.getElementById('pdfMgrList');
+  const pdfMgrFileInput = document.getElementById('pdfMgrFileInput');
+  const pdfMgrExtractName = document.getElementById('pdfMgrExtractName');
+  const pdfMgrSaveName = document.getElementById('pdfMgrSaveName');
+
+  let pdfMgrEntries = []; // { id, doc(PDFLib 문서객체), sourceName, pageIndex, checked }
+  let pdfMgrIdSeq = 1;
+
+  function openPdfManager(){
+    if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
+    pdfMgrOverlay.style.display = 'flex';
+  }
+  function closePdfManager(){ pdfMgrOverlay.style.display = 'none'; }
+  document.getElementById('btnOpenPdfManager').addEventListener('click', openPdfManager);
+  document.getElementById('btnClosePdfMgr').addEventListener('click', closePdfManager);
+
+  document.getElementById('btnPdfMgrAdd').addEventListener('click', ()=> pdfMgrFileInput.click());
+  pdfMgrFileInput.addEventListener('change', async (e)=>{
+    const files = Array.from(e.target.files || []);
+    pdfMgrFileInput.value = '';
+    for (const file of files){
+      try{
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const doc = await PDFLib.PDFDocument.load(bytes);
+        const sourceName = file.name.replace(/\.pdf$/i, '');
+        const pageCount = doc.getPageCount();
+        for (let i = 0; i < pageCount; i++){
+          pdfMgrEntries.push({ id: pdfMgrIdSeq++, doc, sourceName, pageIndex: i, checked: false });
+        }
+      }catch(err){
+        showToast(file.name + ' 불러오기 실패: ' + (err && err.message ? err.message : err), 'error');
+      }
+    }
+    renderPdfMgrList();
+  });
+
+  function renderPdfMgrList(){
+    pdfMgrList.innerHTML = '';
+    pdfMgrEntries.forEach((entry, idx)=>{
+      const row = document.createElement('div');
+      row.className = 'scan-tray-item';
+      row.dataset.idx = idx;
+      row.innerHTML = '<label class="pdf-mgr-check"><input type="checkbox"' + (entry.checked ? ' checked' : '') + '></label>'
+        + '<div class="scan-tray-grip"><span class="pdf-chip-icon">📄</span>'
+        + '<span class="name">' + escapeHtml(entry.sourceName) + ' - ' + (entry.pageIndex + 1) + '페이지</span></div>'
+        + '<button data-act="del" title="목록에서 빼기">✕</button>';
+      row.querySelector('input[type="checkbox"]').addEventListener('change', (e)=>{
+        entry.checked = e.target.checked;
+      });
+      row.querySelector('button').addEventListener('click', ()=>{
+        pdfMgrEntries.splice(idx, 1);
+        renderPdfMgrList();
+      });
+      setupPdfMgrDrag(row);
+      pdfMgrList.appendChild(row);
+    });
+  }
+
+  // 드래그 재정렬 — 스캔 바구니와 완전히 같은 방식(document 전체에서 이동/종료 신호를 받음).
+  function setupPdfMgrDrag(row){
+    const grip = row.querySelector('.scan-tray-grip');
+    function onMove(e){
+      const after = getPdfMgrDragAfterElement(e.clientY);
+      if (after == null) pdfMgrList.appendChild(row);
+      else if (after !== row) pdfMgrList.insertBefore(row, after);
+    }
+    function onEnd(){
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onEnd);
+      document.removeEventListener('pointercancel', onEnd);
+      row.classList.remove('dragging');
+      const newOrder = Array.from(pdfMgrList.children).map(el => Number(el.dataset.idx));
+      pdfMgrEntries = newOrder.map(i => pdfMgrEntries[i]);
+      renderPdfMgrList();
+    }
+    grip.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      row.classList.add('dragging');
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onEnd);
+      document.addEventListener('pointercancel', onEnd);
+    });
+  }
+  function getPdfMgrDragAfterElement(y){
+    const items = Array.from(pdfMgrList.querySelectorAll('.scan-tray-item:not(.dragging)'));
+    return items.reduce((closest, child)=>{
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    }, { offset: -Infinity, element: null }).element;
+  }
+
+  document.getElementById('btnPdfMgrCheckAll').addEventListener('click', ()=>{
+    if (!pdfMgrEntries.length) return;
+    const allChecked = pdfMgrEntries.every(en => en.checked);
+    pdfMgrEntries.forEach(en => { en.checked = !allChecked; });
+    renderPdfMgrList();
+  });
+
+  // 체크된(또는 전체) 항목들을 순서 그대로 하나의 새 PDF 바이트로 만든다.
+  async function buildPdfFromPdfMgrEntries(entries){
+    const outDoc = await PDFLib.PDFDocument.create();
+    for (const entry of entries){
+      const [copied] = await outDoc.copyPages(entry.doc, [entry.pageIndex]);
+      outDoc.addPage(copied);
+    }
+    return await outDoc.save();
+  }
+
+  document.getElementById('btnPdfMgrExtract').addEventListener('click', async ()=>{
+    const checked = pdfMgrEntries.filter(en => en.checked);
+    if (!checked.length){ showToast('추출할 페이지를 먼저 체크하세요.', 'warning'); return; }
+    const name = (pdfMgrExtractName.value.trim() || '추출') + '.pdf';
+    const btn = document.getElementById('btnPdfMgrExtract');
+    btn.disabled = true; btn.textContent = '처리 중…';
+    try{
+      const bytes = await buildPdfFromPdfMgrEntries(checked);
+      const base64 = uint8ToBase64(bytes);
+      const res = await callGas('uploadFile', { path: explorerPath, name, mimeType: 'application/pdf', base64Data: base64 });
+      if (res.error){ showToast('저장 실패: ' + res.error, 'error'); return; }
+      showToast('추출해서 저장했습니다: ' + name, 'success');
+      navigateTo(explorerPath);
+      if (confirm('추출한 ' + checked.length + '개 페이지를 지금 목록에서 지울까요?\n(취소하면 그대로 남습니다)')){
+        pdfMgrEntries = pdfMgrEntries.filter(en => !en.checked);
+        renderPdfMgrList();
+      }
+    }catch(err){
+      showToast('추출 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }finally{
+      btn.disabled = false; btn.textContent = '✂ 선택 추출';
+    }
+  });
+
+  document.getElementById('btnPdfMgrSaveAll').addEventListener('click', async ()=>{
+    if (!pdfMgrEntries.length){ showToast('목록이 비어 있습니다.', 'warning'); return; }
+    const name = (pdfMgrSaveName.value.trim() || '문서') + '.pdf';
+    const btn = document.getElementById('btnPdfMgrSaveAll');
+    btn.disabled = true; btn.textContent = '처리 중…';
+    try{
+      const bytes = await buildPdfFromPdfMgrEntries(pdfMgrEntries);
+      const base64 = uint8ToBase64(bytes);
+      const res = await callGas('uploadFile', { path: explorerPath, name, mimeType: 'application/pdf', base64Data: base64 });
+      if (res.error){ showToast('저장 실패: ' + res.error, 'error'); return; }
+      showToast('저장했습니다: ' + name, 'success');
+      navigateTo(explorerPath);
+    }catch(err){
+      showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }finally{
+      btn.disabled = false; btn.textContent = '💾 전체 저장';
+    }
+  });
 
   // ---- PDF 생성/내보내기/저장 ----
   function dataUrlToUint8(dataUrl){
