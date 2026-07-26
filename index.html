@@ -322,7 +322,7 @@
     cursor:pointer;
   }
   .scan-tb-btn:hover{ background:rgba(255,255,255,0.24); }
-  .modal-body{ padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
+  .modal-body{ padding:16px 18px; display:flex; flex-direction:column; gap:4px; overflow-x:hidden; }
   .modal-label{ font-size:12px; font-weight:700; color:var(--navy); margin-top:10px; margin-bottom:2px; }
   .modal-hint{ font-size:11px; color:var(--sub); line-height:1.5; margin-top:3px; }
   .modal-body select, .modal-body input[type="number"], .modal-body textarea{
@@ -394,6 +394,10 @@
   .scan-controls{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:12px; color:var(--ink); }
   .scan-check{ display:flex; align-items:center; gap:5px; cursor:pointer; }
   .scan-slider{ display:flex; align-items:center; gap:6px; }
+  /* 인식·회전·담기 / AI요약·PC다운·저장 — 무조건 한 줄로 고정한다. 줄바꿈되면 화면이 좁을 때
+     버튼들이 어긋나 보이거나, 최소폭 때문에 오히려 가로로 넘쳐서 스크롤이 생기던 문제가 있었다. */
+  .scan-btn-row{ display:flex; gap:6px; flex-wrap:nowrap; width:100%; }
+  .scan-btn-row .scan-action-btn{ flex:1 1 0; min-width:0; padding:10px 4px; font-size:12.5px; }
 
   .scan-tray{ display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
   .scan-tray-item{
@@ -415,9 +419,9 @@
     width:100%; font-family:inherit; font-size:14px; padding:11px 12px;
     border:1px solid var(--line); border-radius:8px; box-sizing:border-box;
   }
-  .scan-export-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .scan-export-actions{ display:flex; gap:6px; flex-wrap:nowrap; }
   .scan-action-btn{
-    flex:1; min-width:120px; font-size:13.5px; padding:12px 14px; border-radius:8px;
+    flex:1 1 0; min-width:0; font-size:13.5px; padding:12px 6px; border-radius:8px;
   }
   /* PC(stage-full)는 카메라가 없거나 있어도 브라우저가 capture 속성을 무시해서
      "촬영"과 "파일"이 결과적으로 똑같이 동작한다 — 그래서 PC에서만 이 버튼을
@@ -961,10 +965,12 @@
               <div class="scan-handle" id="handle-bl" data-corner="bl"></div>
               <svg id="scanQuadSvg" class="scan-quad-svg"><polygon id="scanQuadPoly"></polygon></svg>
             </div>
-            <div class="scan-controls">
+            <div class="scan-btn-row">
               <button id="btnAutoDetect" class="ghost-btn scan-action-btn">인식</button>
               <button id="btnRotateScanSource" class="ghost-btn scan-action-btn">↻ 회전</button>
               <button id="btnWarpAndAdd" class="ghost-btn scan-action-btn">담기</button>
+            </div>
+            <div class="scan-controls">
               <label class="scan-check"><input type="checkbox" id="scanGrayscale"> 흑백(문서용)</label>
               <label class="scan-slider">대비 <input type="range" id="scanContrast" min="0" max="100" value="20"></label>
             </div>
