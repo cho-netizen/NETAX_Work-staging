@@ -401,6 +401,12 @@
   .scan-btn-row .scan-action-btn{ flex:1 1 0; min-width:0; padding:10px 4px; font-size:12.5px; }
 
   .scan-tray{ display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
+  /* PDF관리는 화면에 목록 하나뿐이라(스캔처럼 위에 사진 편집 영역이 없음), 300px 제한 없이
+     남는 공간을 전부 목록에 쓰도록 한다. */
+  #pdfMgrPanel .modal-body{ display:flex; flex-direction:column; }
+  #pdfMgrPanel .scan-body{ flex:1; min-height:0; }
+  #pdfMgrPanel .scan-section{ flex:1; min-height:0; }
+  #pdfMgrList{ flex:1; max-height:none; min-height:0; }
   .scan-tray-item{
     display:flex; align-items:center; gap:6px; padding:5px 6px; border:2px solid var(--gold); border-radius:6px;
     background:rgba(200,162,68,0.14);
@@ -828,7 +834,6 @@
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
-      <button type="button" id="btnOpenPdfManager" class="tb-btn" title="이미 저장된 PDF들을 페이지 단위로 합치기·발췌·순서변경">📁 PDF관리</button>
       <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 상담메모</button>
       <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
@@ -977,6 +982,7 @@
         <button type="button" id="btnScanScreenCapture" class="scan-tb-btn">캡처</button>
         <button type="button" id="btnScanGallery" class="scan-tb-btn">파일</button>
         <button type="button" id="btnScanPdfInsert" class="scan-tb-btn">모음</button>
+        <button type="button" id="btnOpenPdfManagerFromScan" class="scan-tb-btn">PDF관리</button>
         <span class="modal-close" id="btnCloseScan" title="닫기">✕</span>
       </div>
       <div class="modal-body scan-body">
@@ -2752,7 +2758,6 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📁', label: 'PDF관리', handler: () => openPdfManager() },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
@@ -2772,7 +2777,6 @@ graph TD
   ];
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📁', label: 'PDF관리', handler: () => openPdfManager() },
     { icon: '🖋', label: '편집', handler: openFullEditor },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() }
   ];
@@ -5452,7 +5456,7 @@ graph TD
     pdfMgrOverlay.style.display = 'flex';
   }
   function closePdfManager(){ pdfMgrOverlay.style.display = 'none'; }
-  document.getElementById('btnOpenPdfManager').addEventListener('click', openPdfManager);
+  document.getElementById('btnOpenPdfManagerFromScan').addEventListener('click', openPdfManager);
   document.getElementById('btnClosePdfMgr').addEventListener('click', closePdfManager);
 
   document.getElementById('btnPdfMgrAdd').addEventListener('click', ()=> pdfMgrFileInput.click());
@@ -5466,7 +5470,7 @@ graph TD
         const sourceName = file.name.replace(/\.pdf$/i, '');
         const pageCount = doc.getPageCount();
         for (let i = 0; i < pageCount; i++){
-          pdfMgrEntries.push({ id: pdfMgrIdSeq++, doc, sourceName, pageIndex: i, checked: false });
+          pdfMgrEntries.push({ id: pdfMgrIdSeq++, doc, sourceName, pageIndex: i, checked: false, rotation: 0 });
         }
       }catch(err){
         showToast(file.name + ' 불러오기 실패: ' + (err && err.message ? err.message : err), 'error');
@@ -5481,16 +5485,21 @@ graph TD
       const row = document.createElement('div');
       row.className = 'scan-tray-item';
       row.dataset.idx = idx;
+      const rotLabel = entry.rotation ? (' (' + entry.rotation + '° 회전)') : '';
       row.innerHTML = '<label class="pdf-mgr-check"><input type="checkbox"' + (entry.checked ? ' checked' : '') + '></label>'
         + '<div class="scan-tray-grip"><span class="pdf-chip-icon">📄</span>'
-        + '<span class="name">' + escapeHtml(entry.sourceName) + ' - ' + (entry.pageIndex + 1) + '페이지</span></div>'
+        + '<span class="name">' + escapeHtml(entry.sourceName) + ' - ' + (entry.pageIndex + 1) + '페이지' + rotLabel + '</span></div>'
+        + '<button data-act="rotate" title="90도 회전 — 원본이 옆으로/거꾸로 되어 있을 때">↻</button>'
         + '<button data-act="del" title="목록에서 빼기">✕</button>';
       row.querySelector('input[type="checkbox"]').addEventListener('change', (e)=>{
         entry.checked = e.target.checked;
       });
-      row.querySelector('button').addEventListener('click', ()=>{
-        pdfMgrEntries.splice(idx, 1);
-        renderPdfMgrList();
+      row.querySelectorAll('button').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const act = btn.dataset.act;
+          if (act === 'del'){ pdfMgrEntries.splice(idx, 1); renderPdfMgrList(); }
+          else if (act === 'rotate'){ entry.rotation = (entry.rotation + 90) % 360; renderPdfMgrList(); }
+        });
       });
       setupPdfMgrDrag(row);
       pdfMgrList.appendChild(row);
@@ -5544,6 +5553,10 @@ graph TD
     const outDoc = await PDFLib.PDFDocument.create();
     for (const entry of entries){
       const [copied] = await outDoc.copyPages(entry.doc, [entry.pageIndex]);
+      if (entry.rotation){
+        const currentAngle = copied.getRotation().angle || 0;
+        copied.setRotation(PDFLib.degrees((currentAngle + entry.rotation) % 360));
+      }
       outDoc.addPage(copied);
     }
     return await outDoc.save();
