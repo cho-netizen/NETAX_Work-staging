@@ -5449,7 +5449,6 @@ graph TD
   let pdfMgrIdSeq = 1;
 
   function openPdfManager(){
-    if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
     pdfMgrOverlay.style.display = 'flex';
   }
   function closePdfManager(){ pdfMgrOverlay.style.display = 'none'; }
