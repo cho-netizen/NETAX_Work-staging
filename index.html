@@ -364,6 +364,14 @@
 
   /* ===== 문서 스캔 · PDF 조립 모달 ===== */
   .scan-panel{ width:min(880px, 96vw); }
+  /* 폰(stage-compact)에서는 카드형 모달 대신, 상담메모·편집창과 똑같이 화면을 완전히 꽉 채운다
+     — 카드형(중앙에 여백을 두고 뜨는 방식) 자체가 "본래 창이 비친다"는 문제의 원인이었다. */
+  body.stage-compact #scanOverlay{ padding:0; }
+  body.stage-compact .scan-panel{
+    width:100vw; max-width:100vw; height:100dvh; max-height:100vh;
+    border-radius:0; display:flex; flex-direction:column;
+  }
+  body.stage-compact .scan-panel .modal-body{ flex:1; min-height:0; overflow-y:auto; }
   .scan-body{ display:flex; gap:20px; flex-wrap:wrap; }
   .scan-section{ flex:1; min-width:280px; display:flex; flex-direction:column; gap:8px; }
   .scan-section-title{ font-size:12.5px; font-weight:700; color:var(--navy); }
