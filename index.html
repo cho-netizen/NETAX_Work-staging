@@ -77,7 +77,7 @@
   body.dark-mode .back-btn:hover,
   body.dark-mode .log-btn:hover{ color:var(--ink); border-color:var(--line); }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:'Noto Sans KR',sans-serif;color:var(--ink);}
+  html,body{margin:0;padding:0;height:100%;min-height:100dvh;background:var(--bg);font-family:'Noto Sans KR',sans-serif;color:var(--ink);}
   body{ display:flex; flex-direction:column; overflow:hidden; }
 
   /* ===== 상단바 ===== */
@@ -239,9 +239,9 @@
      position:fixed로 바꾸고 좌우를 화면 여백 기준으로 고정하면 어떤 버튼을 눌러도 항상
      화면 안에 온전히 들어온다. */
   body.stage-compact #topbarActionCluster .nx-popup{
-    position:fixed; left:10px; right:10px; top:auto;
+    position:fixed; left:0; right:0; top:auto;
     bottom:calc(var(--bottombar-h, 64px) + 6px);
-    min-width:0; width:auto; max-height:60vh; overflow-y:auto;
+    min-width:0; width:auto; max-height:60vh; overflow-y:auto; border-radius:0;
   }
   /* 고정바가 화면 아래 떠있는 만큼, 그 뒤에 깔리는 본문(워크스페이스)에 여백을 줘서
      채팅 입력창 등이 안 가리게 한다 — 높이는 JS가 실측해서 --bottombar-h로 넣어준다. */
@@ -5387,6 +5387,26 @@ graph TD
     }finally{
       btnSaveToFolder.disabled = false; btnSaveToFolder.textContent = '현재 폴더에 저장';
     }
+  });
+
+  // ---- 폰에서 열자마자 주소창이 접힌 채로 시작되도록 유도 ----
+  // body 자체가 overflow:hidden 고정이라(내부 패널들이 각자 스크롤을 담당하는 구조라서)
+  // 스크롤할 여백이 원래 없다 — 그래서 임시로 화면 아래에 살짝 여백을 만들어 스크롤 가능하게
+  // 만든 다음, 1px만 스크롤을 시도하고, 끝나면 다시 원래대로(overflow:hidden) 되돌린다.
+  // 다만 최신 브라우저 중에는 "사람이 직접 스크롤한 것"만 인정하고 이런 코드로 흉내낸 스크롤은
+  // 무시하는 경우도 있어서, 기종에 따라 안 먹힐 수 있다는 점은 감안 부탁드린다.
+  window.addEventListener('load', ()=>{
+    const spacer = document.createElement('div');
+    spacer.style.cssText = 'position:absolute; top:100%; left:0; width:1px; height:2px; pointer-events:none;';
+    document.body.appendChild(spacer);
+    document.body.style.overflow = 'auto';
+    setTimeout(()=>{
+      window.scrollTo(0, 1);
+      setTimeout(()=>{
+        document.body.style.overflow = 'hidden';
+        spacer.remove();
+      }, 300);
+    }, 50);
   });
 </script>
 
