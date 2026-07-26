@@ -966,7 +966,8 @@
               <svg id="scanQuadSvg" class="scan-quad-svg"><polygon id="scanQuadPoly"></polygon></svg>
             </div>
             <div class="scan-btn-row">
-              <button id="btnAutoDetect" class="ghost-btn scan-action-btn">인식</button>
+              <button id="btnAutoDetect" class="ghost-btn scan-action-btn">자동</button>
+              <button id="btnUseWholeImage" class="ghost-btn scan-action-btn">전체</button>
               <button id="btnRotateScanSource" class="ghost-btn scan-action-btn">↻ 회전</button>
               <button id="btnWarpAndAdd" class="ghost-btn scan-action-btn">담기</button>
             </div>
@@ -5029,6 +5030,19 @@ graph TD
     renderScanHandles();
   }
   btnAutoDetect.addEventListener('click', autoDetectCorners);
+
+  // ---- 전체(자르지 않고 사진 전체를 그대로 씀) — 귀퉁이를 이미지 가장자리에 딱 맞춘다 ----
+  function useWholeImage(){
+    if (!scanImageEl) return;
+    scanCorners = {
+      tl: { x: 0, y: 0 },
+      tr: { x: scanDW, y: 0 },
+      br: { x: scanDW, y: scanDH },
+      bl: { x: 0, y: scanDH }
+    };
+    renderScanHandles();
+  }
+  document.getElementById('btnUseWholeImage').addEventListener('click', useWholeImage);
 
   // ---- 보정 단계(귀퉁이 맞추기 전)에서 미리 돌리기 — 사진이 옆으로/거꾸로 찍혔을 때
   // 귀퉁이 조정 자체가 헷갈리므로, 인식 전에 먼저 방향을 바로잡을 수 있게 한다.
