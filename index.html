@@ -23,7 +23,6 @@
   body.dark-mode .modal-panel,
   body.dark-mode .full-editor-panel,
   body.dark-mode .editor-frame,
-  body.dark-mode .scan-tray-item button,
   body.dark-mode .icon-round-btn,
   body.dark-mode .log-btn,
   body.dark-mode .log-entry{ background:#1b1f29; }
@@ -71,7 +70,6 @@
   body.dark-mode .back-btn,
   body.dark-mode .attach-chip .x,
   body.dark-mode .calc-table .calc-result{ color:var(--ink); }
-  body.dark-mode .scan-tray-item button:hover,
   body.dark-mode .chip-btn:hover,
   body.dark-mode .icon-round-btn:hover,
   body.dark-mode .back-btn:hover,
@@ -401,15 +399,19 @@
 
   .scan-tray{ display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
   .scan-tray-item{
-    display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:#fafbfc;
+    display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--gold); border-radius:6px;
+    background:rgba(200,162,68,0.14);
   }
   .scan-tray-item img{ width:36px; height:48px; object-fit:cover; border-radius:3px; border:1px solid var(--line); }
   .scan-tray-item .pdf-chip-icon{ width:36px; height:48px; display:flex; align-items:center; justify-content:center; font-size:20px; background:#eef0f4; border-radius:3px; }
   .scan-tray-item .name{ flex:1; font-size:12px; color:var(--ink); word-break:break-all; }
   .scan-tray-item button{
-    font-size:11px; border:1px solid var(--line); background:#fff; border-radius:5px; padding:3px 6px; cursor:pointer; color:var(--sub);
+    font-size:11px; border:none; background:var(--navy); border-radius:5px; padding:4px 7px; cursor:pointer; color:#fff; font-weight:700;
   }
-  .scan-tray-item button:hover{ color:var(--navy); border-color:var(--navy); }
+  .scan-tray-item button:hover{ background:var(--navy-deep); }
+  body.dark-mode .scan-tray-item{ background:var(--navy); border-color:var(--navy); }
+  body.dark-mode .scan-tray-item button{ background:#fff; color:var(--navy); }
+  body.dark-mode .scan-tray-item button:hover{ background:#e6e8ee; color:var(--navy); }
   .scan-hint{ font-size:11px; color:var(--sub); }
 
   .scan-export-foot{
@@ -5242,7 +5244,7 @@ graph TD
     setTimeout(()=>{
       try{ warpAndAddPage(); }
       catch(err){ showToast('처리 중 오류: ' + (err && err.message ? err.message : err), 'error'); }
-      finally{ btnWarpAndAdd.disabled = false; btnWarpAndAdd.textContent = '펴서 페이지에 담기'; }
+      finally{ btnWarpAndAdd.disabled = false; btnWarpAndAdd.textContent = '담기'; }
     }, 20); // 버튼 라벨이 바뀐 걸 화면에 그리고 나서 무거운 연산 시작
   });
 
@@ -5340,7 +5342,7 @@ graph TD
   }
 
   async function buildPdfBytes(){
-    // ①단계(귀퉁이 조절)까지만 마치고 "펴서 페이지에 담기"를 아직 안 눌렀어도,
+    // ①단계(귀퉁이 조절)까지만 마치고 "담기"를 아직 안 눌렀어도,
     // 다운로드/저장/요약 버튼을 누르면 지금 조절해둔 영역을 자동으로 담아준다.
     if (scanImageEl && scanCorners && scanStageWrap.style.display !== 'none'){
       try{ warpAndAddPage(); }catch(err){ /* 여기서 실패해도 아래 담긴 페이지 여부로 정상 처리됨 */ }
