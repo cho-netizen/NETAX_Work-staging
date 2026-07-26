@@ -422,7 +422,16 @@
   .scan-export-actions{ display:flex; gap:6px; flex-wrap:nowrap; }
   .scan-action-btn{
     flex:1 1 0; min-width:0; font-size:13.5px; padding:12px 6px; border-radius:8px;
+    background:rgba(200,162,68,0.14); border:1px solid var(--gold); color:#8a6d1f; font-weight:700;
   }
+  .scan-action-btn:hover{ background:rgba(200,162,68,0.24); }
+  body.dark-mode .scan-action-btn{
+    background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.25); color:#e8e8ec;
+  }
+  body.dark-mode .scan-action-btn:hover{ background:rgba(255,255,255,0.16); }
+  /* 보정단계(흑백·대비 줄)와 파일명 입력칸 사이 간격이 너무 컸던 것 축소 */
+  .scan-panel .modal-body{ padding-bottom:6px; }
+  .scan-panel .modal-foot{ padding-top:6px; }
   /* PC(stage-full)는 카메라가 없거나 있어도 브라우저가 capture 속성을 무시해서
      "촬영"과 "파일"이 결과적으로 똑같이 동작한다 — 그래서 PC에서만 이 버튼을
      숨긴다. 폰·태블릿(compact/grouped)에서는 그대로 보인다. */
@@ -972,7 +981,7 @@
               <button id="btnWarpAndAdd" class="ghost-btn scan-action-btn">담기</button>
             </div>
             <div class="scan-controls">
-              <label class="scan-check"><input type="checkbox" id="scanGrayscale"> 흑백(문서용)</label>
+              <label class="scan-check"><input type="checkbox" id="scanGrayscale"> 흑백</label>
               <label class="scan-slider">대비 <input type="range" id="scanContrast" min="0" max="100" value="20"></label>
             </div>
           </div>
@@ -983,7 +992,7 @@
         </div>
 
       </div>
-      <div class="modal-foot scan-export-foot">
+      <div class="modal-foot scan-export-foot" id="scanExportFoot" style="display:none;">
         <input type="text" id="scanOutputName" placeholder="파일 이름 (예: 계약서_스캔)" class="scan-name-input">
         <div class="scan-export-actions">
           <button id="btnScanSummarize" class="ghost-btn scan-action-btn">🔎 AI 요약</button>
@@ -4438,6 +4447,7 @@ graph TD
   function openScanModal(){
     scanOverlay.style.display = 'flex';
     scanOutputName.value = ''; // 이전 스캔 세션의 파일명이 그대로 남아있던 문제 — 새로 열 때마다 비움
+    updateScanExportFootVisibility();
   }
   function closeScanModal(){ scanOverlay.style.display = 'none'; }
   document.getElementById('btnOpenScan').addEventListener('click', openScanModal);
@@ -5252,7 +5262,13 @@ graph TD
   });
 
   // ---- 페이지 모음(트레이) 렌더 ----
+  function updateScanExportFootVisibility(){
+    const foot = document.getElementById('scanExportFoot');
+    if (foot) foot.style.display = docPages.length ? 'flex' : 'none';
+  }
+
   function renderTray(){
+    updateScanExportFootVisibility();
     scanTray.innerHTML = '';
     docPages.forEach((item, idx)=>{
       const row = document.createElement('div');
