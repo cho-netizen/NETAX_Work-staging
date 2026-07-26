@@ -370,11 +370,11 @@
     border-radius:0; display:flex; flex-direction:column;
   }
   body.stage-compact .scan-panel .modal-body{ flex:1; min-height:0; overflow-y:auto; }
-  .scan-body{ display:flex; gap:20px; flex-wrap:wrap; }
-  .scan-section{ flex:1; min-width:280px; display:flex; flex-direction:column; gap:8px; }
-  /* 폰에서는 너비 계산에 기대지 않고, 확실하게 위(스캔영역)→아래(바구니) 세로로만 쌓는다. */
-  body.stage-compact .scan-body{ flex-direction:column; }
-  body.stage-compact .scan-section{ min-width:0; }
+  /* 화면 크기와 무관하게 항상 세로로 고정한다(작업창 → 바구니 → 파일명 순).
+     PC에서 바구니가 옆이 아니라 아래로 와도 문제없다는 확인을 받아서, "폰에서만" 같은
+     조건부 판정에 기대지 않고 아예 통일했다 — 조건 판정이 어긋날 위험 자체를 없애기 위함. */
+  .scan-body{ display:flex; flex-direction:column; gap:16px; }
+  .scan-section{ min-width:0; display:flex; flex-direction:column; gap:8px; }
   .scan-section-title{ font-size:12.5px; font-weight:700; color:var(--navy); }
 
   .scan-stage-wrap{ display:flex; flex-direction:column; gap:8px; }
