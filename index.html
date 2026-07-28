@@ -986,6 +986,10 @@
         <button type="button" id="btnOpenPdfManagerFromScan" class="scan-tb-btn">PDF관리</button>
         <span class="modal-close" id="btnCloseScan" title="닫기">✕</span>
       </div>
+      <!-- [패치 2026.07 — 버그#7] 저장될 폴더를 항상 눈에 보이게 표시. 탐색창이 접힌
+           커버화면모드·좁은 화면에서는 지금 폴더가 어디인지 안 보인 채로 저장 버튼을 눌러서
+           "종전 폴더에 잘못 저장됐다"고 느끼는 혼란이 있었다. -->
+      <div id="scanTargetFolderLabel" style="font-size:12px;color:var(--sub);padding:2px 2px 0;"></div>
       <div class="modal-body scan-body">
 
         <div class="scan-section">
@@ -1527,14 +1531,36 @@ graph TD
   // ============================================================
   // GAS 호출 (listFolder)
   // ============================================================
-  async function callGas(action, payload){
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      // GAS 웹앱의 CORS preflight 회피를 위해 text/plain으로 보냄 (서버에서 JSON.parse로 처리)
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ action }, payload))
-    });
-    if (!res.ok) throw new Error('네트워크 오류 (status ' + res.status + ')');
+  // [패치 2026.07] Apps Script 웹앱은 콜드스타트·순간적인 구글 인프라 지연 등으로
+  // 가끔 일시적인 오류(404/429/5xx)를 던질 때가 있다. 예전엔 이 상태 하나만 보고
+  // 바로 "네트워크 오류"를 던져버려서, 고객목록처럼 처음 화면을 여는 순간의 요청이
+  // 이 일시적 딸꾹질에 걸리면 바로 실패로 보였다(버그#1). 최대 2번까지 짧게 쉬었다가
+  // 자동으로 다시 시도하고, 그래도 안 되면 그때 진짜 오류로 던진다.
+  async function callGas(action, payload, _retryCount){
+    _retryCount = _retryCount || 0;
+    let res;
+    try{
+      res = await fetch(GAS_URL, {
+        method: 'POST',
+        // GAS 웹앱의 CORS preflight 회피를 위해 text/plain으로 보냄 (서버에서 JSON.parse로 처리)
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ action }, payload))
+      });
+    }catch(networkErr){
+      // fetch 자체가 실패(오프라인, DNS 등) — 이것도 일시적일 수 있으니 재시도 대상에 포함
+      if (_retryCount < 2){
+        await new Promise(r => setTimeout(r, 600 + _retryCount * 700));
+        return callGas(action, payload, _retryCount + 1);
+      }
+      throw networkErr;
+    }
+    if (!res.ok){
+      if (_retryCount < 2){
+        await new Promise(r => setTimeout(r, 600 + _retryCount * 700));
+        return callGas(action, payload, _retryCount + 1);
+      }
+      throw new Error('네트워크 오류 (status ' + res.status + ') — GAS_URL이 최신 배포 주소인지(config.js), 혹은 Apps Script 배포가 최근에 새로 갱신됐는지 확인해보세요.');
+    }
     return res.json();
   }
 
@@ -3994,7 +4020,44 @@ graph TD
   // 과거에는 응답 텍스트 안의 <<<EDIT_DOCUMENT>>> 같은 마커를 정규식으로 찾아냈는데,
   // 코드펜스 안에 마커가 나와도 명령으로 오인하는 등 취약한 지점이 있었다 —
   // 구조화된 데이터로 받으면 이런 문제 자체가 없어진다.
-  function renderAssistantReply(bubbleEl, replyText, clientActions){
+  // [패치 2026.07 — 버그#3 근본 원인]
+  // AI 응답이 오기까지 시간이 걸리는 동안(도구 여러 번 호출 등으로 수십 초씩 걸리는 경우가 흔함)
+  // 사용자가 다른 폴더를 보거나 다른 파일을 열면 isReportWriterOpen/currentOpenFile이 바뀐다.
+  // 예전 코드는 응답이 "도착한 시점"의 이 값들을 기준으로 버튼을 보여줄지 결정했기 때문에,
+  // AI가 apply_document_edit을 정상적으로 호출해서 clientActions에 수정안이 실제로 들어있는데도
+  // 화면에는 버튼이 아예 렌더링되지 않고 조용히 사라지는 경우가 매우 잦았다(사용자가 "버튼을
+  // 준다고 해놓고 안 준다"고 느낀 사고의 실제 원인). 이제 "요청을 보낸 시점"에 열려 있던 파일을
+  // 별도로 기억해뒀다가, 응답이 왔을 때 그 파일이 지금 안 열려 있어도 버튼은 항상 보여주고,
+  // 클릭하면 그 파일을 다시 열어서 적용한다.
+  function applyEditToTargetFile_(editTargetFile, content, applyBtn){
+    const sameFileAlreadyOpen = isReportWriterOpen && currentOpenFile && editTargetFile
+      && currentOpenFile.id === editTargetFile.id;
+    if (sameFileAlreadyOpen){
+      applyEditorContent(content);
+      applyBtn.textContent = '✓ 적용됨';
+      applyBtn.disabled = true;
+      return;
+    }
+    if (!editTargetFile){
+      showToast('적용할 문서 정보를 찾을 수 없습니다 — 문서를 다시 열고 요청해주세요.', 'error');
+      return;
+    }
+    applyBtn.textContent = '문서 여는 중…';
+    applyBtn.disabled = true;
+    openEditor(editTargetFile); // isReportWriterOpen=true로 바뀌고 iframe이 새로 로드된다
+    const frame = getActiveEditorFrame();
+    const onLoad = ()=>{
+      frame.removeEventListener('load', onLoad);
+      // report-writer 내부 스크립트가 파일을 fetch해서 완전히 준비되기까지 약간의 여유를 둔다.
+      setTimeout(()=>{
+        applyEditorContent(content);
+        applyBtn.textContent = '✓ 적용됨';
+      }, 500);
+    };
+    frame.addEventListener('load', onLoad);
+  }
+
+  function renderAssistantReply(bubbleEl, replyText, clientActions, editTargetFile){
     const actions = Array.isArray(clientActions) ? clientActions : [];
     const diagramOpen = (typeof diagramView !== 'undefined' && diagramView.style.display !== 'none');
 
@@ -4011,23 +4074,23 @@ graph TD
       navigateTo(explorerPath);
     }
 
-    const editAction = actions.find(a => a && a.type === 'edit_document' && isReportWriterOpen);
-    const diagramAction = actions.find(a => a && a.type === 'diagram_mermaid' && diagramOpen);
+    // [패치] isReportWriterOpen(지금 이 순간의 화면 상태)로 게이트하지 않는다 — clientActions에
+    // 실제로 들어있으면 무조건 버튼을 보여준다. diagramOpen도 마찬가지로 완화.
+    const editAction = actions.find(a => a && a.type === 'edit_document');
+    const diagramAction = actions.find(a => a && a.type === 'diagram_mermaid');
 
     bubbleEl.innerHTML = '';
 
     if (editAction){
       const textPart = document.createElement('div');
-      textPart.textContent = replyText.trim() || '편집기에 열려 있는 문서에 대한 수정안을 준비했습니다.';
+      textPart.textContent = replyText.trim() || '문서에 대한 수정안을 준비했습니다.';
       bubbleEl.appendChild(textPart);
 
       const applyBtn = document.createElement('button');
       applyBtn.className = 'apply-edit-btn';
       applyBtn.textContent = '📝 편집기에 적용하기';
       applyBtn.addEventListener('click', ()=>{
-        applyEditorContent(editAction.content || '');
-        applyBtn.textContent = '✓ 적용됨';
-        applyBtn.disabled = true;
+        applyEditToTargetFile_(editTargetFile, editAction.content || '', applyBtn);
       });
       bubbleEl.appendChild(applyBtn);
     } else if (diagramAction){
@@ -4108,6 +4171,10 @@ graph TD
     const openFileCtx = currentOpenFile
       ? Object.assign({}, currentOpenFile, (liveContent !== null ? { liveContent } : {}))
       : null;
+    // [패치 2026.07 — 버그#3] 응답이 오는 동안 사용자가 다른 파일/폴더로 이동해도
+    // "이 요청을 보낼 때 편집 중이던 파일"을 잃어버리지 않도록 별도로 스냅샷을 떠둔다.
+    const editTargetFileSnapshot = (isReportWriterOpen && currentOpenFile)
+      ? Object.assign({}, currentOpenFile) : null;
 
     // 관계도 도구가 열려 있으면, AI가 mermaid 코드를 만들어 바로 반영할 수 있도록 지금 내용을 함께 보낸다.
     const openDiagramCtx = (typeof diagramView !== 'undefined' && diagramView.style.display !== 'none')
@@ -4144,7 +4211,13 @@ graph TD
             openFile: openFileCtx,
             openDiagram: openDiagramCtx,
             attachedItems: attachmentsForThisMessage,
-            attachedTexts: textAttachmentsForThisMessage
+            attachedTexts: textAttachmentsForThisMessage,
+            // [패치 2026.07 — 버그#6] 이번 턴이 음성으로 시작됐는지 서버에 알려준다.
+            // 예전엔 이 정보가 프론트엔드에만 있어서(isVoiceTurn), AI는 지금 자기 답이
+            // 소리로 읽힐지 화면에 표시될지 전혀 모른 채 항상 문자채팅 방식(마크다운·표·
+            // 굵게 등)으로만 답했다. 그래서 음성모드에서도 "**이렇게** 하시면 됩니다"처럼
+            // 기호까지 그대로 다 읽어버리는 문제가 생겼다.
+            voiceTurn: isVoiceTurn
           },
           autoRef: autoRefMode
         }, buildAiSettingsPayload(messageContainsUrl(text))))
@@ -4153,7 +4226,7 @@ graph TD
       if (data.error){
         thinkingBubble.textContent = '오류: ' + data.error;
       } else {
-        renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions);
+        renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
         chatMessages.push({ role: 'assistant', content: data.reply || '' });
         scheduleChatHistorySave();
         if (isVoiceTurn) speakReply(data.reply || '');
@@ -4361,6 +4434,27 @@ graph TD
     }
   }
 
+  // [패치 2026.07 — 버그#6] 마크다운 기호를 그대로 읽어버리는 문제 대응.
+  // 백엔드(Code.gs)가 음성턴에는 마크다운을 안 쓰도록 이미 지시받지만, AI가 실수로
+  // 섞어 쓰는 경우에 대비해 클라이언트에서도 한 번 더 걸러낸다(이중 안전망).
+  function stripMarkdownForSpeech_(s){
+    return s
+      .replace(/```[\s\S]*?```/g, '') // 코드블록 통째로 제거(읽어봐야 의미 없음)
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^#{1,6}\s+/gm, '')     // 헤더 #
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // **굵게**
+      .replace(/\*([^*]+)\*/g, '$1')     // *기울임*
+      .replace(/^\s*[-*+]\s+/gm, '')     // 목록 기호
+      .replace(/^\s*\d+\.\s+/gm, '')     // 번호목록
+      .replace(/^>\s?/gm, '')            // blockquote 기호
+      .replace(/\|/g, ' ')               // 표 구분선
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 링크 [글자](url) → 글자만
+      .replace(/[⚠️✅❌ℹ️◇■□●○▸]/g, '')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+  }
+
   // AI 응답 텍스트를 소리로 읽어줌 (문서수정 제안의 <<<EDIT_DOCUMENT>>> 원문 덩어리는 읽지 않고, 앞뒤 설명만 읽음)
   function speakReply(text){
     let spoken = (text || '');
@@ -4375,12 +4469,21 @@ graph TD
       const after = spoken.slice(en + EDIT_END.length).trim();
       spoken = [before, after].filter(Boolean).join(' ') || '문서 수정안을 준비했습니다. 편집기에 적용하기 버튼을 눌러주세요.';
     }
+    spoken = stripMarkdownForSpeech_(spoken);
 
     if (!hasSpeechSynthesis || !spoken){
       voicePhase = 'idle';
       updateVoiceUi();
       if (voiceModeOn) startVoiceRecognition(); // 읽을 내용이 없어도 음성모드면 곧바로 다시 듣기 시작
       return;
+    }
+
+    // [패치 2026.07 — 버그#6] "마이크는 켜져 있는데 AI가 동시에 말하는" 상황을 막기 위한
+    // 안전장치. 정상 흐름이면 이 시점엔 이미 recognition이 꺼져 있어야 하지만, 모바일
+    // 브라우저에서 onend가 늦게/안 불리는 경우를 대비해 말하기 시작 직전에 한 번 더
+    // 확실히 끈다(abort는 onresult를 발생시키지 않고 즉시 멈춘다 — stop과 달리 안전).
+    if (voiceRecognition && isVoiceRecording){
+      try{ voiceRecognition.abort(); }catch(e){}
     }
 
     voicePhase = 'speaking';
@@ -4409,17 +4512,26 @@ graph TD
 
     voiceRecognition = new SpeechRecognitionCtor();
     voiceRecognition.lang = 'ko-KR';
-    voiceRecognition.interimResults = false;
+    // [패치 2026.07 — 버그#6: "말이 끝나지도 않았는데 마이크가 꺼진다"]
+    // 예전엔 interimResults:false + continuous 미지정(기본값 false)이었다. 이 조합이면
+    // 브라우저 내장 엔드포인터가 문장 중간의 짧은 호흡·쉼만 감지해도 "발화 종료"로 판단해
+    // 버려서, 사용자가 말을 채 끝내기도 전에 마이크가 꺼지곤 했다. continuous:true +
+    // interimResults:true로 바꾸고, 대신 "마지막 소리 이후 1.1초 동안 조용하면 그때
+    // 진짜로 말이 끝난 것"으로 우리가 직접 판단하는 무음 타이머를 둔다 — 말하는 도중에는
+    // 계속 타이머가 리셋되므로 문장 중간에 끊기지 않는다.
+    voiceRecognition.continuous = true;
+    voiceRecognition.interimResults = true;
     voiceRecognition.maxAlternatives = 1;
 
-    voiceRecognition.onstart = ()=>{
-      isVoiceRecording = true;
-      chatInputEl.disabled = true; // 음성 인식 중엔 타이핑과 섞여서 덮어써지는 사고를 막기 위해 잠금
-      chatInputEl.placeholder = '음성 인식 중…';
-      updateVoiceUi();
-    };
-    voiceRecognition.onresult = (e)=>{
-      const transcript = e.results[0][0].transcript.trim();
+    let accumulatedFinal = '';
+    let silenceTimer = null;
+    const SILENCE_MS = 1100;
+
+    function finalizeUtterance(){
+      const transcript = accumulatedFinal.trim();
+      accumulatedFinal = '';
+      if (silenceTimer){ clearTimeout(silenceTimer); silenceTimer = null; }
+      try{ voiceRecognition.stop(); }catch(e){}
       if (!transcript) return;
 
       const instantReply = tryInstantVoiceCommand(transcript);
@@ -4435,6 +4547,27 @@ graph TD
       chatInputEl.value = transcript;
       voiceTriggeredSend = true;
       sendChatMessage(); // 말이 끝나면 바로 전송 (엔터/버튼 없이) — 응답 후 speakReply에서 이어서 다시 듣기 시작
+    }
+
+    voiceRecognition.onstart = ()=>{
+      isVoiceRecording = true;
+      chatInputEl.disabled = true; // 음성 인식 중엔 타이핑과 섞여서 덮어써지는 사고를 막기 위해 잠금
+      chatInputEl.placeholder = '음성 인식 중…';
+      updateVoiceUi();
+    };
+    voiceRecognition.onresult = (e)=>{
+      // continuous 모드라 결과가 여러 번에 걸쳐 누적된다. 이번 이벤트에 새로 들어온
+      // 부분(resultIndex부터)만 훑어서 확정(final)된 조각은 누적하고, 아직 확정 안 된
+      // interim 조각까지 포함해서 "지금 소리가 감지되고 있다"고 보고 무음 타이머를 리셋한다.
+      if (silenceTimer) clearTimeout(silenceTimer);
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const chunk = e.results[i][0].transcript;
+        if (e.results[i].isFinal) accumulatedFinal += chunk;
+        else interim += chunk;
+      }
+      if (!accumulatedFinal.trim() && !interim.trim()) return;
+      silenceTimer = setTimeout(finalizeUtterance, SILENCE_MS);
     };
     voiceRecognition.onerror = (e)=>{
       if (e.error !== 'no-speech' && e.error !== 'aborted'){
@@ -4447,9 +4580,12 @@ graph TD
       isVoiceRecording = false;
       chatInputEl.placeholder = '메시지 입력';
       if (!currentChatAbortController) chatInputEl.disabled = false;
-      // voicePhase가 아직 'listening'이면 onresult가 한 번도 안 불렸다는 뜻(무음 타임아웃 등) —
-      // thinking/speaking으로 이미 넘어갔다면 그쪽 흐름이 끝난 뒤 알아서 재시작하므로 여기선 손대지 않는다.
+      if (silenceTimer){ clearTimeout(silenceTimer); silenceTimer = null; }
+      // voicePhase가 아직 'listening'이면 onresult가 한 번도 확정되지 않은 채 끝났다는 뜻이다.
+      // (예: 브라우저가 continuous 모드를 일정 시간 뒤 자체 종료한 경우) — 그래도 그때까지
+      // 모아둔 확정 텍스트가 있으면 그걸로 마무리 처리하고, 전혀 없으면 그냥 다시 듣기 시작한다.
       if (voicePhase === 'listening'){
+        if (accumulatedFinal.trim()){ finalizeUtterance(); return; }
         voicePhase = 'idle';
         updateVoiceUi();
         if (voiceModeOn) startVoiceRecognition();
@@ -4533,6 +4669,14 @@ graph TD
 
   // 촬영하기·갤러리에서 불러오기 두 가지를 선택할 수 있으므로, 모달을 열 때 자동으로
   // 카메라부터 실행하던 방식은 그만둔다 — 사용자가 버튼으로 직접 고르게 한다.
+  function updateScanTargetFolderLabel_(){
+    const label = document.getElementById('scanTargetFolderLabel');
+    if (!label) return;
+    label.textContent = explorerPath.length
+      ? '📁 저장 위치: ' + explorerPath.join(' / ')
+      : '⚠️ 저장할 고객/사건 폴더가 아직 선택되지 않았습니다 — 탐색기에서 먼저 폴더를 여세요.';
+  }
+
   function openScanModal(){
     scanOverlay.style.display = 'flex';
     scanOutputName.value = ''; // 이전 스캔 세션의 파일명이 그대로 남아있던 문제 — 새로 열 때마다 비움
@@ -4540,6 +4684,7 @@ graph TD
     const skipBtn = document.getElementById('btnSkipScanFile');
     if (skipBtn) skipBtn.style.display = 'none';
     updateScanExportFootVisibility();
+    updateScanTargetFolderLabel_(); // [패치] 지금 저장될 폴더를 바로 보여줌(버그#7)
   }
   function closeScanModal(){ scanOverlay.style.display = 'none'; }
   document.getElementById('btnOpenScan').addEventListener('click', openScanModal);
@@ -5937,6 +6082,9 @@ graph TD
 
   btnSaveToFolder.addEventListener('click', async ()=>{
     if (!explorerPath.length){ showToast('먼저 탐색기에서 저장할 고객/사건 폴더를 열어두세요.', 'warning'); return; }
+    // [패치 2026.07 — 버그#7] 실제로 어느 폴더에 저장되는지 클릭 직전 값을 사용자에게
+    // 한 번 더 확인시킨다(취소 가능) — 특히 탐색창이 안 보이는 화면 배치에서 유용.
+    if (!confirm('"' + explorerPath.join(' / ') + '" 폴더에 저장합니다. 맞나요?')) return;
     btnSaveToFolder.disabled = true; btnSaveToFolder.textContent = '저장 중…';
     try{
       const bytes = await buildPdfBytes();
