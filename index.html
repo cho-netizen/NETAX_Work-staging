@@ -606,6 +606,10 @@
   }
   #flipVoiceIcon.listening{ background:#d9534f; border-color:#d9534f; color:#fff; animation:pulseRec 1.1s ease-in-out infinite; }
   #flipVoiceIcon.speaking{ background:#2f6fed; border-color:#2f6fed; color:#fff; }
+  /* 생각 중(답변 대기) — 듣는중(빨강 점멸)·말하는중과 구분되는, 은은하게 커졌다 작아지는 펄스.
+     "멈춘 건지 아직 하는 중인지" 구분이 안 된다는 피드백으로 2026.07 추가. */
+  #flipVoiceIcon.thinking{ animation: pulseThinkIcon 1.3s ease-in-out infinite; }
+  @keyframes pulseThinkIcon{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.12); opacity:0.7; } }
   #flipVoiceText{ font-size:13px; color:var(--sub); font-weight:600; }
   /* 토킹모드 화면 안에서 채팅모드로 되돌아가는 버튼 */
   #btnExitTalkingMode{
@@ -4015,12 +4019,54 @@ graph TD
     }catch(err){ console.warn('첨부 데이터 파싱 실패', err); }
   });
 
+  // ============================================================
+  // 채팅창 자동 스크롤 — 새 말풍선("생각 중…" 포함)이 생기거나 내용이 바뀔 때 항상 맨 아래로
+  // 따라가도록 한다. 예전엔 말풍선을 추가하는 그 순간의 scrollHeight로 딱 한 번만 스크롤해서,
+  // 그 직후에(모바일 키보드가 닫히는 애니메이션·attach-bar 접힘·이미지 로딩 등으로) 화면 높이가
+  // 다시 바뀌면 방금 추가한 "생각 중…" 말풍선이 화면 아래로 밀려 안 보이는 문제가 있었다(수동으로
+  // 스크롤해야만 보임). 이제는 (1) 새 말풍선이 생기는 순간엔 무조건(강제로) 맨 아래로 붙이고,
+  // (2) 사용자가 지금 맨 아래 근처를 보고 있을 때만 이후의 변화(스트리밍·이미지 로딩·키보드
+  // 애니메이션 등)에도 계속 자동으로 따라가며, (3) 사용자가 일부러 위로 스크롤해서 옛 대화를
+  // 읽고 있으면 그건 방해하지 않는다.
+  let chatPinnedToBottom = true;
+  const CHAT_BOTTOM_THRESHOLD_PX = 80;
+
+  function isChatNearBottom_(){
+    return (chatBody.scrollHeight - chatBody.scrollTop - chatBody.clientHeight) < CHAT_BOTTOM_THRESHOLD_PX;
+  }
+  chatBody.addEventListener('scroll', ()=>{ chatPinnedToBottom = isChatNearBottom_(); });
+
+  function scrollChatToBottom(force){
+    if (!force && !chatPinnedToBottom) return;
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  // 한 번만 스크롤하면 그 직후의 뒤늦은 레이아웃 변화(키보드 닫힘 애니메이션 등)를 놓칠 수 있어서,
+  // 지금 당장·다음 프레임·약간의 시간 뒤(키보드 애니메이션이 보통 끝나는 시점) 이렇게 세 번 맞춘다.
+  function scrollChatToBottomInsistently_(force){
+    scrollChatToBottom(force);
+    requestAnimationFrame(()=> scrollChatToBottom(force));
+    setTimeout(()=> scrollChatToBottom(force), 350);
+  }
+
+  // 말풍선 안의 내용이 나중에 바뀌거나(답변 렌더링·이미지 로드 등) 높이가 늘어나는 경우까지
+  // 계속 따라가도록 채팅창 DOM 변화를 관찰한다(사용자가 일부러 위로 스크롤해 옛 대화를 보고
+  // 있을 때는 chatPinnedToBottom이 false가 되어 방해하지 않는다).
+  new MutationObserver(()=>{ scrollChatToBottom(false); })
+    .observe(chatBody, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['src'] });
+
+  // 모바일 키보드가 열리고/닫힐 때도 화면(뷰포트) 높이가 바뀌므로 다시 맞춰준다.
+  window.addEventListener('resize', ()=> scrollChatToBottomInsistently_(false));
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', ()=> scrollChatToBottomInsistently_(false));
+  }
+
   function appendBubble(role, text){
     const div = document.createElement('div');
     div.className = 'msg ' + (role === 'user' ? 'me' : 'ai');
     div.textContent = text;
     chatBody.appendChild(div);
-    chatBody.scrollTop = chatBody.scrollHeight;
+    scrollChatToBottomInsistently_(true); // 새 말풍선은 항상 강제로 맨 아래까지 붙인다
     return div;
   }
 
@@ -4429,6 +4475,63 @@ graph TD
   // voiceModeOn·voicePhase('idle'|'listening'|'thinking'|'speaking')는 스크립트 앞쪽에서 이미 선언됨
   // (상단바 반응형의 커버화면모드 판단 로직이 더 일찍 참조해야 해서 그쪽으로 끌어올려둠).
 
+  // ---- "생각 중" 살아있음 표시(하트비트) ----
+  // 예전엔 voicePhase가 'thinking'인 동안 "AI 응답 준비 중…" 문구만 고정으로 떠 있어서, 답변이
+  // 오래 걸릴 때 멈춘 건지 아직 생각 중인지 구분할 수 없었다. 이제 (1) 점을 천천히 늘렸다
+  // 줄였다 하는 문구, (2) 아이콘이 은은하게 커졌다 작아지는 펄스 애니메이션, (3) 몇 초 간격으로
+  // 아주 작은 소리로 "틱" 소리를 내는 3가지 신호로 "아직 살아서 생각 중"임을 알린다(너무 요란하지
+  // 않게 — 소리는 짧고 작게, 간격도 4초로 넉넉하게 뒀다).
+  let voiceThinkingDotsTimer = null;
+  let voiceThinkingTickTimer = null;
+  let voiceThinkingDotsCount = 0;
+  let voiceThinkingAudioCtx = null;
+
+  function getVoiceThinkingAudioCtx_(){
+    if (!voiceThinkingAudioCtx){
+      try { voiceThinkingAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return null; }
+    }
+    return voiceThinkingAudioCtx;
+  }
+
+  // 아주 짧고(0.15초) 작은 볼륨의 "틱" — 알림음이라기보다 "심장박동"에 가깝게, 거슬리지 않도록 설계.
+  function playVoiceThinkingTick_(){
+    const ctx = getVoiceThinkingAudioCtx_();
+    if (!ctx) return;
+    try{
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.02); // 작은 볼륨
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.16);
+    }catch(e){}
+  }
+
+  function startVoiceThinkingIndicator_(){
+    if (voiceThinkingDotsTimer) return; // 이미 켜져 있으면 다시 시작하지 않음(문구 깜빡임 방지)
+    flipVoiceIcon.classList.add('thinking');
+    voiceThinkingDotsCount = 0;
+    flipVoiceText.textContent = 'AI 응답 준비 중';
+    voiceThinkingDotsTimer = setInterval(()=>{
+      voiceThinkingDotsCount = (voiceThinkingDotsCount + 1) % 4;
+      flipVoiceText.textContent = 'AI 응답 준비 중' + '.'.repeat(voiceThinkingDotsCount);
+    }, 550);
+    voiceThinkingTickTimer = setInterval(playVoiceThinkingTick_, 4000);
+  }
+
+  function stopVoiceThinkingIndicator_(){
+    if (voiceThinkingDotsTimer){ clearInterval(voiceThinkingDotsTimer); voiceThinkingDotsTimer = null; }
+    if (voiceThinkingTickTimer){ clearInterval(voiceThinkingTickTimer); voiceThinkingTickTimer = null; }
+    flipVoiceIcon.classList.remove('thinking');
+  }
+
   // 마이크 버튼 2개(입력창 옆 · 커버화면모드용) + 커버화면모드 상태문구까지 한 번에 지금 상태로 맞춘다.
   function updateVoiceUi(){
     [btnVoiceInput, btnVoiceInputFlip].forEach(btn=>{
@@ -4439,15 +4542,20 @@ graph TD
     });
     flipVoiceIcon.classList.remove('listening', 'speaking');
     if (isVoiceRecording){
+      stopVoiceThinkingIndicator_();
       flipVoiceIcon.classList.add('listening');
       flipVoiceText.textContent = '듣는 중…';
     } else if (voicePhase === 'thinking'){
-      flipVoiceText.textContent = 'AI 응답 준비 중…';
+      startVoiceThinkingIndicator_();
     } else if (voicePhase === 'speaking'){
+      stopVoiceThinkingIndicator_();
+      flipVoiceIcon.classList.add('speaking');
       flipVoiceText.textContent = '말하는 중…';
     } else if (voiceModeOn){
+      stopVoiceThinkingIndicator_();
       flipVoiceText.textContent = '다시 듣기 준비 중…';
     } else {
+      stopVoiceThinkingIndicator_();
       flipVoiceText.textContent = '마이크를 눌러 음성모드를 시작하세요';
     }
   }
