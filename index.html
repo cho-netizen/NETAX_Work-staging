@@ -5586,17 +5586,54 @@ graph TD
     });
 
     // 고객명이 입력됐을 때: "고객명" 또는 "고객명 사건분류"로 시작하는 기존 사건 폴더에 이어붙인다.
+    // customerName과 같은 사람으로 볼 수 있는 폴더들을 찾는다 — "고객명"(일련번호 없음, 1번으로 간주),
+    // "고객명2 양도", "고객명3" 처럼 이름 바로 뒤에 일련번호가 붙은 것까지 전부 후보로 잡는다.
+    function findCustomerFolderMatches_(folders, customerName){
+      const nameEscaped = customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('^' + nameEscaped + '(\\d*)(?:\\s|$)');
+      const matches = [];
+      folders.forEach(f => {
+        const m = f.name.match(re);
+        if (m) matches.push({ name: f.name, serial: m[1] ? parseInt(m[1], 10) : 1 });
+      });
+      return matches;
+    }
+
     async function saveAsCustomerMemo_(customerName){
       const listing = await listFolder(basePath);
-      const matches = listing.folders.filter(f => f.name === customerName || f.name.indexOf(customerName + ' ') === 0);
+      const matches = findCustomerFolderMatches_(listing.folders, customerName);
 
       let targetFolderName;
       if (matches.length === 1){
-        targetFolderName = matches[0].name;
+        // 폴더가 하나 있어도 그냥 이어붙이지 않고, 정말 같은 고객인지 먼저 확인한다.
+        const only = matches[0];
+        const same = confirm(
+          '기존에 "' + only.name + '" 폴더가 있습니다.\n같은 고객이 맞습니까?\n\n' +
+          '"취소"를 누르면 동명이인으로 보고 번호를 붙인 새 폴더를 만듭니다.'
+        );
+        if (same){
+          targetFolderName = only.name;
+        } else {
+          const nextSerial = only.serial + 1; // 기존 것을 1로 간주 → 다음은 2부터
+          const newName = customerName + nextSerial;
+          const created = await callGas('createFolder', { path: basePath, name: newName });
+          if (created.error) throw new Error(created.error);
+          targetFolderName = newName;
+        }
       } else if (matches.length > 1){
-        const choice = prompt('"' + customerName + '"로 시작하는 폴더가 여러 개 있습니다. 저장할 정확한 폴더명을 입력하세요:\n' + matches.map(f => f.name).join('\n'));
+        const choice = prompt(
+          '"' + customerName + '"로 시작하는 폴더가 여러 개 있습니다. 저장할 정확한 폴더명을 입력하세요\n' +
+          '(동명이인 등 목록에 없는 새 사람이면, 새 이름을 그대로 입력하세요):\n' +
+          matches.map(m => m.name).join('\n')
+        );
         if (!choice || !choice.trim()) return false;
-        targetFolderName = choice.trim();
+        const chosen = choice.trim();
+        const alreadyExists = listing.folders.some(f => f.name === chosen);
+        if (!alreadyExists){
+          const created = await callGas('createFolder', { path: basePath, name: chosen });
+          if (created.error) throw new Error(created.error);
+        }
+        targetFolderName = chosen;
       } else {
         // 일치하는 사건 폴더가 없으면(아직 사건분류가 정해지기 전) 고객명 그대로 새 폴더를 만든다.
         const created = await callGas('createFolder', { path: basePath, name: customerName });
