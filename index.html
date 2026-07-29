@@ -5612,7 +5612,8 @@ graph TD
         if (data.error) throw new Error(data.error);
         const templates = data.templates || [];
         if (!templates.length){
-          caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">등록된 템플릿이 없습니다. 업무관리자 폴더 안의 "사건개시템플릿" 폴더에 사건유형별 파일(엑셀 또는 .md/.txt)을 넣어두면 여기 나타납니다.</div>';
+          const pathHint = data.folderPath ? ('<br><span style="color:#a83232;">지금 확인한 폴더: ' + data.folderPath + '</span>') : '';
+          caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">등록된 템플릿이 없습니다. 업무관리자 폴더 안의 "사건개시템플릿" 폴더에 사건유형별 파일(엑셀 또는 .md/.txt)을 넣어두면 여기 나타납니다.' + pathHint + '</div>';
           return;
         }
         caseOpenTemplateList.innerHTML = '';
