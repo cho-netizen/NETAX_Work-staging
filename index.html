@@ -879,8 +879,8 @@
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
-      <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 상담메모</button>
-      <button type="button" id="btnOpenQuickMemo" class="tb-btn" title="타이핑으로 바로 입력하는 상담메모 (통화 중, 지금 보고 있는 폴더와 무관하게 저장할 폴더명을 직접 지정)">⌨ 빠른상담메모</button>
+      <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 필기상담</button>
+      <button type="button" id="btnOpenQuickMemo" class="tb-btn" title="타이핑으로 바로 입력하는 빠른메모 (통화 중, 지금 보고 있는 폴더와 무관하게 저장할 폴더명을 직접 지정)">⌨ 빠른메모</button>
       <button type="button" id="btnOpenCaseOpen" class="tb-btn" title="업무관리자 폴더에 등록해둔 사건유형별 템플릿을 골라 채워 넣고, 고객명만 입력하면 [고객명 사건분류] 규칙대로 새 사건 폴더를 만든다">🗂 사건개시</button>
       <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
@@ -908,7 +908,7 @@
         <div id="mgAnalysisPopup" class="nx-popup"></div>
       </div>
       <div class="topbar-item mobile-group" id="mgConfigWrap">
-        <button type="button" id="btnMgConfig" class="tb-btn" title="스캔 · 편집 · 상담메모">🛠 <span class="tool-menu-label">도구</span></button>
+        <button type="button" id="btnMgConfig" class="tb-btn" title="스캔 · 편집 · 필기상담 · 빠른메모 · 사건개시">🛠 <span class="tool-menu-label">도구</span></button>
         <div id="mgConfigPopup" class="nx-popup"></div>
       </div>
       <!-- 커버화면모드(화면이 아주 작은 폰) 전용 마이크 — 채팅창·입력란이 없는 대신 이 버튼 하나로
@@ -1213,13 +1213,13 @@
        저장할 때만 폴더명(고객명)을 물어서 그 폴더(없으면 새로 생성)에
        "<폴더명>사건.md" 파일로 저장한다(같은 이름 파일이 이미 있으면 이어서 덧붙임). -->
   <div class="modal-overlay" id="quickMemoOverlay" style="display:none; padding:0;">
-    <div class="note-fullscreen-panel" id="quickMemoPanel">
+    <div class="note-fullscreen-panel" id="quickMemoPanel" style="background:var(--panel);">
       <div class="note-titlebar" id="quickMemoTitlebar">
-        <span style="flex:1; color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">⌨ 빠른상담메모</span>
+        <span style="flex:1; color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">⌨ 빠른메모</span>
         <button id="btnQuickMemoSave" class="note-tb-btn note-tb-save" title="저장">💾</button>
         <button id="btnCloseQuickMemo" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
-      <textarea id="quickMemoText" placeholder="통화하면서 바로 타이핑하세요…" style="flex:1 1 auto; width:100%; box-sizing:border-box; border:none; outline:none; resize:none; padding:14px; font-family:inherit; font-size:14.5px; line-height:1.6; background:#fff; color:var(--ink);"></textarea>
+      <textarea id="quickMemoText" placeholder="통화하면서 바로 타이핑하세요…" style="flex:1 1 auto; width:100%; box-sizing:border-box; border:none; outline:none; resize:none; padding:14px; font-family:inherit; font-size:14.5px; line-height:1.6; background:var(--panel); color:var(--ink);"></textarea>
     </div>
     <div id="quickMemoSaveStep" style="display:none; position:fixed; inset:0; background:rgba(13,27,61,0.55); z-index:200; align-items:center; justify-content:center;">
       <div style="background:var(--panel); border-radius:10px; padding:18px; width:min(92vw, 360px); display:flex; flex-direction:column; gap:10px; box-shadow:0 12px 32px rgba(0,0,0,0.3);">
@@ -1237,35 +1237,36 @@
   <!-- 사건개시 — 업무관리자 폴더의 "사건개시템플릿"에 미리 등록해둔 사건유형별 템플릿을 골라
        채워 넣고, 고객명만 입력하면 "[고객명 사건분류]" 규칙대로 새 사건 폴더/파일을 만든다.
        텍스트·마크다운 템플릿은 화면에서 바로 내용을 채울 수 있고, 엑셀처럼 미리보기·편집이
-       안 되는 템플릿은 원본 그대로 복사만 해서 새 폴더에 넣는다. -->
-  <div class="modal-overlay" id="caseOpenOverlay" style="display:none;">
-    <div class="modal-panel" id="caseOpenPanel" style="max-width:520px;">
-      <div class="modal-head">
-        <span>사건개시</span>
-        <span class="modal-close" id="btnCloseCaseOpen" title="닫기">✕</span>
+       안 되는 템플릿은 원본 그대로 복사만 해서 새 폴더에 넣는다. 빠른메모와 마찬가지로 화면을
+       꽉 채워서, 특히 2단계(템플릿 내용 채워넣기)에서 넉넉하게 타이핑할 수 있게 했다. -->
+  <div class="modal-overlay" id="caseOpenOverlay" style="display:none; padding:0;">
+    <div class="note-fullscreen-panel" id="caseOpenPanel" style="background:var(--panel);">
+      <div class="note-titlebar" id="caseOpenTitlebar">
+        <span style="flex:1; color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">🗂 사건개시</span>
+        <button id="btnCloseCaseOpen" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="flex:1 1 auto; min-height:0; overflow-y:auto;">
         <!-- 1단계: 템플릿 선택 -->
         <div id="caseOpenStepTemplate">
           <div style="font-size:12.5px; color:var(--sub); margin-bottom:8px;">사건 유형(템플릿)을 선택하세요</div>
-          <div id="caseOpenTemplateList" style="display:flex; flex-direction:column; gap:6px; max-height:320px; overflow-y:auto;">
+          <div id="caseOpenTemplateList" style="display:flex; flex-direction:column; gap:6px;">
             <div style="color:var(--sub); font-size:12.5px;">불러오는 중…</div>
           </div>
         </div>
         <!-- 2단계: 내용 채워넣기(텍스트/마크다운 템플릿만 미리보기·편집 가능) -->
-        <div id="caseOpenStepFill" style="display:none; flex-direction:column; gap:8px;">
+        <div id="caseOpenStepFill" style="display:none; flex-direction:column; gap:8px; flex:1 1 auto; min-height:0;">
           <div style="display:flex; align-items:center; justify-content:space-between;">
             <div style="font-size:12.5px; color:var(--sub);">템플릿 내용을 확인하고 채워 넣으세요</div>
             <button type="button" id="btnCaseOpenBackToTemplate" class="ghost-btn" style="padding:4px 9px; font-size:11.5px;">◀ 템플릿 다시 선택</button>
           </div>
-          <textarea id="caseOpenFillText" style="width:100%; box-sizing:border-box; min-height:280px; font-family:inherit; font-size:13.5px; line-height:1.6; padding:10px 12px; border:1px solid var(--line); border-radius:8px; resize:vertical;"></textarea>
+          <textarea id="caseOpenFillText" style="width:100%; flex:1 1 auto; min-height:0; box-sizing:border-box; font-family:inherit; font-size:14.5px; line-height:1.6; padding:14px; border:1px solid var(--line); border-radius:8px; resize:none; background:var(--panel); color:var(--ink);"></textarea>
           <div id="caseOpenBinaryNotice" style="display:none; font-size:12.5px; color:var(--sub); background:#f5f6f8; border-radius:8px; padding:10px 12px;">이 템플릿은 미리보기·편집이 지원되지 않는 파일 형식입니다(예: 엑셀). 고객명만 입력하면 이 템플릿을 그대로 복사해서 새 폴더에 저장합니다.</div>
           <div style="display:flex; justify-content:flex-end;">
             <button type="button" id="btnCaseOpenNext" class="save-btn">다음</button>
           </div>
         </div>
         <!-- 3단계: 고객명 입력 및 폴더명/파일명 확인 -->
-        <div id="caseOpenStepName" style="display:none; flex-direction:column; gap:10px;">
+        <div id="caseOpenStepName" style="display:none; flex-direction:column; gap:10px; max-width:460px;">
           <div>
             <div style="font-size:12.5px; color:var(--sub); margin-bottom:4px;">사건분류(템플릿 이름)</div>
             <div id="caseOpenCaseTypeLabel" style="font-weight:700; color:var(--navy);">-</div>
@@ -3032,8 +3033,8 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
-    { icon: '⌨', label: '빠른상담메모', handler: () => window.openQuickMemo() },
+    { icon: '🖊', label: '필기상담', handler: () => window.openNoteModal() },
+    { icon: '⌨', label: '빠른메모', handler: () => window.openQuickMemo() },
     { icon: '🗂', label: '사건개시', handler: () => window.openCaseOpen() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
@@ -3054,8 +3055,8 @@ graph TD
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '🖋', label: '편집', handler: openFullEditor },
-    { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
-    { icon: '⌨', label: '빠른상담메모', handler: () => window.openQuickMemo() },
+    { icon: '🖊', label: '필기상담', handler: () => window.openNoteModal() },
+    { icon: '⌨', label: '빠른메모', handler: () => window.openQuickMemo() },
     { icon: '🗂', label: '사건개시', handler: () => window.openCaseOpen() }
   ];
 
@@ -5451,7 +5452,7 @@ graph TD
         const pdfBytes = await outDoc.save();
         const base64Pdf = uint8ToBase64(pdfBytes);
 
-        const name = '상담메모_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.pdf';
+        const name = '필기상담_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.pdf';
         const res = await callGas('uploadFile', { path: explorerPath, name: name, mimeType: 'application/pdf', base64Data: base64Pdf });
         if (res.error){
           showToast('저장 실패: ' + res.error, 'error');
@@ -5459,7 +5460,7 @@ graph TD
         }
         showToast('"' + explorerPath.join(' / ') + '" 폴더에 저장했습니다: ' + name + ' (' + pageIndexesToInclude.length + '페이지)', 'success');
         addAttachment({ id: res.id, name: res.name, type: 'file', mimeType: 'application/pdf' });
-        chatInputEl.value = '방금 첨부한 상담메모를 읽어서, 이번 사건 파일에 이어서 추가해줘.';
+        chatInputEl.value = '방금 첨부한 필기상담 메모를 읽어서, 이번 사건 파일에 이어서 추가해줘.';
         noteOverlay.style.display = 'none';
         navigateTo(explorerPath); // 방금 저장한 파일이 탐색기에 바로 보이도록 새로고침
         chatInputEl.focus();
@@ -5557,7 +5558,7 @@ graph TD
           if (res.error) throw new Error(res.error);
         }
 
-        showToast('"' + folderName + '" 폴더에 상담메모를 저장했습니다.', 'success');
+        showToast('"' + folderName + '" 폴더에 빠른메모를 저장했습니다.', 'success');
         quickMemoSaveStep.style.display = 'none';
         closeQuickMemo();
         // 지금 탐색기가 마침 그 폴더를 보고 있었다면 새로고침해서 방금 저장한 내용이 바로 보이게 한다.
@@ -5613,7 +5614,8 @@ graph TD
         const templates = data.templates || [];
         if (!templates.length){
           const pathHint = data.folderPath ? ('<br><span style="color:#a83232;">지금 확인한 폴더: ' + data.folderPath + '</span>') : '';
-          caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">등록된 템플릿이 없습니다. 업무관리자 폴더 안의 "사건개시템플릿" 폴더에 사건유형별 파일(엑셀 또는 .md/.txt)을 넣어두면 여기 나타납니다.' + pathHint + '</div>';
+          const versionHint = data.codeVersion ? ('<br><span style="color:var(--sub); font-size:11px;">(코드 버전: ' + data.codeVersion + ')</span>') : '';
+          caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">등록된 템플릿이 없습니다. 업무관리자 폴더 안의 "사건개시템플릿" 폴더에 사건유형별 파일(엑셀 또는 .md/.txt)을 넣어두면 여기 나타납니다.' + pathHint + versionHint + '</div>';
           return;
         }
         caseOpenTemplateList.innerHTML = '';
