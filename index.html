@@ -542,7 +542,7 @@
 
   /* ===== AI 채팅 패널 ===== */
   .chat-body{ flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
-  .msg{ max-width:100%; width:100%; box-sizing:border-box; padding:10px 13px; border-radius:10px; font-size:13.5px; line-height:1.55; align-self:flex-start; }
+  .msg{ max-width:100%; width:100%; box-sizing:border-box; padding:10px 13px; border-radius:10px; font-size:var(--chat-font-size, 13.5px); line-height:1.55; align-self:flex-start; }
   .msg.ai{ background:#f0f2f6; color:var(--ink); border-top-left-radius:2px; }
   .msg.me{ background:var(--navy); color:#fff; border-top-left-radius:2px; }
   .apply-edit-btn{
@@ -557,8 +557,22 @@
   }
   .chat-input-wrap input{
     flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
-    font-family:inherit; font-size:13.5px; background:var(--panel); color:var(--ink);
+    font-family:inherit; font-size:var(--chat-font-size, 13.5px); background:var(--panel); color:var(--ink);
   }
+  /* 채팅창 글자 크기 조절 — 화면 크기·레이아웃(좌우/상하/생략/커버화면 등)과 무관하게 항상
+     채팅패널 맨 위에 작은 바로 떠 있다. 답변이 길거나 화면이 작을 때 읽기 힘들다는 요청으로 추가. */
+  .chat-toolbar{
+    display:flex; align-items:center; justify-content:flex-end; gap:4px;
+    padding:4px 8px; border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  .chat-font-btn{
+    font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; line-height:1.4;
+    border:1px solid var(--line); border-radius:6px; padding:2px 9px;
+    background:var(--panel); color:var(--sub);
+  }
+  .chat-font-btn:hover{ background:#f0f2f6; color:var(--navy); }
+  body.dark-mode .chat-font-btn:hover{ background:#2a2f3b; color:var(--ink); }
+  body.cover-mode.talking-mode .chat-toolbar{ display:none !important; } /* 토킹모드에서는 화면을 음성전용으로 깔끔하게 유지 */
   .chip-btn{
     display:flex; align-items:center; gap:4px; font-family:inherit; font-size:11.5px; font-weight:600;
     cursor:pointer; border:1px solid var(--line); border-radius:14px; padding:4px 10px;
@@ -1165,6 +1179,10 @@
   <div class="workspace" id="workspace">
     <div class="explorer-float-backdrop" id="explorerFloatBackdrop"></div>
     <div class="panel chat">
+      <div class="chat-toolbar" id="chatToolbar">
+        <button type="button" id="btnChatFontDown" class="chat-font-btn" title="글자 작게">가-</button>
+        <button type="button" id="btnChatFontUp" class="chat-font-btn" title="글자 크게">가+</button>
+      </div>
       <div class="chat-body" id="chatBody"></div>
       <div class="attach-bar" id="attachBar" style="display:none;"></div>
       <!-- 커버화면모드 중 "토킹모드"에서만 보임 — 채팅목록·입력창 대신 이것만 보임. 상태 문구만 크게 표시.
@@ -1370,6 +1388,28 @@ graph TD
   }
   const savedDark = localStorage.getItem(DARK_MODE_KEY);
   applyDarkMode(savedDark === null ? window.matchMedia('(prefers-color-scheme: dark)').matches : savedDark === '1');
+
+  // ============================================================
+  // 채팅창 글자 크기 조절 — 채팅패널 상단의 "가-/가+" 버튼으로 조절하며, 화면 크기·레이아웃과
+  // 무관하게(좌우/상하/생략/커버화면 등 전부) 항상 적용되고 다음 방문에도 유지된다.
+  // ============================================================
+  const CHAT_FONT_SIZE_KEY = 'nx_chat_font_size';
+  const CHAT_FONT_MIN = 12, CHAT_FONT_MAX = 22, CHAT_FONT_DEFAULT = 13.5, CHAT_FONT_STEP = 1;
+  function applyChatFontSize(px){
+    document.documentElement.style.setProperty('--chat-font-size', px + 'px');
+  }
+  let chatFontSize = parseFloat(localStorage.getItem(CHAT_FONT_SIZE_KEY));
+  if (!Number.isFinite(chatFontSize)) chatFontSize = CHAT_FONT_DEFAULT;
+  applyChatFontSize(chatFontSize);
+
+  function changeChatFontSize(delta){
+    chatFontSize = Math.min(CHAT_FONT_MAX, Math.max(CHAT_FONT_MIN, chatFontSize + delta));
+    applyChatFontSize(chatFontSize);
+    localStorage.setItem(CHAT_FONT_SIZE_KEY, String(chatFontSize));
+  }
+  document.getElementById('btnChatFontDown').addEventListener('click', ()=> changeChatFontSize(-CHAT_FONT_STEP));
+  document.getElementById('btnChatFontUp').addEventListener('click', ()=> changeChatFontSize(CHAT_FONT_STEP));
+
 
   // ============================================================
   // 레이아웃 전환: 좌우배치 → 상하배치 → 탐색기 생략 → 탐색기 띄우기 — 버튼 하나로 순환
