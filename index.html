@@ -565,6 +565,7 @@
     display:flex; align-items:center; justify-content:flex-end; gap:4px;
     padding:4px 8px; border-bottom:1px solid var(--line); flex-shrink:0;
   }
+  .chat-toolbar-label{ font-size:11.5px; color:var(--sub); margin-right:2px; }
   .chat-font-btn{
     font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; line-height:1.4;
     border:1px solid var(--line); border-radius:6px; padding:2px 9px;
@@ -1180,6 +1181,7 @@
     <div class="explorer-float-backdrop" id="explorerFloatBackdrop"></div>
     <div class="panel chat">
       <div class="chat-toolbar" id="chatToolbar">
+        <span class="chat-toolbar-label">글자 크기</span>
         <button type="button" id="btnChatFontDown" class="chat-font-btn" title="글자 작게">가-</button>
         <button type="button" id="btnChatFontUp" class="chat-font-btn" title="글자 크게">가+</button>
       </div>
@@ -1572,6 +1574,7 @@ graph TD
   // 그걸 '최대' 모드로 이전(migration)해서 반영, 둘 다 없으면 화면 크기 기준 스마트 디폴트.
   let initialMode = localStorage.getItem(WORKSPACE_MODE_KEY);
   if (!initialMode) initialMode = (localStorage.getItem(CHAT_COLLAPSED_KEY) === '1') ? 'max' : detectDefaultMode();
+  if (!isModeAvailable(initialMode)) initialMode = 'hide'; // 예: 세로로 든 폰에 좌우배치가 저장돼 있던 경우 등, 처음 로드 시에도 안전하게 보정
   applyWorkspaceMode(initialMode);
   // 새 모드 체계에서는 chat-collapsed(최대)와 explorer-collapsed(생략/띄우기)가 서로 다른
   // mode 값에서만 켜지도록 선언적으로 짜여 있어 두 상태가 동시에 켜지는 경우 자체가 구조적으로
@@ -1583,6 +1586,23 @@ graph TD
   window.addEventListener('resize', ()=>{
     const current = localStorage.getItem(WORKSPACE_MODE_KEY) || detectDefaultMode();
     if (!isModeAvailable(current)) setWorkspaceMode('hide');
+  });
+
+  // 커버화면모드(플립폰을 접었을 때의 아주 작은 화면) 진입/이탈 — 큰 화면(펼쳤을 때)에서 저장해둔
+  // 탐색작업창 배치(좌우/상하/띄우기/최대 등)가 뭐였든, 커버화면모드 동안에는 항상 "생략"
+  // (채팅만)으로 강제 표시한다. 안 그러면 큰 화면에서 좌우배치 등으로 쓰다가 폰을 접었을 때
+  // 그 배치가 그대로 남아 탐색작업창이 비좁게 끼어 나오는데, 커버화면모드에서는 배치를 바꿀
+  // 버튼 자체가 화면이 좁아 다 숨겨져 있어서(#btnWorkspaceMode 등) 사용자가 스스로 되돌릴
+  // 방법이 없었다. applyWorkspaceMode만 호출하고 setWorkspaceMode(localStorage 저장)는 쓰지
+  // 않으므로, 펼쳤을 때의 원래 배치 설정 자체는 그대로 보존되며 폰을 다시 펼치면 복원된다.
+  document.addEventListener('nx:covermode', (e)=>{
+    if (e.detail.on){
+      applyWorkspaceMode('hide');
+    } else {
+      const restoredMode = localStorage.getItem(WORKSPACE_MODE_KEY) || detectDefaultMode();
+      applyWorkspaceMode(isModeAvailable(restoredMode) ? restoredMode : 'hide');
+    }
+    applySavedSplit();
   });
 
   // 배경(어두운 바깥 부분) 클릭하면 "띄우기"를 닫고 "생략"으로 되돌아감
