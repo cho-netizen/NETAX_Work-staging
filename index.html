@@ -621,15 +621,20 @@
   body.cover-mode #btnWorkspaceMode,
   body.cover-mode #btnModeAutoRef,
   body.cover-mode #btnModeWebSearch,
-  body.cover-mode #btnModeWebFetch,
-  body.cover-mode #customerSelect{ display:none !important; } /* 커버화면모드에선 탐색기 자체가 의미 없고, 음성명령(AI의 navigate_to_folder)으로 이미 자유롭게 폴더 이동이 되므로 다 숨김 */
-  /* 채팅모드(기본) 상태에서는 하단 고정바에 이 마이크 버튼 하나만 크게 보여서 "눌러서 토킹모드로"
-     진입하는 입구 역할을 하게 하고, 토킹모드로 들어간 뒤에는(화면이 이미 음성전용으로 바뀌었으므로) 숨긴다. */
-  body.cover-mode:not(.talking-mode) #btnVoiceInputFlip{
-    display:flex !important; justify-content:center; width:100%; height:44px; border-radius:22px;
-    background:var(--gold); border-color:var(--gold); color:var(--navy-deep); font-size:18px;
+  body.cover-mode #btnModeWebFetch{ display:none !important; } /* 커버화면모드에선 이 모드버튼들은 의미가 없어서 계속 숨김 */
+  /* 작업폴더 검색콤보(customerSelect)와 그 옆의 지금 작업폴더 표시(coverPathLabel)는 채팅모드에서는
+     그대로 보이게 두고(2026.07 — 기존엔 커버화면모드 전체에서 무조건 숨겼었는데, 마이크만으로 폴더
+     이동하기보다 눈으로 확인하고 싶다는 요청으로 되돌림), 토킹모드(화면이 음성전용으로 바뀐 상태)에서만 숨긴다. */
+  body.cover-mode.talking-mode #customerSelect,
+  body.cover-mode.talking-mode #coverPathLabel{ display:none !important; }
+  #coverPathLabel{ display:none; }
+  body.cover-mode:not(.talking-mode) #coverPathLabel{
+    display:block; flex:1 1 auto; min-width:0; font-size:12px; color:rgba(255,255,255,0.75);
+    overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-left:2px;
   }
-  body.cover-mode.talking-mode #btnVoiceInputFlip{ display:none !important; }
+  /* 마이크는 기존 버튼(입력창 옆 #btnVoiceInput) 하나로 충분해서, 커버화면모드 전용으로 따로 만들었던
+     큰 버튼은 다시 없앤다 — #btnVoiceInputFlip은 예전처럼 커버화면모드에서 항상 숨김. */
+  body.cover-mode #btnVoiceInputFlip{ display:none !important; }
   body.cover-mode.talking-mode .panel.chat{ cursor:pointer; } /* 토킹모드에서만 화면 아무데나 눌러 음성모드 on/off */
   body.cover-mode #btnNewChat,
   body.cover-mode #btnOpenSettings{ display:none !important; }
@@ -824,6 +829,10 @@
   <div class="topbar">
     <input type="text" id="customerSelect" class="topbar-select" list="customerListOptions" placeholder="고객 불러오는 중…" autocomplete="off">
     <datalist id="customerListOptions"></datalist>
+    <!-- 커버화면모드(플립폰 커버 화면)에서만 보임 — 지금 작업 중인 폴더 경로를 검색콤보 바로 옆에
+         보여준다. 평소 화면에서는 탐색기 패널 안의 breadcrumb(#breadcrumb)가 이미 이 역할을 하므로
+         숨겨두고, 커버화면모드(탐색기 패널 자체가 안 보이는 폭)의 채팅모드에서만 노출한다. -->
+    <div id="coverPathLabel" title="지금 작업 중인 폴더">&nbsp;</div>
     <!-- 폰(compact) 전용 모드버튼들: 탐색작업창(레이아웃 순환) · 자동참조 · 웹서치 · 가져오기 · 외부조회.
          작업폴더(customerSelect) 바로 오른쪽에 위치, 항상 상단바에 남아있고 하단으로 안 내려감. -->
     <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span></button>
@@ -1598,6 +1607,7 @@ graph TD
   const customerSelect = document.getElementById('customerSelect');
   const customerDatalist = document.getElementById('customerListOptions');
   const breadcrumbEl = document.getElementById('breadcrumb');
+  const coverPathLabel = document.getElementById('coverPathLabel'); // 커버화면모드 전용 — customerSelect 옆 작업폴더 표시
   const explorerBody = document.getElementById('explorerBody');
   const explorerView = document.getElementById('explorerView');
   const editorView = document.getElementById('editorView');
@@ -1677,6 +1687,9 @@ graph TD
         breadcrumbEl.appendChild(sep);
       }
     });
+    // 커버화면모드에서는 탐색기 패널(위 breadcrumb가 들어있는 곳) 자체가 안 보이므로,
+    // customerSelect 옆의 이 라벨로 "지금 작업 중인 폴더"를 대신 보여준다.
+    if (coverPathLabel) coverPathLabel.textContent = explorerPath.length ? explorerPath.join(' / ') : '';
   }
 
   function showExplorerStatus(text, isError){
