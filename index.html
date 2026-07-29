@@ -1117,6 +1117,41 @@
     </div>
   </div>
 
+  <!-- 서명 관리 — 미리 등록해둔 서명을 확인·교체·삭제하거나, 화면에 손가락/마우스로 직접 그려서
+       바로 등록한다. 한 번 등록하면 브라우저(localStorage)에 저장되어, 다음부터는 파일을 다시
+       찾을 필요 없이 자동으로 계속 재사용된다. -->
+  <div class="modal-overlay" id="sigManageOverlay" style="display:none;">
+    <div class="modal-panel" id="sigManagePanel" style="max-width:420px;">
+      <div class="modal-head">
+        <span>서명 관리</span>
+        <span class="modal-close" id="btnCloseSigManage" title="닫기">✕</span>
+      </div>
+      <div class="modal-body">
+        <div id="sigManagePreviewWrap" style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div id="sigManagePreviewBox" style="width:100%; min-height:120px; border:1px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; background:#fff;">
+            <img id="sigManagePreviewImg" style="max-width:100%; max-height:160px; display:none;">
+            <span id="sigManageEmptyLabel" style="color:var(--sub); font-size:12.5px;">등록된 서명이 없습니다</span>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+            <button type="button" id="btnSigManageFromFile" class="ghost-btn">📁 파일에서 불러오기</button>
+            <button type="button" id="btnSigManageDraw" class="ghost-btn">✍ 직접 그리기</button>
+            <button type="button" id="btnSigManageDelete" class="ghost-btn">🗑 삭제</button>
+          </div>
+        </div>
+        <div id="sigManageDrawWrap" style="display:none; flex-direction:column; gap:8px;">
+          <div style="border:1px solid var(--line); border-radius:8px; overflow:hidden;">
+            <canvas id="sigDrawCanvas" style="width:100%; height:180px; display:block; background:#fff; cursor:crosshair; touch-action:none;"></canvas>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:center;">
+            <button type="button" id="btnSigDrawClear" class="ghost-btn">지우기</button>
+            <button type="button" id="btnSigDrawCancel" class="ghost-btn">취소</button>
+            <button type="button" id="btnSigDrawSave" class="save-btn">이 서명 사용</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 서명 정밀 배치 — 실제 그 페이지를 그림으로 렌더링해서 보여주고, 서명 이미지를 손가락으로
        끌어서 원하는 자리에 정확히 놓을 수 있게 한다. 확정하면 그 페이지는 "그림 기반 페이지"로
        바뀐다(글자 선택·검색은 그 페이지에 한해 안 되게 됨 — 세무사님 확인받은 트레이드오프). -->
@@ -5883,22 +5918,168 @@ graph TD
   let pdfMgrIdSeq = 1;
   let pdfMgrSignatureBytes = null; // 도장처럼 찍을 서명 이미지(선택 안 하면 null)
 
-  document.getElementById('btnPdfMgrSignature').addEventListener('click', ()=>{
+  // ---- 서명 관리(2026.07 추가) ----
+  // 예전엔 서명을 쓸 때마다 매번 파일을 다시 찾아 선택해야 했다. 이제는 한 번 등록한 서명을
+  // 브라우저(localStorage)에 저장해뒀다가 다음에 자동으로 다시 불러오고, 파일 업로드뿐 아니라
+  // 화면(터치/마우스)에 직접 그려서 바로 등록할 수도 있다.
+  const SIGNATURE_STORAGE_KEY = 'nx_saved_signature';
+
+  function updateSignatureStatusUI(){
+    pdfMgrSignatureStatus.textContent = pdfMgrSignatureBytes
+      ? '서명 등록됨 — 저장 시 모든 페이지 우측 하단에 찍힙니다'
+      : '';
+  }
+
+  function bytesToDataUrl_(bytes, mime){
+    mime = mime || 'image/png';
+    let binary = '';
+    bytes.forEach(function (b) { binary += String.fromCharCode(b); });
+    return 'data:' + mime + ';base64,' + btoa(binary);
+  }
+
+  function dataUrlToBytes_(dataUrl){
+    const base64 = dataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function saveSignatureBytes_(bytes){
+    pdfMgrSignatureBytes = bytes;
+    try { localStorage.setItem(SIGNATURE_STORAGE_KEY, bytesToDataUrl_(bytes)); }
+    catch (e) { showToast('서명을 브라우저에 저장하지 못했습니다(용량 초과 가능) — 이번 화면에서는 계속 쓸 수 있습니다.', 'warning'); }
+    updateSignatureStatusUI();
+    refreshSigManagePreview();
+  }
+
+  function clearSignature_(){
+    pdfMgrSignatureBytes = null;
+    try { localStorage.removeItem(SIGNATURE_STORAGE_KEY); } catch (e) {}
+    updateSignatureStatusUI();
+    refreshSigManagePreview();
+  }
+
+  // 이전에 등록해둔 서명이 있으면 화면을 열 때 자동으로 불러온다 — 이제부터는 파일을 다시
+  // 찾지 않아도 계속 같은 서명이 쓰인다.
+  try {
+    const savedSignatureDataUrl = localStorage.getItem(SIGNATURE_STORAGE_KEY);
+    if (savedSignatureDataUrl) pdfMgrSignatureBytes = dataUrlToBytes_(savedSignatureDataUrl);
+  } catch (e) {}
+  updateSignatureStatusUI();
+
+  // ---- 서명 관리 모달: 미리보기 · 파일교체 · 삭제 · 직접 그리기 ----
+  const sigManageOverlay = document.getElementById('sigManageOverlay');
+  const sigManagePreviewImg = document.getElementById('sigManagePreviewImg');
+  const sigManageEmptyLabel = document.getElementById('sigManageEmptyLabel');
+  const sigManagePreviewWrap = document.getElementById('sigManagePreviewWrap');
+  const sigManageDrawWrap = document.getElementById('sigManageDrawWrap');
+  const sigDrawCanvas = document.getElementById('sigDrawCanvas');
+
+  function refreshSigManagePreview(){
     if (pdfMgrSignatureBytes){
-      if (confirm('등록된 서명을 해제할까요?\n(취소하면 그대로 유지됩니다)')){
-        pdfMgrSignatureBytes = null;
-        pdfMgrSignatureStatus.textContent = '';
-      }
+      sigManagePreviewImg.src = bytesToDataUrl_(pdfMgrSignatureBytes);
+      sigManagePreviewImg.style.display = '';
+      sigManageEmptyLabel.style.display = 'none';
     } else {
-      pdfMgrSignatureInput.click();
+      sigManagePreviewImg.style.display = 'none';
+      sigManageEmptyLabel.style.display = '';
     }
-  });
+  }
+
+  function openSigManage(){
+    sigManagePreviewWrap.style.display = 'flex';
+    sigManageDrawWrap.style.display = 'none';
+    refreshSigManagePreview();
+    sigManageOverlay.style.display = 'flex';
+  }
+  function closeSigManage(){ sigManageOverlay.style.display = 'none'; }
+
+  document.getElementById('btnPdfMgrSignature').addEventListener('click', openSigManage);
+  document.getElementById('btnCloseSigManage').addEventListener('click', closeSigManage);
+
+  document.getElementById('btnSigManageFromFile').addEventListener('click', ()=> pdfMgrSignatureInput.click());
   pdfMgrSignatureInput.addEventListener('change', async (e)=>{
     const file = e.target.files[0];
     pdfMgrSignatureInput.value = '';
     if (!file) return;
-    pdfMgrSignatureBytes = new Uint8Array(await file.arrayBuffer());
-    pdfMgrSignatureStatus.textContent = '서명 등록됨 — 저장 시 모든 페이지 우측 하단에 찍힙니다 (버튼 다시 누르면 해제)';
+    saveSignatureBytes_(new Uint8Array(await file.arrayBuffer()));
+    showToast('서명이 등록됐습니다.', 'success');
+  });
+
+  document.getElementById('btnSigManageDelete').addEventListener('click', ()=>{
+    if (!pdfMgrSignatureBytes) return;
+    if (confirm('등록된 서명을 삭제할까요?')) clearSignature_();
+  });
+
+  // 화면(터치·마우스)에 직접 그려서 그 자리에서 바로 서명을 받는 서명패드.
+  // 상담메모(노트필기)와 같은 pointer 이벤트 방식이지만, 여긴 훨씬 단순하게(펜 하나·되돌리기 없이) 구성했다.
+  document.getElementById('btnSigManageDraw').addEventListener('click', ()=>{
+    sigManagePreviewWrap.style.display = 'none';
+    sigManageDrawWrap.style.display = 'flex';
+    setupSigDrawCanvas_();
+  });
+  document.getElementById('btnSigDrawCancel').addEventListener('click', ()=>{
+    sigManageDrawWrap.style.display = 'none';
+    sigManagePreviewWrap.style.display = 'flex';
+  });
+
+  let sigDrawCtx = null;
+  let sigDrawing = false;
+  function setupSigDrawCanvas_(){
+    // 화면에 보이는 CSS 크기 기준으로 캔버스 실제 픽셀 크기를 맞춘다(고해상도 화면에서도 선명하게).
+    const rect = sigDrawCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    sigDrawCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+    sigDrawCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+    sigDrawCtx = sigDrawCanvas.getContext('2d');
+    sigDrawCtx.scale(dpr, dpr);
+    sigDrawCtx.fillStyle = '#fff';
+    sigDrawCtx.fillRect(0, 0, rect.width, rect.height);
+    sigDrawCtx.lineWidth = 2.5;
+    sigDrawCtx.lineCap = 'round';
+    sigDrawCtx.lineJoin = 'round';
+    sigDrawCtx.strokeStyle = '#1a1a2e';
+  }
+  function sigDrawPos_(e){
+    const rect = sigDrawCanvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  sigDrawCanvas.addEventListener('pointerdown', (e)=>{
+    if (!sigDrawCtx) return;
+    sigDrawing = true;
+    sigDrawCanvas.setPointerCapture(e.pointerId);
+    const p = sigDrawPos_(e);
+    sigDrawCtx.beginPath();
+    sigDrawCtx.moveTo(p.x, p.y);
+  });
+  sigDrawCanvas.addEventListener('pointermove', (e)=>{
+    if (!sigDrawing || !sigDrawCtx) return;
+    const p = sigDrawPos_(e);
+    sigDrawCtx.lineTo(p.x, p.y);
+    sigDrawCtx.stroke();
+  });
+  function endSigDraw_(){ sigDrawing = false; }
+  sigDrawCanvas.addEventListener('pointerup', endSigDraw_);
+  sigDrawCanvas.addEventListener('pointercancel', endSigDraw_);
+  sigDrawCanvas.addEventListener('pointerleave', endSigDraw_);
+
+  document.getElementById('btnSigDrawClear').addEventListener('click', ()=>{
+    if (!sigDrawCtx) return;
+    const rect = sigDrawCanvas.getBoundingClientRect();
+    sigDrawCtx.fillStyle = '#fff';
+    sigDrawCtx.fillRect(0, 0, rect.width, rect.height);
+  });
+
+  document.getElementById('btnSigDrawSave').addEventListener('click', ()=>{
+    if (!sigDrawCtx) return;
+    sigDrawCanvas.toBlob(async (blob)=>{
+      if (!blob){ showToast('서명 이미지를 만들지 못했습니다.', 'error'); return; }
+      saveSignatureBytes_(new Uint8Array(await blob.arrayBuffer()));
+      sigManageDrawWrap.style.display = 'none';
+      sigManagePreviewWrap.style.display = 'flex';
+      showToast('서명이 등록됐습니다.', 'success');
+    }, 'image/png');
   });
 
   function openPdfManager(){
