@@ -561,6 +561,10 @@
     display:flex; align-items:center; gap:8px; padding:8px 12px;
     border-top:1px solid var(--line); flex-shrink:0;
   }
+  #gemContextCount{
+    flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 4px; max-width:108px;
+    border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--sub);
+  }
   .chat-input-wrap input{
     flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
     font-family:inherit; font-size:var(--chat-font-size, 13.5px); background:var(--panel); color:var(--ink);
@@ -1275,7 +1279,14 @@
         <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
         <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
         <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
-        <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
+        <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개 같이 보낼지 선택 (0=입력창 내용만)">
+          <option value="0">Gem: 직전대화 0개</option>
+          <option value="1">Gem: 직전대화 1개</option>
+          <option value="2">Gem: 직전대화 2개</option>
+          <option value="3">Gem: 직전대화 3개</option>
+          <option value="5">Gem: 직전대화 5개</option>
+        </select>
+        <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을(선택한 개수만큼 직전 대화도 함께) 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
         <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
         <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
       </div>
@@ -3730,7 +3741,28 @@ graph TD
   // NX_GEM_ANSWER/NX_GEM_ERROR로 돌려주는 처리가 추가로 필요하다).
   // ============================================================
   const btnAskGem = document.getElementById('btnAskGem');
+  const gemContextCountSelect = document.getElementById('gemContextCount');
   const pendingGemBubbles = {}; // requestId -> 그 질문에 대한 "대기 중" 말풍선 DOM 엘리먼트
+
+  // 선택한 "직전 대화 몇 개"를 기억해뒀다가 다음에 열 때도 그대로 유지한다.
+  const GEM_CONTEXT_COUNT_KEY = 'nx_gem_context_count';
+  if (gemContextCountSelect){
+    const saved = localStorage.getItem(GEM_CONTEXT_COUNT_KEY);
+    if (saved !== null) gemContextCountSelect.value = saved;
+    gemContextCountSelect.addEventListener('change', ()=>{
+      localStorage.setItem(GEM_CONTEXT_COUNT_KEY, gemContextCountSelect.value);
+    });
+  }
+
+  // 선택된 개수(N)만큼, chatMessages(NX와 실제로 나눈 대화기록)에서 가장 최근의 "나/NX" 교환을
+  // 골라 텍스트로 엮는다. N=0이면 아무것도 붙이지 않는다(입력창 내용만 그대로 전송).
+  function buildRecentContextText_(turnCount){
+    if (!turnCount) return '';
+    const recent = chatMessages.slice(-(turnCount * 2)); // 대략 "나 1개 + NX 1개"를 한 턴으로 계산
+    if (!recent.length) return '';
+    const lines = recent.map(m => (m.role === 'user' ? '나: ' : 'NX: ') + String(m.content || '').trim());
+    return '[참고 — 직전 대화 ' + turnCount + '개]\n' + lines.join('\n') + '\n\n[실제 질문]\n';
+  }
 
   function handleGemMessage(msg){
     if (!msg || !msg.type) return false;
@@ -3759,14 +3791,19 @@ graph TD
 
   if (btnAskGem){
     btnAskGem.addEventListener('click', ()=>{
-      const question = chatInputEl.value.trim();
-      if (!question){ showToast('제미니에게 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
+      const rawQuestion = chatInputEl.value.trim();
+      if (!rawQuestion){ showToast('제미니에게 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
       if (!nxExtConnected || !nxExtPort){
         showToast('외부조회 커넥터 확장프로그램이 연결돼 있지 않습니다. 🔌 버튼으로 먼저 연결해주세요.', 'warning');
         return;
       }
+      const turnCount = gemContextCountSelect ? parseInt(gemContextCountSelect.value, 10) || 0 : 0;
+      const contextText = buildRecentContextText_(turnCount);
+      const fullQuestion = contextText + rawQuestion;
+
       const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-      appendBubble('user', '🔮 Gem에게 물어봄: ' + question);
+      const contextNote = turnCount ? (' (직전 대화 ' + turnCount + '개 포함)') : '';
+      appendBubble('user', '🔮 Gem에게 물어봄' + contextNote + ': ' + rawQuestion);
       const pendingBubble = appendBubble('assistant', '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)');
       pendingBubble.classList.remove('ai');
       pendingBubble.classList.add('gem-pending');
@@ -3775,7 +3812,7 @@ graph TD
       chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
 
       try{
-        nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: question });
+        nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
       }catch(err){
         pendingBubble.classList.remove('gem-pending');
         pendingBubble.classList.add('gem');
@@ -3786,6 +3823,7 @@ graph TD
   }
 
 
+  let chatMessages = []; // Claude API 형식: [{role:'user'|'assistant', content:'...'}]
   let pendingAttachments = []; // [{id,name,type:'file'|'folder',mimeType?,path?}] — 채팅에 끌어다 놓거나 첨부한 항목들 (다음 전송에 무조건 반영)
   let pendingCaptures = []; // [{id,name,dataUrl}] — 화면캡처로 즉석에서 찍은 이미지 (드라이브에 저장 안 하고 바로 첨부)
   let pendingTextAttachments = []; // [{id,name,text}] — 경과지/계산기/관계도 등에서 "지금 화면 그대로" 참조 버튼으로 넘긴 것 (저장 전 상태 포함)
