@@ -880,6 +880,8 @@
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
       <button type="button" id="btnOpenNote" class="tb-btn" title="S펜 등으로 필압 인식되는 손글씨 메모 (상담 중 요구사항 받아적기용)">🖊 상담메모</button>
+      <button type="button" id="btnOpenQuickMemo" class="tb-btn" title="타이핑으로 바로 입력하는 상담메모 (통화 중, 지금 보고 있는 폴더와 무관하게 저장할 폴더명을 직접 지정)">⌨ 빠른상담메모</button>
+      <button type="button" id="btnOpenCaseOpen" class="tb-btn" title="업무관리자 폴더에 등록해둔 사건유형별 템플릿을 골라 채워 넣고, 고객명만 입력하면 [고객명 사건분류] 규칙대로 새 사건 폴더를 만든다">🗂 사건개시</button>
       <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
     <div class="topbar-item tool-group-narrow" id="toolGroup1Wrap">
@@ -1203,6 +1205,85 @@
         </div>
       </div>
       <input type="file" id="noteBgFileInput" accept="image/*" style="display:none;">
+    </div>
+  </div>
+
+  <!-- 빠른상담메모(타이핑) — 상담메모(필기)와 별개. 통화하면서 바로 텍스트로 타이핑하는 용도라
+       지금 탐색기가 어느 폴더를 보고 있는지와 완전히 무관하게 아무 때나 바로 열 수 있다.
+       저장할 때만 폴더명(고객명)을 물어서 그 폴더(없으면 새로 생성)에
+       "<폴더명>사건.md" 파일로 저장한다(같은 이름 파일이 이미 있으면 이어서 덧붙임). -->
+  <div class="modal-overlay" id="quickMemoOverlay" style="display:none; padding:0;">
+    <div class="note-fullscreen-panel" id="quickMemoPanel">
+      <div class="note-titlebar" id="quickMemoTitlebar">
+        <span style="flex:1; color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">⌨ 빠른상담메모</span>
+        <button id="btnQuickMemoSave" class="note-tb-btn note-tb-save" title="저장">💾</button>
+        <button id="btnCloseQuickMemo" class="note-tb-btn note-tb-close" title="닫기">✕</button>
+      </div>
+      <textarea id="quickMemoText" placeholder="통화하면서 바로 타이핑하세요…" style="flex:1 1 auto; width:100%; box-sizing:border-box; border:none; outline:none; resize:none; padding:14px; font-family:inherit; font-size:14.5px; line-height:1.6; background:#fff; color:var(--ink);"></textarea>
+    </div>
+    <div id="quickMemoSaveStep" style="display:none; position:fixed; inset:0; background:rgba(13,27,61,0.55); z-index:200; align-items:center; justify-content:center;">
+      <div style="background:var(--panel); border-radius:10px; padding:18px; width:min(92vw, 360px); display:flex; flex-direction:column; gap:10px; box-shadow:0 12px 32px rgba(0,0,0,0.3);">
+        <div style="font-weight:700; color:var(--navy); font-size:14px;">저장할 폴더명(고객명)을 입력하세요</div>
+        <div style="font-size:11.5px; color:var(--sub);">이미 있는 폴더명이면 그 폴더의 "폴더명사건.md" 파일에 이어서 저장되고, 없으면 새 폴더가 만들어집니다.</div>
+        <input type="text" id="quickMemoFolderInput" placeholder="예: 김철수" style="font-family:inherit; font-size:13.5px; padding:9px 11px; border:1px solid var(--line); border-radius:8px;">
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button type="button" id="btnQuickMemoSaveCancel" class="ghost-btn">취소</button>
+          <button type="button" id="btnQuickMemoSaveConfirm" class="save-btn">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 사건개시 — 업무관리자 폴더의 "사건개시템플릿"에 미리 등록해둔 사건유형별 템플릿을 골라
+       채워 넣고, 고객명만 입력하면 "[고객명 사건분류]" 규칙대로 새 사건 폴더/파일을 만든다.
+       텍스트·마크다운 템플릿은 화면에서 바로 내용을 채울 수 있고, 엑셀처럼 미리보기·편집이
+       안 되는 템플릿은 원본 그대로 복사만 해서 새 폴더에 넣는다. -->
+  <div class="modal-overlay" id="caseOpenOverlay" style="display:none;">
+    <div class="modal-panel" id="caseOpenPanel" style="max-width:520px;">
+      <div class="modal-head">
+        <span>사건개시</span>
+        <span class="modal-close" id="btnCloseCaseOpen" title="닫기">✕</span>
+      </div>
+      <div class="modal-body">
+        <!-- 1단계: 템플릿 선택 -->
+        <div id="caseOpenStepTemplate">
+          <div style="font-size:12.5px; color:var(--sub); margin-bottom:8px;">사건 유형(템플릿)을 선택하세요</div>
+          <div id="caseOpenTemplateList" style="display:flex; flex-direction:column; gap:6px; max-height:320px; overflow-y:auto;">
+            <div style="color:var(--sub); font-size:12.5px;">불러오는 중…</div>
+          </div>
+        </div>
+        <!-- 2단계: 내용 채워넣기(텍스트/마크다운 템플릿만 미리보기·편집 가능) -->
+        <div id="caseOpenStepFill" style="display:none; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-size:12.5px; color:var(--sub);">템플릿 내용을 확인하고 채워 넣으세요</div>
+            <button type="button" id="btnCaseOpenBackToTemplate" class="ghost-btn" style="padding:4px 9px; font-size:11.5px;">◀ 템플릿 다시 선택</button>
+          </div>
+          <textarea id="caseOpenFillText" style="width:100%; box-sizing:border-box; min-height:280px; font-family:inherit; font-size:13.5px; line-height:1.6; padding:10px 12px; border:1px solid var(--line); border-radius:8px; resize:vertical;"></textarea>
+          <div id="caseOpenBinaryNotice" style="display:none; font-size:12.5px; color:var(--sub); background:#f5f6f8; border-radius:8px; padding:10px 12px;">이 템플릿은 미리보기·편집이 지원되지 않는 파일 형식입니다(예: 엑셀). 고객명만 입력하면 이 템플릿을 그대로 복사해서 새 폴더에 저장합니다.</div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="button" id="btnCaseOpenNext" class="save-btn">다음</button>
+          </div>
+        </div>
+        <!-- 3단계: 고객명 입력 및 폴더명/파일명 확인 -->
+        <div id="caseOpenStepName" style="display:none; flex-direction:column; gap:10px;">
+          <div>
+            <div style="font-size:12.5px; color:var(--sub); margin-bottom:4px;">사건분류(템플릿 이름)</div>
+            <div id="caseOpenCaseTypeLabel" style="font-weight:700; color:var(--navy);">-</div>
+          </div>
+          <div>
+            <div style="font-size:12.5px; color:var(--sub); margin-bottom:4px;">고객명</div>
+            <input type="text" id="caseOpenCustomerInput" placeholder="예: 홍길동" style="width:100%; box-sizing:border-box; font-family:inherit; font-size:13.5px; padding:9px 11px; border:1px solid var(--line); border-radius:8px;">
+          </div>
+          <div style="font-size:12px; color:var(--sub); background:#f5f6f8; border-radius:8px; padding:10px 12px;">
+            폴더명: <b id="caseOpenPreviewFolder">-</b><br>
+            파일명: <b id="caseOpenPreviewFile">-</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <button type="button" id="btnCaseOpenBackToFill" class="ghost-btn">◀ 이전</button>
+            <button type="button" id="btnCaseOpenSave" class="save-btn">폴더 만들고 저장</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2952,6 +3033,8 @@ graph TD
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
+    { icon: '⌨', label: '빠른상담메모', handler: () => window.openQuickMemo() },
+    { icon: '🗂', label: '사건개시', handler: () => window.openCaseOpen() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
 
@@ -2971,7 +3054,9 @@ graph TD
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '🖋', label: '편집', handler: openFullEditor },
-    { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() }
+    { icon: '🖊', label: '상담메모', handler: () => window.openNoteModal() },
+    { icon: '⌨', label: '빠른상담메모', handler: () => window.openQuickMemo() },
+    { icon: '🗂', label: '사건개시', handler: () => window.openCaseOpen() }
   ];
 
   function fillToolPopup(popupEl, items){
@@ -5386,6 +5471,239 @@ graph TD
     });
   })();
   document.getElementById('btnOpenNote').addEventListener('click', ()=> window.openNoteModal());
+
+  // ============================================================
+  // 빠른상담메모(타이핑) — 상담메모(필기)와 별개의 화면. 통화하면서 바로 텍스트로 입력하는 용도라
+  // 지금 탐색기가 어느 폴더를 보고 있는지와 완전히 무관하게 아무 때나 바로 열 수 있다. 저장할
+  // 때만 폴더명(고객명)을 물어서, 그 폴더(최상위 고객사건 기준 — 없으면 새로 생성)에
+  // "<폴더명>사건.md" 파일로 저장한다. 같은 이름 파일이 이미 있으면 덮어쓰지 않고 구분선과
+  // 시각을 붙여 이어서 덧붙인다(같은 고객과 여러 번 통화한 기록이 누적되도록).
+  // ============================================================
+  (function(){
+    const quickMemoOverlay = document.getElementById('quickMemoOverlay');
+    const quickMemoText = document.getElementById('quickMemoText');
+    const quickMemoSaveStep = document.getElementById('quickMemoSaveStep');
+    const quickMemoFolderInput = document.getElementById('quickMemoFolderInput');
+    const btnQuickMemoSave = document.getElementById('btnQuickMemoSave');
+    const btnQuickMemoSaveConfirm = document.getElementById('btnQuickMemoSaveConfirm');
+
+    function openQuickMemoImpl(){
+      quickMemoText.value = '';
+      quickMemoSaveStep.style.display = 'none';
+      quickMemoOverlay.style.display = 'flex';
+      setTimeout(()=> quickMemoText.focus(), 50);
+    }
+    function closeQuickMemo(){ quickMemoOverlay.style.display = 'none'; }
+    window.openQuickMemo = openQuickMemoImpl; // 도구 그룹 목록 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
+
+    document.getElementById('btnCloseQuickMemo').addEventListener('click', ()=>{
+      if (quickMemoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 그냥 닫을까요?')) return;
+      closeQuickMemo();
+    });
+
+    btnQuickMemoSave.addEventListener('click', ()=>{
+      if (!quickMemoText.value.trim()){ showToast('입력한 내용이 없습니다.', 'warning'); return; }
+      quickMemoFolderInput.value = '';
+      quickMemoSaveStep.style.display = 'flex';
+      setTimeout(()=> quickMemoFolderInput.focus(), 50);
+    });
+    document.getElementById('btnQuickMemoSaveCancel').addEventListener('click', ()=>{
+      quickMemoSaveStep.style.display = 'none';
+    });
+
+    function formatMemoTimestamp_(){
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    btnQuickMemoSaveConfirm.addEventListener('click', async ()=>{
+      const folderName = quickMemoFolderInput.value.trim();
+      if (!folderName){ showToast('폴더명을 입력하세요.', 'warning'); return; }
+      btnQuickMemoSaveConfirm.disabled = true;
+      btnQuickMemoSaveConfirm.textContent = '저장 중…';
+      try{
+        // 1) 고객사건 최상위(basePath) 기준으로 그 이름 폴더가 이미 있는지 매번 새로 확인하고
+        // (캐시된 목록이 오래됐을 수 있어서), 없을 때만 새로 만든다 — 같은 이름 폴더가 중복
+        // 생성되는 것을 막기 위함.
+        const listing = await listFolder(basePath);
+        const targetPath = basePath.concat([folderName]);
+        const existingFolder = listing.folders.find(f => f.name === folderName);
+        if (!existingFolder){
+          const created = await callGas('createFolder', { path: basePath, name: folderName });
+          if (created.error) throw new Error(created.error);
+        }
+
+        // 2) 파일명 = "<폴더명>사건.md" — 같은 이름 파일이 이미 있으면 이어서 덧붙이고, 없으면 새로 만든다.
+        const fileName = folderName + '사건.md';
+        const folderListing = await listFolder(targetPath);
+        const existingFile = folderListing.files.find(f => f.name === fileName);
+        const entry = '## 상담기록 (' + formatMemoTimestamp_() + ')\n\n' + quickMemoText.value.trim() + '\n';
+
+        if (existingFile){
+          const fileData = await callGas('readFile', { fileId: existingFile.id });
+          const prevContent = (fileData && !fileData.error && typeof fileData.content === 'string') ? fileData.content : '';
+          const newContent = (prevContent.trim() ? prevContent.trim() + '\n\n---\n\n' : '') + entry;
+          const res = await callGas('uploadFile', {
+            fileId: existingFile.id, name: fileName, mimeType: 'text/markdown',
+            base64Data: utf8ToBase64(newContent)
+          });
+          if (res.error) throw new Error(res.error);
+        } else {
+          const res = await callGas('uploadFile', {
+            path: targetPath, name: fileName, mimeType: 'text/markdown',
+            base64Data: utf8ToBase64(entry)
+          });
+          if (res.error) throw new Error(res.error);
+        }
+
+        showToast('"' + folderName + '" 폴더에 상담메모를 저장했습니다.', 'success');
+        quickMemoSaveStep.style.display = 'none';
+        closeQuickMemo();
+        // 지금 탐색기가 마침 그 폴더를 보고 있었다면 새로고침해서 방금 저장한 내용이 바로 보이게 한다.
+        if (JSON.stringify(explorerPath) === JSON.stringify(targetPath)) navigateTo(explorerPath);
+        if (!currentCustomerNames.includes(folderName)) loadCustomers(); // 새 고객이면 상단 고객 목록도 함께 갱신
+      }catch(err){
+        showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error');
+      }finally{
+        btnQuickMemoSaveConfirm.disabled = false;
+        btnQuickMemoSaveConfirm.textContent = '저장';
+      }
+    });
+  })();
+  document.getElementById('btnOpenQuickMemo').addEventListener('click', ()=> window.openQuickMemo());
+
+  // ============================================================
+  // 사건개시 — 업무관리자 폴더의 "사건개시템플릿"에 미리 등록해둔 사건유형별 템플릿을 골라
+  // 채워 넣고, 고객명만 입력하면 "[고객명 사건분류]" 규칙대로 새 사건 폴더/파일을 만든다.
+  // 지금 탐색기가 어느 폴더를 보고 있는지와 무관하게(빠른상담메모와 동일하게) 항상 basePath
+  // (고객사건 최상위) 기준으로 새 폴더를 만든다.
+  // ============================================================
+  (function(){
+    const caseOpenOverlay = document.getElementById('caseOpenOverlay');
+    const caseOpenTemplateList = document.getElementById('caseOpenTemplateList');
+    const caseOpenStepTemplate = document.getElementById('caseOpenStepTemplate');
+    const caseOpenStepFill = document.getElementById('caseOpenStepFill');
+    const caseOpenStepName = document.getElementById('caseOpenStepName');
+    const caseOpenFillText = document.getElementById('caseOpenFillText');
+    const caseOpenBinaryNotice = document.getElementById('caseOpenBinaryNotice');
+    const caseOpenCaseTypeLabel = document.getElementById('caseOpenCaseTypeLabel');
+    const caseOpenCustomerInput = document.getElementById('caseOpenCustomerInput');
+    const caseOpenPreviewFolder = document.getElementById('caseOpenPreviewFolder');
+    const caseOpenPreviewFile = document.getElementById('caseOpenPreviewFile');
+    const btnCaseOpenNext = document.getElementById('btnCaseOpenNext');
+    const btnCaseOpenSave = document.getElementById('btnCaseOpenSave');
+
+    let selectedTemplate = null; // { id, name(사건분류, 확장자 제외), ext, mimeType, isText }
+
+    function showCaseOpenStep(step){
+      caseOpenStepTemplate.style.display = step === 'template' ? 'block' : 'none';
+      caseOpenStepFill.style.display = step === 'fill' ? 'flex' : 'none';
+      caseOpenStepName.style.display = step === 'name' ? 'flex' : 'none';
+    }
+
+    async function openCaseOpenImpl(){
+      selectedTemplate = null;
+      showCaseOpenStep('template');
+      caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">불러오는 중…</div>';
+      caseOpenOverlay.style.display = 'flex';
+      try{
+        const data = await callGas('listCaseTemplates', {});
+        if (data.error) throw new Error(data.error);
+        const templates = data.templates || [];
+        if (!templates.length){
+          caseOpenTemplateList.innerHTML = '<div style="color:var(--sub); font-size:12.5px;">등록된 템플릿이 없습니다. 업무관리자 폴더 안의 "사건개시템플릿" 폴더에 사건유형별 파일(엑셀 또는 .md/.txt)을 넣어두면 여기 나타납니다.</div>';
+          return;
+        }
+        caseOpenTemplateList.innerHTML = '';
+        templates.forEach(t=>{
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ghost-btn';
+          btn.style.cssText = 'text-align:left; padding:10px 12px; justify-content:flex-start;';
+          btn.textContent = (t.isText ? '📄 ' : '📊 ') + t.name;
+          btn.addEventListener('click', ()=> selectCaseTemplate(t));
+          caseOpenTemplateList.appendChild(btn);
+        });
+      }catch(err){
+        caseOpenTemplateList.innerHTML = '<div style="color:#a83232; font-size:12.5px;">템플릿 목록을 불러오지 못했습니다: ' + (err && err.message ? err.message : err) + '</div>';
+      }
+    }
+    window.openCaseOpen = openCaseOpenImpl; // 도구 그룹 목록 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
+
+    async function selectCaseTemplate(t){
+      selectedTemplate = t;
+      caseOpenCaseTypeLabel.textContent = t.name;
+      showCaseOpenStep('fill');
+      if (t.isText){
+        caseOpenFillText.style.display = '';
+        caseOpenBinaryNotice.style.display = 'none';
+        caseOpenFillText.value = '불러오는 중…';
+        try{
+          const data = await callGas('getCaseTemplateContent', { fileId: t.id });
+          caseOpenFillText.value = (data && !data.error && typeof data.content === 'string') ? data.content : '';
+        }catch(err){
+          caseOpenFillText.value = '';
+          showToast('템플릿 내용을 불러오지 못했습니다: ' + (err && err.message ? err.message : err), 'error');
+        }
+      } else {
+        caseOpenFillText.style.display = 'none';
+        caseOpenBinaryNotice.style.display = 'block';
+      }
+    }
+
+    document.getElementById('btnCaseOpenBackToTemplate').addEventListener('click', ()=> showCaseOpenStep('template'));
+    document.getElementById('btnCloseCaseOpen').addEventListener('click', ()=>{ caseOpenOverlay.style.display = 'none'; });
+
+    function updateCaseOpenPreview(){
+      const customerName = caseOpenCustomerInput.value.trim();
+      const caseType = selectedTemplate ? selectedTemplate.name : '';
+      const folderName = customerName ? (customerName + ' ' + caseType) : '(고객명 입력 필요)';
+      caseOpenPreviewFolder.textContent = folderName;
+      caseOpenPreviewFile.textContent = customerName ? (folderName + (selectedTemplate ? selectedTemplate.ext : '')) : '-';
+    }
+    caseOpenCustomerInput.addEventListener('input', updateCaseOpenPreview);
+
+    btnCaseOpenNext.addEventListener('click', ()=>{
+      if (!selectedTemplate) return;
+      caseOpenCustomerInput.value = '';
+      updateCaseOpenPreview();
+      showCaseOpenStep('name');
+      setTimeout(()=> caseOpenCustomerInput.focus(), 50);
+    });
+    document.getElementById('btnCaseOpenBackToFill').addEventListener('click', ()=> showCaseOpenStep('fill'));
+
+    btnCaseOpenSave.addEventListener('click', async ()=>{
+      const customerName = caseOpenCustomerInput.value.trim();
+      if (!customerName){ showToast('고객명을 입력하세요.', 'warning'); return; }
+      if (!selectedTemplate) return;
+      const caseType = selectedTemplate.name;
+      const folderName = customerName + ' ' + caseType;
+      const fileName = folderName + selectedTemplate.ext;
+      btnCaseOpenSave.disabled = true;
+      btnCaseOpenSave.textContent = '저장 중…';
+      try{
+        const payload = {
+          templateFileId: selectedTemplate.id,
+          targetPath: basePath.concat([folderName]),
+          fileName: fileName
+        };
+        if (selectedTemplate.isText) payload.editedContent = caseOpenFillText.value;
+        const res = await callGas('saveCaseFromTemplate', payload);
+        if (res.error) throw new Error(res.error);
+        showToast('"' + folderName + '" 사건을 만들었습니다.', 'success');
+        caseOpenOverlay.style.display = 'none';
+        loadCustomers();
+        navigateTo(basePath.concat([folderName]));
+      }catch(err){
+        showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error');
+      }finally{
+        btnCaseOpenSave.disabled = false;
+        btnCaseOpenSave.textContent = '폴더 만들고 저장';
+      }
+    });
+  })();
+  document.getElementById('btnOpenCaseOpen').addEventListener('click', ()=> window.openCaseOpen());
 
   // ---- 전체화면 편집기 (AI 개입 없이, 드래그·크기조절·최대화 가능한 뜨는 창) ----
   const fullEditorOverlay = document.getElementById('fullEditorOverlay');
