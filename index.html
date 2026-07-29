@@ -545,6 +545,12 @@
   .msg{ max-width:100%; width:100%; box-sizing:border-box; padding:10px 13px; border-radius:10px; font-size:var(--chat-font-size, 13.5px); line-height:1.55; align-self:flex-start; }
   .msg.ai{ background:#f0f2f6; color:var(--ink); border-top-left-radius:2px; }
   .msg.me{ background:var(--navy); color:#fff; border-top-left-radius:2px; }
+  /* Gem(제미니 웹) 자문 관련 말풍선 — NX 자신의 답변과 한눈에 구분되도록 보라색 계열로 표시.
+     .gem-pending은 아직 답변을 기다리는 중(살짝 흐리게), 도착하면 .gem으로 바뀐다. */
+  .msg.gem{ background:#f1ebfb; color:var(--ink); border-top-left-radius:2px; border-left:3px solid #8b5cf6; }
+  .msg.gem-pending{ background:#f1ebfb; color:var(--sub); border-top-left-radius:2px; border-left:3px solid #8b5cf6; opacity:0.75; }
+  body.dark-mode .msg.gem{ background:#2a2140; color:var(--ink); border-left-color:#a78bfa; }
+  body.dark-mode .msg.gem-pending{ background:#2a2140; color:var(--sub); border-left-color:#a78bfa; }
   .apply-edit-btn{
     margin-top:8px; display:block; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;
     border:none; border-radius:6px; padding:7px 12px; background:var(--gold); color:var(--navy-deep);
@@ -1269,6 +1275,7 @@
         <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
         <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
         <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
+        <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
         <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
         <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
       </div>
@@ -3638,6 +3645,7 @@ graph TD
         nxExtPort = chrome.runtime.connect(extId, { name: 'nx-work' });
         nxExtPort.onMessage.addListener((msg)=>{
           if (!msg || !msg.type) return;
+          if (handleGemMessage(msg)) return;
           if (msg.type === 'NX_HELLO_ACK'){
             nxExtConnected = true;
             updateExtStatusUi();
@@ -3674,6 +3682,7 @@ graph TD
     if (event.source !== window) return;
     const data = event.data;
     if (!data || data.source !== 'nx-bridge' || !data.type) return;
+    if (handleGemMessage(data)) return;
     if (data.type === 'NX_HELLO_ACK'){
       nxExtConnected = true;
       updateExtStatusUi();
@@ -3712,7 +3721,71 @@ graph TD
     });
   }
 
-  let chatMessages = []; // Claude API 형식: [{role:'user'|'assistant', content:'...'}]
+  // ============================================================
+  // Gem — 채팅창에서 지금 검토 중인 쟁점을 제미니 웹(gemini.google.com)에게 그대로 물어보고
+  // 의견을 받아온다. NX(넥스)의 답변과는 별개로 참고용으로만 쓰기 위해, 답변은 보라색
+  // 말풍선(.msg.gem)으로 구분해서 채팅에 붙는다 — NX 자신의 분석과 섞이지 않는다.
+  // "NETAX 외부조회 커넥터" 확장프로그램의 기존 연결(nxExtPort)을 그대로 재사용한다
+  // (확장프로그램 쪽에는 NX_GEM_ASK를 받아 제미니 탭에 자동 입력·전송하고, 응답을
+  // NX_GEM_ANSWER/NX_GEM_ERROR로 돌려주는 처리가 추가로 필요하다).
+  // ============================================================
+  const btnAskGem = document.getElementById('btnAskGem');
+  const pendingGemBubbles = {}; // requestId -> 그 질문에 대한 "대기 중" 말풍선 DOM 엘리먼트
+
+  function handleGemMessage(msg){
+    if (!msg || !msg.type) return false;
+    if (msg.type === 'NX_GEM_ANSWER'){
+      const bubble = pendingGemBubbles[msg.requestId];
+      if (bubble){
+        bubble.classList.remove('gem-pending');
+        bubble.classList.add('gem');
+        bubble.textContent = '🔮 Gem: ' + (msg.answer || '(빈 응답)');
+        delete pendingGemBubbles[msg.requestId];
+      }
+      return true;
+    }
+    if (msg.type === 'NX_GEM_ERROR'){
+      const bubble = pendingGemBubbles[msg.requestId];
+      if (bubble){
+        bubble.classList.remove('gem-pending');
+        bubble.classList.add('gem');
+        bubble.textContent = '🔮 Gem 자문 실패: ' + (msg.error || '알 수 없는 오류');
+        delete pendingGemBubbles[msg.requestId];
+      }
+      return true;
+    }
+    return false;
+  }
+
+  if (btnAskGem){
+    btnAskGem.addEventListener('click', ()=>{
+      const question = chatInputEl.value.trim();
+      if (!question){ showToast('제미니에게 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
+      if (!nxExtConnected || !nxExtPort){
+        showToast('외부조회 커넥터 확장프로그램이 연결돼 있지 않습니다. 🔌 버튼으로 먼저 연결해주세요.', 'warning');
+        return;
+      }
+      const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      appendBubble('user', '🔮 Gem에게 물어봄: ' + question);
+      const pendingBubble = appendBubble('assistant', '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)');
+      pendingBubble.classList.remove('ai');
+      pendingBubble.classList.add('gem-pending');
+      pendingGemBubbles[requestId] = pendingBubble;
+
+      chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
+
+      try{
+        nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: question });
+      }catch(err){
+        pendingBubble.classList.remove('gem-pending');
+        pendingBubble.classList.add('gem');
+        pendingBubble.textContent = '🔮 Gem 자문 실패: 확장프로그램과 통신하지 못했습니다.';
+        delete pendingGemBubbles[requestId];
+      }
+    });
+  }
+
+
   let pendingAttachments = []; // [{id,name,type:'file'|'folder',mimeType?,path?}] — 채팅에 끌어다 놓거나 첨부한 항목들 (다음 전송에 무조건 반영)
   let pendingCaptures = []; // [{id,name,dataUrl}] — 화면캡처로 즉석에서 찍은 이미지 (드라이브에 저장 안 하고 바로 첨부)
   let pendingTextAttachments = []; // [{id,name,text}] — 경과지/계산기/관계도 등에서 "지금 화면 그대로" 참조 버튼으로 넘긴 것 (저장 전 상태 포함)
