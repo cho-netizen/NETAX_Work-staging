@@ -5660,7 +5660,7 @@ graph TD
       const caseType = selectedTemplate ? selectedTemplate.name : '';
       const folderName = customerName ? (customerName + ' ' + caseType) : '(고객명 입력 필요)';
       caseOpenPreviewFolder.textContent = folderName;
-      caseOpenPreviewFile.textContent = customerName ? (folderName + (selectedTemplate ? selectedTemplate.ext : '')) : '-';
+      caseOpenPreviewFile.textContent = customerName ? (folderName + '사건' + (selectedTemplate ? selectedTemplate.ext : '')) : '-';
     }
     caseOpenCustomerInput.addEventListener('input', updateCaseOpenPreview);
 
@@ -5679,7 +5679,7 @@ graph TD
       if (!selectedTemplate) return;
       const caseType = selectedTemplate.name;
       const folderName = customerName + ' ' + caseType;
-      const fileName = folderName + selectedTemplate.ext;
+      const fileName = folderName + '사건' + selectedTemplate.ext;
       btnCaseOpenSave.disabled = true;
       btnCaseOpenSave.textContent = '저장 중…';
       try{
