@@ -3756,11 +3756,21 @@ graph TD
 
   // 선택된 개수(N)만큼, chatMessages(NX와 실제로 나눈 대화기록)에서 가장 최근의 "나/NX" 교환을
   // 골라 텍스트로 엮는다. N=0이면 아무것도 붙이지 않는다(입력창 내용만 그대로 전송).
+  // 내용이 비어있거나("빈 응답") 오류·중단으로 끝난 턴은 Gem에게 참고자료로 넘길 가치가 없으니
+  // 미리 걸러내고 나서 최근 N턴을 고른다(예전 저장분에 이런 항목이 섞여 있을 가능성까지 대비).
+  const CONTEXT_EXCLUDE_PATTERN_ = /^(오류|네트워크 오류|⏹ 중단됨)/;
   function buildRecentContextText_(turnCount){
     if (!turnCount) return '';
-    const recent = chatMessages.slice(-(turnCount * 2)); // 대략 "나 1개 + NX 1개"를 한 턴으로 계산
+    const cleaned = chatMessages.filter(m=>{
+      if (!m || !m.content) return false;
+      const c = String(m.content).trim();
+      if (!c) return false;
+      if (CONTEXT_EXCLUDE_PATTERN_.test(c)) return false;
+      return true;
+    });
+    const recent = cleaned.slice(-(turnCount * 2)); // 대략 "나 1개 + NX 1개"를 한 턴으로 계산
     if (!recent.length) return '';
-    const lines = recent.map(m => (m.role === 'user' ? '나: ' : 'NX: ') + String(m.content || '').trim());
+    const lines = recent.map(m => (m.role === 'user' ? '나: ' : 'NX: ') + String(m.content).trim());
     return '[참고 — 직전 대화 ' + turnCount + '개]\n' + lines.join('\n') + '\n\n[실제 질문]\n';
   }
 
@@ -4542,6 +4552,7 @@ graph TD
       const data = await res.json();
       if (data.error){
         thinkingBubble.textContent = '오류: ' + data.error;
+        chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
       } else {
         renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
         chatMessages.push({ role: 'assistant', content: data.reply || '' });
@@ -4554,6 +4565,7 @@ graph TD
         chatMessages.pop(); // 방금 push한 사용자 메시지도 취소된 걸로 취급 (응답 없이 기록만 남으면 다음 턴에 어색해짐)
       } else {
         thinkingBubble.textContent = '네트워크 오류: ' + (err && err.message ? err.message : err);
+        chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
       }
     }finally{
       currentChatAbortController = null;
