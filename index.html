@@ -562,7 +562,7 @@
     border-top:1px solid var(--line); flex-shrink:0;
   }
   #gemContextCount{
-    flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 4px; max-width:108px;
+    flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 2px; width:48px;
     border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--sub);
   }
   .chat-input-wrap input{
@@ -1279,12 +1279,13 @@
         <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
         <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
         <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
-        <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개 같이 보낼지 선택 (0=입력창 내용만)">
-          <option value="0">Gem: 직전대화 0개</option>
-          <option value="1">Gem: 직전대화 1개</option>
-          <option value="2">Gem: 직전대화 2개</option>
-          <option value="3">Gem: 직전대화 3개</option>
-          <option value="5">Gem: 직전대화 5개</option>
+        <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개(턴) 같이 보낼지 선택 (0=입력창 내용만)">
+          <option value="0">0턴</option>
+          <option value="1">1턴</option>
+          <option value="2">2턴</option>
+          <option value="3">3턴</option>
+          <option value="4">4턴</option>
+          <option value="5">5턴</option>
         </select>
         <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을(선택한 개수만큼 직전 대화도 함께) 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
         <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
