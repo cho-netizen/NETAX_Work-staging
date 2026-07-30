@@ -3853,6 +3853,7 @@ graph TD
 
   if (btnAskGem){
     btnAskGem.addEventListener('click', ()=>{
+      showToast('[진단] 🔮 버튼 클릭 감지됨', 'info'); // 문제 해결되면 이 줄은 지울 예정
       const rawQuestion = chatInputEl.value.trim();
       askGem(rawQuestion);
       if (rawQuestion) chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
