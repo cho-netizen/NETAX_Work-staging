@@ -3242,6 +3242,16 @@ graph TD
         setTimeout(updateBottombarHeightVar, 220);
       });
     }
+
+    // 입력창에 포커스가 있는 상태에서 하단바 안의 버튼(🔮·⚖·🔌 등)을 누르면, 마우스를 누르는
+    // 순간 입력창이 blur(포커스 이탈)되면서 위 로직이 하단바를 다시 펼치고, 그 "펼쳐지는 동안"
+    // 첫 클릭이 씹혀버리는 문제가 있었다(같은 버튼을 두 번 눌러야 그제서야 동작). mousedown
+    // 시점에 기본 동작(포커스 이동)만 막아서, 입력창 포커스를 그대로 유지한 채 버튼 클릭만
+    // 정상 처리되게 한다 — 하단바 자체가 움직이지 않으니 첫 클릭부터 바로 먹힌다.
+    cluster.addEventListener('mousedown', (e)=>{
+      const btn = e.target.closest('button');
+      if (btn) e.preventDefault();
+    });
   })();
 
 
