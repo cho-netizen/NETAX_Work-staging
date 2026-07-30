@@ -3224,34 +3224,11 @@ graph TD
     window.addEventListener('resize', scheduleUpdate);
     update(); // 초기 1회
 
-    // 메시지 입력창에 포커스가 가 있는 동안(타이핑 중)에는 하단 고정바를 접어서
-    // 그 공간을 채팅에 돌려준다 — 키보드가 올라오는 타이밍과 자연스럽게 맞물림.
-    const chatInputForBottomBar = document.getElementById('chatInputEl');
-    if (chatInputForBottomBar){
-      chatInputForBottomBar.addEventListener('focus', ()=>{
-        bodyEl.classList.add('bottombar-hidden');
-        updateBottombarHeightVar();
-      });
-      chatInputForBottomBar.addEventListener('blur', ()=>{
-        bodyEl.classList.remove('bottombar-hidden');
-        // 하단바가 접힌 상태(0)에서 펼쳐지는 애니메이션(0.18초)이 막 시작된 시점이라,
-        // 지금 바로 재면 "다 펼쳐지기 전의 작은 값"이 잡혀서 여백이 부족하게 계산된다.
-        // 일단 한 번 재두고(즉시 반응하는 느낌은 유지), 애니메이션이 끝난 뒤 정확한 값으로
-        // 한 번 더 재서 덮어씌운다 — 그래야 입력창이 하단바에 가려지지 않는다.
-        updateBottombarHeightVar();
-        setTimeout(updateBottombarHeightVar, 220);
-      });
-    }
+    // (2026.07) 예전엔 메시지 입력창에 포커스가 가 있는 동안 하단 고정바를 접어서 공간을
+    // 채팅에 돌려주려 했는데, 그 접혔다 펴지는 전환 자체가 하단바 버튼(🔮·⚖·➤ 등) 클릭을
+    // 자꾸 씹어먹는 문제(포커스 이탈 → 하단바 재전개 → 그 사이 첫 클릭 무반응)를 일으켜서,
+    // 이 동작 자체를 없앴다 — 이제 하단바는 입력창 포커스 여부와 무관하게 항상 고정된 자리에 있다.
 
-    // 입력창에 포커스가 있는 상태에서 하단바 안의 버튼(🔮·⚖·🔌 등)을 누르면, 마우스를 누르는
-    // 순간 입력창이 blur(포커스 이탈)되면서 위 로직이 하단바를 다시 펼치고, 그 "펼쳐지는 동안"
-    // 첫 클릭이 씹혀버리는 문제가 있었다(같은 버튼을 두 번 눌러야 그제서야 동작). mousedown
-    // 시점에 기본 동작(포커스 이동)만 막아서, 입력창 포커스를 그대로 유지한 채 버튼 클릭만
-    // 정상 처리되게 한다 — 하단바 자체가 움직이지 않으니 첫 클릭부터 바로 먹힌다.
-    cluster.addEventListener('mousedown', (e)=>{
-      const btn = e.target.closest('button');
-      if (btn) e.preventDefault();
-    });
   })();
 
 
