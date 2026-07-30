@@ -225,6 +225,12 @@
     padding:8px 10px; overflow:hidden; max-height:64px; opacity:1;
     transition:max-height 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
   }
+  /* 하단바에는 여러 개를 묶은 그룹 팝업(mobile-group)과, 그렇지 않은 단독 버튼(메모·마이크 등)이
+     같이 섞여 있는데, 예전엔 단독 버튼은 균등폭 규칙이 안 걸려 있어서 그룹 버튼들과 크기가
+     들쭉날쭉했다. 이제 하단바 바로 아래 자식이면(그룹 래퍼든 단독 버튼이든) 전부 같은 규칙으로
+     너비를 똑같이 나눠 가지게 한다. */
+  body.stage-compact #topbarActionCluster > *:not(#btnVoiceInputFlip){ flex:1 1 0; min-width:0; }
+  body.stage-compact #topbarActionCluster > .tb-btn:not(#btnVoiceInputFlip){ justify-content:center; padding-left:6px; padding-right:6px; }
   body.stage-compact.bottombar-hidden #topbarActionCluster{
     max-height:0; opacity:0; padding-top:0; padding-bottom:0;
   }
@@ -942,6 +948,17 @@
           <label><input type="checkbox" id="settingsDarkMode"> 🌙 다크모드</label>
         </div>
 
+        <div class="modal-checkrow" style="align-items:center; gap:8px;">
+          <label for="settingsDeviceOverride" style="white-space:nowrap;">📱 화면 배치 기준</label>
+          <select id="settingsDeviceOverride" style="font-family:inherit; font-size:12.5px; padding:5px 8px; border:1px solid var(--line); border-radius:6px;">
+            <option value="auto">자동 감지(기본)</option>
+            <option value="pc">PC 화면으로 고정</option>
+            <option value="tablet">태블릿 화면으로 고정</option>
+            <option value="phone">폰 화면으로 고정</option>
+          </select>
+        </div>
+        <div class="modal-hint">화면 크기를 보고 자동으로 배치를 정하는데, 기기에 따라 이 판단이 잘 안 맞으면 여기서 직접 지정할 수 있습니다.</div>
+
         <label class="modal-label">🧾 세무 특화 기능 (AI가 채팅 중 알아서 사용)</label>
         <div class="modal-hint">아래는 파일탐색·처리일지·계산기 같은 범용 도구와 별도로, 세무자문 업무를 위해 추가된 전용 기능입니다. 버튼을 누르는 게 아니라, 채팅에서 필요할 때 자연스럽게 물어보시면 AI가 알아서 사용합니다.</div>
         <div class="tax-feature-list">
@@ -1205,8 +1222,8 @@
         <button id="btnNotePrevPage" class="note-tb-btn" title="이전 페이지">◀</button>
         <span id="notePageIndicator" class="note-tb-page">1/1</span>
         <button id="btnNoteNextPage" class="note-tb-btn" title="다음 페이지(마지막 장이면 새 페이지 추가)">▶</button>
+        <button id="btnNoteSave" class="note-tb-btn note-tb-save" title="저장 (손글씨 자동 텍스트 변환 후 메모와 동일한 방식으로 저장)" style="margin-left:auto;">💾</button>
         <button id="btnNoteToMemo" class="note-tb-btn" title="메모(타이핑)로 전환">⌨</button>
-        <button id="btnNoteSave" class="note-tb-btn note-tb-save" title="저장 (손글씨 자동 텍스트 변환 후 메모와 동일한 방식으로 저장)">💾</button>
         <button id="btnCloseNote" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
       <div id="noteCanvasWrap">
@@ -1229,8 +1246,8 @@
         <span style="color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">📝 메모</span>
         <input type="text" id="quickMemoGeneralSearch" list="quickMemoGeneralList" placeholder="🔍 메모 열기 · 템플릿으로 사건개시" style="flex:1; min-width:0; font-family:inherit; font-size:12.5px; padding:5px 8px; border:1px solid rgba(255,255,255,0.25); border-radius:6px; background:rgba(255,255,255,0.08); color:#fff;">
         <datalist id="quickMemoGeneralList"></datalist>
-        <button id="btnQuickMemoToNote" class="note-tb-btn" title="필기로 전환">✍</button>
         <button id="btnQuickMemoSave" class="note-tb-btn note-tb-save" title="저장">💾</button>
+        <button id="btnQuickMemoToNote" class="note-tb-btn" title="필기로 전환">✍</button>
         <button id="btnCloseQuickMemo" class="note-tb-btn note-tb-close" title="닫기">✕</button>
       </div>
       <textarea id="quickMemoText" placeholder="통화하면서 바로 타이핑하거나, 위 검색창에서 템플릿을 골라 채워 넣으세요…" style="flex:1 1 auto; width:100%; box-sizing:border-box; border:none; outline:none; resize:none; padding:14px; font-family:inherit; font-size:14.5px; line-height:1.6; background:var(--panel); color:var(--ink);"></textarea>
@@ -3093,6 +3110,10 @@ graph TD
   // compact 안에서는 버튼이 그래도 너무 좁아지면(높이의 1.3배 미만) 도구1+도구2를 합치고,
   // compact로 판정된 순간에만 이 버튼들을 화면 하단으로 옮긴다(폰에서 엄지로 누르기 편하게).
   // ============================================================
+  // 자동 감지가 잘 안 맞는 기기를 위한 수동 지정(설정 모달의 "화면 배치 기준") — 'auto'면 예전처럼
+  // 실측해서 정하고, 그 외에는 무조건 그 단계로 고정한다.
+  let deviceOverride = localStorage.getItem('nx_device_override') || 'auto';
+
   (function setupTopbarResponsive(){
     const topbarEl = document.querySelector('.topbar');
     const bodyEl = document.body;
@@ -3126,6 +3147,9 @@ graph TD
     }
 
     function resolveStage(){
+      if (deviceOverride === 'pc') return 'full';
+      if (deviceOverride === 'tablet') return 'grouped';
+      if (deviceOverride === 'phone') return 'compact';
       const available = topbarEl.clientWidth - 4; // 스크롤바 등 오차 여유
       if (measureRequiredWidth('full') <= available) return 'full';
       if (measureRequiredWidth('grouped') <= available) return 'grouped';
@@ -3224,6 +3248,14 @@ graph TD
     window.addEventListener('resize', scheduleUpdate);
     update(); // 초기 1회
 
+    // 설정 모달의 "화면 배치 기준"에서 값을 바꾸면 이 함수로 즉시 재평가한다
+    // (scheduleUpdate/update는 이 IIFE 안에 갇혀 있어서, 밖에서 부를 수 있게 전역에 걸어둔다).
+    window.nxApplyDeviceOverride = function(value){
+      deviceOverride = value;
+      localStorage.setItem('nx_device_override', value);
+      scheduleUpdate();
+    };
+
     // (2026.07) 예전엔 메시지 입력창에 포커스가 가 있는 동안 하단 고정바를 접어서 공간을
     // 채팅에 돌려주려 했는데, 그 접혔다 펴지는 전환 자체가 하단바 버튼(🔮·⚖·➤ 등) 클릭을
     // 자꾸 씹어먹는 문제(포커스 이탈 → 하단바 재전개 → 그 사이 첫 클릭 무반응)를 일으켜서,
@@ -3244,6 +3276,15 @@ graph TD
     applyDarkMode(settingsDarkMode.checked);
     localStorage.setItem(DARK_MODE_KEY, settingsDarkMode.checked ? '1' : '0');
   });
+
+  // 화면 배치 기준(자동/PC/태블릿/폰 수동 지정) — 반응형 자동판정이 기기와 안 맞을 때 직접 고정.
+  const settingsDeviceOverride = document.getElementById('settingsDeviceOverride');
+  if (settingsDeviceOverride){
+    settingsDeviceOverride.value = localStorage.getItem('nx_device_override') || 'auto';
+    settingsDeviceOverride.addEventListener('change', ()=>{
+      if (window.nxApplyDeviceOverride) window.nxApplyDeviceOverride(settingsDeviceOverride.value);
+    });
+  }
 
   document.getElementById('btnAttachSelected').addEventListener('click', attachSelectedFiles);
   document.getElementById('btnClearSelected').addEventListener('click', ()=>{
@@ -3455,6 +3496,7 @@ graph TD
   function openSettingsModal(){
     populateSettingsForm(aiSettings);
     settingsDarkMode.checked = document.body.classList.contains('dark-mode');
+    if (settingsDeviceOverride) settingsDeviceOverride.value = localStorage.getItem('nx_device_override') || 'auto';
     renderVoiceCommandSettings();
     settingsOverlay.style.display = 'flex';
   }
