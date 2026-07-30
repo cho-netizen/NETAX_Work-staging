@@ -1288,6 +1288,7 @@
           <option value="5">5턴</option>
         </select>
         <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을(선택한 개수만큼 직전 대화도 함께) 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
+        <button type="button" id="btnAskBoth" class="icon-round-btn" title="같은 질문을 NX와 Gem에게 동시에 물어봅니다 — 서로 답을 보지 않은 채 독립적인 의견을 받고 싶을 때 (외부조회 커넥터 확장프로그램 필요)">⚖</button>
         <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
         <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
       </div>
@@ -3674,7 +3675,9 @@ graph TD
           nxExtPort = null;
           updateExtStatusUi();
           // 확장프로그램이 나중에 설치/갱신되는 경우를 대비해 잠시 후 재시도
-          setTimeout(connectNxExtension, 4000);
+          // (MV3 서비스워커는 idle 상태가 지속되면 자동으로 잠들면서 이 연결도 같이 끊기는데,
+          // 그 경우 최대한 빨리 다시 이어지도록 대기시간을 짧게 잡는다.)
+          setTimeout(connectNxExtension, 1500);
         });
         nxExtPort.postMessage({ type: 'NX_HELLO' });
         return;
@@ -3800,36 +3803,75 @@ graph TD
     return false;
   }
 
+  // rawQuestion을 Gem(제미니 웹)에게 물어본다 — 입력창을 직접 건드리지 않으므로, NX에게도 같은
+  // 질문을 동시에 보내는 "동시비교" 흐름에서도 그대로 재사용할 수 있다.
+  // opts.label을 주면 채팅에 뜨는 "누가 물어본 것인지" 문구를 바꿀 수 있다(동시비교 구분용).
+  // 연결이 끊긴 상태(nxExtConnected===false)면 즉시 재연결을 시도하고, 핸드셰이크
+  // (NX_HELLO → NX_HELLO_ACK)가 끝날 때까지 최대 2초 정도 짧게 기다려본다.
+  // (MV3 서비스워커가 idle 상태로 잠들면서 연결이 끊겼다가, 다음 이벤트가 와야 다시 깨어나는
+  // 경우가 있어서 — 그냥 실패 처리하지 않고 이 자리에서 한 번 더 살려본다.)
+  async function ensureExtConnected_(){
+    if (nxExtConnected && nxExtPort) return true;
+    connectNxExtension();
+    for (let i = 0; i < 20; i++){
+      if (nxExtConnected && nxExtPort) return true;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return nxExtConnected && !!nxExtPort;
+  }
+
+  async function askGem(rawQuestion, opts){
+    opts = opts || {};
+    if (!rawQuestion){ showToast('제미니에게 물어볼 내용이 없습니다.', 'warning'); return; }
+    const connected = await ensureExtConnected_();
+    if (!connected){
+      showToast('외부조회 커넥터 확장프로그램과 연결하지 못했습니다. 🔌 버튼으로 다시 시도해주세요.', 'warning');
+      return;
+    }
+    const turnCount = gemContextCountSelect ? parseInt(gemContextCountSelect.value, 10) || 0 : 0;
+    const contextText = buildRecentContextText_(turnCount);
+    const fullQuestion = contextText + rawQuestion;
+
+    const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const contextNote = turnCount ? (' (직전 대화 ' + turnCount + '개 포함)') : '';
+    const label = opts.label || '🔮 Gem에게 물어봄';
+    appendBubble('user', label + contextNote + ': ' + rawQuestion);
+    const pendingBubble = appendBubble('assistant', '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)');
+    pendingBubble.classList.remove('ai');
+    pendingBubble.classList.add('gem-pending');
+    pendingGemBubbles[requestId] = pendingBubble;
+
+    try{
+      nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
+    }catch(err){
+      pendingBubble.classList.remove('gem-pending');
+      pendingBubble.classList.add('gem');
+      pendingBubble.textContent = '🔮 Gem 자문 실패: 확장프로그램과 통신하지 못했습니다.';
+      delete pendingGemBubbles[requestId];
+    }
+  }
+
   if (btnAskGem){
     btnAskGem.addEventListener('click', ()=>{
       const rawQuestion = chatInputEl.value.trim();
-      if (!rawQuestion){ showToast('제미니에게 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
-      if (!nxExtConnected || !nxExtPort){
-        showToast('외부조회 커넥터 확장프로그램이 연결돼 있지 않습니다. 🔌 버튼으로 먼저 연결해주세요.', 'warning');
-        return;
-      }
-      const turnCount = gemContextCountSelect ? parseInt(gemContextCountSelect.value, 10) || 0 : 0;
-      const contextText = buildRecentContextText_(turnCount);
-      const fullQuestion = contextText + rawQuestion;
+      askGem(rawQuestion);
+      if (rawQuestion) chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
+    });
+  }
 
-      const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-      const contextNote = turnCount ? (' (직전 대화 ' + turnCount + '개 포함)') : '';
-      appendBubble('user', '🔮 Gem에게 물어봄' + contextNote + ': ' + rawQuestion);
-      const pendingBubble = appendBubble('assistant', '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)');
-      pendingBubble.classList.remove('ai');
-      pendingBubble.classList.add('gem-pending');
-      pendingGemBubbles[requestId] = pendingBubble;
-
-      chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
-
-      try{
-        nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
-      }catch(err){
-        pendingBubble.classList.remove('gem-pending');
-        pendingBubble.classList.add('gem');
-        pendingBubble.textContent = '🔮 Gem 자문 실패: 확장프로그램과 통신하지 못했습니다.';
-        delete pendingGemBubbles[requestId];
-      }
+  // ---- ⚖ 동시비교 — 같은 질문을 NX와 Gem에게 "동시에" 보낸다 ----
+  // 순서대로 물어보면(NX 답을 먼저 읽고 나서 Gem에게 묻는 식) 세무사님이 이미 NX의 관점에
+  // 영향을 받은 채로 Gem에게 질문을 다듬어 던지게 되고, 반대로 해도 마찬가지다 — "누구한테
+  // 먼저 물어보느냐에 따라 판이 바뀌는" 문제. 이걸 줄이려고, 입력창 내용 그대로를 두 곳에
+  // 동시에 쏴서 서로의 답을 안 본 채(만들어지는 동안은 서로 참조가 물리적으로 불가능하다)
+  // 독립적인 의견을 받도록 했다.
+  const btnAskBoth = document.getElementById('btnAskBoth');
+  if (btnAskBoth){
+    btnAskBoth.addEventListener('click', ()=>{
+      const question = chatInputEl.value.trim();
+      if (!question){ showToast('NX와 Gem에게 동시에 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
+      askGem(question, { label: '⚖ 동시비교 — Gem에게 물어봄' });
+      sendChatMessage(); // NX에게도 같은 질문을 그대로 전송(입력창은 이 함수가 알아서 비운다)
     });
   }
 
