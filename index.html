@@ -3780,6 +3780,11 @@ graph TD
 
   function handleGemMessage(msg){
     if (!msg || !msg.type) return false;
+    if (msg.type === 'NX_GEM_PROGRESS'){
+      const bubble = pendingGemBubbles[msg.requestId];
+      if (bubble) bubble.textContent = '🔮 ' + (msg.note || '진행 중…');
+      return true;
+    }
     if (msg.type === 'NX_GEM_ANSWER'){
       const bubble = pendingGemBubbles[msg.requestId];
       if (bubble){
