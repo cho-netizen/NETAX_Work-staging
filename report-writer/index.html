@@ -17,6 +17,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{ --bar-bg:#20242c; --bar-fg:#e8e8ec; --accent:#5b6b8c; --navy:#0D1B3D; --navy-deep:#081226; --gold:#C8A244; --gold-light:#DCC17E; }
   *{box-sizing:border-box;}
@@ -972,6 +974,7 @@
   <select id="docSelect"></select>
   <input type="file" id="fileInput" accept=".md,.txt,.html,.htm" multiple style="display:none;">
   <button id="btnReloadFromDrive" class="iconbtn" title="드라이브에 저장된 최신 내용으로 다시 불러오기 (fileId로 연 문서일 때만 동작)">🔄</button>
+  <button id="btnSaveToDrive" class="iconbtn" title="지금 이 내용을 드라이브 원본 파일에 바로 저장">💾</button>
   <span class="sep"></span>
   <select id="themeSelect">
     <option value="appeal">청구서</option>
@@ -983,11 +986,11 @@
   <button id="btnLayoutToggle" class="iconbtn" title="창보기: 클릭할 때마다 편집창→모아보기→미리보기 순으로 전환 (모아보기 상태에서 더블클릭하면 스크롤 동기화 켜기/끄기)">◫</button>
   <button id="btnNewWindow" class="iconbtn" title="완성된 문서만 새 창(탭)에서 보기 (편집 도구 없이)">↗</button>
   <div id="downloadWrap" style="position:relative; display:inline-flex;">
-    <button id="btnDownload" class="iconbtn" title="다운로드 (DOC・MD・HTML・Print)">⬇</button>
+    <button id="btnDownload" class="iconbtn" title="다운로드 (DOC・HTML・Print)">⬇</button>
     <div id="downloadPopup" class="popupMenu">
       <button id="dlDoc">DOC로 다운로드</button>
-      <button id="dlMd">MD로 다운로드</button>
       <button id="dlHtml">HTML로 다운로드</button>
+      <button id="dlPdf" title="화면에 보이는 그대로 PDF 파일로 바로 저장(인쇄 대화상자 없이)">PDF로 다운로드</button>
       <button id="dlPrint">Print / PDF</button>
     </div>
   </div>
@@ -1257,9 +1260,10 @@ function loadSelectedIntoEditor(){
   const d = getSelected();
   const mdInput = document.getElementById('mdInput');
   const themeSelect = document.getElementById('themeSelect');
-  if (!d) { mdInput.value = ''; return; }
+  if (!d) { mdInput.value = ''; updateSaveToDriveButton(); return; }
   mdInput.value = d.md;
   themeSelect.value = d.theme;
+  updateSaveToDriveButton();
 }
 
 // ---------- 새 파일 불러오기 ----------
@@ -2469,10 +2473,6 @@ document.getElementById('dlDoc').addEventListener('click', () => {
   document.getElementById('downloadPopup').classList.remove('show');
   downloadAsDoc();
 });
-document.getElementById('dlMd').addEventListener('click', () => {
-  document.getElementById('downloadPopup').classList.remove('show');
-  downloadAsMd();
-});
 document.getElementById('dlPrint').addEventListener('click', () => {
   document.getElementById('downloadPopup').classList.remove('show');
   // 크롬 등 브라우저의 인쇄 머리글은 <title> 태그 내용을 그대로 찍는다.
@@ -2557,6 +2557,65 @@ document.getElementById('btnReloadFromDrive').addEventListener('click', () => {
   if (!confirm('탐색기 등 다른 곳에서 바뀐 최신 내용으로 다시 불러옵니다.\n지금 편집창에 저장하지 않은 내용이 있다면 사라집니다. 계속할까요?')) return;
   loadFromUrlFileId();
 });
+
+// ---------- 저장 버튼: 지금 편집창에 직접 입력한 내용을 드라이브 원본 파일에 바로 저장한다 ----------
+// 예전엔 MD로 다운로드 → PC에 받은 파일을 다시 드라이브에 올려야 했는데(사용자가 직접 여러
+// 단계를 거쳐야 했음), 지금 열려 있는 문서가 드라이브 파일(fileId로 불러온 것, docId가
+// "drive-"로 시작)이면 그 파일에 바로 덮어써서 한 번의 클릭으로 끝나게 한다.
+// Code.gs의 uploadFile 액션(fileId가 있으면 그 파일 내용만 교체)을 그대로 재사용한다.
+function utf8ToBase64_(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+function currentDriveFileId_(){
+  return (selectedId && selectedId.indexOf('drive-') === 0) ? selectedId.slice('drive-'.length) : null;
+}
+
+function updateSaveToDriveButton(){
+  const btn = document.getElementById('btnSaveToDrive');
+  if (!btn) return;
+  const isDriveDoc = !!currentDriveFileId_();
+  btn.disabled = !isDriveDoc;
+  btn.style.opacity = isDriveDoc ? '' : '0.4';
+  btn.title = isDriveDoc
+    ? '지금 이 내용을 드라이브 원본 파일에 바로 저장'
+    : '드라이브에서 불러온 문서가 아니라 바로 저장할 원본 파일이 없습니다';
+}
+
+async function saveToDrive(){
+  const fileId = currentDriveFileId_();
+  if (!fileId){
+    flashSaveState('저장할 원본 파일이 없습니다');
+    return;
+  }
+  const d = getSelected();
+  const content = document.getElementById('mdInput').value;
+  const btn = document.getElementById('btnSaveToDrive');
+  btn.disabled = true;
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'uploadFile',
+        fileId: fileId,
+        name: (d && d.name) ? d.name : '문서',
+        base64Data: utf8ToBase64_(content)
+      })
+    });
+    const data = await res.json();
+    if (!data || data.error){
+      flashSaveState((data && data.error) ? data.error : '저장 실패');
+    } else {
+      flashSaveState('드라이브에 저장됨');
+    }
+  } catch (err) {
+    flashSaveState('네트워크 오류: ' + (err && err.message ? err.message : err));
+  } finally {
+    updateSaveToDriveButton();
+  }
+}
+document.getElementById('btnSaveToDrive').addEventListener('click', saveToDrive);
 
 // ---------- 편집창/미리보기 레이아웃 3단계 전환 (편집창만 / 둘 다 / 미리보기만) ----------
 // 예전엔 버튼 3개(◧◫◨)가 각자 하나의 모드를 담당했는데, 버튼 하나로 통합해서 누를 때마다
@@ -2852,16 +2911,6 @@ function downloadAsDoc(){
   URL.revokeObjectURL(url);
 }
 
-function downloadAsMd(){
-  if (!getSelected()) return;
-  const blob = new Blob([document.getElementById('mdInput').value], {type:'text/markdown;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = currentTheme().filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function downloadAsHtml(){
   if (!getSelected()) return;
   const html = buildStandaloneHtml();
@@ -2871,6 +2920,50 @@ function downloadAsHtml(){
   a.href = url; a.download = currentTheme().filename.replace(/\.md$/, '.html');
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// html2canvas로 미리보기 화면을 그대로 캡처한 뒤, jsPDF로 A4 여러 장에 나눠 담아 파일로
+// 저장한다 — 인쇄 대화상자(Print/PDF)를 거치지 않고 버튼 한 번으로 바로 PDF가 떨어진다.
+// 다만 이 방식은 화면을 이미지로 찍어서 담는 거라, 페이지 경계에서 글자 줄이 살짝 잘려
+// 보일 수 있다(가장 흔한 jsPDF+html2canvas 조합의 알려진 한계) — 그런 부분은 예전처럼
+// Print/PDF(브라우저 인쇄)를 쓰면 더 깔끔하게 나온다.
+async function downloadAsPdf(){
+  if (!getSelected()) return;
+  if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
+    showToast('PDF 생성 라이브러리를 불러오지 못했습니다.', 'error');
+    return;
+  }
+  const target = document.getElementById('previewPane');
+  showToast('PDF 만드는 중…', 'info');
+  try{
+    const canvas = await html2canvas(target, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidthMm = pageWidth;
+    const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
+
+    let heightLeft = imgHeightMm;
+    let position = 0;
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidthMm, imgHeightMm);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0){
+      position = heightLeft - imgHeightMm; // 다음 페이지에서 이미지를 위로 밀어서 이어지게 함
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidthMm, imgHeightMm);
+      heightLeft -= pageHeight;
+    }
+
+    const d = getSelected();
+    pdf.save((d ? d.name : '문서') + '.pdf');
+    showToast('PDF로 저장했습니다.', 'success');
+  }catch(err){
+    showToast('PDF 생성 실패: ' + (err && err.message ? err.message : err), 'error');
+  }
 }
 
 function openInNewWindow(){
@@ -2887,6 +2980,10 @@ document.getElementById('btnNewWindow').addEventListener('click', openInNewWindo
 document.getElementById('dlHtml').addEventListener('click', () => {
   document.getElementById('downloadPopup').classList.remove('show');
   downloadAsHtml();
+});
+document.getElementById('dlPdf').addEventListener('click', () => {
+  document.getElementById('downloadPopup').classList.remove('show');
+  downloadAsPdf();
 });
 
 // 좁은 화면(폰・태블릿)에서는 편집창+미리보기를 좌우로 나눠봐야 둘 다 못 보므로,

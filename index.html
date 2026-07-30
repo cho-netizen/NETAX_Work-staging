@@ -855,6 +855,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.30.0/date_fns.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="/config.js"></script>
 </head>
 <body>
@@ -1272,6 +1273,29 @@
       <div style="display:flex; gap:8px; justify-content:flex-end;">
         <button type="button" id="btnQuickMemoSaveCancel" class="ghost-btn">취소</button>
         <button type="button" id="btnQuickMemoSaveConfirm" class="save-btn">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📊 엑셀 열기 — 고객이 준 엑셀 파일을 드라이브 업로드 없이 브라우저에서 바로 표로 확인.
+       SheetJS(xlsx 라이브러리)로 전부 로컬에서 처리하고 서버로는 전송하지 않는다. -->
+  <div class="modal-overlay" id="excelViewerOverlay" style="display:none;">
+    <div class="modal-panel" id="excelViewerPanel" style="max-width:820px; width:92vw;">
+      <div class="modal-head">
+        <span>📊 엑셀 열기</span>
+        <span class="modal-close" id="btnCloseExcelViewer" title="닫기">✕</span>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <input type="file" id="excelViewerFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+          <button type="button" id="btnExcelViewerPick" class="ghost-btn">📁 엑셀 파일 선택</button>
+          <select id="excelViewerSheetSelect" style="display:none; font-family:inherit; font-size:12.5px; padding:6px 8px; border:1px solid var(--line); border-radius:6px;"></select>
+          <button type="button" id="btnExcelViewerAttachChat" class="ghost-btn" style="display:none;" title="지금 보이는 시트 내용을 채팅에 텍스트로 첨부합니다">💬 채팅에 첨부</button>
+          <span id="excelViewerFileName" style="font-size:12px; color:var(--sub);"></span>
+        </div>
+        <div id="excelViewerTableWrap" style="margin-top:10px; overflow:auto; max-height:60vh; border:1px solid var(--line); border-radius:8px;">
+          <div style="padding:20px; text-align:center; color:var(--sub); font-size:12.5px;">엑셀 파일을 선택하면 여기에 표로 보여집니다.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -3082,6 +3106,7 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
+    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
 
@@ -3100,6 +3125,7 @@ graph TD
   ];
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
+    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() },
     { icon: '🖋', label: '편집', handler: openFullEditor }
   ];
 
@@ -6958,6 +6984,85 @@ graph TD
       btn.textContent = '🔤 텍스트 추출';
     }
   });
+
+  // ---- 📊 엑셀 열기 — 고객이 준 엑셀 파일을 드라이브 업로드 없이 브라우저에서 바로 표로 확인
+  // (SheetJS). 전부 로컬에서 처리하고 서버로는 아무것도 전송하지 않는다.
+  (function(){
+    const excelViewerOverlay = document.getElementById('excelViewerOverlay');
+    const excelViewerFileInput = document.getElementById('excelViewerFileInput');
+    const excelViewerSheetSelect = document.getElementById('excelViewerSheetSelect');
+    const excelViewerTableWrap = document.getElementById('excelViewerTableWrap');
+    const excelViewerFileName = document.getElementById('excelViewerFileName');
+    const btnExcelViewerAttachChat = document.getElementById('btnExcelViewerAttachChat');
+
+    let currentWorkbook = null;
+
+    function openExcelViewerImpl(){
+      excelViewerOverlay.style.display = 'flex';
+    }
+    window.openExcelViewer = openExcelViewerImpl; // 도구 그룹 목록 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
+
+    document.getElementById('btnCloseExcelViewer').addEventListener('click', ()=>{
+      excelViewerOverlay.style.display = 'none';
+    });
+    document.getElementById('btnExcelViewerPick').addEventListener('click', ()=> excelViewerFileInput.click());
+
+    function renderSheet(name){
+      if (!currentWorkbook) return;
+      const ws = currentWorkbook.Sheets[name];
+      if (!ws){ excelViewerTableWrap.innerHTML = '<div style="padding:20px; color:var(--sub);">시트를 찾을 수 없습니다.</div>'; return; }
+      const html = XLSX.utils.sheet_to_html(ws, { id: 'excelViewerTable' });
+      excelViewerTableWrap.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
+      // SheetJS 기본 표 스타일이 화면 톤과 안 맞아서 살짝 다듬는다.
+      const table = excelViewerTableWrap.querySelector('table');
+      if (table){
+        table.style.borderCollapse = 'collapse';
+        table.style.width = '100%';
+        table.style.fontSize = '12.5px';
+        table.querySelectorAll('td, th').forEach(cell=>{
+          cell.style.border = '1px solid var(--line)';
+          cell.style.padding = '4px 8px';
+          cell.style.whiteSpace = 'nowrap';
+        });
+      }
+    }
+
+    excelViewerFileInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      excelViewerFileInput.value = '';
+      if (!file) return;
+      if (typeof XLSX === 'undefined'){ showToast('엑셀 처리 라이브러리를 불러오지 못했습니다.', 'error'); return; }
+      try{
+        const buf = await file.arrayBuffer();
+        currentWorkbook = XLSX.read(buf, { type: 'array' });
+        excelViewerFileName.textContent = file.name;
+        excelViewerSheetSelect.innerHTML = '';
+        currentWorkbook.SheetNames.forEach(name=>{
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = name;
+          excelViewerSheetSelect.appendChild(opt);
+        });
+        excelViewerSheetSelect.style.display = currentWorkbook.SheetNames.length > 1 ? '' : 'none';
+        btnExcelViewerAttachChat.style.display = '';
+        renderSheet(currentWorkbook.SheetNames[0]);
+      }catch(err){
+        showToast('엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err), 'error');
+      }
+    });
+
+    excelViewerSheetSelect.addEventListener('change', ()=> renderSheet(excelViewerSheetSelect.value));
+
+    btnExcelViewerAttachChat.addEventListener('click', ()=>{
+      if (!currentWorkbook) return;
+      const name = excelViewerSheetSelect.value || currentWorkbook.SheetNames[0];
+      const ws = currentWorkbook.Sheets[name];
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      const chunk = '[엑셀: ' + excelViewerFileName.textContent + ' - ' + name + ' 시트]\n' + csv;
+      chatInputEl.value = chatInputEl.value ? (chatInputEl.value + '\n\n' + chunk) : chunk;
+      showToast('시트 내용을 입력창에 첨부했습니다.', 'success');
+      excelViewerOverlay.style.display = 'none';
+    });
+  })();
 
   document.getElementById('btnPdfMgrCheckAll').addEventListener('click', ()=>{
     if (!pdfMgrEntries.length) return;
