@@ -3747,6 +3747,7 @@ graph TD
   const btnAskGem = document.getElementById('btnAskGem');
   const gemContextCountSelect = document.getElementById('gemContextCount');
   const pendingGemBubbles = {}; // requestId -> 그 질문에 대한 "대기 중" 말풍선 DOM 엘리먼트
+  const pendingGemAnswerPrefix = {}; // requestId -> 답변에 붙일 라벨(🔮 단독인지 ⚖ 동시비교인지 구분)
 
   // 선택한 "직전 대화 몇 개"를 기억해뒀다가 다음에 열 때도 그대로 유지한다.
   const GEM_CONTEXT_COUNT_KEY = 'nx_gem_context_count';
@@ -3788,20 +3789,24 @@ graph TD
     if (msg.type === 'NX_GEM_ANSWER'){
       const bubble = pendingGemBubbles[msg.requestId];
       if (bubble){
+        const prefix = pendingGemAnswerPrefix[msg.requestId] || '🔮 Gem';
         bubble.classList.remove('gem-pending');
         bubble.classList.add('gem');
-        bubble.textContent = '🔮 Gem: ' + (msg.answer || '(빈 응답)');
+        bubble.textContent = prefix + ': ' + (msg.answer || '(빈 응답)');
         delete pendingGemBubbles[msg.requestId];
+        delete pendingGemAnswerPrefix[msg.requestId];
       }
       return true;
     }
     if (msg.type === 'NX_GEM_ERROR'){
       const bubble = pendingGemBubbles[msg.requestId];
       if (bubble){
+        const prefix = pendingGemAnswerPrefix[msg.requestId] || '🔮 Gem';
         bubble.classList.remove('gem-pending');
         bubble.classList.add('gem');
-        bubble.textContent = '🔮 Gem 자문 실패: ' + (msg.error || '알 수 없는 오류');
+        bubble.textContent = prefix + ' 자문 실패: ' + (msg.error || '알 수 없는 오류');
         delete pendingGemBubbles[msg.requestId];
+        delete pendingGemAnswerPrefix[msg.requestId];
       }
       return true;
     }
@@ -3828,37 +3833,49 @@ graph TD
   async function askGem(rawQuestion, opts){
     opts = opts || {};
     if (!rawQuestion){ showToast('제미니에게 물어볼 내용이 없습니다.', 'warning'); return; }
-    const connected = await ensureExtConnected_();
-    if (!connected){
-      showToast('외부조회 커넥터 확장프로그램과 연결하지 못했습니다. 🔌 버튼으로 다시 시도해주세요.', 'warning');
-      return;
-    }
-    const turnCount = gemContextCountSelect ? parseInt(gemContextCountSelect.value, 10) || 0 : 0;
-    const contextText = buildRecentContextText_(turnCount);
-    const fullQuestion = contextText + rawQuestion;
 
-    const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    // 말풍선부터 무조건 먼저(연결 여부와 무관하게) 만든다 — 연결 확인이 실패해도 작은 토스트만
+    // 뜨고 사라져서 "완전 먹통"처럼 보이는 문제가 있었다. 이제는 항상 뭔가 눈에 보이고,
+    // 실패해도 그 말풍선 안에 이유가 남는다.
+    const turnCount = gemContextCountSelect ? parseInt(gemContextCountSelect.value, 10) || 0 : 0;
     const contextNote = turnCount ? (' (직전 대화 ' + turnCount + '개 포함)') : '';
     const label = opts.label || '🔮 Gem에게 물어봄';
+    const answerPrefix = opts.label ? opts.label.replace(/에게 물어봄$/, '') : '🔮 Gem';
+    const requestId = 'gem_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     appendBubble('user', label + contextNote + ': ' + rawQuestion);
-    const pendingBubble = appendBubble('assistant', '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)');
+    const pendingBubble = appendBubble('assistant', '🔮 확장프로그램 연결 확인 중…');
     pendingBubble.classList.remove('ai');
     pendingBubble.classList.add('gem-pending');
     pendingGemBubbles[requestId] = pendingBubble;
+    pendingGemAnswerPrefix[requestId] = answerPrefix;
+
+    function fail(text){
+      pendingBubble.classList.remove('gem-pending');
+      pendingBubble.classList.add('gem');
+      pendingBubble.textContent = answerPrefix + ' 자문 실패: ' + text;
+      delete pendingGemBubbles[requestId];
+      delete pendingGemAnswerPrefix[requestId];
+    }
+
+    const connected = await ensureExtConnected_();
+    if (!connected){
+      fail('외부조회 커넥터 확장프로그램과 연결하지 못했습니다. 🔌 버튼으로 다시 연결해보세요.');
+      return;
+    }
+
+    pendingBubble.textContent = '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)';
+    const contextText = buildRecentContextText_(turnCount);
+    const fullQuestion = contextText + rawQuestion;
 
     try{
       nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
     }catch(err){
-      pendingBubble.classList.remove('gem-pending');
-      pendingBubble.classList.add('gem');
-      pendingBubble.textContent = '🔮 Gem 자문 실패: 확장프로그램과 통신하지 못했습니다.';
-      delete pendingGemBubbles[requestId];
+      fail('확장프로그램과 통신하지 못했습니다.');
     }
   }
 
   if (btnAskGem){
     btnAskGem.addEventListener('click', ()=>{
-      showToast('[진단] 🔮 버튼 클릭 감지됨', 'info'); // 문제 해결되면 이 줄은 지울 예정
       const rawQuestion = chatInputEl.value.trim();
       askGem(rawQuestion);
       if (rawQuestion) chatInputEl.value = ''; // NX에게 보내는 채팅과 섞이지 않도록 입력창은 비운다
@@ -3877,6 +3894,9 @@ graph TD
       const question = chatInputEl.value.trim();
       if (!question){ showToast('NX와 Gem에게 동시에 물어볼 내용을 입력창에 먼저 입력하세요.', 'warning'); return; }
       askGem(question, { label: '⚖ 동시비교 — Gem에게 물어봄' });
+      // askGem 호출 이후 무슨 이유로든 입력창 내용이 흔들렸을 가능성에 대비해, sendChatMessage
+      // 직전에 다시 한번 명시적으로 채워 넣는다 — NX 전송이 빠지는 일이 없도록 하는 안전장치.
+      chatInputEl.value = question;
       sendChatMessage(); // NX에게도 같은 질문을 그대로 전송(입력창은 이 함수가 알아서 비운다)
     });
   }
