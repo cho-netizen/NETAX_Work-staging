@@ -7218,12 +7218,26 @@ graph TD
       if (typeof XLSX === 'undefined'){ showToast('엑셀 처리 라이브러리를 불러오지 못했습니다.', 'error'); return; }
       try{
         const data = await callGas('readFile', { fileId: file.id });
-        if (data.error || !data.base64) throw new Error(data.error || '파일을 읽지 못했습니다.');
-        const binary = atob(data.base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        loadWorkbookIntoViewer(XLSX.read(bytes, { type: 'array' }), file.name);
+        console.log('[엑셀뷰어] readFile 응답:', data); // 원인 파악용 — F12 콘솔에서 확인 가능
+        if (data.error) throw new Error('서버 오류: ' + data.error);
+        if (!data.base64) throw new Error('서버가 파일 내용을 돌려주지 않았습니다 (base64 없음).');
+
+        let bytes;
+        try{
+          const binary = atob(data.base64);
+          bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        }catch(decodeErr){
+          throw new Error('base64 디코딩 실패: ' + (decodeErr && decodeErr.message ? decodeErr.message : decodeErr));
+        }
+
+        try{
+          loadWorkbookIntoViewer(XLSX.read(bytes, { type: 'array' }), file.name);
+        }catch(parseErr){
+          throw new Error('엑셀 파일 해석 실패(형식 손상 또는 미지원 형식): ' + (parseErr && parseErr.message ? parseErr.message : parseErr));
+        }
       }catch(err){
+        console.error('[엑셀뷰어] 드라이브 파일 열기 실패:', err);
         excelViewerTableWrap.innerHTML = '';
         showToast('엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err), 'error');
       }
