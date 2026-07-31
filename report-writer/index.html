@@ -2926,7 +2926,7 @@ function escapeHtml(s){
 
 // 편집 도구(툴바) 없이, 렌더링된 결과만 담은 완성본 HTML 문자열 생성
 // - 새창으로 보기, HTML 다운로드에서 공용으로 사용
-function buildStandaloneHtml(){
+function buildStandaloneHtml(includeBackButton){
   const d = getSelected();
   const title = d ? d.name : '문서';
   const liveRoot = document.getElementById('renderOut');
@@ -2995,13 +2995,35 @@ function buildStandaloneHtml(){
     + '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">';
   return '<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n'
     + '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+    + '<meta name="color-scheme" content="light">\n'
     + '<title>' + escapeHtml(title) + '</title>\n' + fonts + '\n'
     + '<style>\n' + styleText
     + '\n/* 이 완성본은 편집도구 화면이 아니라 독립 문서이므로, 툴 자체의 body 레이아웃(고정 높이・overflow 숨김)을 원래대로 되돌림 */'
     + '\nhtml,body{height:auto !important;}'
     + '\nbody{display:block !important; overflow:visible !important;}'
-    + '\n#standaloneWrap{overflow:auto; background:#e9eaee; padding:24px; min-height:100vh;}\n</style>\n'
-    + '</head>\n<body>\n<div id="standaloneWrap">\n' + articleHtml + '\n</div>\n'
+    + '\n#standaloneWrap{overflow:auto; background:#e9eaee; padding:24px; min-height:100vh;}'
+    + '\n#nxBackFloat{position:fixed; top:14px; left:14px; z-index:9999;}'
+    + '\n#nxBackFloat button{font-family:\'Noto Sans KR\',sans-serif; font-size:13px; font-weight:700; padding:9px 16px; border-radius:20px; border:1px solid #4a5268; background:#20242c; color:#e8e8ec; cursor:pointer; box-shadow:0 3px 10px rgba(0,0,0,0.25);}'
+    + '\n#nxBackFloat button:hover{background:#333a48;}'
+    + '\n@media print{ #nxBackFloat{display:none !important;} }\n</style>\n'
+    + '</head>\n<body>\n'
+    // 이 완성본은 editor-writer와 별개의 새 창(탭)으로 열리는데, 지금까지는 다시 편집기로 돌아갈
+    // 방법이 없어서(브라우저 자체 탭 닫기 말고는) 사용자가 직접 탭을 찾아 닫아야 했다.
+    // window.opener(이 창을 연 report-writer 탭)가 있으면 이 창만 닫아서 자동으로 편집기 탭으로
+    // 돌아가게 하고, 없으면(브라우저가 opener를 안 넘겨주는 특수한 경우) 이전 기록으로 이동을
+    // 시도한다. 다운로드해서 배포하는 HTML(고객에게 보내거나 rpt.netax.kr에 올리는 파일)에는
+    // opener가 있을 수 없고 사용자 본인 화면도 아니므로, "새 창으로 보기" 때만 넣는다.
+    + (includeBackButton
+      ? '<div id="nxBackFloat"><button type="button" id="nxBackBtn">← 편집기로 돌아가기</button></div>\n'
+        + '<script>\n'
+        + 'document.getElementById("nxBackBtn").addEventListener("click", function(){\n'
+        + '  if (window.opener && !window.opener.closed){ window.close(); }\n'
+        + '  else if (history.length > 1){ history.back(); }\n'
+        + '  else { alert("이 창(탭)은 브라우저에서 직접 닫아주세요."); }\n'
+        + '});\n'
+        + '</' + 'script>\n'
+      : '')
+    + '<div id="standaloneWrap">\n' + articleHtml + '\n</div>\n'
     + statuteModalHtml + '\n' + statuteScript + '\n</body>\n</html>';
 }
 
@@ -3138,7 +3160,7 @@ async function downloadAsPdf(){
 
 function openInNewWindow(){
   if (!getSelected()) return;
-  const html = buildStandaloneHtml();
+  const html = buildStandaloneHtml(true); // true: "편집기로 돌아가기" 버튼 포함 (다운로드용과 구분)
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
