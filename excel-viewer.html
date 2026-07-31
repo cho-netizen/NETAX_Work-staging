@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>엑셀 보기 — NX</title>
+<script src="/config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  :root{
+    --bg:#e9eaee; --panel:#ffffff; --line:#d8dce3; --ink:#1b2430; --sub:#6b7280; --gold:#C8A244;
+  }
+  *{ box-sizing:border-box; }
+  html, body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif; }
+  body{ display:flex; flex-direction:column; }
+
+  #toolbar{ flex:0 0 auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); }
+  #toolbar .fname{ font-size:12.5px; color:var(--sub); margin-left:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #toolbar select, #toolbar button, #toolbar input[type=file]::file-selector-button{
+    font-family:inherit; font-size:12.5px; padding:6px 10px; border:1px solid var(--line);
+    border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer;
+  }
+  #toolbar button:hover{ background:var(--bg); }
+  #toolbar select{ max-width:220px; }
+  #fileInput{ display:none; }
+  .spacer{ flex:1 1 auto; }
+  .hint{ font-size:11.5px; color:var(--sub); }
+
+  #tableWrap{ flex:1 1 auto; overflow:auto; background:var(--panel); }
+  #tableWrap .empty{ padding:40px; text-align:center; color:var(--sub); font-size:13px; }
+  table{ border-collapse:collapse; font-size:12.5px; }
+  td, th{ border:1px solid var(--line); padding:4px 8px; white-space:nowrap; }
+  th{ background:var(--bg); position:sticky; top:0; }
+
+  body.dark-mode{ --bg:#0f1117; --panel:#1b1f29; --line:#333947; --ink:#e6e8ee; --sub:#9aa0ad; }
+</style>
+</head>
+<body>
+  <div id="toolbar">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    <button type="button" id="btnPick">📁 다른 엑셀 파일 선택</button>
+    <select id="sheetSelect" style="display:none;"></select>
+    <button type="button" id="btnAttachChat" style="display:none;" title="지금 보이는 시트 내용을 채팅 참조로 보냅니다">💬 채팅에 참조로 보내기</button>
+    <span class="fname" id="fname"></span>
+    <div class="spacer"></div>
+    <span class="hint">표에서 범위를 드래그해 복사한 뒤, 편집창(md)에 붙여넣으면 표 모양 그대로 반영됩니다</span>
+  </div>
+  <div id="tableWrap"><div class="empty">불러오는 중…</div></div>
+
+<script>
+(function(){
+  const GAS_URL = (window.NX_CONFIG && window.NX_CONFIG.GAS_URL) || '';
+
+  const fileInput = document.getElementById('fileInput');
+  const btnPick = document.getElementById('btnPick');
+  const sheetSelect = document.getElementById('sheetSelect');
+  const btnAttachChat = document.getElementById('btnAttachChat');
+  const fnameEl = document.getElementById('fname');
+  const tableWrap = document.getElementById('tableWrap');
+
+  let currentWorkbook = null;
+
+  // 부모(NX-Work) 창이 다크모드면 이 창도 맞춰준다 — window.opener는 동일 출처라 클래스 확인 가능.
+  try{
+    if (window.opener && window.opener.document.body.classList.contains('dark-mode')){
+      document.body.classList.add('dark-mode');
+    }
+  }catch(e){}
+
+  async function callGas(action, payload){
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS doPost 단순 요청 규약과 동일하게 맞춤
+      body: JSON.stringify(Object.assign({ action: action }, payload))
+    });
+    if (!res.ok) throw new Error('네트워크 오류 (status ' + res.status + ')');
+    return res.json();
+  }
+
+  function renderSheet(name){
+    if (!currentWorkbook) return;
+    const ws = currentWorkbook.Sheets[name];
+    if (!ws){ tableWrap.innerHTML = '<div class="empty">시트를 찾을 수 없습니다.</div>'; return; }
+    const html = XLSX.utils.sheet_to_html(ws, { id: 'excelTable' });
+    tableWrap.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
+  }
+
+  function loadWorkbookIntoViewer(workbook, displayName){
+    currentWorkbook = workbook;
+    fnameEl.textContent = displayName;
+    document.title = displayName + ' — 엑셀 보기';
+    sheetSelect.innerHTML = '';
+    currentWorkbook.SheetNames.forEach(function(name){
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sheetSelect.appendChild(opt);
+    });
+    sheetSelect.style.display = currentWorkbook.SheetNames.length > 1 ? '' : 'none';
+    btnAttachChat.style.display = '';
+    renderSheet(currentWorkbook.SheetNames[0]);
+  }
+
+  function b64ToBytes(b64){
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  async function loadFromDrive(fileId, fallbackName){
+    tableWrap.innerHTML = '<div class="empty">불러오는 중…</div>';
+    fnameEl.textContent = (fallbackName || '') + ' — 불러오는 중…';
+    if (typeof XLSX === 'undefined'){ tableWrap.innerHTML = '<div class="empty">엑셀 처리 라이브러리를 불러오지 못했습니다.</div>'; return; }
+    try{
+      const data = await callGas('readFileBinary', { fileId: fileId });
+      console.log('[엑셀뷰어] readFileBinary 응답:', data);
+      if (data.error) throw new Error('서버 오류: ' + data.error);
+      if (!data.base64) throw new Error('서버가 파일 내용을 돌려주지 않았습니다 (base64 없음).');
+      const bytes = b64ToBytes(data.base64);
+      loadWorkbookIntoViewer(XLSX.read(bytes, { type: 'array' }), data.name || fallbackName || '엑셀 파일');
+    }catch(err){
+      console.error('[엑셀뷰어] 드라이브 파일 열기 실패:', err);
+      tableWrap.innerHTML = '<div class="empty">엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err) + '</div>';
+    }
+  }
+
+  btnPick.addEventListener('click', function(){ fileInput.click(); });
+
+  fileInput.addEventListener('change', async function(e){
+    const file = e.target.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    if (typeof XLSX === 'undefined'){ tableWrap.innerHTML = '<div class="empty">엑셀 처리 라이브러리를 불러오지 못했습니다.</div>'; return; }
+    try{
+      const buf = await file.arrayBuffer();
+      loadWorkbookIntoViewer(XLSX.read(buf, { type: 'array' }), file.name);
+    }catch(err){
+      tableWrap.innerHTML = '<div class="empty">엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err) + '</div>';
+    }
+  });
+
+  sheetSelect.addEventListener('change', function(){ renderSheet(sheetSelect.value); });
+
+  // NX-Work(부모창) 채팅에 지금 보이는 시트를 참조로 보낸다 — report-writer의 참조(📎) 버튼과
+  // 완전히 같은 메시지 규약(nx-request-attach)을 재사용하므로 부모 쪽 코드는 손댈 필요가 없다.
+  btnAttachChat.addEventListener('click', function(){
+    if (!currentWorkbook || !window.opener || window.opener.closed) return;
+    const name = sheetSelect.value || currentWorkbook.SheetNames[0];
+    const ws = currentWorkbook.Sheets[name];
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    window.opener.postMessage({
+      type: 'nx-request-attach',
+      name: fnameEl.textContent + ' - ' + name + ' 시트',
+      content: csv
+    }, '*');
+    btnAttachChat.textContent = '✓ 보냈습니다';
+    setTimeout(function(){ btnAttachChat.textContent = '💬 채팅에 참조로 보내기'; }, 1500);
+  });
+
+  // 페이지 로드 시: URL에 fileId가 있으면(탐색창 클릭으로 열린 경우) 바로 드라이브에서 불러오고,
+  // 없으면(하단바 "엑셀 열기" 버튼으로 빈 상태로 열린 경우) 파일 선택 버튼을 눌러달라고 안내한다.
+  const params = new URLSearchParams(window.location.search);
+  const fileId = params.get('fileId');
+  const nameParam = params.get('name');
+  if (fileId){
+    loadFromDrive(fileId, nameParam);
+  } else {
+    tableWrap.innerHTML = '<div class="empty">"📁 다른 엑셀 파일 선택" 버튼을 눌러 엑셀 파일을 열어주세요.</div>';
+  }
+})();
+</script>
+</body>
+</html>

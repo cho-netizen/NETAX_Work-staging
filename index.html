@@ -1285,28 +1285,10 @@
     </div>
   </div>
 
-  <!-- 📊 엑셀 열기 — 고객이 준 엑셀 파일을 드라이브 업로드 없이 브라우저에서 바로 표로 확인.
-       SheetJS(xlsx 라이브러리)로 전부 로컬에서 처리하고 서버로는 전송하지 않는다. -->
-  <div class="modal-overlay" id="excelViewerOverlay" style="display:none;">
-    <div class="modal-panel" id="excelViewerPanel" style="max-width:820px; width:92vw;">
-      <div class="modal-head">
-        <span>📊 엑셀 열기</span>
-        <span class="modal-close" id="btnCloseExcelViewer" title="닫기">✕</span>
-      </div>
-      <div class="modal-body">
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <input type="file" id="excelViewerFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
-          <button type="button" id="btnExcelViewerPick" class="ghost-btn">📁 엑셀 파일 선택</button>
-          <select id="excelViewerSheetSelect" style="display:none; font-family:inherit; font-size:12.5px; padding:6px 8px; border:1px solid var(--line); border-radius:6px;"></select>
-          <button type="button" id="btnExcelViewerAttachChat" class="ghost-btn" style="display:none;" title="지금 보이는 시트 내용을 채팅에 텍스트로 첨부합니다">💬 채팅에 첨부</button>
-          <span id="excelViewerFileName" style="font-size:12px; color:var(--sub);"></span>
-        </div>
-        <div id="excelViewerTableWrap" style="margin-top:10px; overflow:auto; max-height:60vh; border:1px solid var(--line); border-radius:8px;">
-          <div style="padding:20px; text-align:center; color:var(--sub); font-size:12.5px;">엑셀 파일을 선택하면 여기에 표로 보여집니다.</div>
-        </div>
-      </div>
-    </div>
-  </div>
+
+  <!-- 📊 엑셀 열기는 이제 고정크기 모달이 아니라 excel-viewer.html을 독립창(window.open)으로
+       띄운다 — 크기조절이 안 되는 작은 창에 큰 엑셀시트를 욱여넣던 문제를 해결하기 위함.
+       (관련 스크립트: openExcelPopup, 하단부 "엑셀 열기" 그룹) -->
 
   <div class="floating-layer" id="fullEditorOverlay" style="display:none;">
     <div class="full-editor-panel" id="fullEditorPanel">
@@ -7147,129 +7129,33 @@ graph TD
     }
   });
 
-  // ---- 📊 엑셀 열기 — 고객이 준 엑셀 파일을 드라이브 업로드 없이 브라우저에서 바로 표로 확인
-  // (SheetJS). 전부 로컬에서 처리하고 서버로는 아무것도 전송하지 않는다.
-  (function(){
-    const excelViewerOverlay = document.getElementById('excelViewerOverlay');
-    const excelViewerFileInput = document.getElementById('excelViewerFileInput');
-    const excelViewerSheetSelect = document.getElementById('excelViewerSheetSelect');
-    const excelViewerTableWrap = document.getElementById('excelViewerTableWrap');
-    const excelViewerFileName = document.getElementById('excelViewerFileName');
-    const btnExcelViewerAttachChat = document.getElementById('btnExcelViewerAttachChat');
-
-    let currentWorkbook = null;
-
-    function openExcelViewerImpl(){
-      excelViewerOverlay.style.display = 'flex';
+  // ---- 📊 엑셀 열기 — excel-viewer.html을 크기조절 가능한 독립창(window.open)으로 연다.
+  // [패치 2026.07] 예전엔 페이지 안 고정크기(최대너비 820px, 높이 60vh) 모달이라 큰 시트를
+  // 작업하기 어려웠다("작고 고정된 창으로 어떻게 작업하나" 지적) — report-writer 편집창과
+  // 완전히 같은 방식(파일별 독립 팝업, OS 창닫기/크기조절/최대화 그대로 지원)으로 바꿨다.
+  // 실제 렌더링·SheetJS 로직은 전부 excel-viewer.html로 옮겼고, 여기는 그 창을 열고
+  // 파일별로 재사용하는 역할만 한다.
+  const excelPopupWins = {};
+  function excelPopupKey(file){ return file ? ('f_' + file.id) : '__blank__'; }
+  function openExcelPopup(file){
+    const key = excelPopupKey(file);
+    const url = 'excel-viewer.html' + (file ? ('?fileId=' + encodeURIComponent(file.id) + '&name=' + encodeURIComponent(file.name)) : '');
+    const existing = excelPopupWins[key];
+    if (existing && !existing.closed){ existing.focus(); return; }
+    const w = Math.round(window.innerWidth * 0.85);
+    const h = Math.round(window.innerHeight * 0.85);
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const win = window.open(url, 'nxExcelWindow_' + key, 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!win){
+      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
+      return;
     }
-    window.openExcelViewer = openExcelViewerImpl; // 도구 그룹 목록 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
-
-    document.getElementById('btnCloseExcelViewer').addEventListener('click', ()=>{
-      excelViewerOverlay.style.display = 'none';
-    });
-    document.getElementById('btnExcelViewerPick').addEventListener('click', ()=> excelViewerFileInput.click());
-
-    function renderSheet(name){
-      if (!currentWorkbook) return;
-      const ws = currentWorkbook.Sheets[name];
-      if (!ws){ excelViewerTableWrap.innerHTML = '<div style="padding:20px; color:var(--sub);">시트를 찾을 수 없습니다.</div>'; return; }
-      const html = XLSX.utils.sheet_to_html(ws, { id: 'excelViewerTable' });
-      excelViewerTableWrap.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
-      // SheetJS 기본 표 스타일이 화면 톤과 안 맞아서 살짝 다듬는다.
-      const table = excelViewerTableWrap.querySelector('table');
-      if (table){
-        table.style.borderCollapse = 'collapse';
-        table.style.width = '100%';
-        table.style.fontSize = '12.5px';
-        table.querySelectorAll('td, th').forEach(cell=>{
-          cell.style.border = '1px solid var(--line)';
-          cell.style.padding = '4px 8px';
-          cell.style.whiteSpace = 'nowrap';
-        });
-      }
-    }
-
-    // 워크북을 읽은 뒤 시트 목록·표를 화면에 반영하는 공통 마무리 — 로컬 파일 선택이든
-    // 드라이브 파일(readFile)이든 이 함수 하나로 처리한다.
-    function loadWorkbookIntoViewer(workbook, displayName){
-      currentWorkbook = workbook;
-      excelViewerFileName.textContent = displayName;
-      excelViewerSheetSelect.innerHTML = '';
-      currentWorkbook.SheetNames.forEach(name=>{
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name;
-        excelViewerSheetSelect.appendChild(opt);
-      });
-      excelViewerSheetSelect.style.display = currentWorkbook.SheetNames.length > 1 ? '' : 'none';
-      btnExcelViewerAttachChat.style.display = '';
-      renderSheet(currentWorkbook.SheetNames[0]);
-    }
-
-    // 탐색창에서 엑셀 파일을 클릭했을 때 여기로 연다 — 예전엔 구글드라이브 자체 미리보기로 열려서
-    // 원본과 똑같이 보이긴 해도 셀 범위를 긁어 복사할 수 없었다. 여기서는 우리 페이지 안의 진짜
-    // <table> DOM으로 그리기 때문에 드래그 선택・복사가 그대로 되고, report-writer 편집창에
-    // 붙여넣으면 마크다운 표로 자동 변환된다(엑셀뷰어 자체와 완전히 같은 경험).
-    async function openExcelViewerFromDriveImpl(file){
-      excelViewerOverlay.style.display = 'flex';
-      excelViewerSheetSelect.style.display = 'none';
-      btnExcelViewerAttachChat.style.display = 'none';
-      excelViewerFileName.textContent = file.name + ' — 불러오는 중…';
-      excelViewerTableWrap.innerHTML = '<div style="padding:20px; color:var(--sub);">불러오는 중…</div>';
-      if (typeof XLSX === 'undefined'){ showToast('엑셀 처리 라이브러리를 불러오지 못했습니다.', 'error'); return; }
-      try{
-        const data = await callGas('readFileBinary', { fileId: file.id });
-        console.log('[엑셀뷰어] readFileBinary 응답:', data); // 원인 파악용 — F12 콘솔에서 확인 가능
-        if (data.error) throw new Error('서버 오류: ' + data.error);
-        if (!data.base64) throw new Error('서버가 파일 내용을 돌려주지 않았습니다 (base64 없음).');
-
-        let bytes;
-        try{
-          const binary = atob(data.base64);
-          bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        }catch(decodeErr){
-          throw new Error('base64 디코딩 실패: ' + (decodeErr && decodeErr.message ? decodeErr.message : decodeErr));
-        }
-
-        try{
-          loadWorkbookIntoViewer(XLSX.read(bytes, { type: 'array' }), file.name);
-        }catch(parseErr){
-          throw new Error('엑셀 파일 해석 실패(형식 손상 또는 미지원 형식): ' + (parseErr && parseErr.message ? parseErr.message : parseErr));
-        }
-      }catch(err){
-        console.error('[엑셀뷰어] 드라이브 파일 열기 실패:', err);
-        excelViewerTableWrap.innerHTML = '';
-        showToast('엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err), 'error');
-      }
-    }
-    window.openExcelViewerFromDriveFile = openExcelViewerFromDriveImpl; // openEditor(탐색창 클릭)에서 사용
-
-    excelViewerFileInput.addEventListener('change', async (e)=>{
-      const file = e.target.files[0];
-      excelViewerFileInput.value = '';
-      if (!file) return;
-      if (typeof XLSX === 'undefined'){ showToast('엑셀 처리 라이브러리를 불러오지 못했습니다.', 'error'); return; }
-      try{
-        const buf = await file.arrayBuffer();
-        loadWorkbookIntoViewer(XLSX.read(buf, { type: 'array' }), file.name);
-      }catch(err){
-        showToast('엑셀 파일을 여는 데 실패했습니다: ' + (err && err.message ? err.message : err), 'error');
-      }
-    });
-
-    excelViewerSheetSelect.addEventListener('change', ()=> renderSheet(excelViewerSheetSelect.value));
-
-    btnExcelViewerAttachChat.addEventListener('click', ()=>{
-      if (!currentWorkbook) return;
-      const name = excelViewerSheetSelect.value || currentWorkbook.SheetNames[0];
-      const ws = currentWorkbook.Sheets[name];
-      const csv = XLSX.utils.sheet_to_csv(ws);
-      const chunk = '[엑셀: ' + excelViewerFileName.textContent + ' - ' + name + ' 시트]\n' + csv;
-      chatInputEl.value = chatInputEl.value ? (chatInputEl.value + '\n\n' + chunk) : chunk;
-      showToast('시트 내용을 입력창에 첨부했습니다.', 'success');
-      excelViewerOverlay.style.display = 'none';
-    });
-  })();
+    excelPopupWins[key] = win;
+    win.focus();
+  }
+  window.openExcelViewer = function(){ openExcelPopup(null); }; // 도구 그룹 목록 등록 시점보다 나중에 정의되므로 전역에 걸어둠 (하단바 "📊 엑셀 열기" 버튼용)
+  window.openExcelViewerFromDriveFile = function(file){ openExcelPopup(file); }; // 탐색창에서 엑셀 파일 클릭했을 때(openEditor)
 
   document.getElementById('btnPdfMgrCheckAll').addEventListener('click', ()=>{
     if (!pdfMgrEntries.length) return;
