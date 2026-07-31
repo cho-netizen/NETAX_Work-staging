@@ -3163,7 +3163,16 @@ function openInNewWindow(){
   const html = buildStandaloneHtml(true); // true: "편집기로 돌아가기" 버튼 포함 (다운로드용과 구분)
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  // [패치 2026.07] window.open(url, '_blank')처럼 창 크기를 안 주면, 브라우저는 이걸 그냥 "새 탭"으로
+  // 취급해서 주소창・탭이 있는 일반 브라우저 창 쪽으로 열어버린다 — 지금 이 편집기 자체가 주소창・탭이
+  // 없는 팝업창이라 탭을 못 담기 때문. 그러면 완성본이 엉뚱한 브라우저 창으로 튀어나가고 편집기
+  // 팝업은 뒤로 가려져 "사라진 것처럼" 보이는 문제가 있었다. 편집기 팝업과 똑같이 크기를 지정해서
+  // 열면 이것도 진짜 독립 팝업창이 되어, 편집기 창과 나란히 남아있는다.
+  const w = Math.round(window.innerWidth * 0.9);
+  const h = Math.round(window.innerHeight * 0.9);
+  const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+  const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+  window.open(url, 'nxStandaloneView', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
   // 새 창이 파일을 불러갈 시간을 준 뒤 임시 URL 정리 (바로 지우면 새 창에서 못 열 수 있음)
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
