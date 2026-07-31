@@ -2454,7 +2454,38 @@ document.getElementById('mdInput').addEventListener('input', () => {
 // text/html(선택한 셀 그대로의 <table> 구조)도 함께 담아준다. 지금까지는 text/plain만
 // 그대로 붙여써서 표 모양이 사라지고 AI에게 "표를 그려달라"고 다시 부탁해야 했는데,
 // 그 text/html 표를 가로채 마크다운 표 문법으로 직접 변환해서 붙여넣는다 — 엑셀에서 만든
-// 행・열 모양을 그대로 가져오는 게 목적이라, AI가 손대지 않는다. ----------
+// 행・열 모양을 그대로 가져오는 게 목적이라, AI가 손대지 않는다.
+// [패치 2026.07] 일반 텍스트 파일 안에서 탭으로 줄맞춰 만들어둔 "표처럼 보이는" 부분을 복사해
+// 붙여넣을 때도(=text/html에 표가 없고 text/plain에 탭만 있는 경우) 똑같이 표로 인식하도록 확장.
+// ----------
+
+// 이미 텍스트로 추출된 grid(문자열 2차원 배열)를 마크다운 표 문법으로 만든다 — HTML 표든
+// 탭으로 구분된 순수 텍스트든, 일단 grid로만 만들어지면 이 함수 하나로 처리한다.
+function gridToMarkdownTable_(grid){
+  if (!grid || !grid.length) return null;
+
+  function cellText(raw){
+    // 셀 안에 줄바꿈이 있으면 마크다운 표 한 줄이 깨지므로 <br>로 바꾸고, 파이프(|)는 이스케이프한다.
+    let t = String(raw == null ? '' : raw).replace(/\r\n|\r|\n/g, '<br>').trim();
+    t = t.replace(/\|/g, '\\|');
+    return t || ' ';
+  }
+
+  const cleaned = grid.map(row => row.map(cellText));
+  // 병합된 셀 등으로 행마다 열 개수가 다를 수 있어, 가장 긴 행 기준으로 빈 칸을 채워 맞춘다.
+  const colCount = Math.max.apply(null, cleaned.map(r => r.length));
+  cleaned.forEach(r => { while (r.length < colCount) r.push(' '); });
+
+  const header = cleaned[0];
+  const body = cleaned.slice(1);
+
+  const lines = [];
+  lines.push('| ' + header.join(' | ') + ' |');
+  lines.push('|' + header.map(() => ':--').join('|') + '|');
+  body.forEach(r => lines.push('| ' + r.join(' | ') + ' |'));
+  return lines.join('\n');
+}
+
 function htmlTableToMarkdown_(tableEl){
   const rows = Array.from(tableEl.querySelectorAll('tr'));
   if (!rows.length) return null;
@@ -2465,47 +2496,69 @@ function htmlTableToMarkdown_(tableEl){
   const totalCells = rows.reduce((sum, tr) => sum + cellsOf(tr).length, 0);
   if (totalCells <= 1) return null;
 
-  function cellText(cell){
-    // 셀 안에 줄바꿈이 있으면 마크다운 표 한 줄이 깨지므로 <br>로 바꾸고, 파이프(|)는 이스케이프한다.
-    let t = (cell.textContent || '').replace(/\r\n|\r|\n/g, '<br>').trim();
-    t = t.replace(/\|/g, '\\|');
-    return t || ' ';
-  }
+  const grid = rows.map(tr => cellsOf(tr).map(cell => cell.textContent));
+  return gridToMarkdownTable_(grid);
+}
 
-  const grid = rows.map(tr => cellsOf(tr).map(cellText));
-  // 병합된 셀 등으로 행마다 열 개수가 다를 수 있어, 가장 긴 행 기준으로 빈 칸을 채워 맞춘다.
-  // (셀 병합 자체(rowspan/colspan)까지 완벽히 재현하지는 못한다 — 필요하면 붙여넣은 뒤 직접 다듬어야 함)
-  const colCount = Math.max.apply(null, grid.map(r => r.length));
-  grid.forEach(r => { while (r.length < colCount) r.push(' '); });
+// 탭으로 구분된 순수 텍스트(엑셀이 아니라 일반 텍스트 파일에서 복사한 경우 등)가 진짜 "표처럼
+// 줄맞춰진 것"인지 판별해서 grid를 돌려준다 — 아니면(코드 들여쓰기에 우연히 탭이 섞인 경우 등)
+// null을 돌려줘서 평소처럼 기본 붙여넣기가 되게 한다. 오판을 막기 위한 조건:
+//  - 최소 2줄(헤더+데이터 1줄) 이상
+//  - 모든 줄에 탭이 최소 1개(=2열 이상) 있어야 함
+//  - 줄마다 열 개수가 들쭉날쭉하면(진짜 표라면 보통 열 개수가 맞음) 표로 보지 않음
+//    (가장 흔한 열 개수를 가진 줄이 80% 미만이면 포기)
+function parseTsvToGrid_(text){
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop(); // 끝의 빈 줄 제거
+  if (lines.length < 2) return null;
 
-  const header = grid[0];
-  const body = grid.slice(1);
+  const rows = lines.map(l => l.split('\t'));
+  if (rows.some(r => r.length < 2)) return null; // 탭이 하나도 없는 줄이 섞여있으면 표가 아님
 
-  const lines = [];
-  lines.push('| ' + header.join(' | ') + ' |');
-  lines.push('|' + header.map(() => ':--').join('|') + '|');
-  body.forEach(r => lines.push('| ' + r.join(' | ') + ' |'));
-  return lines.join('\n');
+  const counts = {};
+  rows.forEach(r => { counts[r.length] = (counts[r.length] || 0) + 1; });
+  const mode = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+  if (counts[mode] / rows.length < 0.8) return null; // 열 개수가 너무 들쭉날쭉하면 표로 보지 않음
+
+  return rows;
 }
 
 document.getElementById('mdInput').addEventListener('paste', (e) => {
   const html = e.clipboardData && e.clipboardData.getData('text/html');
-  if (!html || !/<table[\s>]/i.test(html)) return; // 표가 아니면 원래대로 기본 붙여넣기 동작
+  if (html && /<table[\s>]/i.test(html)){
+    let table = null;
+    try{
+      const safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
+      table = new DOMParser().parseFromString(safeHtml, 'text/html').querySelector('table');
+    }catch(err){ table = null; }
 
-  let table = null;
-  try{
-    const safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
-    table = new DOMParser().parseFromString(safeHtml, 'text/html').querySelector('table');
-  }catch(err){ table = null; }
-  if (!table) return;
+    const md = table ? htmlTableToMarkdown_(table) : null;
+    if (md){
+      e.preventDefault();
+      document.execCommand('insertText', false, md); // insertText로 넣어야 실행취소(Ctrl+Z)와 input 이벤트(자동저장)가 정상 동작한다
+      flashSaveState('엑셀 표 모양대로 붙여넣었습니다');
+      return;
+    }
+    // 표 HTML은 있었는데 변환이 안 됐으면(셀 1개 이하 등) 아래 탭-텍스트 판별로 넘어가지 않고
+    // 그냥 평소처럼 기본 붙여넣기가 되게 둔다 — html이 있다는 건 이미 위에서 판단이 끝난 것이므로.
+    return;
+  }
 
-  const md = htmlTableToMarkdown_(table);
-  if (!md) return; // 셀 1개 이하 등 표로 볼 수 없는 경우엔 평소처럼 붙여넣게 둔다
-
-  e.preventDefault();
-  document.execCommand('insertText', false, md); // insertText로 넣어야 실행취소(Ctrl+Z)와 input 이벤트(자동저장)가 정상 동작한다
-  flashSaveState('엑셀 표 모양대로 붙여넣었습니다');
+  // text/html에 표가 없으면(엑셀이 아니라 일반 텍스트 파일 등에서 복사한 경우), 탭으로 줄맞춰진
+  // 텍스트인지 확인해서 표처럼 보이면 마크다운 표로 변환한다.
+  const plain = e.clipboardData && e.clipboardData.getData('text/plain');
+  if (plain && plain.indexOf('\t') !== -1){
+    const grid = parseTsvToGrid_(plain);
+    const md = grid ? gridToMarkdownTable_(grid) : null;
+    if (md){
+      e.preventDefault();
+      document.execCommand('insertText', false, md);
+      flashSaveState('탭으로 구분된 내용을 표로 붙여넣었습니다');
+    }
+    // 표로 안 보이면 아무것도 안 하고 기본 붙여넣기 그대로 둔다.
+  }
 });
+
 
 document.getElementById('btnDocPlus').addEventListener('click', (e) => {
   e.stopPropagation();
