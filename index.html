@@ -6325,8 +6325,17 @@ graph TD
   // 편집창: 폰(좁은 화면)에서는 상담메모창과 똑같이 페이지 안에서 전체화면으로 띄우고,
   // PC·태블릿에서는 진짜 브라우저 새 창(window.open)으로 연다 — 크기조절·이동·최대화를
   // 우리가 직접 흉내내는 대신 OS/브라우저에게 그대로 맡긴다(훨씬 더 자연스럽고 안정적).
+  // stage-compact는 "폰이냐 PC냐"가 아니라 지금 브라우저 창의 픽셀 너비(툴바가 한 줄에 다
+  // 들어가는지)를 재는 반응형 CSS 상태라서, PC에서 창을 안 넓게 펼쳐두면 편집기 버튼이 오작동
+  // (독립창 대신 폰용 전체화면 오버레이로 열림)했었다. 독립창(window.open)을 지원하는지는 화면
+  // 폭이 아니라 "진짜 터치 전용 기기인지"로 판단해야 한다 — 포인터 정밀도(마우스=fine,
+  // 손가락=coarse)로 실제 기기 종류를 확인한다.
+  function isTouchOnlyDevice_(){
+    return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  }
+
   function openFullEditor(){
-    if (document.body.classList.contains('stage-compact')){
+    if (isTouchOnlyDevice_()){
       const url = currentOpenFile
         ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id))
         : REPORT_WRITER_URL;
@@ -6334,9 +6343,10 @@ graph TD
       fullEditorOverlay.style.display = 'block';
       return;
     }
-    // PC・태블릿: 탐색창 클릭으로 여는 것과 완전히 같은 독립창 로직을 공유한다(openEditorPopup).
-    // 이렇게 하나로 합쳐 놔야 어느 쪽으로 열어도 같은 창을 재사용하고, AI 적용·참조·새로고침이
-    // 항상 똑같이 동작한다(예전엔 이 버튼의 window.open이 지역변수였어서 전역에서 추적이 안 됐음).
+    // PC・태블릿(마우스 있는 환경): 탐색창 클릭으로 여는 것과 완전히 같은 독립창 로직을 공유한다
+    // (openEditorPopup). 이렇게 하나로 합쳐 놔야 어느 쪽으로 열어도 같은 창을 재사용하고, AI
+    // 적용·참조·새로고침이 항상 똑같이 동작한다(예전엔 이 버튼의 window.open이 지역변수였어서
+    // 전역에서 추적이 안 됐음).
     openEditorPopup(currentOpenFile || null);
   }
   function closeFullEditor(){
