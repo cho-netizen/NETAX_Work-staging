@@ -5891,14 +5891,28 @@ graph TD
   let pendingSaveOnDone = null;  // 저장이 끝난 뒤 호출할 콜백(그 화면 닫기 등)
   let pendingSaveCustomHandler = null; // 설정돼 있으면 기본 저장 로직 대신 이 함수(customerName)=>boolean 를 쓴다(사건개시 등)
 
-  // "일반메모" 폴더 위치 — 기본폴더(basePath, "0 NETAX") 바로 아래, 고객 폴더들과 나란히.
-  // basePath는 페이지가 열리자마자 비동기로 채워지는데, 메모 화면을 그 로딩이 끝나기 전에
-  // 아주 빨리 열면(예: 페이지 열자마자 바로 메모부터 쓰는 경우) 아직 빈 배열이어서 진짜
-  // 드라이브 루트에 폴더가 생겨버리는 문제가 있었다 — 비어있으면 한 번 더 확실하게 받아온
-  // 뒤에 쓰도록 만들었다.
+  // "일반메모" 폴더 위치 — <고객사건>(사건 파일 전용, basePath가 가리키는 곳)이 아니라
+  // <0 NETAX>(넥스 시스템 환경설정 폴더) 바로 아래여야 한다. [패치 2026.07] 예전엔 이 함수가
+  // basePath(=고객사건)를 "0 NETAX"인 것처럼 잘못 가정해서, 일반메모가 엉뚱하게
+  // 고객사건/일반메모에 저장되고 있었다 — 서버의 getNetaxRootPath 액션으로 진짜 "0 NETAX"
+  // 경로를 물어보도록 고쳤다. 한 번 받아오면 이 세션 동안은 캐시해서 재사용한다.
+  let netaxRootPathCache = null;
   async function generalMemoParentPath_(){
-    if (basePath && basePath.length) return basePath;
-    await loadCustomers();
+    if (netaxRootPathCache && netaxRootPathCache.length) return netaxRootPathCache;
+    try{
+      const data = await callGas('getNetaxRootPath', {});
+      if (data && !data.error && Array.isArray(data.path)){
+        netaxRootPathCache = data.path;
+        return netaxRootPathCache;
+      }
+      console.error('[일반메모] "0 NETAX" 경로 조회 실패:', data && data.error);
+    }catch(err){
+      console.error('[일반메모] "0 NETAX" 경로 조회 중 오류:', err);
+    }
+    // 서버가 "0 NETAX" 경로를 못 줄 때(스크립트 속성 미설정 등)는, 저장 자체가 아예 실패하는 것보다
+    // 낫도록 예전처럼 기본 작업 폴더(고객사건) 아래로라도 폴백한다 — 다만 잘못된 위치이니 알린다.
+    showToast('"0 NETAX" 폴더 위치를 확인하지 못해 임시로 기본 작업 폴더 아래에 저장합니다. Code.gs의 NETAX_ROOT_FOLDER_ID(또는 BUSINESS_MANAGER_FOLDER_ID) 설정을 확인해주세요.', 'warning');
+    if (!basePath || !basePath.length) await loadCustomers();
     return basePath;
   }
   async function generalMemoPath_(){
@@ -6186,16 +6200,20 @@ graph TD
       quickMemoSearchDropdown.style.display = 'block';
     }
 
-    quickMemoGeneralSearch.addEventListener('input', ()=>{
-      const val = quickMemoGeneralSearch.value.trim();
-      if (!val){ quickMemoSearchDropdown.style.display = 'none'; return; }
-      const results = comboFuse
+    // 검색어가 비어있으면 저장된 메모+템플릿 전체 목록을, 있으면 그 검색어로 걸러진 결과를 돌려준다.
+    function comboResultsFor_(val){
+      if (!val) return comboEntries;
+      return comboFuse
         ? comboFuse.search(val).map(r => r.item)
         : comboEntries.filter(en => en.label.indexOf(val) !== -1); // Fuse 로드 실패 시 단순 포함검색으로 대체
-      renderSearchDropdown_(results);
+    }
+    quickMemoGeneralSearch.addEventListener('input', ()=>{
+      renderSearchDropdown_(comboResultsFor_(quickMemoGeneralSearch.value.trim()));
     });
+    // 클릭(포커스)만 해도 바로 전체 목록이 보이도록 — 타이핑을 해야만 목록이 뜨던 예전 방식은
+    // "메모 열기·템플릿으로 사건개시를 그냥 클릭해서 봤었다"는 사용 방식과 안 맞았다.
     quickMemoGeneralSearch.addEventListener('focus', ()=>{
-      if (quickMemoGeneralSearch.value.trim()) quickMemoGeneralSearch.dispatchEvent(new Event('input'));
+      renderSearchDropdown_(comboResultsFor_(quickMemoGeneralSearch.value.trim()));
     });
     document.addEventListener('click', (e)=>{
       if (!quickMemoSearchDropdown.contains(e.target) && e.target !== quickMemoGeneralSearch){
