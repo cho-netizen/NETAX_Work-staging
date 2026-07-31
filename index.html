@@ -7217,8 +7217,8 @@ graph TD
       excelViewerTableWrap.innerHTML = '<div style="padding:20px; color:var(--sub);">불러오는 중…</div>';
       if (typeof XLSX === 'undefined'){ showToast('엑셀 처리 라이브러리를 불러오지 못했습니다.', 'error'); return; }
       try{
-        const data = await callGas('readFile', { fileId: file.id });
-        console.log('[엑셀뷰어] readFile 응답:', data); // 원인 파악용 — F12 콘솔에서 확인 가능
+        const data = await callGas('readFileBinary', { fileId: file.id });
+        console.log('[엑셀뷰어] readFileBinary 응답:', data); // 원인 파악용 — F12 콘솔에서 확인 가능
         if (data.error) throw new Error('서버 오류: ' + data.error);
         if (!data.base64) throw new Error('서버가 파일 내용을 돌려주지 않았습니다 (base64 없음).');
 
