@@ -1391,20 +1391,20 @@ graph TD
       </div>
 
       <div id="explorerView" style="display:flex; flex:1; flex-direction:column; min-height:0;">
+        <!-- 이미지·PDF·워드·파워포인트 등(편집 대상이 아닌 파일)을 열면 여기 얇은 상태바만 뜨고,
+             실제 미리보기는 독립 리사이즈 창(팝업)으로 연다 — 예전엔 이 파일들도 좁고 고정된
+             패널(editorView, 최대 crop된 iframe)에 갇혀서 큰 PDF·고해상도 이미지를 보기 답답했다.
+             탐색기 자체는 항상 그대로 보이므로(팝업이 따로 뜨는 동안도) 화면 전환이 필요 없다. -->
+        <div class="editor-toolbar" id="openFileStatusBar" style="display:none;">
+          <span class="editor-filename" id="openFileStatusName"></span>
+          <div class="spacer"></div>
+          <button type="button" id="btnOpenFileReload" class="ghost-btn" title="독립창을 최신 내용으로 다시 불러옵니다">🔄 새로고침</button>
+          <button type="button" id="btnOpenFileRef" class="ghost-btn">📎 참조</button>
+          <button type="button" id="btnOpenFileClose" class="ghost-btn" title="닫기">✕ 닫기</button>
+        </div>
         <div class="explorer-body" id="explorerBody">
           <div class="explorer-status">불러오는 중…</div>
         </div>
-      </div>
-
-      <div id="editorView" style="display:none; flex:1; flex-direction:column; min-height:0;">
-        <div class="editor-toolbar">
-          <button class="back-btn" id="btnBack" title="닫기">✕</button>
-          <span class="editor-filename" id="editorFilename"></span>
-          <div class="spacer"></div>
-          <button type="button" id="btnEditorReload" class="ghost-btn" title="탐색기 등 다른 곳에서 이 파일이 바뀌었으면 눌러서 최신 내용으로 다시 엽니다">🔄 새로고침</button>
-          <button type="button" id="btnEditorRef" class="ghost-btn">📎 참조</button>
-        </div>
-        <iframe id="editorFrame" class="editor-frame" title="문서 편집기"></iframe>
       </div>
 
       <div id="calcView" style="display:none; flex:1; flex-direction:column; min-height:0;">
@@ -1818,17 +1818,20 @@ graph TD
   const coverPathLabel = document.getElementById('coverPathLabel'); // 커버화면모드 전용 — customerSelect 옆 작업폴더 표시
   const explorerBody = document.getElementById('explorerBody');
   const explorerView = document.getElementById('explorerView');
-  const editorView = document.getElementById('editorView');
   const explorerPanelHead = document.getElementById('explorerPanelHead');
-  const editorFrame = document.getElementById('editorFrame');
+  const openFileStatusBar = document.getElementById('openFileStatusBar');
+  const openFileStatusName = document.getElementById('openFileStatusName');
 
-  // 오른쪽 패널 안의 모든 하위 화면(탐색기/편집기/경과지/계산기/관계도/캡처확인)을 한 번에 숨김.
+  // 오른쪽 패널 안의 모든 하위 화면(탐색기/경과지/계산기/관계도/캡처확인)을 한 번에 숨김.
   // 각 화면을 열 때 이걸 먼저 호출한 뒤 자기 화면만 다시 보이게 해서, 뒤로가기 없이 다른 도구로
   // 바로 넘어가도 이전 화면이 안 겹쳐 보이게 한다. (logView 등은 아래에서 나중에 선언되지만
   // 함수 몸통 안 참조라 실행 시점엔 이미 선언이 끝나 있어 문제없음)
+  // [패치 2026.07] 예전엔 편집기(editorView)도 이 안에서 숨김/표시 대상이었지만, 이제 문서·엑셀·
+  // 기타 파일 모두 독립창으로 열려서 탐색기 자체를 가릴 필요가 없어졌다 — 그래서 editorView는
+  // 아예 없앴고, 이 함수는 explorerView를 숨기는 게 아니라 "다른 전용 화면(경과지 등)으로
+  // 전환할 때"만 쓰인다.
   function hideAllPanelViews(){
     explorerView.style.display = 'none';
-    editorView.style.display = 'none';
     if (typeof logView !== 'undefined' && logView) logView.style.display = 'none';
     if (typeof calcView !== 'undefined' && calcView) calcView.style.display = 'none';
     if (typeof diagramView !== 'undefined' && diagramView) diagramView.style.display = 'none';
@@ -1838,8 +1841,6 @@ graph TD
     if (typeof searchView !== 'undefined' && searchView) searchView.style.display = 'none';
     explorerPanelHead.style.display = 'none';
   }
-
-  const editorFilename = document.getElementById('editorFilename');
 
   // explorerPath: [고객명, 사건명, ...하위 폴더들] — 항상 최소 2단계(고객/사건) 유지
   let explorerPath = [];
@@ -2143,6 +2144,32 @@ graph TD
     return editorPopupWins[key] || null;
   }
 
+  // 이미지・PDF・워드・파워포인트・한글 등(편집 대상이 아니라 보기・참조만 하면 되는 파일) 전용
+  // 독립 팝업 관리 — report-writer/엑셀뷰어와 완전히 같은 파일별 재사용 패턴이다. 구글드라이브
+  // 자체 미리보기 URL을 그대로 새 창으로 열 뿐이라 별도 뷰어 페이지를 만들 필요가 없다.
+  const filePopupWins = {};
+  function filePopupKey(file){ return 'f_' + file.id; }
+  function driveFilePreviewUrl_(fileId, cacheBust){
+    return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview' + (cacheBust ? ('?_r=' + Date.now()) : '');
+  }
+  function openFilePopup(file){
+    const key = filePopupKey(file);
+    const existing = filePopupWins[key];
+    if (existing && !existing.closed){ existing.focus(); return; }
+    const url = driveFilePreviewUrl_(file.id);
+    const w = Math.round(window.innerWidth * 0.85);
+    const h = Math.round(window.innerHeight * 0.85);
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    const win = window.open(url, 'nxFileWindow_' + key, 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!win){
+      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
+      return;
+    }
+    filePopupWins[key] = win;
+    win.focus();
+  }
+
   function openEditor(file){
     if (isTextRenderable(file.mimeType, file.name)){
       // 편집 대상 문서: 탐색창을 대체하지 않고 항상 독립창으로 연다.
@@ -2159,58 +2186,50 @@ graph TD
       }
       // 혹시라도 엑셀뷰어 초기화 전이면(스크립트 로드 순서 문제) 예전처럼 미리보기로 폴백.
     }
-    // 이미지・PDF・기타(편집이 아니라 보기만 하면 되는 파일)는 예전처럼 좁은 패널에 그대로 띄운다.
-    hideAllPanelViews();
-    editorView.style.display = 'flex';
-    editorFilename.textContent = file.name;
+    // 이미지・PDF・워드・파워포인트・한글 등: 이제 좁고 고정된 패널 대신 독립 리사이즈 창으로 연다
+    // ("작고 고정된 창으로 큰 PDF·이미지를 어떻게 보나" 지적 반영). 탐색창은 그대로 살아있고,
+    // 얇은 상태바에 파일명 + 새로고침・참조・닫기 버튼만 남는다.
     currentOpenFile = { id: file.id, name: file.name, mimeType: file.mimeType };
     isReportWriterOpen = false;
-    editorFrame.src = 'https://drive.google.com/file/d/' + encodeURIComponent(file.id) + '/preview';
-    document.getElementById('btnEditorReload').style.display = '';
-    document.getElementById('btnEditorRef').style.display = '';
+    openFilePopup(file);
+    openFileStatusName.textContent = file.name;
+    openFileStatusBar.style.display = 'flex';
   }
 
-  document.getElementById('btnBack').addEventListener('click', ()=>{
-    editorFrame.src = 'about:blank';
-    hideAllPanelViews();
-    explorerView.style.display = 'flex';
-    explorerPanelHead.style.display = 'flex'; // 탐색 중일 때는 경로표시줄 다시 보이게
+  document.getElementById('btnOpenFileClose').addEventListener('click', ()=>{
+    if (currentOpenFile){
+      const win = filePopupWins[filePopupKey(currentOpenFile)];
+      if (win && !win.closed) win.close();
+      delete filePopupWins[filePopupKey(currentOpenFile)];
+    }
+    openFileStatusBar.style.display = 'none';
     currentOpenFile = null;
     isReportWriterOpen = false;
   });
 
-  document.getElementById('btnEditorReload').addEventListener('click', ()=>{
+  document.getElementById('btnOpenFileReload').addEventListener('click', ()=>{
     if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
-    if (isReportWriterOpen){
-      // 편집기 내용을 지금 화면 그대로 덮어쓰지 않고, 저장되어 있는 최신 파일 내용을 다시 불러온다.
-      // 편집 중이던 내용이 있으면 새로고침으로 사라질 수 있으니 먼저 확인한다.
-      if (!confirm('탐색기 등 다른 곳에서 바뀐 최신 내용으로 다시 엽니다.\n지금 편집창에 저장하지 않은 내용이 있다면 사라집니다. 계속할까요?')) return;
-      if (editorFrame.contentWindow){
-        editorFrame.contentWindow.postMessage({ type: 'nx-reload-file' }, '*');
-        showToast('최신 내용으로 새로고침했습니다.', 'success');
-      }
+    const key = filePopupKey(currentOpenFile);
+    const win = filePopupWins[key];
+    const url = driveFilePreviewUrl_(currentOpenFile.id, true); // 캐시 방지용 타임스탬프 포함
+    if (win && !win.closed){
+      win.location.href = url;
+      win.focus();
     } else {
-      // 이미지·PDF 미리보기: 구글드라이브 미리보기 iframe을 그냥 다시 불러온다 (캐시 방지용 타임스탬프 포함)
-      editorFrame.src = 'https://drive.google.com/file/d/' + encodeURIComponent(currentOpenFile.id) + '/preview?_r=' + Date.now();
-      showToast('새로고침했습니다.', 'success');
+      openFilePopup(currentOpenFile);
     }
+    showToast('새로고침했습니다.', 'success');
   });
 
-  document.getElementById('btnEditorRef').addEventListener('click', async ()=>{
+  document.getElementById('btnOpenFileRef').addEventListener('click', async ()=>{
     if (!currentOpenFile){ showToast('열려 있는 파일이 없습니다.', 'warning'); return; }
-    if (isReportWriterOpen){
-      // report-writer 문서: 저장 전이라도 지금 편집창에 실제로 타이핑되어 있는 내용을 그대로 가져옴
-      const content = await getEditorLiveContent();
-      if (content === null){ showToast('편집기 내용을 가져오지 못했습니다. 잠시 후 다시 시도해주세요.', 'error'); return; }
-      addTextAttachment(currentOpenFile.name, content);
-    } else {
-      // 이미지·PDF 뷰어: 그 파일 자체를 이미지/문서 블록으로 가져옴
-      const block = await getOpenFileMediaBlock();
-      if (!block){ showToast('이 파일 형식은 아직 참조를 지원하지 않습니다 (이미지·PDF만 가능).', 'error'); return; }
-      if (pendingRefMedia.find(m => m.name === currentOpenFile.name)) return; // 중복 방지
-      pendingRefMedia.push({ id: 'ref' + Date.now(), name: currentOpenFile.name, block });
-      renderAttachBar();
-    }
+    // 이미지·PDF: 그 파일 자체를 이미지/문서 블록으로 가져와 AI 채팅에 첨부한다.
+    // (워드·파워포인트·한글 등은 아직 미지원 — getOpenFileMediaBlock이 이미지·PDF만 처리)
+    const block = await getOpenFileMediaBlock();
+    if (!block){ showToast('이 파일 형식은 아직 참조를 지원하지 않습니다 (이미지·PDF만 가능).', 'error'); return; }
+    if (pendingRefMedia.find(m => m.name === currentOpenFile.name)) return; // 중복 방지
+    pendingRefMedia.push({ id: 'ref' + Date.now(), name: currentOpenFile.name, block });
+    renderAttachBar();
   });
 
   // ---- 경과지 보드 ----
