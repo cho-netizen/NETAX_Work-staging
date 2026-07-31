@@ -3017,7 +3017,7 @@ function buildStandaloneHtml(includeBackButton){
       ? '<div id="nxBackFloat"><button type="button" id="nxBackBtn">← 편집기로 돌아가기</button></div>\n'
         + '<script>\n'
         + 'document.getElementById("nxBackBtn").addEventListener("click", function(){\n'
-        + '  if (window.opener && !window.opener.closed){ window.close(); }\n'
+        + '  if (window.opener && !window.opener.closed){ window.opener.focus(); window.close(); }\n'
         + '  else if (history.length > 1){ history.back(); }\n'
         + '  else { alert("이 창(탭)은 브라우저에서 직접 닫아주세요."); }\n'
         + '});\n'
