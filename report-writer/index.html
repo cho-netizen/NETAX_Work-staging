@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 안드로이드 크롬 등의 "웹페이지 강제 다크모드"가 이 페이지 색상을 임의로 뒤집어서
+     서식 버튼(제목・굵게・목록 등)이 흰바탕에 흰 글씨로 보이는 문제를 막는다 — 이 페이지는
+     처음부터 라이트 테마 전용으로 만들어졌다는 걸 브라우저에 명시적으로 알려준다. -->
+<meta name="color-scheme" content="light">
 <title>보고서 렌더시스템</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2a41'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='34' font-weight='700' fill='%23c9a227' text-anchor='middle'%3EN%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,7 +26,7 @@
 <style>
   :root{ --bar-bg:#20242c; --bar-fg:#e8e8ec; --accent:#5b6b8c; --navy:#0D1B3D; --navy-deep:#081226; --gold:#C8A244; --gold-light:#DCC17E; }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:#e9eaee;font-family:'Noto Sans KR',sans-serif; height:100%;}
+  html,body{margin:0;padding:0;background:#e9eaee;font-family:'Noto Sans KR',sans-serif; height:100%; color-scheme:light;}
   body{ height:100vh; overflow:hidden; }
   #appRoot{ display:flex; flex-direction:column; height:100%; }
 
