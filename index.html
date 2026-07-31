@@ -6104,6 +6104,16 @@ graph TD
     const quickMemoSearchDropdown = document.getElementById('quickMemoSearchDropdown');
     const btnQuickMemoSave = document.getElementById('btnQuickMemoSave');
 
+    // 그냥 <textarea>는 Tab을 누르면 브라우저 기본 동작대로 다음 요소로 포커스가 넘어가버려서
+    // 탭 문자가 안 찍힌다. 통화 중 표처럼 탭으로 줄맞춰 메모해두면(나중에 report-writer 편집창에
+    // 붙여넣을 때 표로 자동 인식됨) 편하므로, Tab을 가로채 실제 탭 문자를 입력하게 한다.
+    quickMemoText.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab'){
+        e.preventDefault();
+        document.execCommand('insertText', false, '\t'); // execCommand로 넣어야 실행취소(Ctrl+Z)가 정상 동작한다
+      }
+    });
+
     let editingGeneralMemoFile = null; // 검색콤보로 기존 일반메모를 열어서 편집 중이면 그 파일 정보
     let currentTemplateMode = null; // 검색콤보로 사건개시 템플릿을 골랐으면 그 템플릿 정보(사건개시 모드)
     let comboEntries = []; // [{label, type:'memo'|'template', file?, tpl?}] — Fuse.js 검색 대상

@@ -2290,6 +2290,14 @@ document.getElementById('mdInput').addEventListener('keydown', (e) => {
     openFindBar();
     return;
   }
+  if (e.key === 'Tab' && !cmd) {
+    // 그냥 <textarea>는 Tab을 누르면 브라우저 기본 동작대로 다음 요소로 포커스가 넘어가버려서
+    // 탭 문자가 안 찍힌다. 탭으로 줄맞춰 표처럼 입력하는 걸 지원하려면(붙여넣기 때 표로 자동
+    // 인식하는 기능과 짝을 맞추려면) 직접 타이핑할 때도 탭이 찍혀야 한다.
+    e.preventDefault();
+    document.execCommand('insertText', false, '\t'); // execCommand로 넣어야 실행취소(Ctrl+Z)와 input 이벤트(자동저장)가 정상 동작한다
+    return;
+  }
   if (e.key === 'Enter') {
     const ta = e.target;
     const start = ta.selectionStart;
