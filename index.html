@@ -567,6 +567,14 @@
     display:flex; align-items:center; gap:8px; padding:8px 12px;
     border-top:1px solid var(--line); flex-shrink:0;
   }
+  .chat-input-row{ flex:1; min-width:0; display:flex; }
+  .chat-input-row input{ width:100%; }
+  .chat-tools-row{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  /* 폰(좁은 화면)에서는 아이콘 버튼이 너무 많이 붙어서 입력창이 한 글자 폭으로 눌리는
+     문제가 있었다 — 입력창 행과 버튼 행을 아예 분리해서, 입력창은 항상 전체 너비를 쓰고
+     버튼들은 그 아래 줄에서 필요하면 줄바꿈되게 한다. */
+  body.stage-compact .chat-input-wrap{ flex-direction:column; align-items:stretch; gap:6px; }
+  body.stage-compact .chat-tools-row{ flex-wrap:wrap; justify-content:flex-end; }
   #gemContextCount{
     flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 2px; width:48px;
     border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--sub);
@@ -1324,21 +1332,25 @@
         <button type="button" id="btnExitTalkingMode" title="채팅모드로 돌아가기">⌨ 채팅모드로</button>
       </div>
       <div class="chat-input-wrap">
-        <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
-        <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
-        <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
-        <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개(턴) 같이 보낼지 선택 (0=입력창 내용만)">
-          <option value="0">0턴</option>
-          <option value="1">1턴</option>
-          <option value="2">2턴</option>
-          <option value="3">3턴</option>
-          <option value="4">4턴</option>
-          <option value="5">5턴</option>
-        </select>
-        <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을(선택한 개수만큼 직전 대화도 함께) 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
-        <button type="button" id="btnAskBoth" class="icon-round-btn" title="같은 질문을 NX와 Gem에게 동시에 물어봅니다 — 서로 답을 보지 않은 채 독립적인 의견을 받고 싶을 때 (외부조회 커넥터 확장프로그램 필요)">⚖</button>
-        <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
-        <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
+        <div class="chat-input-row">
+          <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
+        </div>
+        <div class="chat-tools-row">
+          <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
+          <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
+          <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개(턴) 같이 보낼지 선택 (0=입력창 내용만)">
+            <option value="0">0턴</option>
+            <option value="1">1턴</option>
+            <option value="2">2턴</option>
+            <option value="3">3턴</option>
+            <option value="4">4턴</option>
+            <option value="5">5턴</option>
+          </select>
+          <button type="button" id="btnAskGem" class="icon-round-btn" title="지금 입력창 내용을(선택한 개수만큼 직전 대화도 함께) 제미니 웹(Gem)에게 물어보고 의견을 받아옵니다 (외부조회 커넥터 확장프로그램 필요)">🔮</button>
+          <button type="button" id="btnAskBoth" class="icon-round-btn" title="같은 질문을 NX와 Gem에게 동시에 물어봅니다 — 서로 답을 보지 않은 채 독립적인 의견을 받고 싶을 때 (외부조회 커넥터 확장프로그램 필요)">⚖</button>
+          <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
+          <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
+        </div>
       </div>
     </div>
 
@@ -2078,25 +2090,55 @@ graph TD
     return false;
   }
 
+  // 편집기 독립창(팝업) 참조 — 탐색창 클릭으로 열든, 하단바 편집 버튼으로 열든 항상 이 하나만 쓴다.
+  // (예전엔 하단바 버튼이 지역변수로만 window.open 결과를 들고 있어서, 두 번째로 열면 창이
+  // 중복 생성되고 AI 적용 기능도 그 창을 찾을 방법이 없었다 — 전역으로 통일해서 해결)
+  let editorPopupWin = null;
+
+  // report-writer(편집 대상) 문서를 독립창으로 연다. NX 탐색창은 전혀 건드리지 않으므로
+  // 탐색기/채팅 등 원래 화면은 그대로 살아있는다. 이미 같은 창이 열려 있으면 새로 만들지 않고
+  // 그 창의 내용만 바꿔치기(location 이동)하고 포커스만 준다.
+  function openEditorPopup(file){
+    // 이 함수는 항상 report-writer만 여는 용도이므로(이미지·PDF는 openEditor의 다른 분기가 처리),
+    // 파일 없이(새 빈 문서) 열 때도 isReportWriterOpen은 true로 둔다 — 그래야 그 상태에서도
+    // 참조·AI적용이 정상 동작한다.
+    const url = file ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(file.id)) : REPORT_WRITER_URL;
+    currentOpenFile = file ? { id: file.id, name: file.name, mimeType: file.mimeType } : null;
+    isReportWriterOpen = true;
+    if (editorPopupWin && !editorPopupWin.closed){
+      editorPopupWin.location.href = url;
+      editorPopupWin.focus();
+      return;
+    }
+    const w = Math.round(window.innerWidth * 0.75);
+    const h = Math.round(window.innerHeight * 0.85);
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
+    editorPopupWin = window.open(url, 'nxEditorWindow', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!editorPopupWin){
+      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
+      currentOpenFile = null;
+      isReportWriterOpen = false;
+    } else {
+      editorPopupWin.focus();
+    }
+  }
+
   function openEditor(file){
+    if (isTextRenderable(file.mimeType, file.name)){
+      // 편집 대상 문서: 탐색창을 대체하지 않고 항상 독립창으로 연다.
+      openEditorPopup(file);
+      return;
+    }
+    // 이미지・PDF・기타(편집이 아니라 보기만 하면 되는 파일)는 예전처럼 좁은 패널에 그대로 띄운다.
     hideAllPanelViews();
     editorView.style.display = 'flex';
     editorFilename.textContent = file.name;
     currentOpenFile = { id: file.id, name: file.name, mimeType: file.mimeType };
-
-    if (isTextRenderable(file.mimeType, file.name)){
-      isReportWriterOpen = true;
-      editorFrame.src = REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(file.id);
-    } else {
-      isReportWriterOpen = false;
-      // 이미지・PDF・기타 파일: 구글드라이브 자체 미리보기 사용 (별도 뷰어를 만들 필요 없음)
-      editorFrame.src = 'https://drive.google.com/file/d/' + encodeURIComponent(file.id) + '/preview';
-    }
-    // report-writer로 열린 경우엔 report-writer 자체 툴바에 이미 새로고침(🔄)·참조(📎) 버튼이
-    // 있으므로, 바깥(이 화면)의 예전 버튼은 중복이라 숨긴다. 이미지·PDF 미리보기일 때만
-    // (report-writer가 아니므로) 바깥 버튼이 계속 필요해서 보여준다.
-    document.getElementById('btnEditorReload').style.display = isReportWriterOpen ? 'none' : '';
-    document.getElementById('btnEditorRef').style.display = isReportWriterOpen ? 'none' : '';
+    isReportWriterOpen = false;
+    editorFrame.src = 'https://drive.google.com/file/d/' + encodeURIComponent(file.id) + '/preview';
+    document.getElementById('btnEditorReload').style.display = '';
+    document.getElementById('btnEditorRef').style.display = '';
   }
 
   document.getElementById('btnBack').addEventListener('click', ()=>{
@@ -3008,39 +3050,44 @@ graph TD
       // 임베드 — 에는 이 버튼이 눌려도 닫을 오버레이가 없으므로 아무 일도 하지 않음).
       closeFullEditor();
     }
+    if (msg.type === 'nx-editor-window-closed'){
+      // 편집창 독립 팝업이 (자체 닫기 버튼이든 OS 창닫기 버튼이든 어떤 방법으로든) 닫혔다는
+      // 신호 — report-writer가 unload 시점에 opener에게 직접 보내온다. 상태를 초기화해서
+      // AI가 "지금 열려있는 문서"로 착각해 적용을 시도하는 일이 없게 한다.
+      editorPopupWin = null;
+      if (isReportWriterOpen){ isReportWriterOpen = false; currentOpenFile = null; }
+    }
   });
 
   // 지금 편집기(report-writer)에 실제로 타이핑되어 있는(저장 전 포함) 내용을 물어봄
-  // 좁은 편집창(editorFrame)과 전체화면 편집창(fullEditorFrame) 중 "지금 실제로 화면에 보이는 쪽"을
-  // 골라주는 공통 헬퍼. 이걸 통해서 참조/새로고침 등을 구현하면, 앞으로는 어느 화면 크기에서
-  // 기능을 써도 항상 똑같이 동작한다(예전처럼 화면마다 따로 처리해서 하나씩 빠뜨리는 문제 방지).
+  // 폰 전체화면(fullEditorFrame, iframe)과 PC·태블릿 독립창(editorPopupWin, window.open) 중
+  // "지금 실제로 열려 있는 쪽"을 골라주는 공통 헬퍼. 이걸 통해서 참조/새로고침/AI적용을 구현하면
+  // 어느 화면(폰/PC/탐색창 클릭/하단바 버튼)에서 열어도 항상 똑같이 동작한다.
   function isFullEditorVisible(){
     return !!(fullEditorOverlay && fullEditorOverlay.style.display !== 'none');
   }
-  function getActiveEditorFrame(){
-    return isFullEditorVisible() ? fullEditorFrame : editorFrame;
+  function getActiveEditorTarget(){
+    if (isFullEditorVisible()) return fullEditorFrame.contentWindow || null;
+    if (editorPopupWin && !editorPopupWin.closed) return editorPopupWin;
+    return null;
   }
 
   function getEditorLiveContent(){
     return new Promise((resolve)=>{
-      const frame = getActiveEditorFrame();
-      const full = isFullEditorVisible();
-      // 전체화면은 항상 report-writer만 띄우므로 report-writer 열림 여부를 따로 확인할 필요 없음.
-      // 좁은 편집창일 때만 isReportWriterOpen(이미지·PDF 미리보기가 아닌지) 확인이 필요하다.
-      if ((!full && !isReportWriterOpen) || !frame || !frame.contentWindow){ resolve(null); return; }
+      const target = getActiveEditorTarget();
+      if (!isReportWriterOpen || !target){ resolve(null); return; }
       const requestId = 'req' + (++msgReqCounter);
       const timer = setTimeout(()=>{ delete pendingContentRequests[requestId]; resolve(null); }, 1500);
       pendingContentRequests[requestId] = (content)=>{ clearTimeout(timer); resolve(content); };
-      frame.contentWindow.postMessage({ type: 'nx-get-content', requestId }, '*');
+      target.postMessage({ type: 'nx-get-content', requestId }, '*');
     });
   }
 
   // AI가 제안한 새 문서 내용을 편집기에 실제로 적용
   function applyEditorContent(newContent){
-    const frame = getActiveEditorFrame();
-    const full = isFullEditorVisible();
-    if ((!full && !isReportWriterOpen) || !frame || !frame.contentWindow) return;
-    frame.contentWindow.postMessage({ type: 'nx-set-content', content: newContent }, '*');
+    const target = getActiveEditorTarget();
+    if (!isReportWriterOpen || !target) return;
+    target.postMessage({ type: 'nx-set-content', content: newContent }, '*');
   }
 
   // report-writer가 아니라 구글드라이브 자체 미리보기(이미지·PDF)로 열려 있는 파일은
@@ -4553,17 +4600,24 @@ graph TD
     }
     applyBtn.textContent = '문서 여는 중…';
     applyBtn.disabled = true;
-    openEditor(editTargetFile); // isReportWriterOpen=true로 바뀌고 iframe이 새로 로드된다
-    const frame = getActiveEditorFrame();
+    openEditor(editTargetFile); // isReportWriterOpen=true로 바뀌고 편집창(독립창 또는 폰 전체화면)이 새로 열린다
+    const target = getActiveEditorTarget();
+    if (!target){
+      // 독립창이 팝업 차단 등으로 열리지 못한 경우 — iframe과 달리 이 경우는 실제로 일어날 수 있어서
+      // (예전 iframe 방식은 차단될 일이 없었음) 조용히 실패하지 않고 안내한다.
+      showToast('편집창을 열지 못했습니다. 브라우저에서 이 사이트의 팝업 허용을 켜고 다시 시도해주세요.', 'error');
+      applyBtn.textContent = '문서 열기 실패';
+      return;
+    }
     const onLoad = ()=>{
-      frame.removeEventListener('load', onLoad);
+      target.removeEventListener('load', onLoad);
       // report-writer 내부 스크립트가 파일을 fetch해서 완전히 준비되기까지 약간의 여유를 둔다.
       setTimeout(()=>{
         applyEditorContent(content);
         applyBtn.textContent = '✓ 적용됨';
       }, 500);
     };
-    frame.addEventListener('load', onLoad);
+    target.addEventListener('load', onLoad);
   }
 
   function renderAssistantReply(bubbleEl, replyText, clientActions, editTargetFile){
@@ -5760,10 +5814,20 @@ graph TD
   let pendingSaveOnDone = null;  // 저장이 끝난 뒤 호출할 콜백(그 화면 닫기 등)
   let pendingSaveCustomHandler = null; // 설정돼 있으면 기본 저장 로직 대신 이 함수(customerName)=>boolean 를 쓴다(사건개시 등)
 
-  // "일반메모" 폴더 경로 — 고객사건 최상위(basePath)의 한 단계 위(예: "0 NETAX") 바로 아래.
-  // (업무관리자 폴더와 같은 위치, 즉 고객사건 폴더와 나란한 형제 폴더로 둔다.)
-  function generalMemoParentPath_(){ return basePath.slice(0, -1); }
-  function generalMemoPath_(){ return generalMemoParentPath_().concat(['일반메모']); }
+  // "일반메모" 폴더 위치 — 기본폴더(basePath, "0 NETAX") 바로 아래, 고객 폴더들과 나란히.
+  // basePath는 페이지가 열리자마자 비동기로 채워지는데, 메모 화면을 그 로딩이 끝나기 전에
+  // 아주 빨리 열면(예: 페이지 열자마자 바로 메모부터 쓰는 경우) 아직 빈 배열이어서 진짜
+  // 드라이브 루트에 폴더가 생겨버리는 문제가 있었다 — 비어있으면 한 번 더 확실하게 받아온
+  // 뒤에 쓰도록 만들었다.
+  async function generalMemoParentPath_(){
+    if (basePath && basePath.length) return basePath;
+    await loadCustomers();
+    return basePath;
+  }
+  async function generalMemoPath_(){
+    const parent = await generalMemoParentPath_();
+    return parent.concat(['일반메모']);
+  }
 
   function formatMemoTimestamp_(){
     const d = new Date();
@@ -5874,7 +5938,7 @@ graph TD
     let fileName = fileNameRaw.trim();
     if (!/\.md$/i.test(fileName)) fileName += '.md';
 
-    const parentPath = generalMemoParentPath_();
+    const parentPath = await generalMemoParentPath_();
     const parentListing = await listFolder(parentPath);
     const hasGeneralFolder = parentListing.folders.some(f => f.name === '일반메모');
     if (!hasGeneralFolder){
@@ -5882,15 +5946,16 @@ graph TD
       if (created.error) throw new Error(created.error);
     }
 
+    const targetPath = parentPath.concat(['일반메모']);
     const res = await callGas('uploadFile', {
-      path: generalMemoPath_(), name: fileName, mimeType: 'text/markdown',
+      path: targetPath, name: fileName, mimeType: 'text/markdown',
       base64Data: utf8ToBase64(content.trim() + '\n')
     });
     if (res.error) throw new Error(res.error);
 
     if (extraFile){
       const res2 = await callGas('uploadFile', {
-        path: generalMemoPath_(), name: extraFile.name, mimeType: extraFile.mimeType, base64Data: extraFile.base64Data
+        path: targetPath, name: extraFile.name, mimeType: extraFile.mimeType, base64Data: extraFile.base64Data
       });
       if (res2 && res2.error) showToast('본문은 저장됐지만, 첨부(' + extraFile.name + ') 저장은 실패했습니다: ' + res2.error, 'warning');
     }
@@ -5971,7 +6036,7 @@ graph TD
       comboEntries = [];
 
       try{
-        const listing = await listFolder(generalMemoPath_());
+        const listing = await listFolder(await generalMemoPath_());
         (listing.files || []).forEach(f=>{
           comboEntries.push({ label: '📄 ' + f.name.replace(/\.md$/i, ''), type: 'memo', file: f });
         });
@@ -5993,14 +6058,43 @@ graph TD
       quickMemoSearchDropdown.innerHTML = '';
       if (!results.length){ quickMemoSearchDropdown.style.display = 'none'; return; }
       results.slice(0, 8).forEach(entry=>{
-        const item = document.createElement('div');
-        item.textContent = entry.label;
-        item.style.cssText = 'padding:8px 10px; font-size:12.5px; cursor:pointer; color:var(--ink);';
-        item.addEventListener('mouseenter', ()=> item.style.background = '#f0f2f6');
-        item.addEventListener('mouseleave', ()=> item.style.background = '');
-        item.addEventListener('mousedown', (e)=>{ e.preventDefault(); }); // 입력창 blur로 드롭다운이 먼저 닫히는 것 방지
-        item.addEventListener('click', ()=> selectComboEntry_(entry));
-        quickMemoSearchDropdown.appendChild(item);
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:8px 10px; font-size:12.5px; cursor:pointer; color:var(--ink);';
+        row.addEventListener('mouseenter', ()=> row.style.background = '#f0f2f6');
+        row.addEventListener('mouseleave', ()=> row.style.background = '');
+        row.addEventListener('mousedown', (e)=>{ e.preventDefault(); }); // 입력창 blur로 드롭다운이 먼저 닫히는 것 방지
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = entry.label;
+        labelSpan.style.cssText = 'flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+        labelSpan.addEventListener('click', ()=> selectComboEntry_(entry));
+        row.appendChild(labelSpan);
+
+        // 삭제는 일반메모(📄)만 지원한다 — 템플릿(🗂)은 사건개시템플릿 폴더에서 직접 관리하는 게 맞다.
+        if (entry.type === 'memo'){
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.textContent = '🗑';
+          delBtn.title = '이 메모 삭제(휴지통으로 이동)';
+          delBtn.style.cssText = 'flex-shrink:0; border:none; background:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:var(--sub);';
+          delBtn.addEventListener('mousedown', (e)=> e.preventDefault());
+          delBtn.addEventListener('click', async (e)=>{
+            e.stopPropagation();
+            if (!confirm('"' + entry.file.name + '" 메모를 삭제할까요?(휴지통으로 이동, 필요하면 복구 가능)')) return;
+            try{
+              const res = await callGas('deleteItem', { id: entry.file.id, type: 'file' });
+              if (res && res.error) throw new Error(res.error);
+              showToast('삭제했습니다.', 'success');
+              await refreshGeneralMemoList();
+              quickMemoGeneralSearch.dispatchEvent(new Event('input')); // 목록에서 방금 지운 항목이 바로 빠지도록 다시 검색
+            }catch(err){
+              showToast('삭제 실패: ' + (err && err.message ? err.message : err), 'error');
+            }
+          });
+          row.appendChild(delBtn);
+        }
+
+        quickMemoSearchDropdown.appendChild(row);
       });
       quickMemoSearchDropdown.style.display = 'block';
     }
@@ -6145,26 +6239,18 @@ graph TD
   // PC·태블릿에서는 진짜 브라우저 새 창(window.open)으로 연다 — 크기조절·이동·최대화를
   // 우리가 직접 흉내내는 대신 OS/브라우저에게 그대로 맡긴다(훨씬 더 자연스럽고 안정적).
   function openFullEditor(){
-    const url = currentOpenFile
-      ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id))
-      : REPORT_WRITER_URL;
-
     if (document.body.classList.contains('stage-compact')){
+      const url = currentOpenFile
+        ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id))
+        : REPORT_WRITER_URL;
       fullEditorFrame.src = url;
       fullEditorOverlay.style.display = 'block';
       return;
     }
-
-    const w = Math.round(window.innerWidth * 0.75);
-    const h = Math.round(window.innerHeight * 0.85);
-    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
-    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
-    const win = window.open(url, 'nxEditorWindow', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
-    if (!win){
-      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
-    } else {
-      win.focus();
-    }
+    // PC・태블릿: 탐색창 클릭으로 여는 것과 완전히 같은 독립창 로직을 공유한다(openEditorPopup).
+    // 이렇게 하나로 합쳐 놔야 어느 쪽으로 열어도 같은 창을 재사용하고, AI 적용·참조·새로고침이
+    // 항상 똑같이 동작한다(예전엔 이 버튼의 window.open이 지역변수였어서 전역에서 추적이 안 됐음).
+    openEditorPopup(currentOpenFile || null);
   }
   function closeFullEditor(){
     fullEditorOverlay.style.display = 'none';

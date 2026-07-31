@@ -2511,19 +2511,32 @@ refreshDocSelect();
 loadSelectedIntoEditor();
 document.getElementById('btnRender').addEventListener('click', render);
 
-// ---------- 참조 버튼: NX-Work(부모창) 안에서 열렸을 때만 보이고, 지금 편집 중인 내용을
-// 부모창 채팅의 참조 첨부로 바로 넘긴다. 독립된 탭에서 report-writer만 단독으로 열었을 때는
+// ---------- NX-Work(부모/오프너 창)와 통신할 대상 판별 ----------
+// - 폰 전체화면 오버레이(iframe)로 열렸으면: window.parent
+// - PC・태블릿 독립창(window.open)으로 열렸으면: window.opener
+// - report-writer만 단독 탭/새로고침으로 열었으면(둘 다 없음): null → 참조·닫기 버튼 숨김
+// [패치 2026.07] 예전엔 iframe(window.self !== window.top)만 "임베드"로 인정해서, 독립창으로
+// 열렸을 땐 부모가 버젓이 있는데도 참조・닫기 버튼이 통째로 사라져 "편집기가 아니라 뷰어"가
+// 되어버렸다. window.opener까지 인식하도록 넓혀서 독립창에서도 항상 완전히 똑같이 동작한다.
+function getNxParentTarget(){
+  if (window.opener && !window.opener.closed) return window.opener;
+  if (window.self !== window.top) return window.parent;
+  return null;
+}
+
+// ---------- 참조 버튼: NX-Work 안에서 열렸을 때(iframe이든 독립창이든)만 보이고, 지금 편집 중인
+// 내용을 부모/오프너 창 채팅의 참조 첨부로 바로 넘긴다. report-writer만 단독으로 열었을 때는
 // 넘길 부모 채팅 자체가 없으므로 버튼을 아예 숨긴다. ----------
 (function(){
   const btnRef = document.getElementById('btnRefToParent');
-  const isEmbedded = (window.self !== window.top);
-  if (!isEmbedded){ btnRef.style.display = 'none'; return; }
+  const target = getNxParentTarget();
+  if (!target){ btnRef.style.display = 'none'; return; }
   btnRef.style.display = '';
   btnRef.addEventListener('click', () => {
     const mdInputEl = document.getElementById('mdInput');
     const d = docs.find(x => x.id === selectedId);
     const name = (d && d.name) ? d.name : '문서';
-    window.parent.postMessage({
+    target.postMessage({
       type: 'nx-request-attach',
       name: name,
       content: mdInputEl ? mdInputEl.value : ''
@@ -2532,18 +2545,30 @@ document.getElementById('btnRender').addEventListener('click', render);
   });
 })();
 
-// ---------- 닫기 버튼: NX-Work(부모창)의 폰 전체화면 편집기 오버레이 안에 열렸을 때만 보이고,
-// 누르면 그 오버레이를 닫아달라고 부모에게 요청한다(PC 새 창일 때는 그냥 OS 창닫기를 쓰면 되므로
-// 이 버튼 자체가 필요 없음 — embedded 상태에서만 노출되는 게 자연스럽게 그 구분을 대신한다). ----------
+// ---------- 닫기 버튼: NX-Work 안에서 열렸을 때(iframe이든 독립창이든)만 보인다.
+// iframe(폰 전체화면 오버레이)이면 부모에게 오버레이를 닫아달라고 요청하고,
+// 독립창(window.open)이면 스크립트가 직접 연 창이므로 window.close()로 스스로 닫는다
+// (OS 창닫기 버튼과 동일하게 동작 — beforeunload가 opener에게 알아서 상태 정리를 요청한다). ----------
 (function(){
   const btnClose = document.getElementById('btnCloseToParent');
-  const isEmbedded = (window.self !== window.top);
-  if (!isEmbedded){ btnClose.style.display = 'none'; return; }
+  const target = getNxParentTarget();
+  if (!target){ btnClose.style.display = 'none'; return; }
   btnClose.style.display = '';
   btnClose.addEventListener('click', () => {
-    window.parent.postMessage({ type: 'nx-close-editor' }, '*');
+    if (window.opener){ window.close(); return; }
+    target.postMessage({ type: 'nx-close-editor' }, '*');
   });
 })();
+
+// ---------- 독립창(팝업)이 어떤 방법으로든(자체 닫기 버튼 / OS 창닫기 버튼) 닫히면, opener인
+// NX-Work에게 알려서 currentOpenFile・isReportWriterOpen 등 상태를 즉시 초기화하게 한다.
+// 이게 없으면 창을 닫아도 NX-Work은 "아직 열려있다"고 착각해서 AI 적용・참조가 죽은 창을
+// 향해 조용히 실패한다. ----------
+window.addEventListener('beforeunload', () => {
+  if (window.opener && !window.opener.closed){
+    try{ window.opener.postMessage({ type: 'nx-editor-window-closed' }, '*'); }catch(e){}
+  }
+});
 
 // ---------- 새로고침 버튼: 지금 열려 있는 문서가 fileId로 드라이브에서 불러온 것이면,
 // 탐색기 등 다른 경로에서 바뀐 최신 내용을 다시 읽어온다(부모창을 거치지 않고 report-writer가
