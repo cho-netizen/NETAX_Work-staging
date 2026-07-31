@@ -2090,38 +2090,65 @@ graph TD
     return false;
   }
 
-  // 편집기 독립창(팝업) 참조 — 탐색창 클릭으로 열든, 하단바 편집 버튼으로 열든 항상 이 하나만 쓴다.
-  // (예전엔 하단바 버튼이 지역변수로만 window.open 결과를 들고 있어서, 두 번째로 열면 창이
-  // 중복 생성되고 AI 적용 기능도 그 창을 찾을 방법이 없었다 — 전역으로 통일해서 해결)
-  let editorPopupWin = null;
+  // 편집기 독립창(팝업) 참조 — 파일별로 하나씩 관리한다 (key: fileId, 파일 없는 새문서는 '__blank__').
+  // 각 항목은 { win, file } — win은 window 참조, file은 그 창이 열고 있는 파일 메타데이터
+  // (포커스 알림이 왔을 때 currentOpenFile을 복원하는 데 쓴다).
+  // [패치 2026.07] 예전엔 창을 하나만 두고 재사용해서 두 문서를 동시에 띄울 수 없었다.
+  // 메인검토서를 열어두고 쟁점별검토서 여러 개를 같이 펼쳐놓고 옮겨 적는 작업 방식이 많아서,
+  // 파일마다 독립된 창을 갖도록 맵으로 바꿨다. 같은 파일을 또 클릭하면 새로 만들지 않고 그 창에
+  // 포커스만 준다(창이 여러 개 있어도 중복 생성 방지).
+  const editorPopupWins = {};
+  function editorPopupKey(file){ return file ? ('f_' + file.id) : '__blank__'; }
 
   // report-writer(편집 대상) 문서를 독립창으로 연다. NX 탐색창은 전혀 건드리지 않으므로
-  // 탐색기/채팅 등 원래 화면은 그대로 살아있는다. 이미 같은 창이 열려 있으면 새로 만들지 않고
-  // 그 창의 내용만 바꿔치기(location 이동)하고 포커스만 준다.
+  // 탐색기/채팅 등 원래 화면은 그대로 살아있는다. 이미 그 파일의 창이 열려 있으면 새로 만들지
+  // 않고 포커스만 준다.
   function openEditorPopup(file){
     // 이 함수는 항상 report-writer만 여는 용도이므로(이미지·PDF는 openEditor의 다른 분기가 처리),
     // 파일 없이(새 빈 문서) 열 때도 isReportWriterOpen은 true로 둔다 — 그래야 그 상태에서도
     // 참조·AI적용이 정상 동작한다.
+    const key = editorPopupKey(file);
     const url = file ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(file.id)) : REPORT_WRITER_URL;
+    // "지금 편집 중인 문서"(채팅에 자동으로 실시간 반영되는 대상)는 일단 방금 연/포커스한 이
+    // 창으로 잡아둔다. 이후 사용자가 다른 창을 클릭하면 report-writer의 focus 알림으로 갱신된다.
     currentOpenFile = file ? { id: file.id, name: file.name, mimeType: file.mimeType } : null;
     isReportWriterOpen = true;
-    if (editorPopupWin && !editorPopupWin.closed){
-      editorPopupWin.location.href = url;
-      editorPopupWin.focus();
+
+    const existing = editorPopupWins[key];
+    if (existing && existing.win && !existing.win.closed){
+      existing.win.focus();
       return;
     }
     const w = Math.round(window.innerWidth * 0.75);
     const h = Math.round(window.innerHeight * 0.85);
-    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
-    const top = Math.round(window.screenY + (window.outerHeight - h) / 2);
-    editorPopupWin = window.open(url, 'nxEditorWindow', 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
-    if (!editorPopupWin){
+    // 여러 창을 동시에 띄울 때 완전히 겹치지 않도록, 지금 열려있는 편집창 개수만큼 계단식으로 위치를 밀어준다.
+    const openCount = Object.keys(editorPopupWins).filter(k => editorPopupWins[k] && editorPopupWins[k].win && !editorPopupWins[k].win.closed).length;
+    const cascade = (openCount % 6) * 32;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2) + cascade;
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2) + cascade;
+    const win = window.open(url, 'nxEditorWindow_' + key, 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!win){
       showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
       currentOpenFile = null;
       isReportWriterOpen = false;
     } else {
-      editorPopupWin.focus();
+      editorPopupWins[key] = { win: win, file: currentOpenFile };
+      win.focus();
     }
+  }
+
+  // 특정 파일의 편집창이 지금 열려 있으면(닫히지 않았으면) 그 window 참조를 돌려준다 — 없으면 null.
+  // AI 적용처럼 "포커스와 무관하게 이 파일 창에 정확히 반영해야 하는" 경우에 쓴다.
+  function getEditorWindowForFile(file){
+    const entry = editorPopupWins[editorPopupKey(file)];
+    return (entry && entry.win && !entry.win.closed) ? entry.win : null;
+  }
+
+  // fileId(문자열, 새문서 창이면 null)로 열려있는 편집창을 찾아 그 파일 메타데이터를 돌려준다.
+  // report-writer의 포커스/닫힘 알림 메시지가 fileId만 갖고 오기 때문에 필요하다.
+  function findEditorEntryByFileId(fileId){
+    const key = fileId ? ('f_' + fileId) : '__blank__';
+    return editorPopupWins[key] || null;
   }
 
   function openEditor(file){
@@ -3051,25 +3078,42 @@ graph TD
       closeFullEditor();
     }
     if (msg.type === 'nx-editor-window-closed'){
-      // 편집창 독립 팝업이 (자체 닫기 버튼이든 OS 창닫기 버튼이든 어떤 방법으로든) 닫혔다는
-      // 신호 — report-writer가 unload 시점에 opener에게 직접 보내온다. 상태를 초기화해서
-      // AI가 "지금 열려있는 문서"로 착각해 적용을 시도하는 일이 없게 한다.
-      editorPopupWin = null;
-      if (isReportWriterOpen){ isReportWriterOpen = false; currentOpenFile = null; }
+      // 편집창 독립 팝업 중 하나가 (자체 닫기 버튼이든 OS 창닫기 버튼이든 어떤 방법으로든) 닫혔다는
+      // 신호 — report-writer가 unload 시점에 opener에게 직접 보내온다. fileId로 정확히 그 창만
+      // 목록에서 지운다(다른 편집창까지 같이 지우면 여러 창 동시 작업이 깨진다).
+      const closedKey = msg.fileId ? ('f_' + msg.fileId) : '__blank__';
+      delete editorPopupWins[closedKey];
+      // 지금 "포커스 추적 중"이던 창이 닫힌 거라면 그 추적만 해제한다 — AI가 "지금 열려있는
+      // 문서"로 착각해 죽은 창에 적용을 시도하는 일이 없게 한다. 다른 창이 아직 열려있어도
+      // 자동으로 그쪽으로 넘기지 않는다(사용자가 그 창을 클릭하면 focus 알림으로 알아서 넘어감).
+      if (isReportWriterOpen && editorPopupKey(currentOpenFile) === closedKey){
+        isReportWriterOpen = false;
+        currentOpenFile = null;
+      }
+    }
+    if (msg.type === 'nx-editor-window-focused'){
+      // 여러 편집창 중 사용자가 지금 클릭해서 활성화한 창 — "지금 편집 중인 문서"(채팅 보낼 때
+      // 자동으로 AI에게 실시간 반영되는 대상)를 그 창으로 맞춘다. 메인검토서/쟁점별검토서를
+      // 오가며 작업할 때, 방금 돌아온 창이 곧바로 AI 컨텍스트가 되게 하기 위함.
+      const entry = findEditorEntryByFileId(msg.fileId);
+      if (entry){
+        currentOpenFile = entry.file; // 파일 없이 연 새 문서 창이면 null
+        isReportWriterOpen = true;
+      }
     }
   });
 
   // 지금 편집기(report-writer)에 실제로 타이핑되어 있는(저장 전 포함) 내용을 물어봄
-  // 폰 전체화면(fullEditorFrame, iframe)과 PC·태블릿 독립창(editorPopupWin, window.open) 중
-  // "지금 실제로 열려 있는 쪽"을 골라주는 공통 헬퍼. 이걸 통해서 참조/새로고침/AI적용을 구현하면
-  // 어느 화면(폰/PC/탐색창 클릭/하단바 버튼)에서 열어도 항상 똑같이 동작한다.
+  // 폰 전체화면(fullEditorFrame, iframe)과 PC·태블릿 독립창들(editorPopupWins) 중 지금
+  // "포커스 추적 중인"(currentOpenFile에 해당하는) 창을 골라주는 공통 헬퍼. 이걸 통해서
+  // 참조/새로고침/AI적용을 구현하면 어느 화면에서 열어도, 여러 창이 열려있어도 항상 정확한
+  // 대상에 반영된다.
   function isFullEditorVisible(){
     return !!(fullEditorOverlay && fullEditorOverlay.style.display !== 'none');
   }
   function getActiveEditorTarget(){
     if (isFullEditorVisible()) return fullEditorFrame.contentWindow || null;
-    if (editorPopupWin && !editorPopupWin.closed) return editorPopupWin;
-    return null;
+    return getEditorWindowForFile(currentOpenFile);
   }
 
   function getEditorLiveContent(){
@@ -4586,10 +4630,12 @@ graph TD
   // 별도로 기억해뒀다가, 응답이 왔을 때 그 파일이 지금 안 열려 있어도 버튼은 항상 보여주고,
   // 클릭하면 그 파일을 다시 열어서 적용한다.
   function applyEditToTargetFile_(editTargetFile, content, applyBtn){
-    const sameFileAlreadyOpen = isReportWriterOpen && currentOpenFile && editTargetFile
-      && currentOpenFile.id === editTargetFile.id;
-    if (sameFileAlreadyOpen){
-      applyEditorContent(content);
+    // 폰 전체화면 오버레이가 지금 이 파일을 보여주고 있으면 그쪽으로 (오버레이는 파일별 맵이 아니라
+    // 한 번에 하나만 뜨므로 이 경우만 별도 처리).
+    const fullEditorShowsThisFile = isFullEditorVisible() && isReportWriterOpen
+      && currentOpenFile && editTargetFile && currentOpenFile.id === editTargetFile.id;
+    if (fullEditorShowsThisFile){
+      fullEditorFrame.contentWindow.postMessage({ type: 'nx-set-content', content: content }, '*');
       applyBtn.textContent = '✓ 적용됨';
       applyBtn.disabled = true;
       return;
@@ -4598,10 +4644,20 @@ graph TD
       showToast('적용할 문서 정보를 찾을 수 없습니다 — 문서를 다시 열고 요청해주세요.', 'error');
       return;
     }
+    // 이미 그 파일의 독립창이 열려있으면 — 지금 그 창이 포커스되어 있지 않아도(예: 다른 문서를
+    // 보고 있는 중이어도) 곧바로 그 창에 반영한다. 여러 편집창을 동시에 띄워놓고 작업할 때,
+    // AI 적용은 "지금 보고 있는 창"이 아니라 "AI가 지목한 그 문서"로 정확히 가야 하기 때문이다.
+    const already = getEditorWindowForFile(editTargetFile);
+    if (already){
+      already.postMessage({ type: 'nx-set-content', content: content }, '*');
+      applyBtn.textContent = '✓ 적용됨';
+      applyBtn.disabled = true;
+      return;
+    }
     applyBtn.textContent = '문서 여는 중…';
     applyBtn.disabled = true;
-    openEditor(editTargetFile); // isReportWriterOpen=true로 바뀌고 편집창(독립창 또는 폰 전체화면)이 새로 열린다
-    const target = getActiveEditorTarget();
+    openEditor(editTargetFile); // 그 파일 전용 독립창을 새로 연다(다른 편집창들은 그대로 유지됨)
+    const target = getEditorWindowForFile(editTargetFile);
     if (!target){
       // 독립창이 팝업 차단 등으로 열리지 못한 경우 — iframe과 달리 이 경우는 실제로 일어날 수 있어서
       // (예전 iframe 방식은 차단될 일이 없었음) 조용히 실패하지 않고 안내한다.
@@ -4613,7 +4669,7 @@ graph TD
       target.removeEventListener('load', onLoad);
       // report-writer 내부 스크립트가 파일을 fetch해서 완전히 준비되기까지 약간의 여유를 둔다.
       setTimeout(()=>{
-        applyEditorContent(content);
+        target.postMessage({ type: 'nx-set-content', content: content }, '*');
         applyBtn.textContent = '✓ 적용됨';
       }, 500);
     };
