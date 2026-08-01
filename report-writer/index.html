@@ -2405,6 +2405,17 @@ async function render(){
   out.className = currentTheme().cls;
   out.innerHTML = html;
 
+  // [패치 2026.08] 원인 확정: 보고서 본문에 마크다운으로 박힌 링크(법령 인용 등)가
+  // marked.js 기본 렌더링대로 target 지정 없이 <a href="...">로 나가서, 클릭하는 순간
+  // "지금 이 창"이 그대로 그 주소로 이동해버렸다. 독립창(window.open)으로 연 보고서든,
+  // 내보낸 완성본 HTML이든 다시 돌아올 방법이 없어 보고서 자체가 사라지는 것처럼 보였다.
+  // STATUTE_INFO 팝업 시스템(linkifyStatutes)과는 별개로, 본문에 존재하는 모든 링크를
+  // 테마 구분 없이 무조건 새 탭으로 강제해서 이 사고 자체를 원천 차단한다.
+  out.querySelectorAll('a[href]').forEach(a => {
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  });
+
   if (isExternal) {
     // rpt.netax.kr의 showResult()와 동일한 순서로 후처리 (mermaid는 비동기라 완료를 기다린 뒤 나머지 실행)
     try {
