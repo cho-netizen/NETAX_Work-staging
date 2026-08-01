@@ -916,7 +916,6 @@
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
-      <button id="btnOpenFullEditor" class="tb-btn" title="전체화면으로 직접 편집 (AI 개입 없이)">🖋 편집</button>
     </div>
     <div class="topbar-item tool-group-narrow" id="toolGroup1Wrap">
       <button type="button" id="btnToolGroup1" class="tb-btn" title="검색 · 휴지통 · 현황판">🔍 <span class="tool-menu-label">도구1</span></button>
@@ -1297,12 +1296,6 @@
   <!-- 📊 엑셀 열기는 이제 고정크기 모달이 아니라 excel-viewer.html을 독립창(window.open)으로
        띄운다 — 크기조절이 안 되는 작은 창에 큰 엑셀시트를 욱여넣던 문제를 해결하기 위함.
        (관련 스크립트: openExcelPopup, 하단부 "엑셀 열기" 그룹) -->
-
-  <div class="floating-layer" id="fullEditorOverlay" style="display:none;">
-    <div class="full-editor-panel" id="fullEditorPanel">
-      <iframe id="fullEditorFrame" class="full-editor-frame" title="전체화면 문서 편집기"></iframe>
-    </div>
-  </div>
 
   <div class="workspace" id="workspace">
     <div class="explorer-float-backdrop" id="explorerFloatBackdrop"></div>
@@ -3101,11 +3094,6 @@ graph TD
       // 똑같이 여기서 처리된다(화면별로 따로 처리하지 않아도 됨).
       addTextAttachment(msg.name || (currentOpenFile && currentOpenFile.name) || '문서', msg.content || '');
     }
-    if (msg.type === 'nx-close-editor' && fullEditorOverlay.style.display !== 'none'){
-      // 폰 전체화면 편집기가 열려있을 때만 반응한다(그 외의 경우 — 예: 탐색기 안 좁은 편집창
-      // 임베드 — 에는 이 버튼이 눌려도 닫을 오버레이가 없으므로 아무 일도 하지 않음).
-      closeFullEditor();
-    }
     if (msg.type === 'nx-editor-window-closed'){
       // 편집창 독립 팝업 중 하나가 (자체 닫기 버튼이든 OS 창닫기 버튼이든 어떤 방법으로든) 닫혔다는
       // 신호 — report-writer가 unload 시점에 opener에게 직접 보내온다. fileId로 정확히 그 창만
@@ -3133,15 +3121,10 @@ graph TD
   });
 
   // 지금 편집기(report-writer)에 실제로 타이핑되어 있는(저장 전 포함) 내용을 물어봄
-  // 폰 전체화면(fullEditorFrame, iframe)과 PC·태블릿 독립창들(editorPopupWins) 중 지금
-  // "포커스 추적 중인"(currentOpenFile에 해당하는) 창을 골라주는 공통 헬퍼. 이걸 통해서
-  // 참조/새로고침/AI적용을 구현하면 어느 화면에서 열어도, 여러 창이 열려있어도 항상 정확한
-  // 대상에 반영된다.
-  function isFullEditorVisible(){
-    return !!(fullEditorOverlay && fullEditorOverlay.style.display !== 'none');
-  }
+  // PC・태블릿 독립창들(editorPopupWins) 중 지금 "포커스 추적 중인"(currentOpenFile에 해당하는)
+  // 창을 골라주는 공통 헬퍼. 이걸 통해서 참조/새로고침/AI적용을 구현하면 어느 화면에서 열어도,
+  // 여러 창이 열려있어도 항상 정확한 대상에 반영된다.
   function getActiveEditorTarget(){
-    if (isFullEditorVisible()) return fullEditorFrame.contentWindow || null;
     return getEditorWindowForFile(currentOpenFile);
   }
 
@@ -3226,8 +3209,7 @@ graph TD
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() },
-    { icon: '🖋', label: '편집', handler: openFullEditor }
+    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() }
   ];
 
   // ---- 폰(compact 단계) 전용 하단 도구 5그룹 — 기능이 비슷한 것끼리 2개씩 묶음 ----
@@ -3245,8 +3227,7 @@ graph TD
   ];
   const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() },
-    { icon: '🖋', label: '편집', handler: openFullEditor }
+    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() }
   ];
 
   function fillToolPopup(popupEl, items){
@@ -4659,16 +4640,6 @@ graph TD
   // 별도로 기억해뒀다가, 응답이 왔을 때 그 파일이 지금 안 열려 있어도 버튼은 항상 보여주고,
   // 클릭하면 그 파일을 다시 열어서 적용한다.
   function applyEditToTargetFile_(editTargetFile, content, applyBtn){
-    // 폰 전체화면 오버레이가 지금 이 파일을 보여주고 있으면 그쪽으로 (오버레이는 파일별 맵이 아니라
-    // 한 번에 하나만 뜨므로 이 경우만 별도 처리).
-    const fullEditorShowsThisFile = isFullEditorVisible() && isReportWriterOpen
-      && currentOpenFile && editTargetFile && currentOpenFile.id === editTargetFile.id;
-    if (fullEditorShowsThisFile){
-      fullEditorFrame.contentWindow.postMessage({ type: 'nx-set-content', content: content }, '*');
-      applyBtn.textContent = '✓ 적용됨';
-      applyBtn.disabled = true;
-      return;
-    }
     if (!editTargetFile){
       showToast('적용할 문서 정보를 찾을 수 없습니다 — 문서를 다시 열고 요청해주세요.', 'error');
       return;
@@ -4937,7 +4908,6 @@ graph TD
     { id: 'openScan', label: '스캔 열기', action: 'openScan', enabled: true, phrases: ['스캔열어', '스캔켜', '스캔시작'] },
     { id: 'capture', label: '화면 캡처', action: 'capture', enabled: true, phrases: ['화면캡처', '캡처해줘', '캡처시작'] },
     { id: 'openSettings', label: '설정 열기', action: 'openSettings', enabled: true, phrases: ['설정열어', '설정보여'] },
-    { id: 'openFullEditor', label: '전체화면 편집', action: 'openFullEditor', enabled: true, phrases: ['전체화면편집', '전체화면열어'] },
     { id: 'hideExplorer', label: '탐색창 접기', action: 'hideExplorer', enabled: true, phrases: ['탐색창접어', '탐색창숨겨', '탐색창생략'] },
     { id: 'showExplorer', label: '탐색창 펼치기', action: 'showExplorer', enabled: true, phrases: ['탐색창보여', '탐색창펼쳐'] },
     { id: 'darkOn', label: '다크모드 켜기', action: 'darkOn', enabled: true, phrases: ['다크모드켜', '다크모드시작'] },
@@ -5006,7 +4976,6 @@ graph TD
       case 'openScan': openScanModal(); return '스캔 열었습니다.';
       case 'capture': captureScreen(); return '화면 캡처를 시작합니다.';
       case 'openSettings': openSettingsModal(); return '설정 열었습니다.';
-      case 'openFullEditor': openFullEditor(); return '전체화면 편집 열었습니다.';
       case 'hideExplorer': setWorkspaceMode('hide'); return '탐색창을 접었습니다.';
       case 'showExplorer': setWorkspaceMode('row'); return '탐색창을 펼쳤습니다.';
       case 'darkOn': applyDarkMode(true); localStorage.setItem(DARK_MODE_KEY, '1'); return '다크모드를 켰습니다.';
@@ -6356,45 +6325,6 @@ graph TD
     });
   })();
   document.getElementById('btnOpenMemo').addEventListener('click', ()=> window.openQuickMemo());
-
-  // ---- 전체화면 편집기 (AI 개입 없이, 드래그·크기조절·최대화 가능한 뜨는 창) ----
-  const fullEditorOverlay = document.getElementById('fullEditorOverlay');
-  const fullEditorFrame = document.getElementById('fullEditorFrame');
-
-  // 편집창: 폰(좁은 화면)에서는 상담메모창과 똑같이 페이지 안에서 전체화면으로 띄우고,
-  // PC·태블릿에서는 진짜 브라우저 새 창(window.open)으로 연다 — 크기조절·이동·최대화를
-  // 우리가 직접 흉내내는 대신 OS/브라우저에게 그대로 맡긴다(훨씬 더 자연스럽고 안정적).
-  // stage-compact는 "폰이냐 PC냐"가 아니라 지금 브라우저 창의 픽셀 너비(툴바가 한 줄에 다
-  // 들어가는지)를 재는 반응형 CSS 상태라서, PC에서 창을 안 넓게 펼쳐두면 편집기 버튼이 오작동
-  // (독립창 대신 폰용 전체화면 오버레이로 열림)했었다. 독립창(window.open)을 지원하는지는 화면
-  // 폭이 아니라 "진짜 터치 전용 기기인지"로 판단해야 한다 — 포인터 정밀도(마우스=fine,
-  // 손가락=coarse)로 실제 기기 종류를 확인한다.
-  function isTouchOnlyDevice_(){
-    return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-  }
-
-  function openFullEditor(){
-    if (isTouchOnlyDevice_()){
-      const url = currentOpenFile
-        ? (REPORT_WRITER_URL + '?fileId=' + encodeURIComponent(currentOpenFile.id))
-        : REPORT_WRITER_URL;
-      fullEditorFrame.src = url;
-      fullEditorOverlay.style.display = 'block';
-      return;
-    }
-    // PC・태블릿(마우스 있는 환경): 탐색창 클릭으로 여는 것과 완전히 같은 독립창 로직을 공유한다
-    // (openEditorPopup). 이렇게 하나로 합쳐 놔야 어느 쪽으로 열어도 같은 창을 재사용하고, AI
-    // 적용·참조·새로고침이 항상 똑같이 동작한다(예전엔 이 버튼의 window.open이 지역변수였어서
-    // 전역에서 추적이 안 됐음).
-    openEditorPopup(currentOpenFile || null);
-  }
-  function closeFullEditor(){
-    fullEditorOverlay.style.display = 'none';
-    fullEditorFrame.src = 'about:blank';
-  }
-  document.getElementById('btnOpenFullEditor').addEventListener('click', openFullEditor);
-  // 닫기는 이제 report-writer 자체 툴바의 ✕ 버튼(embedded일 때만 보임)이 postMessage로
-  // 요청하면 위쪽 메시지 리스너에서 closeFullEditor()를 호출하는 방식으로 처리한다.
 
   document.getElementById('btnCloseScan').addEventListener('click', closeScanModal);
   // 바깥(어두운 배경) 클릭 시 자동으로 닫히는 동작은 일부러 안 넣는다 — 스캔 작업 중에는
