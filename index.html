@@ -1270,6 +1270,7 @@
           <input type="text" id="quickMemoGeneralSearch" autocomplete="off" placeholder="🔍 메모 열기 · 템플릿으로 사건개시 (오타 허용)" style="width:100%; box-sizing:border-box; font-family:inherit; font-size:12.5px; padding:5px 8px; border:1px solid rgba(255,255,255,0.25); border-radius:6px; background:rgba(255,255,255,0.08); color:#fff;">
           <div id="quickMemoSearchDropdown" style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,0.25); max-height:240px; overflow-y:auto; z-index:50;"></div>
         </div>
+        <button id="btnQuickMemoNew" class="note-tb-btn" title="새 메모 (지금 창을 안 닫고 바로 새로 시작)">🆕</button>
         <button id="btnQuickMemoSave" class="note-tb-btn note-tb-save" title="저장">💾</button>
         <button id="btnQuickMemoToNote" class="note-tb-btn" title="필기로 전환">✍</button>
         <button id="btnCloseQuickMemo" class="note-tb-btn note-tb-close" title="닫기">✕</button>
@@ -6277,6 +6278,19 @@ graph TD
     document.getElementById('btnCloseQuickMemo').addEventListener('click', ()=>{
       if (quickMemoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 그냥 닫을까요?')) return;
       closeQuickMemo();
+    });
+
+    // 새로 만들기 — 지금 메모를 불러온 상태에서 창을 닫았다가 다시 열 필요 없이, 바로 빈 메모로
+    // 초기화한다. 저장 안 한 내용이 있으면 한 번 확인한다(닫기 버튼과 동일한 안전장치).
+    document.getElementById('btnQuickMemoNew').addEventListener('click', ()=>{
+      if (quickMemoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 새 메모를 시작할까요?')) return;
+      quickMemoText.value = '';
+      editingGeneralMemoFile = null;
+      currentTemplateMode = null;
+      quickMemoGeneralSearch.value = '';
+      quickMemoSearchDropdown.style.display = 'none';
+      quickMemoText.focus();
+      showToast('새 메모를 시작합니다.', 'success');
     });
 
     // 필기상담 화면으로 바로 전환 — 지금 메모 화면은 닫고 필기상담을 연다.
