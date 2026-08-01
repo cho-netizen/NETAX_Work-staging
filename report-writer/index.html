@@ -2020,10 +2020,18 @@ function showStatutePopup(key) {
     : 'https://www.law.go.kr/LSW/lsSc.do?section=&menuId=1&subMenuId=15&tabMenuId=81&query=' + encodeURIComponent(lawFullName);
 
   document.getElementById('statuteModal').style.display = 'flex';
+  // [패치 2026.08] "새창으로 보기"로 연 완성본에는 좌상단에 '← 편집기로 돌아가기' 버튼이
+  // z-index:9999로 항상 최상단에 떠 있다. 법령 팝업(z-index:500)이 화면 대부분을 어둡게
+  // 덮어버리면 이 버튼만 유일하게 눈에 띄는 클릭 가능 요소로 남아, 사용자가 이걸 "팝업 닫기"로
+  // 착각해 누르면 보고서 창 전체가 닫혀버리는 사고가 있었다. 팝업이 떠 있는 동안은 숨긴다.
+  const backFloat = document.getElementById('nxBackFloat');
+  if (backFloat) backFloat.style.display = 'none';
 }
 
 function closeStatuteModal() {
   document.getElementById('statuteModal').style.display = 'none';
+  const backFloat = document.getElementById('nxBackFloat');
+  if (backFloat) backFloat.style.display = '';
 }
 
 // ===== 마크다운 문법 도움말 =====
@@ -2990,8 +2998,14 @@ function buildStandaloneHtml(includeBackButton){
     + '    ? "https://www.law.go.kr/법령/" + encodeURIComponent(lawFullName) + "/" + encodeURIComponent(articlePath)\n'
     + '    : "https://www.law.go.kr/LSW/lsSc.do?section=&menuId=1&subMenuId=15&tabMenuId=81&query=" + encodeURIComponent(lawFullName);\n'
     + '  document.getElementById("statuteModal").style.display = "flex";\n'
+    + '  var backFloat = document.getElementById("nxBackFloat");\n'
+    + '  if (backFloat) backFloat.style.display = "none";\n'
     + '}\n'
-    + 'function closeStatuteModal(){ document.getElementById("statuteModal").style.display = "none"; }\n'
+    + 'function closeStatuteModal(){\n'
+    + '  document.getElementById("statuteModal").style.display = "none";\n'
+    + '  var backFloat = document.getElementById("nxBackFloat");\n'
+    + '  if (backFloat) backFloat.style.display = "";\n'
+    + '}\n'
     + 'document.querySelectorAll(".statute-link").forEach(function(span){\n'
     + '  const key = span.dataset.statuteKey;\n'
     + '  if (key) span.addEventListener("click", function(){ showStatutePopup(key); });\n'
