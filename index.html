@@ -260,6 +260,7 @@
   .modal-overlay{
     position:fixed; inset:0; background:rgba(13,27,61,0.55);
     display:flex; align-items:center; justify-content:center; z-index:100;
+    overflow:hidden; /* 창을 아주 작게 줄여 쓸 때, 안의 내용이 넘쳐서 페이지 전체가 스크롤되는 걸 막는다 */
   }
   .modal-panel{
     width:min(420px, 92vw); max-height:86vh; overflow-y:auto;
@@ -291,6 +292,13 @@
   }
   .note-tb-range{ flex:0 0 60px; width:60px; }
   .note-tb-page{ flex:0 0 auto; color:#fff; font-size:12px; padding:0 2px; }
+  /* 메모창(quickMemo)의 타이틀바는 필기(note-taking)용과 달리 검색 입력창이 들어있어서, 창을 좁게
+     쓰면 가로 스크롤 대신 줄바꿈되게 한다 — 그래야 닫기 버튼 등이 화면 밖으로 밀려나지 않는다. */
+  #quickMemoTitlebar{ overflow-x:visible; white-space:normal; flex-wrap:wrap; row-gap:6px; }
+  #quickMemoTitlebar > div{ min-width:160px; } /* 검색창 래퍼 — 너무 좁아지면 줄바꿈되도록 최소폭 확보 */
+  /* 드롭다운 목록도 창 높이 자체가 작을 땐 그만큼 줄어들어야, 페이지가 밀려서 타이틀바가
+     스크롤되어 화면 밖으로 사라지는 문제(창을 아주 작게 썼을 때 보고된 문제)가 없어진다. */
+  #quickMemoSearchDropdown{ max-height:min(240px, 50vh) !important; }
   #noteCanvasWrap{
     flex:1 1 auto; position:relative; width:100%; min-height:0;
     background:#fff; overflow:hidden; touch-action:none;
