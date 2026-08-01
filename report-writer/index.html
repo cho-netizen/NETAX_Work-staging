@@ -260,6 +260,7 @@
   .modal-overlay{
     position:fixed; inset:0; background:rgba(13,27,61,0.55);
     display:flex; align-items:center; justify-content:center; z-index:100;
+    overflow:hidden; /* 창을 아주 작게 줄여 쓸 때, 안의 내용이 넘쳐서 페이지 전체가 스크롤되는 걸 막는다 */
   }
   .modal-panel{
     width:min(420px, 92vw); max-height:86vh; overflow-y:auto;
@@ -291,6 +292,13 @@
   }
   .note-tb-range{ flex:0 0 60px; width:60px; }
   .note-tb-page{ flex:0 0 auto; color:#fff; font-size:12px; padding:0 2px; }
+  /* 메모창(quickMemo)의 타이틀바는 필기(note-taking)용과 달리 검색 입력창이 들어있어서, 창을 좁게
+     쓰면 가로 스크롤 대신 줄바꿈되게 한다 — 그래야 닫기 버튼 등이 화면 밖으로 밀려나지 않는다. */
+  #quickMemoTitlebar{ overflow-x:visible; white-space:normal; flex-wrap:wrap; row-gap:6px; }
+  #quickMemoTitlebar > div{ min-width:160px; } /* 검색창 래퍼 — 너무 좁아지면 줄바꿈되도록 최소폭 확보 */
+  /* 드롭다운 목록도 창 높이 자체가 작을 땐 그만큼 줄어들어야, 페이지가 밀려서 타이틀바가
+     스크롤되어 화면 밖으로 사라지는 문제(창을 아주 작게 썼을 때 보고된 문제)가 없어진다. */
+  #quickMemoSearchDropdown{ max-height:min(240px, 50vh) !important; }
   #noteCanvasWrap{
     flex:1 1 auto; position:relative; width:100%; min-height:0;
     background:#fff; overflow:hidden; touch-action:none;
@@ -1257,11 +1265,11 @@
   <div class="modal-overlay" id="quickMemoOverlay" style="display:none; padding:0;">
     <div class="note-fullscreen-panel" id="quickMemoPanel" style="background:var(--panel);">
       <div class="note-titlebar" id="quickMemoTitlebar">
-        <span style="color:#fff; font-size:13px; padding-left:6px; white-space:nowrap;">📝 메모</span>
         <div style="position:relative; flex:1; min-width:0;">
           <input type="text" id="quickMemoGeneralSearch" autocomplete="off" placeholder="🔍 메모 열기 · 템플릿으로 사건개시 (오타 허용)" style="width:100%; box-sizing:border-box; font-family:inherit; font-size:12.5px; padding:5px 8px; border:1px solid rgba(255,255,255,0.25); border-radius:6px; background:rgba(255,255,255,0.08); color:#fff;">
           <div id="quickMemoSearchDropdown" style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,0.25); max-height:240px; overflow-y:auto; z-index:50;"></div>
         </div>
+        <button id="btnQuickMemoNew" class="note-tb-btn" title="새 메모 (지금 창을 안 닫고 바로 새로 시작)">🆕</button>
         <button id="btnQuickMemoSave" class="note-tb-btn note-tb-save" title="저장">💾</button>
         <button id="btnQuickMemoToNote" class="note-tb-btn" title="필기로 전환">✍</button>
         <button id="btnCloseQuickMemo" class="note-tb-btn note-tb-close" title="닫기">✕</button>
@@ -6161,7 +6169,7 @@ graph TD
       results.slice(0, 8).forEach(entry=>{
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:8px 10px; font-size:12.5px; cursor:pointer; color:var(--ink);';
-        row.addEventListener('mouseenter', ()=> row.style.background = '#f0f2f6');
+        row.addEventListener('mouseenter', ()=> row.style.background = 'rgba(128,136,150,0.22)'); // 테마 무관 반투명 톤 — 라이트/다크 어디서도 글자와 항상 구분됨
         row.addEventListener('mouseleave', ()=> row.style.background = '');
         row.addEventListener('mousedown', (e)=>{ e.preventDefault(); }); // 입력창 blur로 드롭다운이 먼저 닫히는 것 방지
 
@@ -6269,6 +6277,19 @@ graph TD
     document.getElementById('btnCloseQuickMemo').addEventListener('click', ()=>{
       if (quickMemoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 그냥 닫을까요?')) return;
       closeQuickMemo();
+    });
+
+    // 새로 만들기 — 지금 메모를 불러온 상태에서 창을 닫았다가 다시 열 필요 없이, 바로 빈 메모로
+    // 초기화한다. 저장 안 한 내용이 있으면 한 번 확인한다(닫기 버튼과 동일한 안전장치).
+    document.getElementById('btnQuickMemoNew').addEventListener('click', ()=>{
+      if (quickMemoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 새 메모를 시작할까요?')) return;
+      quickMemoText.value = '';
+      editingGeneralMemoFile = null;
+      currentTemplateMode = null;
+      quickMemoGeneralSearch.value = '';
+      quickMemoSearchDropdown.style.display = 'none';
+      quickMemoText.focus();
+      showToast('새 메모를 시작합니다.', 'success');
     });
 
     // 필기상담 화면으로 바로 전환 — 지금 메모 화면은 닫고 필기상담을 연다.
