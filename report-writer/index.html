@@ -882,6 +882,17 @@
     position: relative;
     box-shadow: 0 12px 40px rgba(0,0,0,0.3);
   }
+  /* [패치 2026.08] report-writer가 독립 팝업창(window.open)으로 뜨면서, 법령 모달이
+     창을 거의 다 채워 보이는 경우 사용자가 "이 팝업만" 닫는 방법을 못 찾고 report-writer
+     자체 상단 툴바의 닫기 버튼을 눌러버려 보고서 창 전체가 닫히는 문제가 있었다(모달은
+     원래 배경 클릭/Esc로만 닫히고 눈에 보이는 닫기 버튼이 없었음). 모달 박스 자체에
+     명확한 ✕ 버튼을 두어 report-writer 창 닫기와 절대 혼동되지 않게 한다. */
+  .statute-modal-close {
+    position: absolute; top: 12px; right: 14px;
+    font-size: 16px; color: #999; cursor: pointer;
+    line-height: 1; padding: 4px; user-select: none;
+  }
+  .statute-modal-close:hover { color: #333; }
   .statute-modal-title {
     font-family: 'Noto Serif KR', serif;
     font-weight: 700;
@@ -1050,6 +1061,7 @@
 
 <div class="statute-modal-backdrop" id="statuteModal" onclick="if(event.target===this) closeStatuteModal()">
   <div class="statute-modal-box">
+    <span class="statute-modal-close" onclick="closeStatuteModal()" title="닫기">✕</span>
     <div class="statute-modal-title" id="statuteModalTitle"></div>
     <div class="statute-modal-body" id="statuteModalBody"></div>
     <a class="statute-modal-link" id="statuteModalLink" target="_blank" rel="noopener">국가법령정보센터에서 전문 보기 ↗</a>
