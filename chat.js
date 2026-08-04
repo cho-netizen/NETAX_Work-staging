@@ -358,7 +358,8 @@
       showToast('폴더 만들기 중 오류: ' + (err && err.message ? err.message : err), 'error');
     }
   }
-  document.getElementById('btnNewFolder').addEventListener('click', createNewFolder);
+  // [2026.08] 버튼(btnNewFolder)은 없앴고, 우클릭 메뉴(setupExplorerEmptyContextMenu)에서
+  // 이 함수를 그대로 재사용한다.
 
   async function createNewDoc(){
     let name = prompt('새 문서 이름을 입력하세요 (확장자는 자동으로 .md가 붙습니다):');
@@ -376,7 +377,7 @@
       showToast('문서 만들기 중 오류: ' + (err && err.message ? err.message : err), 'error');
     }
   }
-  document.getElementById('btnNewDoc').addEventListener('click', createNewDoc);
+  // [2026.08] 버튼(btnNewDoc)은 없앴고, 우클릭 메뉴에서 이 함수를 그대로 재사용한다.
 
   // ---- [2026.08] 탐색기 빈 공간 우클릭 → 브라우저 기본 메뉴 대신 새폴더/새문서 메뉴 ----
   // 파일/폴더 행(.file-row, .folder-row) 위에서는 항목별 동작과 헷갈리지 않도록 그대로 두고,
@@ -395,8 +396,9 @@
       closeMenu();
 
       menuEl = document.createElement('div');
-      menuEl.style.cssText = 'position:fixed; z-index:5000; background:#fff; border:1px solid var(--line);'
-        + 'border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.18); padding:4px; min-width:150px;'
+      menuEl.style.cssText = 'position:fixed; z-index:5000; background:var(--panel); color:var(--ink);'
+        + 'border:1px solid var(--line);'
+        + 'border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.28); padding:4px; min-width:150px;'
         + 'font-size:13.5px; font-family:inherit;';
       const items = [
         { label: '📁 새 폴더 만들기', action: createNewFolder },
@@ -406,8 +408,8 @@
       items.forEach(it=>{
         const row = document.createElement('div');
         row.textContent = it.label;
-        row.style.cssText = 'padding:8px 12px; border-radius:4px; cursor:pointer; white-space:nowrap;';
-        row.addEventListener('mouseenter', ()=> row.style.background = '#f0f2f6');
+        row.style.cssText = 'padding:8px 12px; border-radius:4px; cursor:pointer; white-space:nowrap; color:var(--ink);';
+        row.addEventListener('mouseenter', ()=> row.style.background = 'var(--bg)');
         row.addEventListener('mouseleave', ()=> row.style.background = '');
         row.addEventListener('click', ()=>{ closeMenu(); it.action(); });
         menuEl.appendChild(row);
@@ -428,13 +430,9 @@
     });
   })();
 
-  // 드라이브에서 직접 파일을 추가/삭제했거나, AI가 스스로(요청 없이) 파일을 만들거나 갱신했을 때
-  // 탐색기가 그걸 자동으로는 알 방법이 없는 경우가 있다(예: 검토서 자동갱신, 외부에서 직접 업로드
-  // 등) — 그럴 때 수동으로 다시 불러오는 버튼.
-  document.getElementById('btnRefreshExplorer').addEventListener('click', ()=>{
-    navigateTo(explorerPath);
-    showToast('새로고침했습니다.', 'info');
-  });
+  // [2026.08] 이 새로고침 버튼은 없앴다 — 같은 동작이 우클릭 메뉴의 "🔄 새로고침" 항목으로
+  // 대체되었다(드라이브에서 직접 파일을 추가/삭제했거나 AI가 스스로 파일을 갱신했을 때 등,
+  // 탐색기가 자동으로 알 수 없는 경우 수동으로 다시 불러오는 용도는 동일).
 
   // 공유 — 퀵쉐어(윈도우/안드로이드 OS 기능)는 웹사이트가 직접 지정할 수 없어서,
   // 대신 브라우저 표준 "공유하기"(Web Share API)를 띄운다. OS/기기가 지원하면 그 공유창 안에
