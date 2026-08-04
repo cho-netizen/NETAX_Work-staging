@@ -21,6 +21,14 @@
     }
   }
 
+  // [2026.08] <input list="...">(datalist) 방식은 이미 값이 채워져 있으면 클릭해도
+  // 목록이 안 뜨는 경우가 많다(브라우저 기본 동작) — 값을 지우고 다시 눌러야만 뜨던 그
+  // 불편함. showPicker()로 값 유무와 상관없이 항상 목록이 뜨도록 강제한다.
+  customerSelect.addEventListener('click', ()=>{
+    if (typeof customerSelect.showPicker === 'function'){
+      try{ customerSelect.showPicker(); }catch(e){}
+    }
+  });
   customerSelect.addEventListener('change', ()=>{
     const val = customerSelect.value.trim();
     if (val && currentCustomerNames.includes(val)) navigateTo(basePath.concat([val]));
