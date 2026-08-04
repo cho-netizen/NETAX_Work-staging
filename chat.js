@@ -2243,7 +2243,7 @@
       // 짧게(0.6초) 줄이고, 아니면(문장이 끊긴 채 멈춘 것일 수 있으니) 기존처럼 넉넉히
       // (1.1초) 기다린다.
       const trailing = (accumulatedFinal + interim).replace(/[\s,.!?~]+$/, '');
-      const soundsFinished = /(줘|줄래|라|다|요|죠|까|네|자|니|나)$/.test(trailing);
+      const soundsFinished = /(라|줘)$/.test(trailing);
       silenceTimer = setTimeout(finalizeUtterance, soundsFinished ? 600 : SILENCE_MS);
     };
     voiceRecognition.onerror = (e)=>{
