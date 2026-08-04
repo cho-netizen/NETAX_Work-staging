@@ -10,7 +10,8 @@
       const names = data.folders.map(f => f.name);
       setSelectOptions(customerSelect, names, '고객 폴더 없음');
       if (names.length){
-        customerSelect.value = names[0];
+        customerSelect.value = ''; // [2026.08] 값을 채워두면 다음 클릭에 목록이 안 뜨는 문제가 있어, 비워두고
+        customerSelect.placeholder = names[0]; // 지금 선택된 고객명은 placeholder로만 보여준다
         await navigateTo(basePath.concat([names[0]]));
       } else {
         showExplorerStatus('고객 폴더가 없습니다.');
@@ -31,7 +32,11 @@
   });
   customerSelect.addEventListener('change', ()=>{
     const val = customerSelect.value.trim();
-    if (val && currentCustomerNames.includes(val)) navigateTo(basePath.concat([val]));
+    if (val && currentCustomerNames.includes(val)){
+      navigateTo(basePath.concat([val]));
+      customerSelect.value = ''; // 선택 직후 비워서, 다음에 클릭했을 때 목록이 항상 뜨게 함
+      customerSelect.placeholder = val;
+    }
   });
 
   loadCustomers();
