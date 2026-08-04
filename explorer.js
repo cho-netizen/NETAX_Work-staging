@@ -157,6 +157,33 @@
   // 위치를 기억해뒀다가 매번 다시 계산한다. 여러 개를 선택 중이면 "가장 최근에 체크한 항목"
   // 기준으로 따라다닌다.
   let selectionAnchorRow = null;
+  // [2026.08] Shift/Ctrl 다중선택 지원용 — 지금 화면에 그려진 폴더+파일을 화면에 보이는
+  // 순서 그대로 기록해뒀다가(Shift 범위선택 계산용), 마지막으로 선택/해제한 항목ID를
+  // 기억해둔다(다음 Shift 클릭의 시작점).
+  let renderedItemOrder = [];
+  let lastSelectAnchorId = null;
+
+  function toggleItemSelection_(itemMeta, row){
+    if (selectedItems.has(itemMeta.id)) selectedItems.delete(itemMeta.id);
+    else { selectedItems.set(itemMeta.id, itemMeta); selectionAnchorRow = row; }
+    lastSelectAnchorId = itemMeta.id;
+    refreshSelectionUi();
+  }
+
+  function selectRange_(anchorId, targetId, targetRow){
+    const anchorIdx = renderedItemOrder.findIndex(it => it.id === anchorId);
+    const targetIdx = renderedItemOrder.findIndex(it => it.id === targetId);
+    if (anchorIdx === -1 || targetIdx === -1){
+      // 앵커를 화면에서 못 찾으면(다른 폴더로 이동한 경우 등) 범위선택 대신 단일선택으로 대체
+      toggleItemSelection_(renderedItemOrder.find(it => it.id === targetId) || { id: targetId }, targetRow);
+      return;
+    }
+    const start = Math.min(anchorIdx, targetIdx), end = Math.max(anchorIdx, targetIdx);
+    for (let i = start; i <= end; i++) selectedItems.set(renderedItemOrder[i].id, renderedItemOrder[i]);
+    lastSelectAnchorId = targetId;
+    selectionAnchorRow = targetRow;
+    refreshSelectionUi();
+  }
 
   function positionSelectionBar(){
     const anchor = (selectionAnchorRow && document.body.contains(selectionAnchorRow))
@@ -231,6 +258,8 @@
     renderBreadcrumb();
     explorerBody.innerHTML = '';
     selectedItems.clear(); // 새 폴더로 이동하면 이전 화면의 선택은 의미 없으므로 초기화
+    renderedItemOrder = [];
+    lastSelectAnchorId = null;
     lastRenderedFiles = data.files;
     lastRenderedFolders = data.folders;
 
@@ -245,6 +274,8 @@
 
     data.folders.forEach(f=>{
       const folderPath = explorerPath.concat([f.name]);
+      const itemMeta = { id: f.id, name: f.name, type: 'folder', path: folderPath };
+      renderedItemOrder.push(itemMeta);
       const row = document.createElement('div');
       row.className = 'folder-row';
       row.draggable = true;
@@ -252,14 +283,26 @@
       row.innerHTML = '<input type="checkbox" class="file-check" title="여러 개 선택해서 한 번에 첨부하려면 체크하세요">'
         + '<span class="icon">📁</span> ' + escapeHtml(f.name);
 
-      row.addEventListener('click', ()=> navigateTo(folderPath));
+      row.addEventListener('click', (e)=>{
+        // [2026.08] Ctrl/⌘+클릭 = 그 항목만 선택 토글, Shift+클릭 = 마지막 선택 항목부터
+        // 범위 선택 — 둘 다 눌려있으면 폴더 진입 대신 선택 동작으로 대신한다.
+        if (e.ctrlKey || e.metaKey){ e.preventDefault(); e.stopPropagation(); toggleItemSelection_(itemMeta, row); return; }
+        if (e.shiftKey){
+          e.preventDefault();
+          e.stopPropagation();
+          if (lastSelectAnchorId) selectRange_(lastSelectAnchorId, f.id, row);
+          else toggleItemSelection_(itemMeta, row);
+          return;
+        }
+        navigateTo(folderPath);
+      });
 
       const checkbox = row.querySelector('.file-check');
       checkbox.addEventListener('click', (e)=>{ e.stopPropagation(); }); // 체크박스 클릭이 폴더 진입으로 이어지지 않게
       checkbox.addEventListener('change', ()=>{
-        if (checkbox.checked) selectedItems.set(f.id, { id: f.id, name: f.name, type: 'folder', path: folderPath });
+        if (checkbox.checked) selectedItems.set(f.id, itemMeta);
         else selectedItems.delete(f.id);
-        if (checkbox.checked) selectionAnchorRow = row; // 방금 체크한 항목 옆에 선택바가 뜨도록
+        if (checkbox.checked){ selectionAnchorRow = row; lastSelectAnchorId = f.id; }
         refreshSelectionUi();
       });
 
@@ -275,6 +318,8 @@
     });
 
     data.files.forEach(f=>{
+      const itemMeta = { id: f.id, name: f.name, type: 'file', mimeType: f.mimeType };
+      renderedItemOrder.push(itemMeta);
       const row = document.createElement('div');
       row.className = 'file-row';
       row.draggable = true;
@@ -283,16 +328,26 @@
         + '<span class="icon">' + iconForFile(f.mimeType) + '</span> '
         + escapeHtml(f.name) + '<span class="meta">' + escapeHtml(f.modifiedDate || '') + (f.sizeBytes !== undefined ? ' · ' + formatFileSize(f.sizeBytes) : '') + '</span>';
 
-      row.addEventListener('click', ()=> openEditor(f));
+      row.addEventListener('click', (e)=>{
+        if (e.ctrlKey || e.metaKey){ e.preventDefault(); e.stopPropagation(); toggleItemSelection_(itemMeta, row); return; }
+        if (e.shiftKey){
+          e.preventDefault();
+          e.stopPropagation();
+          if (lastSelectAnchorId) selectRange_(lastSelectAnchorId, f.id, row);
+          else toggleItemSelection_(itemMeta, row);
+          return;
+        }
+        openEditor(f);
+      });
 
       const checkbox = row.querySelector('.file-check');
       checkbox.addEventListener('click', (e)=>{
         e.stopPropagation(); // 체크박스 클릭이 행 클릭(편집기 열기)으로 이어지지 않게
       });
       checkbox.addEventListener('change', ()=>{
-        if (checkbox.checked) selectedItems.set(f.id, { id: f.id, name: f.name, type: 'file', mimeType: f.mimeType });
+        if (checkbox.checked) selectedItems.set(f.id, itemMeta);
         else selectedItems.delete(f.id);
-        if (checkbox.checked) selectionAnchorRow = row; // 방금 체크한 항목 옆에 선택바가 뜨도록
+        if (checkbox.checked){ selectionAnchorRow = row; lastSelectAnchorId = f.id; } // 방금 체크한 항목 옆에 선택바가 뜨도록
         refreshSelectionUi();
       });
 
