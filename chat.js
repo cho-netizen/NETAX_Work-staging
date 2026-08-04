@@ -335,6 +335,17 @@
     })();
   }
 
+  // [2026.08] 체크박스나 선택바(#selectionInline) 자체가 아닌 다른 곳을 클릭하면
+  // 선택을 자동으로 취소한다. 체크박스 클릭은 이미 자체적으로 stopPropagation() 하고
+  // 있어서 여기까지 안 올라오고, 선택바 안 버튼(이름바꾸기 등)을 눌렀을 때도 그 버튼의
+  // 동작이 우선이므로 건드리지 않는다.
+  document.addEventListener('click', (e)=>{
+    if (!selectedItems.size) return;
+    if (e.target.closest('#selectionInline')) return;
+    selectedItems.clear();
+    refreshSelectionUi();
+  });
+
   document.getElementById('btnAttachSelected').addEventListener('click', attachSelectedFiles);
   document.getElementById('btnClearSelected').addEventListener('click', ()=>{
     selectedItems.clear();
