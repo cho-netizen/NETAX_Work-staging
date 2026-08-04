@@ -49,14 +49,24 @@
   // ============================================================
   // 채팅창 글자 크기 조절 — 채팅패널 상단의 "가-/가+" 버튼으로 조절하며, 화면 크기·레이아웃과
   // 무관하게(좌우/상하/생략/커버화면 등 전부) 항상 적용되고 다음 방문에도 유지된다.
+  // [2026.08] 태블릿에서 "최대"로 키워도 작다는 피드백이 있어 상한을 22→32로 크게 올렸고,
+  // 터치기기(태블릿/폰으로 추정)에서 이 브라우저로 처음 접속하는 경우(저장된 값이 없을 때)엔
+  // PC 기본값보다 몇 단계 큰 값을 기본으로 잡아준다 — 이후엔 여느 때처럼 사용자가 조절한 값이
+  // 그대로 저장되어 우선한다.
   // ============================================================
   const CHAT_FONT_SIZE_KEY = 'nx_chat_font_size';
-  const CHAT_FONT_MIN = 12, CHAT_FONT_MAX = 22, CHAT_FONT_DEFAULT = 13.5, CHAT_FONT_STEP = 1;
+  const CHAT_FONT_MIN = 12, CHAT_FONT_MAX = 32, CHAT_FONT_DEFAULT = 13.5, CHAT_FONT_STEP = 1;
+  // 터치 포인터(마우스 없음) + 화면폭 1366px 이하 정도면 태블릿/폰으로 간주 — 정밀한 기기 판별이
+  // 목적이 아니라 "이 조합이면 글자가 작아 보일 가능성이 높다"는 실용적인 추정이라 이 정도로 충분함.
+  const isLikelyTouchDevice = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const CHAT_FONT_DEFAULT_TOUCH = 18;
   function applyChatFontSize(px){
     document.documentElement.style.setProperty('--chat-font-size', px + 'px');
   }
   let chatFontSize = parseFloat(localStorage.getItem(CHAT_FONT_SIZE_KEY));
-  if (!Number.isFinite(chatFontSize)) chatFontSize = CHAT_FONT_DEFAULT;
+  if (!Number.isFinite(chatFontSize)){
+    chatFontSize = (isLikelyTouchDevice && window.innerWidth <= 1366) ? CHAT_FONT_DEFAULT_TOUCH : CHAT_FONT_DEFAULT;
+  }
   applyChatFontSize(chatFontSize);
 
   function changeChatFontSize(delta){

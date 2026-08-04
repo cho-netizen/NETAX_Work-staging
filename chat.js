@@ -1719,8 +1719,30 @@
       sendChatMessage();
     }
   });
+  // Shift 키의 눌림 상태를 직접 추적 — beforeinput의 InputEvent에는 shiftKey가 신뢰성 있게
+  // 담기지 않는 브라우저가 있어서, keydown/keyup으로 직접 추적한 값을 대신 사용한다.
+  let shiftKeyHeld = false;
   chatInputEl.addEventListener('keydown', (e)=>{
+    if (e.key === 'Shift') shiftKeyHeld = true;
+    // [2026.08] 한글 등 IME로 글자를 조합하는 중에 눌린 엔터는 "글자 확정"용이지 "전송"용이
+    // 아니다. 이 구분이 없으면 특히 태블릿 가상자판에서 한글 입력 후 엔터가 먹통처럼 느껴지는
+    // 현상이 생긴다(isComposing이 true이거나, 구형 브라우저는 keyCode 229로 알려줌).
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+  chatInputEl.addEventListener('keyup', (e)=>{
+    if (e.key === 'Shift') shiftKeyHeld = false;
+  });
+  // [2026.08] 일부 태블릿 가상자판(특히 한글 자판)은 Enter를 눌러도 keydown에서 e.key가
+  // 'Enter'로 안 잡히고, 대신 textarea에 실제 줄바꿈을 넣는 insertLineBreak 이벤트만 발생시키는
+  // 경우가 있다. keydown이 못 잡는 경우를 위한 보강 경로 — 물리 키보드 Shift+Enter의 줄바꿈은
+  // shiftKeyHeld로 구분해서 그대로 살려둔다(가상자판엔 물리 Shift가 없어 항상 false이므로
+  // 자연히 전송 쪽으로 판정됨).
+  chatInputEl.addEventListener('beforeinput', (e)=>{
+    if (e.inputType === 'insertLineBreak' && !shiftKeyHeld){
       e.preventDefault();
       sendChatMessage();
     }
