@@ -221,8 +221,13 @@
     refreshSelectionUi();
   }
 
+  // [2026.08] my.netax.kr 제출현황 연동용 — 지금 보고 있는 폴더의 실제 드라이브 폴더ID.
+  // 고객사건 폴더가 my.netax.kr 케이스와 매칭되는지 확인할 때(폴더ID 기준) 쓴다.
+  let currentFolderId = null;
+
   function renderExplorer(data){
     explorerPath = data.path;
+    currentFolderId = data.folderId || null;
     renderBreadcrumb();
     explorerBody.innerHTML = '';
     selectedItems.clear(); // 새 폴더로 이동하면 이전 화면의 선택은 의미 없으므로 초기화
@@ -1160,6 +1165,131 @@
   }
 
   document.getElementById('btnOpenDashboard').addEventListener('click', openDashboardView);
+
+  // =========================================================
+  // [2026.08] my.netax.kr 제출현황 연동 — 지금 보고 있는 사건 폴더가 my.netax.kr에
+  // 케이스로 등록되어 있으면, 고객 자료제출 현황을 바로 확인하고 필요서류를 추가 요청한다.
+  // (기존에는 admin.netax.kr에서만 볼 수 있었는데, 실제 작업 중인 이 화면에서 바로 보는 게
+  // 맞다는 판단으로 옮겨왔다 — admin.netax.kr 쪽 케이스관리 탭은 신규 케이스 "등록"용으로
+  // 그대로 남겨두고, "현황 보기·항목 추가"는 여기서도 쓸 수 있게 한다.)
+  // =========================================================
+  const MY_API_URL_FOR_SUBMISSIONS = 'https://script.google.com/macros/s/AKfycbzpyTO4wLZNJhpoiV0Ke3u1KsRW_4x6LppvPWE9hyZbE9UrZzDzQ2gOLndzmeKeHwBLsw/exec';
+  const MY_ADMIN_CODE_KEY = 'nx_my_admin_code';
+
+  function getMyAdminCode_(forcePrompt){
+    let code = localStorage.getItem(MY_ADMIN_CODE_KEY) || '';
+    if (!code || forcePrompt){
+      code = prompt('my.netax.kr 관리자 코드를 입력해주세요 (한 번만 입력하면 이 브라우저에 저장됩니다):', code) || '';
+      if (code) localStorage.setItem(MY_ADMIN_CODE_KEY, code);
+    }
+    return code;
+  }
+
+  async function callMyBackend_(payload){
+    const res = await fetch(MY_API_URL_FOR_SUBMISSIONS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  }
+
+  function closeSubmissionsPanel_(){
+    const el = document.getElementById('nxSubmissionsPanel');
+    if (el) el.remove();
+  }
+
+  function renderSubmissionsPanel_(caseInfo){
+    closeSubmissionsPanel_();
+    const checklist = caseInfo.checklist || [];
+    const status = caseInfo.submission_status || {};
+    const extra = status._extra || [];
+
+    const overlay = document.createElement('div');
+    overlay.id = 'nxSubmissionsPanel';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;';
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) closeSubmissionsPanel_(); });
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel); color:var(--ink); border-radius:10px; width:min(480px, 92vw); max-height:80vh; overflow-y:auto; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.35);';
+
+    const checklistHtml = checklist.length
+      ? checklist.map(item => {
+          const done = status[item] && status[item].submitted;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;">
+            <span>${escapeHtml(item)}</span>
+            <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;${done ? 'background:#e7f6ec;color:#1a7d3a;' : 'background:#fdeceb;color:#c0392b;'}">${done ? '제출완료' : '미제출'}</span>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:var(--sub);padding:8px 0;">등록된 필요서류가 없습니다.</div>';
+
+    const extraHtml = extra.length
+      ? `<div style="margin-top:10px;font-size:12.5px;color:var(--sub);">기타 제출 ${extra.length}건: ${extra.map(f => escapeHtml(f.fileName)).join(', ')}</div>`
+      : '';
+
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <h3 style="margin:0;font-size:16px;">📋 제출현황 — ${escapeHtml(caseInfo.name)} ${escapeHtml(caseInfo.case_name)}</h3>
+        <button id="nxSubClose" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--sub);">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:14px;">열람번호: ${escapeHtml(caseInfo.report_id)}</div>
+      <div id="nxSubChecklist">${checklistHtml}</div>
+      ${extraHtml}
+      <button id="nxSubAddItem" style="width:100%;margin-top:16px;padding:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">＋ 필요서류 항목 추가</button>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    document.getElementById('nxSubClose').addEventListener('click', closeSubmissionsPanel_);
+    document.getElementById('nxSubAddItem').addEventListener('click', async ()=>{
+      const item = prompt('추가로 요청할 서류명을 입력해주세요 (예: 가족관계증명서):');
+      if (!item || !item.trim()) return;
+      const adminCode = getMyAdminCode_(false);
+      const res = await callMyBackend_({ action: 'admin_add_checklist_item', admin_code: adminCode, report_id: caseInfo.report_id, item: item.trim() });
+      if (res.success){
+        showToast('"' + item.trim() + '" 항목을 추가했습니다.', 'success');
+        caseInfo.checklist = res.checklist;
+        renderSubmissionsPanel_(caseInfo);
+      } else {
+        showToast(res.message || '항목 추가에 실패했습니다.', 'error');
+      }
+    });
+  }
+
+  async function openSubmissionsPanel(){
+    if (!currentFolderId){
+      showToast('지금 보고 있는 폴더 정보를 아직 확인하지 못했습니다. 잠시 후 다시 시도해주세요.', 'warning');
+      return;
+    }
+    const adminCode = getMyAdminCode_(false);
+    if (!adminCode) return;
+
+    showToast('제출현황을 불러오는 중입니다…', 'info');
+    let data;
+    try{
+      data = await callMyBackend_({ action: 'admin_list', admin_code: adminCode });
+    }catch(err){
+      showToast('my.netax.kr 연결 중 오류: ' + (err && err.message ? err.message : err), 'error');
+      return;
+    }
+
+    if (!data.success){
+      // 관리자 코드가 틀렸을 수 있으니, 저장된 값을 지우고 다시 물어볼 기회를 준다.
+      localStorage.removeItem(MY_ADMIN_CODE_KEY);
+      showToast(data.message || '관리자 코드가 올바르지 않은 것 같습니다. 다시 시도해주세요.', 'error');
+      return;
+    }
+
+    const matched = (data.cases || []).find(c => c.folder_id === currentFolderId);
+    if (!matched){
+      showToast('이 사건은 아직 my.netax.kr 케이스로 등록되어 있지 않습니다. (admin.netax.kr의 "케이스관리" 탭에서 신규 등록할 수 있습니다)', 'info');
+      return;
+    }
+
+    renderSubmissionsPanel_(matched);
+  }
+
+  document.getElementById('btnOpenSubmissions').addEventListener('click', openSubmissionsPanel);
   document.getElementById('btnDashboardBack').addEventListener('click', closeDashboardView);
 
   // ---- 파일·폴더 검색 (드라이브 전체, 이름 기준) ----
