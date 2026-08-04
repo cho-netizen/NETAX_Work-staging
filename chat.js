@@ -2007,6 +2007,11 @@
   const hasSpeechSynthesis = 'speechSynthesis' in window;
   let voiceRecognition = null;
   let isVoiceRecording = false;
+  // [2026.08] 지금 듣고 있는 도중(빨간불)에 사용자가 마이크 버튼을 수동으로 눌렀을 때,
+  // 음성모드를 통째로 껐다 켜는 대신 "지금까지 들은 말로 바로 마무리"만 하기 위한 참조.
+  // startVoiceRecognition() 안에서 매번 새로 정의되는 finalizeUtterance를 여기 저장해두고,
+  // toggleVoiceMode()에서 꺼내 쓴다.
+  let currentFinalizeUtterance = null;
   let voiceTriggeredSend = false; // 이번 전송이 음성으로 시작됐는지 — sendChatMessage에서 답변을 읽어줄지 판단
   // voiceModeOn·voicePhase('idle'|'listening'|'thinking'|'speaking')는 스크립트 앞쪽에서 이미 선언됨
   // (상단바 반응형의 커버화면모드 판단 로직이 더 일찍 참조해야 해서 그쪽으로 끌어올려둠).
@@ -2210,6 +2215,7 @@
       voiceTriggeredSend = true;
       sendChatMessage(); // 말이 끝나면 바로 전송 (엔터/버튼 없이) — 응답 후 speakReply에서 이어서 다시 듣기 시작
     }
+    currentFinalizeUtterance = finalizeUtterance; // 수동 버튼 클릭(toggleVoiceMode)에서 꺼내 쓸 수 있게 등록
 
     voiceRecognition.onstart = ()=>{
       isVoiceRecording = true;
@@ -2229,6 +2235,18 @@
         else interim += chunk;
       }
       if (!accumulatedFinal.trim() && !interim.trim()) return;
+
+      // [2026.08] 커버화면모드 등 일부 기기에서 브라우저 자체의 "말 끝남" 판단이 느리거나
+      // 아예 잘 안 걸려서, 말이 다 끝났는데도 계속 듣는 중(빨간불) 상태로 오래 남아있는
+      // 경우가 있었다. 사용자가 문장 맨 끝에 "땡"이라고 붙이면, 무음 타이머(1.1초)를
+      // 기다리지 않고 그 즉시 끝난 것으로 처리한다.
+      const trailing = (accumulatedFinal + interim).replace(/[\s,.!?~]+$/, '');
+      if (/땡$/.test(trailing)){
+        accumulatedFinal = accumulatedFinal.replace(/땡\s*[,.!?~]*\s*$/, '').trim();
+        finalizeUtterance();
+        return;
+      }
+
       silenceTimer = setTimeout(finalizeUtterance, SILENCE_MS);
     };
     voiceRecognition.onerror = (e)=>{
@@ -2267,6 +2285,14 @@
   }
 
   function toggleVoiceMode(){
+    // [2026.08] 듣는 중(빨간불)일 때 버튼을 누르면, 예전엔 음성모드 자체를 꺼버려서
+    // 그때까지 인식된 말이 통째로 버려지고, 다시 켜는 과정이 반복되며 음성인식 객체가
+    // 꼬이는 원인이 되기도 했다. 이제는 "지금까지 들은 말로 즉시 마무리"만 한다 —
+    // 완전히 끄고 싶으면(토킹모드 자체를 나가고 싶으면) "채팅모드로" 버튼을 쓰면 된다.
+    if (isVoiceRecording && currentFinalizeUtterance){
+      currentFinalizeUtterance();
+      return;
+    }
     if (voiceModeOn){
       stopVoiceMode();
       return;
