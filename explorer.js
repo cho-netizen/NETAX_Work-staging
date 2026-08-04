@@ -157,6 +157,44 @@
   // 위치를 기억해뒀다가 매번 다시 계산한다. 여러 개를 선택 중이면 "가장 최근에 체크한 항목"
   // 기준으로 따라다닌다.
   let selectionAnchorRow = null;
+
+  // [2026.08] 파일/폴더를 다른 폴더 위로 끌어다 놓으면(드래그앤드롭) 그 자리로 이동시킨다.
+  // 이미 있던 dragstart(끌어서 채팅 첨부하기 등)는 그대로 두고, 폴더 행에 "받는 쪽"만
+  // 새로 추가하는 것 — 잘라내기/붙여넣기와 똑같이 백엔드의 moveItem 액션을 재사용한다.
+  function attachDropTarget_(row, targetPath, ownId){
+    row.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over-target');
+    });
+    row.addEventListener('dragleave', ()=>{
+      row.classList.remove('drag-over-target');
+    });
+    row.addEventListener('drop', async (e)=>{
+      e.preventDefault();
+      row.classList.remove('drag-over-target');
+      let items;
+      try{ items = JSON.parse(e.dataTransfer.getData('application/json') || '[]'); }catch(err){ items = []; }
+      if (!items.length) return;
+      if (ownId && items.some(it => it.id === ownId)){
+        showToast('같은 폴더로는 이동할 수 없습니다.', 'warning');
+        return;
+      }
+      showToast(items.length + '개 항목을 이동하는 중입니다…', 'info');
+      const failed = [];
+      for (const item of items){
+        try{
+          const res = await callGas('moveItem', { id: item.id, type: item.type, targetPath: targetPath });
+          if (res.error) failed.push(item.name + ' (' + res.error + ')');
+        }catch(err){
+          failed.push(item.name + ' (' + (err && err.message ? err.message : err) + ')');
+        }
+      }
+      navigateTo(explorerPath); // 이동된 항목이 목록에서 사라진 걸 바로 반영
+      if (failed.length) showToast('일부 이동 실패:\n' + failed.join('\n'), 'error');
+      else showToast(items.length + '개 항목을 이동했습니다.', 'success');
+    });
+  }
   // [2026.08] Shift/Ctrl 다중선택 지원용 — 지금 화면에 그려진 폴더+파일을 화면에 보이는
   // 순서 그대로 기록해뒀다가(Shift 범위선택 계산용), 마지막으로 선택/해제한 항목ID를
   // 기억해둔다(다음 Shift 클릭의 시작점).
@@ -269,6 +307,7 @@
       up.className = 'folder-row';
       up.innerHTML = '<span class="icon">📁</span> .. (상위 폴더)';
       up.addEventListener('click', ()=> navigateTo(explorerPath.slice(0, -1)));
+      attachDropTarget_(up, explorerPath.slice(0, -1), null);
       explorerBody.appendChild(up);
     }
 
@@ -313,6 +352,7 @@
         e.dataTransfer.setData('application/json', JSON.stringify(itemsToDrag));
         e.dataTransfer.effectAllowed = 'copy';
       });
+      attachDropTarget_(row, folderPath, f.id);
 
       explorerBody.appendChild(row);
     });
