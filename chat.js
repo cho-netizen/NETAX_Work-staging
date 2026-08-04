@@ -686,7 +686,7 @@
   function updateExtStatusUi(){
     if (!btnExtStatus) return;
     if (nxExtConnected){
-      btnExtStatus.textContent = '🟢🔌';
+      btnExtStatus.textContent = '🟢';
       btnExtStatus.title = 'NX 외부조회 커넥터 연결됨 — 다른 탭에서 캡처하면 여기로 자동 전송됩니다';
     } else {
       btnExtStatus.textContent = '🔌';
