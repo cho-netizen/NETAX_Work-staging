@@ -380,8 +380,48 @@
   // [2026.08] 버튼(btnNewDoc)은 없앴고, 우클릭 메뉴에서 이 함수를 그대로 재사용한다.
 
   // ---- [2026.08] 탐색기 빈 공간 우클릭 → 브라우저 기본 메뉴 대신 새폴더/새문서 메뉴 ----
-  // 파일/폴더 행(.file-row, .folder-row) 위에서는 항목별 동작과 헷갈리지 않도록 그대로 두고,
-  // 정말 "빈 공간"에서 우클릭했을 때만 가로챈다.
+  // 파일/폴더 행(.file-row, .folder-row) 위에서 우클릭하면 브라우저 기본 메뉴 대신
+  // 왼쪽 체크박스를 클릭한 것과 똑같이 선택/해제된다. 태블릿처럼 우클릭 자체가 없는
+  // 기기에서도 그대로 쓸 수 있도록, 체크박스도 그대로 남겨둔다(우클릭은 데스크톱용 지름길).
+  explorerBody.addEventListener('contextmenu', (e)=>{
+    const onItem = e.target.closest('.file-row, .folder-row[data-item-id]');
+    if (!onItem) return;
+    e.preventDefault();
+    const cb = onItem.querySelector('.file-check');
+    if (cb){ cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+  });
+
+  // 컴퓨터에서 파일을 골라 지금 보고 있는 폴더에 그대로 올리는 숨김 입력 — 우클릭 메뉴의
+  // "파일 업로드"에서 씀 (여러 개 한 번에 선택 가능).
+  const nxUploadPickerInput = document.createElement('input');
+  nxUploadPickerInput.type = 'file';
+  nxUploadPickerInput.multiple = true;
+  nxUploadPickerInput.style.display = 'none';
+  document.body.appendChild(nxUploadPickerInput);
+  nxUploadPickerInput.addEventListener('change', async ()=>{
+    const files = Array.from(nxUploadPickerInput.files || []);
+    nxUploadPickerInput.value = ''; // 같은 파일을 연달아 다시 선택해도 change가 또 뜨도록 초기화
+    if (!files.length) return;
+    showToast(files.length + '개 파일을 업로드하는 중입니다…', 'info');
+    let okCount = 0, failCount = 0;
+    for (const file of files){
+      try{
+        const buf = await file.arrayBuffer();
+        const base64 = uint8ToBase64(new Uint8Array(buf));
+        const res = await callGas('uploadFile', {
+          path: explorerPath, name: file.name, mimeType: file.type || 'application/octet-stream',
+          base64Data: base64
+        });
+        if (res.error) failCount++; else okCount++;
+      }catch(err){ failCount++; }
+    }
+    navigateTo(explorerPath);
+    if (failCount) showToast(okCount + '개 업로드 완료, ' + failCount + '개 실패했습니다.', failCount ? 'warning' : 'success');
+    else showToast(okCount + '개 파일을 업로드했습니다.', 'success');
+  });
+  function triggerFileUpload(){ nxUploadPickerInput.click(); }
+
+  // 정말 "빈 공간"에서 우클릭했을 때만 메뉴를 띄운다.
   (function setupExplorerEmptyContextMenu(){
     let menuEl = null;
     function closeMenu(){
@@ -391,7 +431,7 @@
     }
     explorerBody.addEventListener('contextmenu', (e)=>{
       const onItem = e.target.closest('.file-row, .folder-row');
-      if (onItem) return; // 항목 위에서는 건드리지 않음(브라우저 기본 메뉴 유지)
+      if (onItem) return; // 항목 위 우클릭은 위쪽의 별도 리스너가 체크박스 토글로 처리함
       e.preventDefault();
       closeMenu();
 
@@ -403,6 +443,8 @@
       const items = [
         { label: '📁 새 폴더 만들기', action: createNewFolder },
         { label: '📝 새 문서 만들기', action: createNewDoc },
+        { label: '📤 파일 업로드', action: triggerFileUpload },
+        { label: '🗑 휴지통 열기', action: openTrashView },
         { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
       ];
       items.forEach(it=>{
