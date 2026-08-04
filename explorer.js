@@ -153,6 +153,39 @@
     return '📄';
   }
 
+  // 선택바를 상단바에 고정하지 않고, 방금 체크한 항목(행) 옆에 뜨게 하기 위해 그 항목의
+  // 위치를 기억해뒀다가 매번 다시 계산한다. 여러 개를 선택 중이면 "가장 최근에 체크한 항목"
+  // 기준으로 따라다닌다.
+  let selectionAnchorRow = null;
+
+  function positionSelectionBar(){
+    const anchor = (selectionAnchorRow && document.body.contains(selectionAnchorRow))
+      ? selectionAnchorRow
+      : null;
+    if (!anchor){ // 앵커를 잃어버렸으면(새로고침 등) 탐색기 영역 상단 근처에 대충 띄움
+      const rect = explorerBody.getBoundingClientRect();
+      selectionInline.style.top = (rect.top + 8) + 'px';
+      selectionInline.style.left = (rect.left + 8) + 'px';
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    // 항목 바로 오른쪽에 세로 중앙 정렬로 띄우되, 화면 밖으로 나가면 항목 아래로 옮긴다.
+    selectionInline.style.visibility = 'hidden';
+    selectionInline.style.display = 'flex';
+    const barW = selectionInline.offsetWidth, barH = selectionInline.offsetHeight;
+    let left = rect.right + 8;
+    let top = rect.top + (rect.height - barH) / 2;
+    if (left + barW > window.innerWidth - 8){
+      left = Math.max(8, rect.left);
+      top = rect.bottom + 6;
+    }
+    if (top + barH > window.innerHeight - 8) top = window.innerHeight - barH - 8;
+    if (top < 8) top = 8;
+    selectionInline.style.left = left + 'px';
+    selectionInline.style.top = top + 'px';
+    selectionInline.style.visibility = '';
+  }
+
   function renderSelectionBar(){
     if (!selectedItems.size){
       selectionInline.style.display = 'none';
@@ -160,12 +193,14 @@
     }
     selectionCountText.textContent = selectedItems.size + '개 선택됨';
     selectionInline.style.display = 'flex';
+    positionSelectionBar();
 
     const items = Array.from(selectedItems.values());
     const single = items.length === 1 ? items[0] : null;
     btnRenameSelected.disabled = !single; // 이름바꾸기는 한 개 선택했을 때만 의미 있음
     btnShareSelected.disabled = !single || single.type === 'folder'; // 공유는 파일 한 개일 때만 (폴더 공유는 미지원)
   }
+  window.addEventListener('resize', ()=>{ if (selectedItems.size) positionSelectionBar(); });
 
   // 체크박스 상태와 선택바를 다시 그림 (파일 목록 자체를 새로 그리지 않고 표시만 갱신)
   function refreshSelectionUi(){
@@ -219,6 +254,7 @@
       checkbox.addEventListener('change', ()=>{
         if (checkbox.checked) selectedItems.set(f.id, { id: f.id, name: f.name, type: 'folder', path: folderPath });
         else selectedItems.delete(f.id);
+        if (checkbox.checked) selectionAnchorRow = row; // 방금 체크한 항목 옆에 선택바가 뜨도록
         refreshSelectionUi();
       });
 
@@ -251,6 +287,7 @@
       checkbox.addEventListener('change', ()=>{
         if (checkbox.checked) selectedItems.set(f.id, { id: f.id, name: f.name, type: 'file', mimeType: f.mimeType });
         else selectedItems.delete(f.id);
+        if (checkbox.checked) selectionAnchorRow = row; // 방금 체크한 항목 옆에 선택바가 뜨도록
         refreshSelectionUi();
       });
 

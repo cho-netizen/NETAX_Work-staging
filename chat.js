@@ -346,8 +346,8 @@
     }
   });
 
-  // ---- 새 폴더 / 새 문서 만들기 (탐색기 상단, 경로표시줄 오른쪽) ----
-  document.getElementById('btnNewFolder').addEventListener('click', async ()=>{
+  // ---- 새 폴더 / 새 문서 만들기 (탐색기 상단, 경로표시줄 오른쪽 버튼 + 빈 공간 우클릭 메뉴에서 공용으로 씀) ----
+  async function createNewFolder(){
     const name = prompt('새 폴더 이름을 입력하세요:');
     if (!name || !name.trim()) return;
     try{
@@ -357,9 +357,10 @@
     }catch(err){
       showToast('폴더 만들기 중 오류: ' + (err && err.message ? err.message : err), 'error');
     }
-  });
+  }
+  document.getElementById('btnNewFolder').addEventListener('click', createNewFolder);
 
-  document.getElementById('btnNewDoc').addEventListener('click', async ()=>{
+  async function createNewDoc(){
     let name = prompt('새 문서 이름을 입력하세요 (확장자는 자동으로 .md가 붙습니다):');
     if (!name || !name.trim()) return;
     name = name.trim();
@@ -374,7 +375,58 @@
     }catch(err){
       showToast('문서 만들기 중 오류: ' + (err && err.message ? err.message : err), 'error');
     }
-  });
+  }
+  document.getElementById('btnNewDoc').addEventListener('click', createNewDoc);
+
+  // ---- [2026.08] 탐색기 빈 공간 우클릭 → 브라우저 기본 메뉴 대신 새폴더/새문서 메뉴 ----
+  // 파일/폴더 행(.file-row, .folder-row) 위에서는 항목별 동작과 헷갈리지 않도록 그대로 두고,
+  // 정말 "빈 공간"에서 우클릭했을 때만 가로챈다.
+  (function setupExplorerEmptyContextMenu(){
+    let menuEl = null;
+    function closeMenu(){
+      if (menuEl){ menuEl.remove(); menuEl = null; }
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('scroll', closeMenu, true);
+    }
+    explorerBody.addEventListener('contextmenu', (e)=>{
+      const onItem = e.target.closest('.file-row, .folder-row');
+      if (onItem) return; // 항목 위에서는 건드리지 않음(브라우저 기본 메뉴 유지)
+      e.preventDefault();
+      closeMenu();
+
+      menuEl = document.createElement('div');
+      menuEl.style.cssText = 'position:fixed; z-index:5000; background:#fff; border:1px solid var(--line);'
+        + 'border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.18); padding:4px; min-width:150px;'
+        + 'font-size:13.5px; font-family:inherit;';
+      const items = [
+        { label: '📁 새 폴더 만들기', action: createNewFolder },
+        { label: '📝 새 문서 만들기', action: createNewDoc },
+        { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
+      ];
+      items.forEach(it=>{
+        const row = document.createElement('div');
+        row.textContent = it.label;
+        row.style.cssText = 'padding:8px 12px; border-radius:4px; cursor:pointer; white-space:nowrap;';
+        row.addEventListener('mouseenter', ()=> row.style.background = '#f0f2f6');
+        row.addEventListener('mouseleave', ()=> row.style.background = '');
+        row.addEventListener('click', ()=>{ closeMenu(); it.action(); });
+        menuEl.appendChild(row);
+      });
+      document.body.appendChild(menuEl);
+
+      // 메뉴가 화면 밖으로 안 나가도록 위치 보정
+      const menuW = menuEl.offsetWidth, menuH = menuEl.offsetHeight;
+      const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
+      const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
+      menuEl.style.left = x + 'px';
+      menuEl.style.top = y + 'px';
+
+      setTimeout(()=>{ // 지금 이 클릭(우클릭) 자체로 즉시 닫히지 않도록 한 틱 늦춰서 등록
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('scroll', closeMenu, true);
+      }, 0);
+    });
+  })();
 
   // 드라이브에서 직접 파일을 추가/삭제했거나, AI가 스스로(요청 없이) 파일을 만들거나 갱신했을 때
   // 탐색기가 그걸 자동으로는 알 방법이 없는 경우가 있다(예: 검토서 자동갱신, 외부에서 직접 업로드
