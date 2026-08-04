@@ -2238,16 +2238,13 @@
 
       // [2026.08] 커버화면모드 등 일부 기기에서 브라우저 자체의 "말 끝남" 판단이 느리거나
       // 아예 잘 안 걸려서, 말이 다 끝났는데도 계속 듣는 중(빨간불) 상태로 오래 남아있는
-      // 경우가 있었다. 사용자가 문장 맨 끝에 "땡"이라고 붙이면, 무음 타이머(1.1초)를
-      // 기다리지 않고 그 즉시 끝난 것으로 처리한다.
+      // 경우가 있었다. "오버"·"땡" 같은 인위적인 신호어 대신, 문장이 이미 문법적으로
+      // 끝난 것처럼 들리는 종결어미(~줘/~라/~다/~요/~까 등)로 끝났으면 무음판정 시간을
+      // 짧게(0.6초) 줄이고, 아니면(문장이 끊긴 채 멈춘 것일 수 있으니) 기존처럼 넉넉히
+      // (1.1초) 기다린다.
       const trailing = (accumulatedFinal + interim).replace(/[\s,.!?~]+$/, '');
-      if (/땡$/.test(trailing)){
-        accumulatedFinal = accumulatedFinal.replace(/땡\s*[,.!?~]*\s*$/, '').trim();
-        finalizeUtterance();
-        return;
-      }
-
-      silenceTimer = setTimeout(finalizeUtterance, SILENCE_MS);
+      const soundsFinished = /(줘|줄래|라|다|요|죠|까|네|자|니|나)$/.test(trailing);
+      silenceTimer = setTimeout(finalizeUtterance, soundsFinished ? 600 : SILENCE_MS);
     };
     voiceRecognition.onerror = (e)=>{
       if (e.error !== 'no-speech' && e.error !== 'aborted'){
