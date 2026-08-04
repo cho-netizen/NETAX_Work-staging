@@ -302,6 +302,39 @@
     });
   }
 
+  // [2026.08] 파일/폴더 이동 — "이동" 버튼으로 선택 항목을 클립보드에 담아두고,
+  // 원하는 폴더로 이동한 뒤 빈 공간 우클릭 메뉴의 "여기에 붙여넣기"로 실제 이동을 마무리한다.
+  let nxMoveClipboard = null; // { items: [{id,type,name}], sourceLabel: string } | null
+  document.getElementById('btnMoveSelected').addEventListener('click', ()=>{
+    const items = Array.from(selectedItems.values());
+    if (!items.length) return;
+    nxMoveClipboard = { items: items, sourceLabel: explorerPath.join(' / ') || '최상위' };
+    selectedItems.clear();
+    refreshSelectionUi();
+    showToast(items.length + '개 항목을 이동 대기 중입니다 — 원하는 폴더로 이동한 뒤, 빈 공간에서 우클릭 → "여기에 붙여넣기"를 눌러주세요.', 'info');
+  });
+
+  function pasteMoveClipboard(){
+    if (!nxMoveClipboard || !nxMoveClipboard.items.length) return;
+    const clip = nxMoveClipboard;
+    nxMoveClipboard = null; // 먼저 비워서, 중간에 실패해도 같은 항목을 두 번 붙여넣는 사고를 막음
+    (async () => {
+      showToast(clip.items.length + '개 항목을 이동하는 중입니다…', 'info');
+      const failed = [];
+      for (const item of clip.items){
+        try{
+          const res = await callGas('moveItem', { id: item.id, type: item.type, targetPath: explorerPath });
+          if (res.error) failed.push(item.name + ' (' + res.error + ')');
+        }catch(err){
+          failed.push(item.name + ' (' + (err && err.message ? err.message : err) + ')');
+        }
+      }
+      navigateTo(explorerPath); // 이동 결과가 바로 반영되도록 새로고침
+      if (failed.length) showToast('일부 이동 실패:\n' + failed.join('\n'), 'error');
+      else showToast(clip.items.length + '개 항목을 이동했습니다.', 'success');
+    })();
+  }
+
   document.getElementById('btnAttachSelected').addEventListener('click', attachSelectedFiles);
   document.getElementById('btnClearSelected').addEventListener('click', ()=>{
     selectedItems.clear();
@@ -447,6 +480,9 @@
         { label: '🗑 휴지통 열기', action: openTrashView },
         { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
       ];
+      if (nxMoveClipboard && nxMoveClipboard.items.length){
+        items.push({ label: '📋 여기에 붙여넣기 (' + nxMoveClipboard.items.length + '개)', action: pasteMoveClipboard });
+      }
       items.forEach(it=>{
         const row = document.createElement('div');
         row.textContent = it.label;
