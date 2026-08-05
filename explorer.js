@@ -587,8 +587,8 @@
     box.style.cssText = 'background:var(--panel); color:var(--ink); border-radius:10px; width:min(320px, 88vw); padding:18px; box-shadow:0 8px 32px rgba(0,0,0,0.35);';
     box.innerHTML = `
       <div style="font-size:14px;font-weight:600;margin-bottom:14px;">${escapeHtml(file.name)}</div>
-      <button id="pdfChoiceOpen" style="width:100%;padding:11px;margin-bottom:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">📄 파일 열기</button>
-      <button id="pdfChoiceManage" style="width:100%;padding:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">🗂 PDF 관리로 열기</button>
+      <button id="pdfChoiceOpen" style="width:100%;padding:11px;margin-bottom:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">📄 파일보기</button>
+      <button id="pdfChoiceManage" style="width:100%;padding:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">🗂 파일관리</button>
     `;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
