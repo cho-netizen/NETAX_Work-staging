@@ -1627,6 +1627,34 @@
   document.getElementById('btnOpenPdfManagerFromScan').addEventListener('click', openPdfManager);
   document.getElementById('btnClosePdfMgr').addEventListener('click', closePdfManager);
 
+  // [2026.08] 탐색기에서 PDF 파일을 클릭했을 때 "PDF 관리로 열기"를 고르면 여기로 온다.
+  // 지금까지 PDF관리는 컴퓨터에서 새로 고른 파일(pdfMgrFileInput)만 넣을 수 있었는데,
+  // 폴더에 이미 있는 파일을 그대로 불러오는 길이 없어서 새로 만들었다 — 백엔드의
+  // readFileBinary 액션(원본 바이트 그대로 반환)으로 받아와서, 로컬 업로드와 완전히 같은
+  // 방식(PDFLib+pdf.js로 파싱해서 페이지 단위로 등록)으로 처리한다.
+  window.openExistingFileInPdfManager = async function(file){
+    showToast(file.name + ' 불러오는 중입니다…', 'info');
+    try{
+      const res = await callGas('readFileBinary', { fileId: file.id });
+      if (res.error){ showToast('불러오기 실패: ' + res.error, 'error'); return; }
+      const binary = atob(res.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const doc = await PDFLib.PDFDocument.load(bytes);
+      const pdfjsDoc = (typeof pdfjsLib !== 'undefined') ? await pdfjsLib.getDocument({ data: bytes.slice() }).promise : null;
+      const sourceName = file.name.replace(/\.pdf$/i, '');
+      const pageCount = doc.getPageCount();
+      for (let i = 0; i < pageCount; i++){
+        pdfMgrEntries.push({ id: pdfMgrIdSeq++, type: 'pdfpage', doc, pdfjsDoc, sourceName, pageIndex: i, checked: false, rotation: 0 });
+      }
+      renderPdfMgrList();
+      openPdfManager();
+    }catch(err){
+      showToast(file.name + ' 불러오기 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }
+  };
+
   document.getElementById('btnPdfMgrAdd').addEventListener('click', ()=> pdfMgrFileInput.click());
   pdfMgrFileInput.addEventListener('change', async (e)=>{
     const files = Array.from(e.target.files || []);

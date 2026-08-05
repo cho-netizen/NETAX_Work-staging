@@ -554,14 +554,57 @@
       }
       // 혹시라도 엑셀뷰어 초기화 전이면(스크립트 로드 순서 문제) 예전처럼 미리보기로 폴백.
     }
-    // 이미지・PDF・워드・파워포인트・한글 등: 이제 좁고 고정된 패널 대신 독립 리사이즈 창으로 연다
-    // ("작고 고정된 창으로 큰 PDF·이미지를 어떻게 보나" 지적 반영). 탐색창은 그대로 살아있고,
-    // 얇은 상태바에 파일명 + 새로고침・참조・닫기 버튼만 남는다.
+    // [2026.08] PDF는 "그냥 보기"와 "PDF 관리(페이지 단위 병합·회전·서명 등)로 열기" 둘 다
+    // 쓸모가 있어서, 클릭 한 번으로 정하지 않고 먼저 물어본다. document-tools.js에 이미 있는
+    // PDF관리 도구(pdfMgrEntries 등)를 그대로 재사용 — 다만 지금까지 PDF관리는 "컴퓨터에서
+    // 새로 고른 파일"만 넣을 수 있었지, 폴더 안에 이미 있는 파일을 바로 불러오는 길이 없어서
+    // 그 길도 같이 새로 만들었다(아래 openExistingFileInPdfManager).
+    if (file.mimeType === 'application/pdf'){
+      showPdfOpenChoice_(file);
+      return;
+    }
+    proceedToOpenFilePopup_(file);
+  }
+
+  // 이미지・PDF・워드・파워포인트・한글 등: 좁고 고정된 패널 대신 독립 리사이즈 창으로 연다
+  // ("작고 고정된 창으로 큰 PDF·이미지를 어떻게 보나" 지적 반영). 탐색창은 그대로 살아있고,
+  // 얇은 상태바에 파일명 + 새로고침・참조・닫기 버튼만 남는다.
+  function proceedToOpenFilePopup_(file){
     currentOpenFile = { id: file.id, name: file.name, mimeType: file.mimeType };
     isReportWriterOpen = false;
     openFilePopup(file);
     openFileStatusName.textContent = file.name;
     openFileStatusBar.style.display = 'flex';
+  }
+
+  // PDF 클릭 시 "파일 열기" / "PDF 관리로 열기" 중 고르는 작은 선택창.
+  function showPdfOpenChoice_(file){
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;';
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) overlay.remove(); });
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel); color:var(--ink); border-radius:10px; width:min(320px, 88vw); padding:18px; box-shadow:0 8px 32px rgba(0,0,0,0.35);';
+    box.innerHTML = `
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px;">${escapeHtml(file.name)}</div>
+      <button id="pdfChoiceOpen" style="width:100%;padding:11px;margin-bottom:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">📄 파일 열기</button>
+      <button id="pdfChoiceManage" style="width:100%;padding:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">🗂 PDF 관리로 열기</button>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    document.getElementById('pdfChoiceOpen').addEventListener('click', ()=>{
+      overlay.remove();
+      proceedToOpenFilePopup_(file);
+    });
+    document.getElementById('pdfChoiceManage').addEventListener('click', ()=>{
+      overlay.remove();
+      if (typeof window.openExistingFileInPdfManager === 'function'){
+        window.openExistingFileInPdfManager(file);
+      } else {
+        showToast('PDF 관리 도구를 아직 불러오지 못했습니다. 잠시 후 다시 시도해주세요.', 'warning');
+      }
+    });
   }
 
   document.getElementById('btnOpenFileClose').addEventListener('click', ()=>{
