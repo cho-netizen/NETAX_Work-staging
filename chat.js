@@ -22,10 +22,57 @@
     }
   }
 
+  // [2026.08] 태블릿/폰의 크롬·사파리는 <datalist>(네이티브 드롭다운) 지원이 컴퓨터만큼
+  // 확실하지 않아서(아예 목록이 안 뜨는 경우가 많음), 터치기기에서는 직접 만든 목록으로
+  // 대체한다. 컴퓨터(마우스)는 그대로 네이티브 datalist + showPicker()를 쓴다.
+  const isTouchDevice_ = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  let customerDropdownEl = null;
+
+  function closeCustomerDropdown_(){
+    if (customerDropdownEl){ customerDropdownEl.remove(); customerDropdownEl = null; }
+    document.removeEventListener('click', onDocClickCloseCustomerDropdown_);
+  }
+  function onDocClickCloseCustomerDropdown_(e){
+    if (e.target === customerSelect) return;
+    if (customerDropdownEl && customerDropdownEl.contains(e.target)) return;
+    closeCustomerDropdown_();
+  }
+  function openCustomerDropdown_(){
+    closeCustomerDropdown_();
+    if (!currentCustomerNames.length) return;
+    const rect = customerSelect.getBoundingClientRect();
+    customerDropdownEl = document.createElement('div');
+    customerDropdownEl.style.cssText = 'position:fixed; z-index:5000; background:var(--panel); color:var(--ink);'
+      + 'border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3);'
+      + 'max-height:280px; overflow-y:auto; min-width:' + Math.max(rect.width, 180) + 'px;';
+    currentCustomerNames.forEach(name=>{
+      const item = document.createElement('div');
+      item.textContent = name;
+      item.style.cssText = 'padding:12px 14px; cursor:pointer; font-size:14px; border-bottom:1px solid var(--line);';
+      item.addEventListener('click', ()=>{
+        closeCustomerDropdown_();
+        navigateTo(basePath.concat([name]));
+        customerSelect.value = '';
+        customerSelect.placeholder = name;
+      });
+      customerDropdownEl.appendChild(item);
+    });
+    document.body.appendChild(customerDropdownEl);
+    const top = rect.bottom + 4;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - customerDropdownEl.offsetWidth - 8));
+    customerDropdownEl.style.top = top + 'px';
+    customerDropdownEl.style.left = left + 'px';
+    setTimeout(()=> document.addEventListener('click', onDocClickCloseCustomerDropdown_), 0);
+  }
+
   // [2026.08] <input list="...">(datalist) 방식은 이미 값이 채워져 있으면 클릭해도
   // 목록이 안 뜨는 경우가 많다(브라우저 기본 동작) — 값을 지우고 다시 눌러야만 뜨던 그
   // 불편함. showPicker()로 값 유무와 상관없이 항상 목록이 뜨도록 강제한다.
   customerSelect.addEventListener('click', ()=>{
+    if (isTouchDevice_){
+      openCustomerDropdown_();
+      return;
+    }
     if (typeof customerSelect.showPicker === 'function'){
       try{ customerSelect.showPicker(); }catch(e){}
     }
