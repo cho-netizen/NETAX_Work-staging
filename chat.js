@@ -46,7 +46,8 @@
   const TOOL_GROUP_1 = [
     { icon: '🔍', label: '검색', handler: openSearchView },
     { icon: '🗑', label: '휴지통', handler: openTrashView },
-    { icon: '📊', label: '현황판', handler: openDashboardView }
+    { icon: '📊', label: '현황판', handler: openDashboardView },
+    { icon: '📋', label: '제출현황', handler: openSubmissionsPanel }
   ];
   const TOOL_GROUP_2 = [
     { icon: '📝', label: '경과지', handler: openLogView },
@@ -63,7 +64,8 @@
   ];
   const MOBILE_GROUP_RECORDS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '📝', label: '경과지', handler: openLogView }
+    { icon: '📝', label: '경과지', handler: openLogView },
+    { icon: '📋', label: '제출현황', handler: openSubmissionsPanel }
   ];
   const MOBILE_GROUP_ANALYSIS = [
     { icon: '🧮', label: '계산기', handler: openCalcView },
