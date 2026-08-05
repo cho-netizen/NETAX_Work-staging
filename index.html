@@ -591,13 +591,9 @@
     flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
     font-family:inherit; font-size:var(--chat-font-size, 13.5px); background:var(--panel); color:var(--ink);
   }
-  /* 채팅창 글자 크기 조절 — 화면 크기·레이아웃(좌우/상하/생략/커버화면 등)과 무관하게 항상
-     채팅패널 맨 위에 작은 바로 떠 있다. 답변이 길거나 화면이 작을 때 읽기 힘들다는 요청으로 추가. */
-  .chat-toolbar{
-    display:flex; align-items:center; justify-content:flex-end; gap:4px;
-    padding:4px 8px; border-bottom:1px solid var(--line); flex-shrink:0;
-  }
-  .chat-toolbar-label{ font-size:11.5px; color:var(--sub); margin-right:2px; }
+  /* [2026.08] 예전엔 채팅패널 맨 위에 "글자 크기" 라벨과 함께 별도 줄로 떠 있었는데,
+     화면 한 줄을 아끼기 위해 버튼(가-/가+)만 하단 도구줄(.chat-tools-row)로 옮기고
+     라벨과 이 별도 줄 자체는 없앴다. */
   .chat-font-btn{
     font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; line-height:1.4;
     border:1px solid var(--line); border-radius:6px; padding:2px 9px;
@@ -605,7 +601,6 @@
   }
   .chat-font-btn:hover{ background:#f0f2f6; color:var(--navy); }
   body.dark-mode .chat-font-btn:hover{ background:#2a2f3b; color:var(--ink); }
-  body.cover-mode.talking-mode .chat-toolbar{ display:none !important; } /* 토킹모드에서는 화면을 음성전용으로 깔끔하게 유지 */
   .chip-btn{
     display:flex; align-items:center; gap:4px; font-family:inherit; font-size:11.5px; font-weight:600;
     cursor:pointer; border:1px solid var(--line); border-radius:14px; padding:4px 10px;
@@ -1318,11 +1313,6 @@
   <div class="workspace" id="workspace">
     <div class="explorer-float-backdrop" id="explorerFloatBackdrop"></div>
     <div class="panel chat">
-      <div class="chat-toolbar" id="chatToolbar">
-        <span class="chat-toolbar-label">글자 크기</span>
-        <button type="button" id="btnChatFontDown" class="chat-font-btn" title="글자 작게">가-</button>
-        <button type="button" id="btnChatFontUp" class="chat-font-btn" title="글자 크게">가+</button>
-      </div>
       <div class="chat-body" id="chatBody"></div>
       <div class="attach-bar" id="attachBar" style="display:none;"></div>
       <!-- 커버화면모드 중 "토킹모드"에서만 보임 — 채팅목록·입력창 대신 이것만 보임. 상태 문구만 크게 표시.
@@ -1337,6 +1327,8 @@
           <input type="text" id="chatInputEl" placeholder="메시지 입력" aria-label="메시지 입력">
         </div>
         <div class="chat-tools-row">
+          <button type="button" id="btnChatFontDown" class="chat-font-btn" title="글자 작게">가-</button>
+          <button type="button" id="btnChatFontUp" class="chat-font-btn" title="글자 크게">가+</button>
           <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
           <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
           <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개(턴) 같이 보낼지 선택 (0=입력창 내용만)">
