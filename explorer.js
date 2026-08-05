@@ -1384,7 +1384,9 @@
     renderSubmissionsPanel_(matched);
   }
 
-  document.getElementById('btnOpenSubmissions').addEventListener('click', openSubmissionsPanel);
+  // [2026.08] 상단바 버튼(btnOpenSubmissions)은 없앴다 — 반응형 단계별로 계속 위치가
+  // 바뀌는 게 번거로워서, 탐색기 빈 공간 우클릭 메뉴의 "📋 제출현황"으로 옮겼다.
+  // openSubmissionsPanel 함수 자체는 그대로 두고 그쪽에서 재사용한다.
   document.getElementById('btnDashboardBack').addEventListener('click', closeDashboardView);
 
   // ---- 파일·폴더 검색 (드라이브 전체, 이름 기준) ----

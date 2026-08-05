@@ -46,8 +46,7 @@
   const TOOL_GROUP_1 = [
     { icon: '🔍', label: '검색', handler: openSearchView },
     { icon: '🗑', label: '휴지통', handler: openTrashView },
-    { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '📋', label: '제출현황', handler: openSubmissionsPanel }
+    { icon: '📊', label: '현황판', handler: openDashboardView }
   ];
   const TOOL_GROUP_2 = [
     { icon: '📝', label: '경과지', handler: openLogView },
@@ -64,8 +63,7 @@
   ];
   const MOBILE_GROUP_RECORDS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '📝', label: '경과지', handler: openLogView },
-    { icon: '📋', label: '제출현황', handler: openSubmissionsPanel }
+    { icon: '📝', label: '경과지', handler: openLogView }
   ];
   const MOBILE_GROUP_ANALYSIS = [
     { icon: '🧮', label: '계산기', handler: openCalcView },
@@ -503,6 +501,7 @@
         { label: '📁 새 폴더 만들기', action: createNewFolder },
         { label: '📝 새 문서 만들기', action: createNewDoc },
         { label: '📤 파일 업로드', action: triggerFileUpload },
+        { label: '📋 제출현황', action: openSubmissionsPanel },
         { label: '🗑 휴지통 열기', action: openTrashView },
         { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
       ];
