@@ -526,12 +526,11 @@
       document.removeEventListener('click', closeMenu);
       document.removeEventListener('scroll', closeMenu, true);
     }
-    explorerBody.addEventListener('contextmenu', (e)=>{
-      const onItem = e.target.closest('.file-row, .folder-row');
-      if (onItem) return; // 항목 위 우클릭은 위쪽의 별도 리스너가 체크박스 토글로 처리함
-      e.preventDefault();
-      closeMenu();
 
+    // [2026.08] 우클릭(빈 공간)과, 목록이 꽉 차서 빈 공간이 없을 때를 위한 "＋" 버튼
+    // 둘 다 같은 메뉴를 띄운다 — 좌표(x,y)만 다르게 받아서 그 자리에 연다.
+    function showMenuAt_(x, y){
+      closeMenu();
       menuEl = document.createElement('div');
       menuEl.style.cssText = 'position:fixed; z-index:5000; background:var(--panel); color:var(--ink);'
         + 'border:1px solid var(--line);'
@@ -562,16 +561,39 @@
 
       // 메뉴가 화면 밖으로 안 나가도록 위치 보정
       const menuW = menuEl.offsetWidth, menuH = menuEl.offsetHeight;
-      const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
-      const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
-      menuEl.style.left = x + 'px';
-      menuEl.style.top = y + 'px';
+      const left = Math.min(x, window.innerWidth - menuW - 8);
+      const top = Math.min(y, window.innerHeight - menuH - 8);
+      menuEl.style.left = left + 'px';
+      menuEl.style.top = top + 'px';
 
-      setTimeout(()=>{ // 지금 이 클릭(우클릭) 자체로 즉시 닫히지 않도록 한 틱 늦춰서 등록
+      setTimeout(()=>{ // 지금 이 클릭 자체로 즉시 닫히지 않도록 한 틱 늦춰서 등록
         document.addEventListener('click', closeMenu);
         document.addEventListener('scroll', closeMenu, true);
       }, 0);
+    }
+
+    explorerBody.addEventListener('contextmenu', (e)=>{
+      const onItem = e.target.closest('.file-row, .folder-row');
+      if (onItem) return; // 항목 위 우클릭은 위쪽의 별도 리스너가 체크박스 토글로 처리함
+      e.preventDefault();
+      showMenuAt_(e.clientX, e.clientY);
     });
+
+    // 파일 목록이 꽉 차서 우클릭(길게 누르기)할 빈 공간이 없을 때를 위한 "＋" 버튼.
+    // 탐색기 패널 오른쪽 아래에 항상 떠 있어서, 스크롤 위치나 목록 길이와 무관하게 접근 가능.
+    const fab = document.createElement('button');
+    fab.type = 'button';
+    fab.title = '새 폴더·새 문서·검색 등';
+    fab.textContent = '＋';
+    fab.style.cssText = 'position:absolute; right:14px; bottom:14px; z-index:50; width:48px; height:48px;'
+      + 'border-radius:50%; border:1px solid var(--line); background:var(--navy); color:#fff;'
+      + 'font-size:24px; line-height:1; cursor:pointer; box-shadow:0 3px 10px rgba(0,0,0,0.3);';
+    fab.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const rect = fab.getBoundingClientRect();
+      showMenuAt_(rect.left, rect.top - 8); // 버튼 바로 위쪽에 메뉴가 뜨도록(화면 밖 보정은 showMenuAt_이 처리)
+    });
+    explorerView.appendChild(fab);
   })();
 
   // [2026.08] 이 새로고침 버튼은 없앴다 — 같은 동작이 우클릭 메뉴의 "🔄 새로고침" 항목으로
