@@ -173,6 +173,26 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'search_legal_interpretations',
+    description: '국가법령정보센터에서 세법 관련 법령해석례(예규·질의회신·유권해석 등)를 검색해서 목록(안건명·질의기관·회신일자·해석례일련번호 등)을 가져온다. "이런 거래는 어떻게 과세되는지 국세청 해석이 있는지" 확인할 때 써라. 조문 조회와 같은 인증키를 쓴다. 결과 중 관련성 높은 항목의 "법령해석례일련번호"를 골라 get_legal_interpretation_detail로 본문을 이어서 확인하라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '검색어(쟁점·거래유형·세목 등)' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'get_legal_interpretation_detail',
+    description: 'search_legal_interpretations로 찾은 법령해석례(예규) 하나의 전체 본문(질의요지·회답·이유 등)을 가져온다. interpretationId는 검색 결과의 "법령해석례일련번호" 값을 그대로 써라.',
+    input_schema: {
+      type: 'object',
+      properties: { interpretationId: { type: 'string', description: 'search_legal_interpretations 결과의 법령해석례일련번호' } },
+      required: ['interpretationId']
+    }
+  },
+  {
     name: 'register_report_to_rpt',
     description: '완성된 보고서를 rpt.netax.kr(고객 열람 시스템)에 등록해서 열람번호를 발급한다. 사용자가 "이거 rpt에 등록해줘", "고객이 볼 수 있게 올려줘"처럼 요청했을 때만 써라. link는 이미 완성해서 저장해둔 보고서 파일(구글독스/드라이브 파일)의 URL이어야 한다 — 아직 파일이 없으면 먼저 save_file_to_folder나 export_to_google_doc으로 만들고 나서 그 결과의 url을 여기에 넣어라. 등록 직전에 그 파일의 공유설정을 "링크가 있는 모든 사용자·보기"로 자동으로 바꿔준다(안 그러면 고객이 열람번호로 들어와도 파일을 못 엶) — 별도로 공유설정을 미리 바꿔둘 필요 없다.',
     input_schema: {
@@ -1053,6 +1073,78 @@ function toolGetCasePrecedentDetail(caseId) {
     return obj;
   } catch (err) {
     return { error: '판례 본문 조회 중 오류: ' + err.message };
+  }
+}
+
+/**
+ * 법령해석례(예규·질의회신) 검색 — target=expc, 나머지는 판례 검색과 완전히 같은 패턴.
+ * 같은 인증키(LAW_OC)를 재사용하고, 필드명도 하드코딩하지 않고 API가 주는 그대로 펼친다.
+ */
+function toolSearchLegalInterpretations(query) {
+  if (!query || !String(query).trim()) return { error: '검색어가 없습니다.' };
+
+  const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
+  if (!ocKey) return { error: 'LAW_OC(국가법령정보센터 인증키)가 스크립트 속성에 설정되어 있지 않습니다.' };
+
+  try {
+    const url = 'https://www.law.go.kr/DRF/lawSearch.do?OC=' + encodeURIComponent(ocKey)
+      + '&target=expc&type=XML&display=20'
+      + '&query=' + encodeURIComponent(String(query).trim());
+
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) {
+      return { error: '법령해석례 검색 API 호출 실패 (status ' + res.getResponseCode() + ')' };
+    }
+    const doc = XmlService.parse(res.getContentText('UTF-8'));
+    const root = doc.getRootElement();
+    const totalCntEl = root.getChild('totalCnt');
+    const items = root.getChildren('expc');
+
+    if (!items.length) {
+      return {
+        totalCnt: totalCntEl ? totalCntEl.getText() : '0',
+        결과: [],
+        안내: '검색된 법령해석례가 없습니다. 검색어를 더 구체적으로 바꿔서 다시 시도하세요.'
+      };
+    }
+
+    const results = items.map(function (item) {
+      const obj = {};
+      item.getChildren().forEach(function (field) {
+        obj[field.getName()] = field.getText().trim();
+      });
+      return obj;
+    });
+
+    return { totalCnt: totalCntEl ? totalCntEl.getText() : String(results.length), 결과: results };
+  } catch (err) {
+    return { error: '법령해석례 검색 중 오류: ' + err.message };
+  }
+}
+
+/** 법령해석례 본문 조회 — search_legal_interpretations 결과의 "법령해석례일련번호"로 조회. */
+function toolGetLegalInterpretationDetail(interpretationId) {
+  if (!interpretationId || !String(interpretationId).trim()) return { error: 'interpretationId(법령해석례일련번호)가 없습니다.' };
+
+  const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
+  if (!ocKey) return { error: 'LAW_OC(국가법령정보센터 인증키)가 스크립트 속성에 설정되어 있지 않습니다.' };
+
+  try {
+    const url = 'https://www.law.go.kr/DRF/lawService.do?target=expc&OC=' + encodeURIComponent(ocKey)
+      + '&type=XML&ID=' + encodeURIComponent(String(interpretationId).trim());
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) {
+      return { error: '법령해석례 본문 조회 API 호출 실패 (status ' + res.getResponseCode() + ')' };
+    }
+    const doc = XmlService.parse(res.getContentText('UTF-8'));
+    const root = doc.getRootElement();
+    const obj = {};
+    root.getChildren().forEach(function (field) {
+      obj[field.getName()] = field.getText().trim();
+    });
+    return obj;
+  } catch (err) {
+    return { error: '법령해석례 본문 조회 중 오류: ' + err.message };
   }
 }
 
@@ -2677,6 +2769,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'lookup_statute_article' ||
         b.name === 'search_case_precedents' ||
         b.name === 'get_case_precedent_detail' ||
+        b.name === 'search_legal_interpretations' ||
+        b.name === 'get_legal_interpretation_detail' ||
         b.name === 'register_report_to_rpt' ||
         b.name === 'lookup_real_estate_price' ||
         b.name === 'lookup_building_register' ||
@@ -2748,6 +2842,18 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       if (block.name === 'get_case_precedent_detail') {
         const input = block.input || {};
         const resultObj = toolGetCasePrecedentDetail(input.caseId);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'search_legal_interpretations') {
+        const input = block.input || {};
+        const resultObj = toolSearchLegalInterpretations(input.query);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'get_legal_interpretation_detail') {
+        const input = block.input || {};
+        const resultObj = toolGetLegalInterpretationDetail(input.interpretationId);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
