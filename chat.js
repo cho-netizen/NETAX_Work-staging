@@ -91,8 +91,6 @@
 
   // ---- 좁은 화면(PC/탭, grouped 단계)용 도구 그룹 팝업 — 도구1/도구2 2그룹 ----
   const TOOL_GROUP_1 = [
-    { icon: '🔍', label: '검색', handler: openSearchView },
-    { icon: '🗑', label: '휴지통', handler: openTrashView },
     { icon: '📊', label: '현황판', handler: openDashboardView }
   ];
   const TOOL_GROUP_2 = [
@@ -104,10 +102,8 @@
   ];
 
   // ---- 폰(compact 단계) 전용 하단 도구 5그룹 — 기능이 비슷한 것끼리 2개씩 묶음 ----
-  const MOBILE_GROUP_FILES = [
-    { icon: '🔍', label: '검색', handler: openSearchView },
-    { icon: '🗑', label: '휴지통', handler: openTrashView }
-  ];
+  // (2026.08) MOBILE_GROUP_FILES(검색·휴지통)는 없앴다 — 둘 다 탐색기 빈 공간
+  // 우클릭(길게 누르기) 메뉴로 옮겼다.
   const MOBILE_GROUP_RECORDS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
     { icon: '📝', label: '경과지', handler: openLogView }
@@ -143,25 +139,22 @@
   const toolGroup1Popup = document.getElementById('toolGroup1Popup');
   const toolGroup2Popup = document.getElementById('toolGroup2Popup');
 
-  const mgFilesBtn = document.getElementById('btnMgFiles');
   const mgRecordsBtn = document.getElementById('btnMgRecords');
   const mgAnalysisBtn = document.getElementById('btnMgAnalysis');
   const mgConfigBtn = document.getElementById('btnMgConfig');
-  const mgFilesPopup = document.getElementById('mgFilesPopup');
   const mgRecordsPopup = document.getElementById('mgRecordsPopup');
   const mgAnalysisPopup = document.getElementById('mgAnalysisPopup');
   const mgConfigPopup = document.getElementById('mgConfigPopup');
 
   fillToolPopup(toolGroup1Popup, TOOL_GROUP_1);
   fillToolPopup(toolGroup2Popup, TOOL_GROUP_2);
-  fillToolPopup(mgFilesPopup, MOBILE_GROUP_FILES);
   fillToolPopup(mgRecordsPopup, MOBILE_GROUP_RECORDS);
   fillToolPopup(mgAnalysisPopup, MOBILE_GROUP_ANALYSIS);
   fillToolPopup(mgConfigPopup, MOBILE_GROUP_CONFIG);
 
   const ALL_GROUP_POPUPS = [
     [toolGroup1Popup, btnToolGroup1], [toolGroup2Popup, btnToolGroup2],
-    [mgFilesPopup, mgFilesBtn], [mgRecordsPopup, mgRecordsBtn], [mgAnalysisPopup, mgAnalysisBtn],
+    [mgRecordsPopup, mgRecordsBtn], [mgAnalysisPopup, mgAnalysisBtn],
     [mgConfigPopup, mgConfigBtn]
   ];
 
@@ -548,6 +541,7 @@
         { label: '📁 새 폴더 만들기', action: createNewFolder },
         { label: '📝 새 문서 만들기', action: createNewDoc },
         { label: '📤 파일 업로드', action: triggerFileUpload },
+        { label: '🔍 검색', action: openSearchView },
         { label: '📋 제출현황', action: openSubmissionsPanel },
         { label: '🗑 휴지통 열기', action: openTrashView },
         { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
