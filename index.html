@@ -864,6 +864,26 @@
   .nx-toast.error{ background:#B3261E; }
   .nx-toast.warning{ background:#8A6D1E; }
   .nx-toast.success{ background:#1E7A46; }
+
+  /* ============================================================
+     [2026.08] 터치기기(태블릿·폰) 전용 버튼 확대
+     "pointer:coarse"는 마우스가 아니라 손가락으로 조작하는 기기에서만 참(true)이 되므로,
+     컴퓨터 화면 크기와 무관하게 정확히 터치기기만 골라서 적용된다 — 컴퓨터 창을 좁혀도
+     여기 걸리지 않는다. 손가락으로 누르기 편한 최소 크기(대략 44px 안팎)를 기준으로 키움.
+     ============================================================ */
+  @media (pointer: coarse) {
+    .tb-btn{ padding:11px 15px; font-size:15px; border-radius:10px; gap:5px; }
+    .layout-toggle button{ padding:11px 14px; font-size:18px; }
+    .topbar-select, #customerSelect{ padding:11px 14px; font-size:15px; }
+    .ghost-btn, .save-btn{ padding:12px 20px; font-size:15px; border-radius:8px; }
+    .chip-btn{ padding:9px 15px; font-size:14px; border-radius:16px; }
+    .chat-font-btn{ padding:9px 15px; font-size:15px; }
+    .icon-round-btn{ width:44px; height:44px; font-size:18px; }
+    .file-row .file-check, .folder-row .file-check{ width:22px; height:22px; }
+    .folder-row, .file-row{ padding:13px 14px; gap:12px; }
+    .selection-inline{ padding:8px 12px; gap:10px; }
+    .selection-inline button{ padding:9px 15px; font-size:14px; border-radius:16px; }
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
