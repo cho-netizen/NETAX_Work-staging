@@ -537,10 +537,10 @@
         + 'border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.28); padding:4px; min-width:150px;'
         + 'font-size:13.5px; font-family:inherit;';
       const items = [
-        { label: '📁 새 폴더 만들기', action: createNewFolder },
-        { label: '📝 새 문서 만들기', action: createNewDoc },
+        { label: '📁 새 폴더', action: createNewFolder },
+        { label: '📝 새 문서', action: createNewDoc },
         { label: '📤 파일 업로드', action: triggerFileUpload },
-        { label: '🔍 검색', action: openSearchView },
+        { label: '🔍 파일 검색', action: openSearchView },
         { label: '📋 제출현황', action: openSubmissionsPanel },
         { label: '🗑 휴지통 열기', action: openTrashView },
         { label: '🔄 새로고침', action: ()=>{ navigateTo(explorerPath); showToast('새로고침했습니다.', 'info'); } }
