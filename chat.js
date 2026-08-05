@@ -41,10 +41,16 @@
     closeCustomerDropdown_();
     if (!currentCustomerNames.length) return;
     const rect = customerSelect.getBoundingClientRect();
+    // [2026.08] 280px로 고정해뒀더니 태블릿에서 "딱 6개까지만 있다"고 오해할 만큼 짧게
+    // 보였다(사실은 스크롤 가능했지만 티가 안 남) — 컴퓨터의 네이티브 드롭다운처럼, 화면에
+    // 남은 공간만큼 최대한 크게 펼쳐지도록 매번 계산한다.
+    const availableBelow = window.innerHeight - rect.bottom - 16;
+    const maxHeight = Math.max(200, Math.min(availableBelow, 520));
     customerDropdownEl = document.createElement('div');
     customerDropdownEl.style.cssText = 'position:fixed; z-index:5000; background:var(--panel); color:var(--ink);'
       + 'border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3);'
-      + 'max-height:280px; overflow-y:auto; min-width:' + Math.max(rect.width, 180) + 'px;';
+      + '-webkit-overflow-scrolling:touch;'
+      + 'max-height:' + maxHeight + 'px; overflow-y:auto; min-width:' + Math.max(rect.width, 180) + 'px;';
     currentCustomerNames.forEach(name=>{
       const item = document.createElement('div');
       item.textContent = name;
