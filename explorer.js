@@ -377,7 +377,24 @@
           else toggleItemSelection_(itemMeta, row);
           return;
         }
+        // PDF는 단일 클릭 시 "파일보기/파일관리" 선택창이 뜨는데, 더블클릭으로는
+        // 바로 파일보기로 열리게 하려고 단일 클릭 처리를 살짝 지연시켜 더블클릭인지 구분한다.
+        if (f.mimeType === 'application/pdf'){
+          if (row._pdfClickTimer){ return; } // 더블클릭의 두 번째 클릭 — dblclick 핸들러가 처리
+          row._pdfClickTimer = setTimeout(()=>{
+            row._pdfClickTimer = null;
+            openEditor(f);
+          }, 280);
+          return;
+        }
         openEditor(f);
+      });
+
+      row.addEventListener('dblclick', (e)=>{
+        if (f.mimeType !== 'application/pdf') return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (row._pdfClickTimer){ clearTimeout(row._pdfClickTimer); row._pdfClickTimer = null; }
+        proceedToOpenFilePopup_(f);
       });
 
       const checkbox = row.querySelector('.file-check');
@@ -580,6 +597,7 @@
   // PDF 클릭 시 "파일 열기" / "PDF 관리로 열기" 중 고르는 작은 선택창.
   function showPdfOpenChoice_(file){
     const overlay = document.createElement('div');
+    overlay.className = 'pdf-choice-overlay';	
     overlay.style.cssText = 'position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;';
     overlay.addEventListener('click', (e)=>{ if (e.target === overlay) overlay.remove(); });
 
