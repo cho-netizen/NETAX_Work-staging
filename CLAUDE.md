@@ -21,3 +21,20 @@
 ## 착수 전 확인
 - 요청 범위가 모호하거나 여러 방식으로 해석될 수 있으면, 작업 시작 전에 어떤 방식으로 진행할지 먼저 확인한다.
 - 요청받지 않은 추가 작업(예상치 못한 리팩토링, 파일 구조 변경 등)은 임의로 하지 않는다.
+
+## GS(Apps Script) 코드 수정 시 반드시 지킬 절차
+`gs-backend` 폴더 안의 `.gs`/`appsscript.json` 파일을 수정했다면, 코드 수정만으로는 실제 서비스에 반영되지 않는다. 아래 순서를 매번 빠짐없이 실행한다 (사용자에게 각 단계를 할지 묻지 말고, 커밋/푸시 승인 규칙과 별개로 이 기술적 절차는 자동으로 진행한다 — 단, git commit/push 자체의 승인 규칙은 위 "Git 작업 규칙"을 그대로 따른다):
+
+1. `clasp push` — 로컬 수정사항을 Apps Script 서버로 올린다.
+2. `clasp deploy -i <기존 배포 ID>` — **반드시 기존 배포 ID를 재사용**한다. 새 배포를 만들면 웹앱 URL이 바뀌어 `config.js` 등에 박힌 주소가 전부 깨지므로, `clasp deploy` (ID 옵션 없이)로 새 배포를 만드는 것은 금지.
+3. 각 프로젝트의 배포 ID는 최초 1회 `clasp deployments`로 확인해서 아래 표에 기록해두고, 이후에는 매번 다시 찾지 말고 이 표를 사용한다. 표에 없는 프로젝트를 처음 건드릴 때만 `clasp deployments`로 확인 후 이 파일에 추가한다.
+4. 위 두 단계가 끝난 뒤에만 `git commit`/`git push` 진행 여부를 평소 규칙대로 묻는다 (이건 실제 반영과 무관한 기록/백업용이라 순서상 나중이어도 무방).
+
+### 프로젝트별 배포 ID (확인되는 대로 채워나갈 것)
+| 저장소 폴더 | GS 프로젝트명 | 배포 ID |
+|---|---|---|
+| NETAX_Work-staging/gs-backend | NX-Assistant | (미확인) |
+| NETAX_Report/gs-backend | NETAX_Report_Access | (미확인) |
+| NETAX_Desk/gs-backend | NETAX_Desk | (미확인) |
+| NETAX_Card/gs-backend | NETAX_Booking | (미확인) |
+| NETAX_My/gs-backend | MY_NETAX | (미확인) |
