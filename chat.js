@@ -365,6 +365,10 @@
   document.addEventListener('click', (e)=>{
     if (!selectedItems.size) return;
     if (e.target.closest('#selectionInline')) return;
+    // [2026.08] 빈 공간 드래그로 방금 여러 항목을 선택한 직후에는, 마우스를 뗄 때 브라우저가
+    // 자동으로 쏘는 click 이벤트가 이 리스너를 타고 방금 만든 선택을 바로 지워버린다 —
+    // 드래그선택 쪽에서 이 플래그를 한 번만 세워두고 여기서 소비한다.
+    if (window.__nxSkipNextOutsideClearClick){ window.__nxSkipNextOutsideClearClick = false; return; }
     selectedItems.clear();
     refreshSelectionUi();
   });
@@ -573,11 +577,11 @@
   // 공유 — 퀵쉐어(윈도우/안드로이드 OS 기능)는 웹사이트가 직접 지정할 수 없어서,
   // 대신 브라우저 표준 "공유하기"(Web Share API)를 띄운다. OS/기기가 지원하면 그 공유창 안에
   // 퀵쉐어·에어드롭 등이 옵션으로 나타날 수 있음 (지원 여부는 기기·브라우저에 따라 다름).
-  btnShareSelected.addEventListener('click', async ()=>{
-    const items = Array.from(selectedItems.values());
-    if (items.length !== 1 || items[0].type === 'folder') return;
-    const item = items[0];
-
+  // [2026.08] 선택바 "공유" 버튼뿐 아니라 탐색기 행 Alt+클릭(체크 없이 바로 공유)에서도 이
+  // 함수를 그대로 재사용한다 — explorer.js가 이 파일보다 먼저 로드되지만, 실제 호출은 사용자가
+  // Alt+클릭하는 시점(스크립트 로드가 전부 끝난 뒤)이라 문제없다.
+  async function shareSingleItem_(item){
+    if (!item || item.type === 'folder') return;
     try{
       const data = await callGas('readFile', { fileId: item.id });
       if (data.error){ showToast('공유용으로 파일을 불러오지 못했습니다: ' + data.error, 'error'); return; }
@@ -610,6 +614,11 @@
         showToast('공유 중 오류: ' + (err && err.message ? err.message : err), 'error');
       }
     }
+  }
+  btnShareSelected.addEventListener('click', ()=>{
+    const items = Array.from(selectedItems.values());
+    if (items.length !== 1 || items[0].type === 'folder') return;
+    shareSingleItem_(items[0]);
   });
 
   // ============================================================
@@ -1226,7 +1235,10 @@
           hint.className = 'chat-history-hint';
           hint.textContent = '— 이 사건의 지난 대화를 이어서 보여드립니다 —';
           chatBody.appendChild(hint);
-          loaded.forEach(m => appendBubble(m.role === 'assistant' ? 'assistant' : 'user', stripSignalMarkersForDisplay(m.content)));
+          loaded.forEach(m => {
+            const bubbleEl = appendBubble(m.role === 'assistant' ? 'assistant' : 'user', stripSignalMarkersForDisplay(m.content));
+            bubbleEl._nxMsgRef = m; // 지난 대화를 다시 불러온 말풍선도 복사·재생성 등 메뉴가 똑같이 동작하도록
+          });
         }
       }
     }catch(err){
@@ -1786,7 +1798,7 @@
       ? ' ' + refMediaForThisMessage.map(m => (m.block.type === 'document' ? '📕' : '🖼️') + m.name).join(', ')
       : '';
 
-    appendBubble('user', text + attachNote + captureNote + textAttachNote + refMediaNote);
+    const userBubbleEl = appendBubble('user', text + attachNote + captureNote + textAttachNote + refMediaNote);
     chatInputEl.value = '';
     nxCaptureCounter = 0; // 이번 메시지를 보냈으니, 다음 캡처는 다시 1번부터
     chatInputEl.disabled = true;
@@ -1831,7 +1843,9 @@
 
     // 대화 기록(chatMessages)에는 가벼운 텍스트만 남긴다 — 이미지를 기록에 박아두면
     // 다음 턴부터 대화 전체를 다시 보낼 때마다 그 이미지까지 매번 반복 전송되어 낭비가 누적된다.
-    chatMessages.push({ role: 'user', content: text });
+    const userMsgObj = { role: 'user', content: text };
+    chatMessages.push(userMsgObj);
+    userBubbleEl._nxMsgRef = userMsgObj; // 말풍선 클릭/우클릭 메뉴(복사·수정재전송·삭제 등)가 이 참조로 배열 위치를 찾는다
 
     // 실제 API 요청에는(이번 한 턴에 한해서만) 이미지/문서 블록을 살짝 끼워 보낸다.
     const requestMessages = chatMessages.slice();
@@ -1876,7 +1890,9 @@
         chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
       } else {
         renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
-        chatMessages.push({ role: 'assistant', content: data.reply || '' });
+        const aiMsgObj = { role: 'assistant', content: data.reply || '' };
+        chatMessages.push(aiMsgObj);
+        thinkingBubble._nxMsgRef = aiMsgObj;
         scheduleChatHistorySave();
         if (isVoiceTurn) speakReply(data.reply || '');
       }
@@ -1909,6 +1925,171 @@
       }
     }
   }
+
+  // ============================================================
+  // 채팅 말풍선 좌/우클릭 — [2026.08] 지금까지 말풍선엔 마우스 동작이 하나도 없어서
+  // 복사하려면 드래그로 선택한 뒤 Ctrl+C 해야 했다. 좌클릭은 가장 자주 쓸 만한 동작 하나
+  // (AI 답변=복사, 내 메시지=입력창에 다시 채우기)를 즉시 실행하고, 우클릭은 그 외 메뉴
+  // (재생성·삭제·되돌리기·메모저장)를 모은다. 각 말풍선에는 그 메시지가 가리키는
+  // chatMessages 배열의 실제 객체를 _nxMsgRef로 걸어둔다(인덱스가 아니라 객체 참조라, 중간에
+  // 다른 메시지를 지워도 위치가 안 꼬인다 — 필요할 때 chatMessages.indexOf(msgRef)로 찾는다).
+  // ============================================================
+
+  function copyMessageText_(msgRef){
+    if (!msgRef || !msgRef.content) return;
+    navigator.clipboard.writeText(msgRef.content)
+      .then(()=> showToast('메시지를 복사했습니다.', 'success'))
+      .catch(()=> showToast('복사에 실패했습니다(브라우저 권한을 확인해주세요).', 'error'));
+  }
+
+  function refillInputForEdit_(msgRef){
+    if (!msgRef) return;
+    chatInputEl.value = msgRef.content;
+    chatInputEl.focus();
+    chatInputEl.selectionStart = chatInputEl.selectionEnd = chatInputEl.value.length;
+    showToast('입력창에 불러왔습니다 — 수정한 뒤 다시 보내세요.', 'info');
+  }
+
+  // 이 메시지 하나만 대화기록에서 지운다(화면·chatMessages·저장 파일 전부 반영).
+  function deleteSingleMessage_(bubbleEl, msgRef){
+    if (!confirm('이 메시지를 대화기록에서 삭제할까요? 되돌릴 수 없습니다.')) return;
+    const idx = chatMessages.indexOf(msgRef);
+    if (idx !== -1) chatMessages.splice(idx, 1);
+    bubbleEl.remove();
+    scheduleChatHistorySave();
+  }
+
+  // 이 메시지부터(포함) 그 뒤에 오는 모든 메시지를 지운다 — 대화를 이 지점 이전으로 되돌림.
+  function revertFrom_(bubbleEl, msgRef){
+    if (!confirm('이 메시지부터 이후 대화가 전부 사라집니다. 계속할까요?')) return;
+    const idx = chatMessages.indexOf(msgRef);
+    if (idx !== -1) chatMessages.length = idx;
+    let sib = bubbleEl;
+    while (sib){ const next = sib.nextSibling; sib.remove(); sib = next; }
+    scheduleChatHistorySave();
+    showToast('이 지점으로 대화를 되돌렸습니다.', 'success');
+  }
+
+  function saveMsgAsMemo_(msgRef){
+    if (!msgRef || typeof window.openMemoSaveDialog !== 'function') return;
+    window.openMemoSaveDialog(msgRef.content, null);
+  }
+
+  // AI 답변 하나를 다시 만든다 — 그 답변(과 그 뒤 대화)을 지우고, 그 앞까지의 대화 기록으로
+  // 새로 요청한다. sendChatMessage와 요청 로직이 겹치지만, sendChatMessage는 "지금 입력창에
+  // 새로 타이핑한 메시지"를 위한 함수라 여기서는 작게 따로 구성했다 — 캡처·첨부처럼 그
+  // 턴에서만 한 번 실려가던 것들은 애초에 chatMessages에 안 남아있어서 재생성 시 다시
+  // 붙이지 못한다(가벼운 한계로 감수 — 텍스트 맥락은 그대로 유지된다).
+  async function regenerateFrom_(bubbleEl, msgRef){
+    if (!msgRef || msgRef.role !== 'assistant') return;
+    if (!confirm('이 답변을 다시 만들까요? 이 답변 이후의 대화는 모두 사라집니다.')) return;
+    const idx = chatMessages.indexOf(msgRef);
+    if (idx === -1) return;
+    chatMessages.length = idx;
+    let sib = bubbleEl;
+    while (sib){ const next = sib.nextSibling; sib.remove(); sib = next; }
+
+    const thinkingBubble = appendBubble('assistant', '생각 중…');
+    try{
+      const liveContent = await getEditorLiveContent();
+      const openFileCtx = currentOpenFile
+        ? Object.assign({}, currentOpenFile, (liveContent !== null ? { liveContent } : {}))
+        : null;
+      const editTargetFileSnapshot = (isReportWriterOpen && currentOpenFile) ? Object.assign({}, currentOpenFile) : null;
+      const openDiagramCtx = (typeof diagramView !== 'undefined' && diagramView.style.display !== 'none')
+        ? { liveContent: diagramInput.value } : null;
+
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({
+          messages: chatMessages.slice(),
+          context: {
+            currentPath: explorerPath,
+            openFile: openFileCtx,
+            openDiagram: openDiagramCtx,
+            attachedItems: [],
+            attachedTexts: [],
+            voiceTurn: false
+          },
+          autoRef: autoRefMode
+        }, buildAiSettingsPayload(false)))
+      });
+      const data = await res.json();
+      if (data.error){
+        thinkingBubble.textContent = '오류: ' + data.error;
+        return;
+      }
+      renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
+      const newMsgObj = { role: 'assistant', content: data.reply || '' };
+      chatMessages.push(newMsgObj);
+      thinkingBubble._nxMsgRef = newMsgObj;
+      scheduleChatHistorySave();
+    }catch(err){
+      thinkingBubble.textContent = '네트워크 오류: ' + (err && err.message ? err.message : err);
+    }
+  }
+
+  chatBody.addEventListener('click', (e)=>{
+    const bubbleEl = e.target.closest('.msg');
+    if (!bubbleEl || !bubbleEl._nxMsgRef) return;
+    if (e.target.closest('button, a, input, textarea')) return; // 편집기 적용 버튼 등은 그 버튼 동작이 우선
+    const sel = window.getSelection();
+    if (sel && sel.toString().length > 0) return; // 드래그로 텍스트를 선택하던 중이면 클릭 동작을 건너뜀
+    const msgRef = bubbleEl._nxMsgRef;
+    if (msgRef.role === 'assistant') copyMessageText_(msgRef);
+    else refillInputForEdit_(msgRef);
+  });
+
+  (function setupChatMessageContextMenu_(){
+    let menuEl = null;
+    function closeMenu(){
+      if (menuEl){ menuEl.remove(); menuEl = null; }
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('scroll', closeMenu, true);
+    }
+    function showMenuAt_(x, y, items){
+      closeMenu();
+      menuEl = document.createElement('div');
+      menuEl.style.cssText = 'position:fixed; z-index:5000; background:var(--panel); color:var(--ink);'
+        + 'border:1px solid var(--line); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.28);'
+        + 'padding:4px; min-width:170px; font-size:13.5px; font-family:inherit;';
+      items.forEach(it=>{
+        const row = document.createElement('div');
+        row.textContent = it.label;
+        row.style.cssText = 'padding:8px 12px; border-radius:4px; cursor:pointer; white-space:nowrap; color:var(--ink);';
+        row.addEventListener('mouseenter', ()=> row.style.background = 'var(--bg)');
+        row.addEventListener('mouseleave', ()=> row.style.background = '');
+        row.addEventListener('click', ()=>{ closeMenu(); it.action(); });
+        menuEl.appendChild(row);
+      });
+      document.body.appendChild(menuEl);
+      const menuW = menuEl.offsetWidth, menuH = menuEl.offsetHeight;
+      menuEl.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
+      menuEl.style.top = Math.min(y, window.innerHeight - menuH - 8) + 'px';
+      setTimeout(()=>{
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('scroll', closeMenu, true);
+      }, 0);
+    }
+
+    chatBody.addEventListener('contextmenu', (e)=>{
+      const bubbleEl = e.target.closest('.msg');
+      if (!bubbleEl || !bubbleEl._nxMsgRef) return;
+      e.preventDefault();
+      const msgRef = bubbleEl._nxMsgRef;
+      const items = [{ label: '📋 복사', action: ()=> copyMessageText_(msgRef) }];
+      if (msgRef.role === 'assistant'){
+        items.push({ label: '🔄 이 답변 다시 만들기', action: ()=> regenerateFrom_(bubbleEl, msgRef) });
+        items.push({ label: '📝 메모로 저장', action: ()=> saveMsgAsMemo_(msgRef) });
+      } else {
+        items.push({ label: '✏️ 수정 후 재전송', action: ()=> refillInputForEdit_(msgRef) });
+      }
+      items.push({ label: '🗑 이 메시지만 삭제', action: ()=> deleteSingleMessage_(bubbleEl, msgRef) });
+      items.push({ label: '⏪ 이 지점부터 대화 되돌리기', action: ()=> revertFrom_(bubbleEl, msgRef) });
+      showMenuAt_(e.clientX, e.clientY, items);
+    });
+  })();
 
   btnChatSend.addEventListener('click', ()=>{
     if (currentChatAbortController){

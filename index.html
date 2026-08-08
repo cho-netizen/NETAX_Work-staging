@@ -567,6 +567,12 @@
   .msg{ max-width:100%; width:100%; box-sizing:border-box; padding:10px 13px; border-radius:10px; font-size:var(--chat-font-size, 13.5px); line-height:1.55; align-self:flex-start; }
   .msg.ai{ background:#f0f2f6; color:var(--ink); border-top-left-radius:2px; }
   .msg.me{ background:var(--navy); color:#fff; border-top-left-radius:2px; }
+  /* [2026.08] 좌클릭(AI=복사, 내 메시지=입력창에 다시 채우기)·우클릭(메뉴) 동작이 생겨서
+     클릭 가능하다는 걸 커서로 알려준다 — Gem 말풍선은 이 동작이 없어서 제외. */
+  .msg.ai, .msg.me{ cursor:pointer; }
+  .msg.ai:hover{ background:#e7eaf1; }
+  .msg.me:hover{ background:#132a5c; }
+  body.dark-mode .msg.ai:hover{ background:#323848; }
   /* Gem(제미니 웹) 자문 관련 말풍선 — NX 자신의 답변과 한눈에 구분되도록 보라색 계열로 표시.
      .gem-pending은 아직 답변을 기다리는 중(살짝 흐리게), 도착하면 .gem으로 바뀐다. */
   .msg.gem{ background:#f1ebfb; color:var(--ink); border-top-left-radius:2px; border-left:3px solid #8b5cf6; }

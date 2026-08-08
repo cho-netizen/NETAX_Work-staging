@@ -279,6 +279,76 @@
     renderSelectionBar();
   }
 
+  // [2026.08] 빈 공간을 마우스로 드래그해서 여러 항목을 한 번에 선택(러버밴드) — 지금까지는
+  // 체크박스를 하나씩 누르거나 Shift로 범위선택해야 했는데, 마우스로 쓱 긋는 동작 자체가 없었다.
+  // 드래그 시작 전에 이미 선택돼 있던 항목은 사각형 밖으로 나가도 그대로 유지하고(기존 선택 보존),
+  // 사각형이 새로 스치는 항목만 추가/해제한다(Windows 탐색기 등과 같은 방식).
+  (function setupRubberBandSelect_(){
+    let dragging = false;
+    let moved = false;
+    let startX = 0, startY = 0;
+    let baseSelection = null; // 드래그 시작 전 선택 상태(id Set) — 이 안에 있던 항목은 사각형 밖이어도 유지
+    let overlayEl = null;
+
+    function currentRect(clientX, clientY){
+      const left = Math.min(startX, clientX), top = Math.min(startY, clientY);
+      const right = Math.max(startX, clientX), bottom = Math.max(startY, clientY);
+      return { left, top, right, bottom };
+    }
+    function intersects(a, b){
+      return !(b.right < a.left || b.left > a.right || b.bottom < a.top || b.top > a.bottom);
+    }
+
+    explorerBody.addEventListener('mousedown', (e)=>{
+      if (e.button !== 0) return; // 왼쪽 버튼만
+      if (e.target.closest('.file-row, .folder-row[data-item-id]')) return; // 항목 위에서 누르면 기존 클릭·드래그이동 동작 그대로
+      dragging = true;
+      moved = false;
+      startX = e.clientX; startY = e.clientY;
+      baseSelection = new Set(selectedItems.keys());
+      overlayEl = document.createElement('div');
+      overlayEl.style.cssText = 'position:fixed; z-index:400; border:1px solid var(--gold); background:rgba(200,162,68,0.15); pointer-events:none;';
+      document.body.appendChild(overlayEl);
+    });
+
+    document.addEventListener('mousemove', (e)=>{
+      if (!dragging) return;
+      if (!moved && (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4)) return; // 미세한 떨림은 드래그로 안 침
+      moved = true;
+      const rect = currentRect(e.clientX, e.clientY);
+      overlayEl.style.left = rect.left + 'px';
+      overlayEl.style.top = rect.top + 'px';
+      overlayEl.style.width = (rect.right - rect.left) + 'px';
+      overlayEl.style.height = (rect.bottom - rect.top) + 'px';
+
+      explorerBody.querySelectorAll('.file-row, .folder-row[data-item-id]').forEach(row=>{
+        const id = row.dataset.itemId;
+        const hit = intersects(rect, row.getBoundingClientRect());
+        if (hit){
+          if (!selectedItems.has(id)){
+            const meta = renderedItemOrder.find(it => it.id === id);
+            if (meta) selectedItems.set(id, meta);
+          }
+        } else if (!baseSelection.has(id)){
+          selectedItems.delete(id);
+        }
+      });
+      refreshSelectionUi();
+    });
+
+    document.addEventListener('mouseup', ()=>{
+      if (!dragging) return;
+      dragging = false;
+      if (overlayEl){ overlayEl.remove(); overlayEl = null; }
+      if (moved){
+        // 방금 만든 선택이 mouseup 직후의 click 이벤트(바깥 클릭 취급)로 바로 지워지지 않게 한다.
+        window.__nxSkipNextOutsideClearClick = true;
+      }
+      baseSelection = null;
+      moved = false;
+    });
+  })();
+
   // 선택된 파일/폴더를 한 번에 채팅 첨부 목록으로 보냄
   function attachSelectedFiles(){
     selectedItems.forEach(item => addAttachment(item));
@@ -323,6 +393,9 @@
         + '<span class="icon">📁</span> ' + escapeHtml(f.name);
 
       row.addEventListener('click', (e)=>{
+        // [2026.08] Alt+클릭은 파일 전용 "바로 공유" 지름길이라, 폴더에서는 의미가 없다 —
+        // 조용히 아무 일도 안 하는 대신 이유를 알려준다(폴더 진입도 안 함).
+        if (e.altKey){ e.preventDefault(); e.stopPropagation(); showToast('폴더는 공유할 수 없습니다.', 'info'); return; }
         // [2026.08] Ctrl/⌘+클릭 = 그 항목만 선택 토글, Shift+클릭 = 마지막 선택 항목부터
         // 범위 선택 — 둘 다 눌려있으면 폴더 진입 대신 선택 동작으로 대신한다.
         if (e.ctrlKey || e.metaKey){ e.preventDefault(); e.stopPropagation(); toggleItemSelection_(itemMeta, row); return; }
@@ -369,6 +442,10 @@
         + escapeHtml(f.name) + '<span class="meta">' + escapeHtml(f.modifiedDate || '') + (f.sizeBytes !== undefined ? ' · ' + formatFileSize(f.sizeBytes) : '') + '</span>';
 
       row.addEventListener('click', (e)=>{
+        // [2026.08] Alt+클릭 — 체크해서 선택바를 거치는 절차 없이, 이 파일 하나만 바로 공유(공유
+        // 미지원이면 자동 다운로드로 폴백. shareSingleItem_는 chat.js에 있는 "공유" 버튼과 같은
+        // 함수를 재사용한다).
+        if (e.altKey){ e.preventDefault(); e.stopPropagation(); shareSingleItem_(itemMeta); return; }
         if (e.ctrlKey || e.metaKey){ e.preventDefault(); e.stopPropagation(); toggleItemSelection_(itemMeta, row); return; }
         if (e.shiftKey){
           e.preventDefault();
@@ -395,6 +472,14 @@
         if (e.ctrlKey || e.metaKey || e.shiftKey) return;
         if (row._pdfClickTimer){ clearTimeout(row._pdfClickTimer); row._pdfClickTimer = null; }
         proceedToOpenFilePopup_(f);
+      });
+
+      // [2026.08] 휠클릭(가운데 버튼) — 지금 열려있는 창을 안 건드리고, 이 파일을 완전히
+      // 새로운 미리보기 창으로 하나 더 띄운다(두 문서를 나란히 비교할 때 유용).
+      row.addEventListener('auxclick', (e)=>{
+        if (e.button !== 1) return;
+        e.preventDefault();
+        openFileInNewWindow_(f);
       });
 
       const checkbox = row.querySelector('.file-check');
@@ -552,6 +637,24 @@
       return;
     }
     filePopupWins[key] = win;
+    win.focus();
+  }
+
+  // [2026.08] 휠클릭 전용 — openFilePopup과 달리 filePopupWins에 등록하지 않고 창 이름도
+  // 매번 다르게(Date.now()) 줘서, 같은 파일이든 다른 파일이든 항상 새 창이 뜬다(재사용 안 함).
+  // "지금 열려있는 파일"(currentOpenFile) 취급도 안 해서 상태표시줄·AI 자동적용 대상과 무관한
+  // 순수 보기 전용 창이다 — 두 문서를 나란히 비교할 때처럼 잠깐 띄워놓고 보는 용도.
+  function openFileInNewWindow_(file){
+    const url = driveFilePreviewUrl_(file.id);
+    const w = Math.round(window.innerWidth * 0.85);
+    const h = Math.round(window.innerHeight * 0.85);
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2 + 24);
+    const top = Math.round(window.screenY + (window.outerHeight - h) / 2 + 24);
+    const win = window.open(url, 'nxFileWindowExtra_' + Date.now(), 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    if (!win){
+      showToast('새 창이 차단된 것 같습니다. 브라우저에서 이 사이트의 팝업 허용을 켜주세요.', 'warning');
+      return;
+    }
     win.focus();
   }
 
