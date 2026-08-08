@@ -715,6 +715,17 @@
   }
 
   document.getElementById('btnOpenSettings').addEventListener('click', openSettingsModal);
+  // [2026.08] Alt+S 단축키 — 설정 버튼이 폰 세로모드 등 일부 화면에서 안 보일 때도 열 수 있게.
+  // 이미 열려있으면 다시 눌렀을 때 닫히게(저장 포함) 해서 토글처럼 쓸 수 있다.
+  document.addEventListener('keydown', (e)=>{
+    if (!e.altKey || e.key.toLowerCase() !== 's') return;
+    e.preventDefault();
+    if (settingsOverlay.style.display === 'none' || !settingsOverlay.style.display){
+      openSettingsModal();
+    } else {
+      saveSettingsAndClose();
+    }
+  });
   document.getElementById('btnCloseSettings').addEventListener('click', saveSettingsAndClose);
   settingsOverlay.addEventListener('click', (e)=>{
     if (e.target === settingsOverlay) saveSettingsAndClose(); // 바깥(어두운 영역) 클릭 시에도 저장 후 닫기
@@ -771,7 +782,7 @@
   function updateChatModelBadge(){
     const modelName = MODEL_LABELS[aiSettings.model] || aiSettings.model;
     const effortName = EFFORT_LABELS[aiSettings.effort] || aiSettings.effort;
-    btnOpenSettingsEl.title = 'AI 설정 · 현재: ' + modelName + ' · ' + effortName;
+    btnOpenSettingsEl.title = 'AI 설정 (Alt+S) · 현재: ' + modelName + ' · ' + effortName;
   }
   updateChatModelBadge();
 
