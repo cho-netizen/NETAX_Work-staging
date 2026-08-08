@@ -186,18 +186,24 @@
   body.stage-grouped .work-tools-group{ display:flex; }
   body.stage-grouped .topbar .spacer{ flex:0 0 8px; min-width:0; }
 
-  /* ---- compact(폰): 상단엔 모드버튼 2개(탐색작업창·모드) + 도구 통합버튼 + 메모 ---- */
+  /* ---- compact(폰): 상단엔 [작업폴더](고정폭) + [탐색창·참조·도구·메모](균등폭, 라벨 항상 표시)
+     + [설정](고정폭, 아이콘만). [2026.08] 예전엔 폭이 빠듯할 때만 라벨을 보여주는 실측 로직이
+     있었는데, 이제 4개뿐이라 균등폭으로 나누면 항상 라벨이 들어갈 만큼 넉넉해서 그 로직을 없애고
+     항상 라벨을 보여주는 것으로 단순화했다. ---- */
   body.stage-compact .layout-buttons-wide{ display:none; }
   body.stage-compact .tool-buttons-wide{ display:none; }
-  body.stage-compact .work-tools-group{ display:flex; flex:1 1 0; min-width:0; justify-content:center; }
+  body.stage-compact #btnWorkspaceMode,
+  body.stage-compact .mode-menu-group,
+  body.stage-compact .work-tools-group,
+  body.stage-compact #btnOpenMemo{
+    display:flex; flex:1 1 0; min-width:0; justify-content:center;
+  }
   body.stage-compact .work-tools-group > .tb-btn,
   body.stage-compact .mode-menu-group > .tb-btn{ width:100%; justify-content:center; min-width:0; padding-left:6px; padding-right:6px; }
   body.stage-compact #btnOpenSettings{
     display:inline-flex; flex:0 0 auto; padding-left:8px; padding-right:8px;
-  } /* 설정은 화면 크기와 무관하게 항상 상단바 우측에 고정 표시 */
-  body.stage-compact #btnOpenSettings .tool-menu-label{ display:none; } /* 아이콘만(라벨은 넓을 때만) */
-  body.stage-compact #btnWorkspaceMode{ display:inline-flex; flex:1 1 0; min-width:0; justify-content:center; }
-  body.stage-compact .mode-menu-group{ display:flex; flex:1 1 0; min-width:0; justify-content:center; }
+  } /* 설정은 지금처럼 화면 크기와 무관하게 항상 고정폭·아이콘만 표시 */
+  body.stage-compact #btnOpenSettings .tool-menu-label{ display:none; }
   body.stage-compact .topbar .spacer{ flex:0 0 8px; min-width:0; }
 
   /* 폰 세로모드에서만 설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게 한다(채팅기록지우기는
@@ -207,16 +213,13 @@
     body.stage-compact #btnOpenSettings{ display:none; }
   }
 
-  /* 상단 모드버튼(탐색작업창·모드)의 글자 라벨은 화면에 여유가 있을 때만 보여준다 — 예전엔
-     폰이면 무조건 아이콘만 남겨서, 화면이 넓은 폰(가로모드 등)에서도 불필요하게 작게 고정돼
-     있었다. JS(updateModeButtonsLabeled)가 "customerSelect+이 버튼들이 한 줄에 들어가는지"
-     실측해서, 들어가면 body에 mode-buttons-labeled를 붙여 글자를 보여준다. 도구 통합버튼은
-     폭이 빠듯한 자리라 항상 아이콘만 유지한다. */
-  body.stage-compact #btnWorkspaceMode .tool-menu-label,
-  body.stage-compact .mode-menu-group .tool-menu-label,
-  body.stage-compact .work-tools-group .tool-menu-label{ display:none; }
-  body.stage-compact.mode-buttons-labeled #btnWorkspaceMode .tool-menu-label,
-  body.stage-compact.mode-buttons-labeled .mode-menu-group .tool-menu-label{ display:inline; }
+  /* 탐색창 버튼은 그룹(grouped) 단계에서는 지금 배치 상태 이름(좌우/상하/…)을 라벨로 보여주지만,
+     폰(compact)에서는 다른 3개 버튼과 통일된 고정 라벨("탐색창")을 대신 보여준다 — 상태가 바뀔
+     때마다 라벨 길이가 들쭉날쭉해서 균등폭 배열이 흐트러지는 걸 막기 위함(아이콘은 그대로
+     상태에 따라 바뀌므로 지금 배치를 알아보는 데는 지장 없다). */
+  .compact-fixed-label{ display:none; }
+  body.stage-compact #workspaceModeLabel{ display:none; }
+  body.stage-compact .compact-fixed-label{ display:inline; }
 
   /* compact(폰) 단계의 도구·모드 팝업은 "그 버튼 기준"이 아니라 "화면 기준"으로 연다 — 버튼
      기준으로 열면 화면 오른쪽에 가까운 버튼을 눌렀을 때 220px짜리 팝업이 화면 밖으로 밀려나
@@ -878,13 +881,13 @@
     <div id="coverPathLabel" title="지금 작업 중인 폴더">&nbsp;</div>
     <!-- 폰(compact) 전용 모드버튼들: 탐색작업창(레이아웃 순환) · 모드(자동참조·웹서치·가져오기·채팅기록지우기).
          작업폴더(customerSelect) 바로 오른쪽에 위치, 항상 상단바에 남아있고 하단으로 안 내려감. -->
-    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span></button>
+    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span><span class="tool-menu-label compact-fixed-label">탐색창</span></button>
     <!-- [2026.08] 자동참조·웹서치·가져오기 버튼 3개를 체크박스 팝업 하나로 합쳤다. 셋 다
          독립적으로 켜고 끌 수 있는 상태라(하나 고르면 닫히는 액션메뉴와 달리) 체크해도 팝업이
          안 닫혀야 연달아 여러 개를 토글할 수 있다 — .toggle-item 참고. 자주 쓰는 기능은 아니지만
          AI가 오류로 엉뚱한 맥락을 참조할 때 바로 초기화해야 해서 채팅기록지우기도 여기 같이 뒀다. -->
     <div class="topbar-item mode-menu-group" id="modeMenuWrap">
-      <button type="button" id="btnModeMenu" class="tb-btn" title="모드 — 자동참조 · 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기">🎛 <span class="tool-menu-label">모드</span></button>
+      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 자동참조 · 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기">🔗 <span class="tool-menu-label">참조</span></button>
       <div id="modeMenuPopup" class="nx-popup">
         <label class="toggle-item"><input type="checkbox" id="modeChkAutoRef"> 🔗 자동참조 — AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인</label>
         <label class="toggle-item"><input type="checkbox" id="modeChkWebSearch"> 🌐 웹서치 — 기본으로 항상 켜져 있음</label>

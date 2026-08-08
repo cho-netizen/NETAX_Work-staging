@@ -197,36 +197,6 @@
       return 'compact'; // 마지막 단계는 flex:1이 알아서 맞춰주므로 항상 채택
     }
 
-    // compact(폰) 단계에서, 상단 모드버튼 2개(탐색작업창·모드)에 글자 라벨을 붙일 여유가
-    // 있는지 실측한다 — 화면이 넓은 폰(가로모드 등)이면 라벨을 보여주고, 좁으면 아이콘만
-    // 남긴다. 고정폭 기준이 아니라 "customerSelect+이 버튼들이 실제로 한 줄에 들어가는지"를
-    // 매번 재서 판단하므로, 항상 지금 화면에 맞는 가장 넉넉한 크기가 나온다.
-    let modeButtonsLabeled = false;
-    function updateModeButtonsLabeled(){
-      if (currentStage !== 'compact'){
-        if (modeButtonsLabeled){ modeButtonsLabeled = false; bodyEl.classList.remove('mode-buttons-labeled'); }
-        return;
-      }
-      const prevBodyClass = bodyEl.className;
-      let required;
-      try {
-        bodyEl.className = prevBodyClass.includes('mode-buttons-labeled')
-          ? prevBodyClass
-          : prevBodyClass + ' mode-buttons-labeled';
-        topbarEl.classList.add('measuring');
-        required = topbarEl.scrollWidth;
-      } finally {
-        topbarEl.classList.remove('measuring');
-        bodyEl.className = prevBodyClass; // 예외가 나든 안 나든 반드시 원상복구
-      }
-
-      const fits = required <= topbarEl.clientWidth - 4;
-      if (fits !== modeButtonsLabeled){
-        modeButtonsLabeled = fits;
-        bodyEl.classList.toggle('mode-buttons-labeled', fits);
-      }
-    }
-
     // 상단바 실제 높이도 실측해서 --topbar-h로 넣어준다 — "띄우기" 모드의 탐색기 패널처럼
     // position:fixed로 뜨는 것들이 막연히 "화면의 6%" 같은 값 대신 실제 상단바 높이만큼
     // 정확히 비켜서 그려지도록 하기 위함 (안 그러면 버튼이 상단바 뒤에 가려질 수 있음).
@@ -241,7 +211,6 @@
         currentStage = stage;
         bodyEl.className = bodyEl.className.replace(/\bstage-\S+/g, '').trim() + ' stage-' + stage;
       }
-      updateModeButtonsLabeled();
       updateTopbarHeightVar();
 
       // 커버화면모드(아주 작은 폰) 판정 — compact 단계 안에서, 그보다도 더 좁을 때만.
