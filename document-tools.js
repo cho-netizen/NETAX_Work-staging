@@ -77,10 +77,10 @@
     const btnNoteSave = document.getElementById('btnNoteSave');
     const btnCloseNote = document.getElementById('btnCloseNote');
 
-    // ---- 도구 모드: 펜 → 형광펜 → 지우개 → 직선 → 사각형 순환(자리 절약을 위해 버튼 하나로 순환시킴) ----
-    const TOOL_MODES = ['pen', 'highlight', 'eraser', 'line', 'rect'];
-    const TOOL_MODE_ICON = { pen: '✏️', highlight: '🖍', eraser: '🧹', line: '📏', rect: '▭' };
-    const TOOL_MODE_LABEL = { pen: '펜', highlight: '형광펜', eraser: '지우개', line: '직선', rect: '사각형' };
+    // ---- 도구 모드: 펜 → 형광펜 → 지우개 → 영역삭제 → 직선 → 사각형 순환(자리 절약을 위해 버튼 하나로 순환시킴) ----
+    const TOOL_MODES = ['pen', 'highlight', 'eraser', 'select', 'line', 'rect'];
+    const TOOL_MODE_ICON = { pen: '✏️', highlight: '🖍', eraser: '🧹', select: '✂️', line: '📏', rect: '▭' };
+    const TOOL_MODE_LABEL = { pen: '펜', highlight: '형광펜', eraser: '지우개', select: '영역삭제', line: '직선', rect: '사각형' };
     let toolModeIndex = 0;
     let toolMode = TOOL_MODES[0];
 
@@ -89,8 +89,9 @@
     const PALM_REJECT_WINDOW_MS = 600;
     let undoStack = []; // 스냅샷(dataURL) 배열 — 페이지 전환 시 초기화됨
     let redoStack = [];
-    let shapeSnapshotImageData = null; // 직선/사각형 미리보기용 — 획 시작 시점의 픽셀 스냅샷
+    let shapeSnapshotImageData = null; // 직선/사각형/영역삭제 미리보기용 — 획 시작 시점의 픽셀 스냅샷
     let shapeStartPoint = null;
+    let shapeCurrentPoint = null; // 영역삭제 확정(포인터 뗄 때) 시 필요한 마지막 드래그 위치
 
     let notePages = [''];          // 페이지별 잉크 내용(dataURL, 투명배경)
     let notePageBackgrounds = [null]; // 페이지별 배경 이미지(dataURL) 또는 null
@@ -201,10 +202,11 @@
       noteCanvas.setPointerCapture(e.pointerId);
       const p = getPoint(e);
 
-      if (toolMode === 'line' || toolMode === 'rect'){
+      if (toolMode === 'line' || toolMode === 'rect' || toolMode === 'select'){
         pushUndoSnapshot();
         shapeSnapshotImageData = ctx.getImageData(0, 0, noteCanvas.width, noteCanvas.height);
         shapeStartPoint = p;
+        shapeCurrentPoint = p;
         return;
       }
 
@@ -216,6 +218,24 @@
       if (!drawing) return;
       if (e.pointerType === 'touch' && (Date.now() - lastPenTime) < PALM_REJECT_WINDOW_MS) return;
       const p = getPoint(e);
+
+      if (toolMode === 'select'){
+        if (!shapeSnapshotImageData) return;
+        shapeCurrentPoint = p;
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = 1.5;
+        const rx = shapeStartPoint.x, ry = shapeStartPoint.y, rw = p.x - shapeStartPoint.x, rh = p.y - shapeStartPoint.y;
+        ctx.strokeRect(rx, ry, rw, rh);
+        ctx.fillStyle = 'rgba(225, 29, 72, 0.1)';
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.restore();
+        return;
+      }
 
       if (toolMode === 'line' || toolMode === 'rect'){
         if (!shapeSnapshotImageData) return;
@@ -241,9 +261,20 @@
     });
 
     function endStroke(){
+      // 영역삭제: 드래그로 그린 점선 미리보기를 지우고, 그 자리를 실제로 비운다(지우개와 달리
+      // 손으로 문지를 필요 없이 사각형 범위 전체가 한 번에 삭제된다).
+      if (toolMode === 'select' && shapeSnapshotImageData && shapeStartPoint && shapeCurrentPoint){
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        const x = Math.min(shapeStartPoint.x, shapeCurrentPoint.x);
+        const y = Math.min(shapeStartPoint.y, shapeCurrentPoint.y);
+        const w = Math.abs(shapeCurrentPoint.x - shapeStartPoint.x);
+        const h = Math.abs(shapeCurrentPoint.y - shapeStartPoint.y);
+        if (w > 2 && h > 2) ctx.clearRect(x, y, w, h);
+      }
       drawing = false;
       shapeSnapshotImageData = null;
       shapeStartPoint = null;
+      shapeCurrentPoint = null;
       ctx.globalAlpha = 1; // 형광펜 등으로 낮춰둔 투명도가 다음 프레임에 영향 안 주도록 복원
     }
     noteCanvas.addEventListener('pointerup', endStroke);
