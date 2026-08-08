@@ -228,6 +228,11 @@
   body:not(.stage-full) #workspaceModeLabel{ display:none; }
   body:not(.stage-full) .topbar-equal-btn .tool-menu-label{ display:none; }
   body.topbar-buttons-labeled .topbar-equal-btn .tool-menu-label{ display:inline; }
+  /* [2026.08] 화면이 넓어서 버튼명이 보일 땐 아이콘 없이 글자만, 좁아서 아이콘만 남을 땐
+     아이콘으로 — 아이콘+글자를 같이 보여주면 좁을 때(아이콘만)와 넓을 때(아이콘+글자)의
+     정보량이 안 맞고, 같이 있으면 오히려 더 넓어 보인다는 피드백으로 서로 자리를 바꿨다. */
+  body.topbar-buttons-labeled .topbar-equal-btn .tool-menu-icon{ display:none; }
+  body:not(.stage-compact) #btnOpenSettings .tool-menu-icon{ display:none; } /* 설정도 같은 규칙 — 라벨 보일 때(full·grouped)는 아이콘 숨김, 폰(아이콘만)에선 그대로 보임 */
   /* 실측(scrollWidth) 도중엔 flex-grow가 버튼을 늘려서 항상 남는 폭을 꽉 채워버리고(flex:1),
      flex-shrink는 반대로 계속 줄여버려서(min-width:0) 두 경우 다 "진짜 필요한 폭"이 항상
      clientWidth 안으로 들어와 버리는 문제가 있다 — 측정하는 그 순간만 grow·shrink를 끄고
@@ -908,14 +913,14 @@
          참조·도구보다 항상 20px씩 넓게 잡히는 브라우저 특이현상이 있었다(버튼 자체가 flex
          item일 때와 div 안에 버튼이 있을 때 내용은 같아도 폭 계산이 달랐다) — 구조를 통일해서 해결. -->
     <div class="topbar-item topbar-equal-btn workspace-mode-group" id="workspaceModeWrap">
-      <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span><span class="tool-menu-label fixed-label">탐색</span></button>
+      <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span class="tool-menu-icon" id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span><span class="tool-menu-label fixed-label">탐색</span></button>
     </div>
     <!-- [2026.08] 자동참조·웹서치·가져오기 버튼 3개를 체크박스 팝업 하나로 합쳤다. 셋 다
          독립적으로 켜고 끌 수 있는 상태라(하나 고르면 닫히는 액션메뉴와 달리) 체크해도 팝업이
          안 닫혀야 연달아 여러 개를 토글할 수 있다 — .toggle-item 참고. 자주 쓰는 기능은 아니지만
          AI가 오류로 엉뚱한 맥락을 참조할 때 바로 초기화해야 해서 채팅기록지우기도 여기 같이 뒀다. -->
     <div class="topbar-item mode-menu-group topbar-equal-btn" id="modeMenuWrap">
-      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 자동참조 · 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기">🔗 <span class="tool-menu-label">참조</span></button>
+      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 자동참조 · 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기"><span class="tool-menu-icon">🔗</span> <span class="tool-menu-label">참조</span></button>
       <div id="modeMenuPopup" class="nx-popup">
         <label class="toggle-item"><input type="checkbox" id="modeChkAutoRef"> 🔗 자동참조 — AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인</label>
         <label class="toggle-item"><input type="checkbox" id="modeChkWebSearch"> 🌐 웹서치 — 기본으로 항상 켜져 있음</label>
@@ -954,20 +959,20 @@
          기록·분석·도구 3그룹으로 따로 나뉘어 있었는데, 어차피 같은 6개 기능이라 하나로 합쳤다.
          grouped·compact 두 단계 모두 이 버튼 하나를 그대로 재사용한다(.work-tools-group 참고). -->
     <div class="topbar-item work-tools-group topbar-equal-btn" id="workToolsWrap">
-      <button type="button" id="btnWorkTools" class="tb-btn" title="현황판 · 경과지 · 계산기 · 관계도 · 스캔 · 엑셀 열기">🛠 <span class="tool-menu-label">도구</span></button>
+      <button type="button" id="btnWorkTools" class="tb-btn" title="현황판 · 경과지 · 계산기 · 관계도 · 스캔 · 엑셀 열기"><span class="tool-menu-icon">🛠</span> <span class="tool-menu-label">도구</span></button>
       <div id="workToolsPopup" class="nx-popup"></div>
     </div>
     <!-- 메모(빠른메모+사건개시 통합, ✍ 버튼으로 필기상담 전환) — 통화하면서 바로 눌러야 하는
          기능이라 메뉴 뒤에 묻지 않고, 화면 크기와 무관하게 항상 상단바에 단독 아이콘으로 둔다
          (2026.08 이전엔 폰에서만 하단 고정바 안에 있었음). -->
     <div class="topbar-item topbar-equal-btn memo-group" id="memoWrap">
-      <button type="button" id="btnOpenMemo" class="tb-btn" title="메모 — 빠른메모+사건개시 통합. 검색창에 메모를 검색하면 메모장, 템플릿을 검색하면 사건개시가 됩니다 (✍ 버튼으로 필기상담 전환 가능)">📝 <span class="tool-menu-label">메모</span></button>
+      <button type="button" id="btnOpenMemo" class="tb-btn" title="메모 — 빠른메모+사건개시 통합. 검색창에 메모를 검색하면 메모장, 템플릿을 검색하면 사건개시가 됩니다 (✍ 버튼으로 필기상담 전환 가능)"><span class="tool-menu-icon">📝</span> <span class="tool-menu-label">메모</span></button>
     </div>
     <!-- 커버화면모드(화면이 아주 작은 폰) 전용 마이크 — 채팅창·입력란이 없는 대신 이 버튼 하나로
          음성모드를 켜고 끈다. 일반 폰 모드에서는 숨겨져 있고, 원래 마이크(입력창 옆)가 그대로 쓰인다. -->
     <button type="button" id="btnVoiceInputFlip" class="tb-btn" title="음성모드" style="display:none;">🎤</button>
     <!-- 설정은 화면 크기와 무관하게 항상 상단바 맨 우측에 고정 -->
-    <button id="btnOpenSettings" class="tb-btn" title="AI 설정">⚙ <span class="tool-menu-label">설정</span></button>
+    <button id="btnOpenSettings" class="tb-btn" title="AI 설정"><span class="tool-menu-icon">⚙</span> <span class="tool-menu-label">설정</span></button>
   </div>
 
   <div class="modal-overlay" id="settingsOverlay" style="display:none;">
