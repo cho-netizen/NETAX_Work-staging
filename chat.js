@@ -95,30 +95,14 @@
   loadCustomers();
 
 
-  // ---- 좁은 화면(PC/탭, grouped 단계)용 도구 그룹 팝업 — 도구1/도구2 2그룹 ----
-  const TOOL_GROUP_1 = [
-    { icon: '📊', label: '현황판', handler: openDashboardView }
-  ];
-  const TOOL_GROUP_2 = [
+  // ---- 업무도구 통합 팝업 — 예전엔 PC/탭(grouped)은 도구1/도구2 2그룹, 폰(compact)은 하단
+  // 고정바의 기록·분석·도구 3그룹으로 나뉘어 있었는데, 어차피 같은 기능들이라 하나로 합쳤다.
+  // (2026.08) 검색·휴지통은 여기 없다 — 탐색기 빈 공간 우클릭(길게 누르기) 메뉴로 옮겼다.
+  const WORK_TOOLS = [
+    { icon: '📊', label: '현황판', handler: openDashboardView },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
-    { icon: '📷', label: '스캔', handler: openScanModal },
-    { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() }
-  ];
-
-  // ---- 폰(compact 단계) 전용 하단 도구 5그룹 — 기능이 비슷한 것끼리 2개씩 묶음 ----
-  // (2026.08) MOBILE_GROUP_FILES(검색·휴지통)는 없앴다 — 둘 다 탐색기 빈 공간
-  // 우클릭(길게 누르기) 메뉴로 옮겼다.
-  const MOBILE_GROUP_RECORDS = [
-    { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '📝', label: '경과지', handler: openLogView }
-  ];
-  const MOBILE_GROUP_ANALYSIS = [
-    { icon: '🧮', label: '계산기', handler: openCalcView },
-    { icon: '🕸', label: '관계도', handler: openDiagramView }
-  ];
-  const MOBILE_GROUP_CONFIG = [
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() }
   ];
@@ -138,30 +122,18 @@
     });
   }
 
-  const toolGroup1Wrap = document.getElementById('toolGroup1Wrap');
-  const toolGroup2Wrap = document.getElementById('toolGroup2Wrap');
-  const btnToolGroup1 = document.getElementById('btnToolGroup1');
-  const btnToolGroup2 = document.getElementById('btnToolGroup2');
-  const toolGroup1Popup = document.getElementById('toolGroup1Popup');
-  const toolGroup2Popup = document.getElementById('toolGroup2Popup');
+  const btnWorkTools = document.getElementById('btnWorkTools');
+  const workToolsPopup = document.getElementById('workToolsPopup');
+  fillToolPopup(workToolsPopup, WORK_TOOLS);
 
-  const mgRecordsBtn = document.getElementById('btnMgRecords');
-  const mgAnalysisBtn = document.getElementById('btnMgAnalysis');
-  const mgConfigBtn = document.getElementById('btnMgConfig');
-  const mgRecordsPopup = document.getElementById('mgRecordsPopup');
-  const mgAnalysisPopup = document.getElementById('mgAnalysisPopup');
-  const mgConfigPopup = document.getElementById('mgConfigPopup');
-
-  fillToolPopup(toolGroup1Popup, TOOL_GROUP_1);
-  fillToolPopup(toolGroup2Popup, TOOL_GROUP_2);
-  fillToolPopup(mgRecordsPopup, MOBILE_GROUP_RECORDS);
-  fillToolPopup(mgAnalysisPopup, MOBILE_GROUP_ANALYSIS);
-  fillToolPopup(mgConfigPopup, MOBILE_GROUP_CONFIG);
+  // 모드 팝업(자동참조·웹서치·가져오기 체크박스 + 채팅기록지우기)은 체크박스 상태 반영을
+  // 이 아래(모드버튼 섹션)에서 따로 처리하지만, 열고 닫는 토글 자체는 다른 그룹 팝업들과
+  // 같은 방식(하나 열리면 나머지는 자동으로 닫힘)을 써야 하므로 여기 같이 등록한다.
+  const btnModeMenu = document.getElementById('btnModeMenu');
+  const modeMenuPopup = document.getElementById('modeMenuPopup');
 
   const ALL_GROUP_POPUPS = [
-    [toolGroup1Popup, btnToolGroup1], [toolGroup2Popup, btnToolGroup2],
-    [mgRecordsPopup, mgRecordsBtn], [mgAnalysisPopup, mgAnalysisBtn],
-    [mgConfigPopup, mgConfigBtn]
+    [workToolsPopup, btnWorkTools], [modeMenuPopup, btnModeMenu]
   ];
 
   function wireGroupToggle(btn, popup){
@@ -192,16 +164,10 @@
   (function setupTopbarResponsive(){
     const topbarEl = document.querySelector('.topbar');
     const bodyEl = document.body;
-    const cluster = document.getElementById('topbarActionCluster');
     // 플립폰 커버화면처럼 아주 작은 폰 판정 기준(가로 px). 실기기 실측 결과 커버화면 352px,
     // 펼친 상태 세로모드 360px로 확인되어(2026.07), 그 사이 값인 356으로 조정함.
     const COVER_MODE_MAX_WIDTH = 356;
     let wasCover = false; // 커버화면모드 여부가 "바뀔 때만" 이벤트를 쏘기 위한 이전 상태 기억
-    // max-height 트랜지션이 끝나는 순간에도 한 번 더 정확히 재서, setTimeout 타이밍이
-    // 살짝 어긋나는 경우(기기 성능 편차 등)까지 이중으로 보정한다.
-    cluster.addEventListener('transitionend', (e)=>{
-      if (e.propertyName === 'max-height') updateBottombarHeightVar();
-    });
 
     // 지금 stage를 candidateStage로 잠깐 바꿔서(화면엔 안 그려짐 — 아래 설명 참고) 그 상태로
     // 한 줄로 쭉 펼쳤을 때 실제로 몇 px가 필요한지(scrollWidth)를 재고 원래 상태로 되돌린다.
@@ -231,10 +197,10 @@
       return 'compact'; // 마지막 단계는 flex:1이 알아서 맞춰주므로 항상 채택
     }
 
-    // compact(폰) 단계에서, 상단 모드버튼 4개(탐색작업창·자동참조·웹서치·가져오기)에 글자
-    // 라벨을 붙일 여유가 있는지 실측한다 — 화면이 넓은 폰(가로모드 등)이면 라벨을 보여주고,
-    // 좁으면 아이콘만 남긴다. 고정폭 기준이 아니라 "customerSelect+이 4버튼이 실제로 한 줄에
-    // 들어가는지"를 매번 재서 판단하므로, 항상 지금 화면에 맞는 가장 넉넉한 크기가 나온다.
+    // compact(폰) 단계에서, 상단 모드버튼 2개(탐색작업창·모드)에 글자 라벨을 붙일 여유가
+    // 있는지 실측한다 — 화면이 넓은 폰(가로모드 등)이면 라벨을 보여주고, 좁으면 아이콘만
+    // 남긴다. 고정폭 기준이 아니라 "customerSelect+이 버튼들이 실제로 한 줄에 들어가는지"를
+    // 매번 재서 판단하므로, 항상 지금 화면에 맞는 가장 넉넉한 크기가 나온다.
     let modeButtonsLabeled = false;
     function updateModeButtonsLabeled(){
       if (currentStage !== 'compact'){
@@ -261,17 +227,6 @@
       }
     }
 
-    // compact일 때 #topbarActionCluster가 화면 아래 고정으로 떠 있는 만큼, 그 높이를 실측해서
-    // .workspace의 padding-bottom으로 넣어준다. 버퍼를 아예 없앴더니(0) 이번엔 너무 붙어
-    // 보인다는 피드백이 있어서, 살짝만(4px) 여유를 둔다 — 이전(8px)보다는 좁고 0보다는 넓게.
-    function updateBottombarHeightVar(){
-      if (bodyEl.classList.contains('stage-compact') && !bodyEl.classList.contains('bottombar-hidden')){
-        document.documentElement.style.setProperty('--bottombar-h', (cluster.getBoundingClientRect().height + 4) + 'px');
-      } else {
-        document.documentElement.style.setProperty('--bottombar-h', '0px');
-      }
-    }
-
     // 상단바 실제 높이도 실측해서 --topbar-h로 넣어준다 — "띄우기" 모드의 탐색기 패널처럼
     // position:fixed로 뜨는 것들이 막연히 "화면의 6%" 같은 값 대신 실제 상단바 높이만큼
     // 정확히 비켜서 그려지도록 하기 위함 (안 그러면 버튼이 상단바 뒤에 가려질 수 있음).
@@ -287,7 +242,6 @@
         bodyEl.className = bodyEl.className.replace(/\bstage-\S+/g, '').trim() + ' stage-' + stage;
       }
       updateModeButtonsLabeled();
-      updateBottombarHeightVar();
       updateTopbarHeightVar();
 
       // 커버화면모드(아주 작은 폰) 판정 — compact 단계 안에서, 그보다도 더 좁을 때만.
@@ -763,32 +717,30 @@
   });
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettingsAndClose);
 
-  // ---- 폰 상단 모드버튼 4개(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
-  // 여기서) — 설정모달을 안 열어도 바로 켜고 끌 수 있고, 켜져 있으면 금색으로 표시된다. ----
-  const btnModeAutoRef = document.getElementById('btnModeAutoRef');
-  const btnModeWebSearch = document.getElementById('btnModeWebSearch');
-  const btnModeWebFetch = document.getElementById('btnModeWebFetch');
+  // ---- 폰 상단 모드메뉴(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
+  // 여기서) — [2026.08] 버튼 3개를 체크박스 팝업 하나로 합쳤다. 설정모달을 안 열어도 바로
+  // 켜고 끌 수 있는 건 그대로고, 체크박스라 하나 바꿔도 팝업이 안 닫혀서 연달아 여러 개를
+  // 토글할 수 있다(예전 버튼 방식은 누르는 즉시 바로 반영되는 대신 각자 따로 눌러야 했음). ----
+  const modeChkAutoRef = document.getElementById('modeChkAutoRef');
+  const modeChkWebSearch = document.getElementById('modeChkWebSearch');
+  const modeChkWebFetch = document.getElementById('modeChkWebFetch');
   function refreshModeButtonStates(){
-    btnModeAutoRef.classList.toggle('is-on', autoRefMode);
-    // 웹서치는 기본이 "켜짐"이라 다른 버튼과 반대로 표시한다: 켜져 있을 땐 특별한 색 없이
-    // 다른 버튼들과 똑같이 두고, 꺼졌을 때만 회색으로 흐리게 표시한다.
-    btnModeWebSearch.classList.toggle('is-off', aiSettings.enableWebSearch === false);
-    btnModeWebFetch.classList.toggle('is-on', !!aiSettings.enableWebFetch);
+    modeChkAutoRef.checked = autoRefMode;
+    // 웹서치는 기본이 "켜짐"이라, enableWebSearch가 명시적으로 false일 때만 체크 해제로 표시한다.
+    modeChkWebSearch.checked = aiSettings.enableWebSearch !== false;
+    modeChkWebFetch.checked = !!aiSettings.enableWebFetch;
   }
-  btnModeAutoRef.addEventListener('click', ()=>{
-    autoRefMode = !autoRefMode;
+  modeChkAutoRef.addEventListener('change', ()=>{
+    autoRefMode = modeChkAutoRef.checked;
     localStorage.setItem(AUTOREF_KEY, autoRefMode ? '1' : '0');
-    refreshModeButtonStates();
   });
-  btnModeWebSearch.addEventListener('click', ()=>{
-    aiSettings.enableWebSearch = !aiSettings.enableWebSearch;
+  modeChkWebSearch.addEventListener('change', ()=>{
+    aiSettings.enableWebSearch = modeChkWebSearch.checked;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
-    refreshModeButtonStates();
   });
-  btnModeWebFetch.addEventListener('click', ()=>{
-    aiSettings.enableWebFetch = !aiSettings.enableWebFetch;
+  modeChkWebFetch.addEventListener('change', ()=>{
+    aiSettings.enableWebFetch = modeChkWebFetch.checked;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
-    refreshModeButtonStates();
   });
   refreshModeButtonStates();
 
@@ -1284,7 +1236,10 @@
     }
     showToast('새 대화를 시작합니다.', 'success');
   }
-  document.getElementById('btnNewChat').addEventListener('click', startNewConversation);
+  document.getElementById('btnNewChat').addEventListener('click', ()=>{
+    startNewConversation();
+    document.getElementById('modeMenuPopup').classList.remove('show'); // [2026.08] 모드 팝업 안으로 옮겨서, 눌렀으면 팝업도 같이 닫아준다
+  });
 
   function renderAttachBar(){
     attachBar.innerHTML = '';

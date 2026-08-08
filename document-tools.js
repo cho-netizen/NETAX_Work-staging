@@ -416,7 +416,7 @@
         resizeCanvasToWrap();
       });
     }
-    window.openNoteModal = openNoteModalImpl; // TOOL_GROUP_2/MOBILE_GROUP_CONFIG 등록 시점보다 이 함수가 나중에 정의되므로 전역에 걸어둔다
+    window.openNoteModal = openNoteModalImpl; // 메모 화면(✍ 버튼)이 이 함수보다 먼저 정의되므로 전역에 걸어둔다
     window.addEventListener('resize', ()=>{ if (noteOverlay.style.display !== 'none') resizeCanvasToWrap(); });
 
     btnCloseNote.addEventListener('click', ()=>{ noteOverlay.style.display = 'none'; });
