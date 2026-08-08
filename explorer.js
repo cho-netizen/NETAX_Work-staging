@@ -284,11 +284,19 @@
   // 드래그 시작 전에 이미 선택돼 있던 항목은 사각형 밖으로 나가도 그대로 유지하고(기존 선택 보존),
   // 사각형이 새로 스치는 항목만 추가/해제한다(Windows 탐색기 등과 같은 방식).
   (function setupRubberBandSelect_(){
+    // [2026.08 버그수정] 처음엔 mousedown/mousemove/mouseup으로 만들었는데, 드래그 도중 마우스가
+    // 이미 열려있는 파일 미리보기 팝업창 위나 브라우저 창 밖으로 나간 채로 버튼을 떼면 이 문서가
+    // mouseup을 아예 못 받아서 dragging 상태가 안 풀리고 선택 상자(overlayEl)가 화면에 계속
+    // 남아있는 문제가 있었다(여러 번 시도하면 상자가 겹겹이 쌓임). PDF 필기메모 캔버스와 같은
+    // 방식(pointer capture)으로 바꿔서, 캡처한 뒤엔 마우스가 어디로 나가도 이 요소가 계속
+    // pointermove/pointerup을 받도록 한다. 터치(pointerType:'touch')는 목록 스크롤과 겹치므로
+    // 제외 — 터치기기는 예전처럼 체크박스·길게 누르기로만 다중선택한다.
     let dragging = false;
     let moved = false;
     let startX = 0, startY = 0;
     let baseSelection = null; // 드래그 시작 전 선택 상태(id Set) — 이 안에 있던 항목은 사각형 밖이어도 유지
     let overlayEl = null;
+    let activePointerId = null;
 
     function currentRect(clientX, clientY){
       const left = Math.min(startX, clientX), top = Math.min(startY, clientY);
@@ -298,10 +306,27 @@
     function intersects(a, b){
       return !(b.right < a.left || b.left > a.right || b.bottom < a.top || b.top > a.bottom);
     }
+    function removeOverlay(){
+      if (overlayEl){ overlayEl.remove(); overlayEl = null; }
+    }
+    function endDrag(){
+      if (!dragging) return;
+      dragging = false;
+      removeOverlay();
+      if (moved){
+        // 방금 만든 선택이 pointerup 직후의 click 이벤트(바깥 클릭 취급)로 바로 지워지지 않게 한다.
+        window.__nxSkipNextOutsideClearClick = true;
+      }
+      baseSelection = null;
+      moved = false;
+      activePointerId = null;
+    }
 
-    explorerBody.addEventListener('mousedown', (e)=>{
+    explorerBody.addEventListener('pointerdown', (e)=>{
+      if (e.pointerType === 'touch') return; // 터치는 스크롤 제스처와 겹쳐서 제외
       if (e.button !== 0) return; // 왼쪽 버튼만
       if (e.target.closest('.file-row, .folder-row[data-item-id]')) return; // 항목 위에서 누르면 기존 클릭·드래그이동 동작 그대로
+      removeOverlay(); // 혹시 이전 드래그가 비정상 종료돼 안 지워진 상자가 남아있으면 먼저 치움
       dragging = true;
       moved = false;
       startX = e.clientX; startY = e.clientY;
@@ -309,10 +334,13 @@
       overlayEl = document.createElement('div');
       overlayEl.style.cssText = 'position:fixed; z-index:400; border:1px solid var(--gold); background:rgba(200,162,68,0.15); pointer-events:none;';
       document.body.appendChild(overlayEl);
+      activePointerId = e.pointerId;
+      explorerBody.setPointerCapture(e.pointerId);
     });
 
-    document.addEventListener('mousemove', (e)=>{
-      if (!dragging) return;
+    explorerBody.addEventListener('pointermove', (e)=>{
+      if (!dragging || e.pointerId !== activePointerId) return;
+      if (e.buttons === 0){ endDrag(); return; } // 버튼이 이미 떼진 채로 들어오면(이벤트를 놓친 경우) 그 자리에서 바로 종료
       if (!moved && (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4)) return; // 미세한 떨림은 드래그로 안 침
       moved = true;
       const rect = currentRect(e.clientX, e.clientY);
@@ -336,16 +364,13 @@
       refreshSelectionUi();
     });
 
-    document.addEventListener('mouseup', ()=>{
-      if (!dragging) return;
-      dragging = false;
-      if (overlayEl){ overlayEl.remove(); overlayEl = null; }
-      if (moved){
-        // 방금 만든 선택이 mouseup 직후의 click 이벤트(바깥 클릭 취급)로 바로 지워지지 않게 한다.
-        window.__nxSkipNextOutsideClearClick = true;
-      }
-      baseSelection = null;
-      moved = false;
+    explorerBody.addEventListener('pointerup', (e)=>{
+      if (e.pointerId !== activePointerId) return;
+      endDrag();
+    });
+    explorerBody.addEventListener('pointercancel', (e)=>{
+      if (e.pointerId !== activePointerId) return;
+      endDrag();
     });
   })();
 
