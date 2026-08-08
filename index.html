@@ -160,7 +160,7 @@
 
      세 단계의 역할:
      - full(넓은 PC): 레이아웃 4버튼 + 도구 9버튼 개별 표시, 라벨 항상 표시
-     - grouped(PC/탭 중간폭) · compact(폰): 둘 다 [작업폴더](고정폭) + [탐색창·참조·도구·메모]
+     - grouped(PC/탭 중간폭) · compact(폰): 둘 다 [작업폴더](고정폭) + [탐색·참조·도구·메모]
        (균등폭) + [설정](고정폭)으로 버튼 구성은 동일. 참조=자동참조·웹서치·가져오기 체크박스+
        채팅기록지우기, 도구=현황판·경과지·계산기·관계도·스캔·엑셀열기. 라벨(버튼명)은 stage와
        무관하게 "지금 폭에 라벨 달고도 들어가는지" 별도로 실측해서(body.topbar-buttons-labeled)
@@ -181,9 +181,9 @@
   #btnWorkspaceMode{ display:none; }
   .work-tools-group{ display:none; } /* 도구 통합버튼 — full은 개별 버튼(tool-buttons-wide)을 그대로 쓰므로 숨김 */
   .mode-menu-group{ display:none; } /* 참조 통합버튼(자동참조·웹서치·가져오기·채팅기록지우기) — full(넓은 PC)에선 개별 버튼 자리가 없어 숨김, grouped·compact에서만 보임 */
-  .fixed-label{ display:none; } /* 탐색창 버튼의 고정 라벨("탐색창") — grouped에서만 쓰고, 그 외엔 숨김(그룹에선 지금 배치 상태 이름이 대신 보임) */
+  .fixed-label{ display:none; } /* 탐색(작업창) 버튼의 고정 라벨("탐색") — grouped·compact에서만 쓰고, 그 외엔 숨김(full에선 지금 배치 상태 이름이 대신 보임) */
 
-  /* ---- grouped·compact(PC 중간폭·폰) 공용: 상단엔 [작업폴더](고정폭) + [탐색창·참조·도구·메모]
+  /* ---- grouped·compact(PC 중간폭·폰) 공용: 상단엔 [작업폴더](고정폭) + [탐색·참조·도구·메모]
      (균등폭) + [설정](고정폭). [2026.08] 두 단계는 이 버튼 구성 자체는 완전히 같고, 라벨(버튼명)
      표시 여부만 다르다 — 처음엔 "grouped면 항상 라벨, compact면 항상 숨김"으로 고정해뒀는데,
      실제로는 화면이 넓은데도(측정상 grouped 문턱을 못 넘어 compact로 판정되는 경우) 라벨이
@@ -204,10 +204,14 @@
   body.stage-compact #btnOpenMemo{
     display:flex; flex:1 1 0; min-width:0; justify-content:center;
   }
+  /* [2026.08] 패딩을 따로 안 줘서 기본 .tb-btn 패딩(9px)을 그대로 쓴다 — 탐색창·메모(직접 버튼)와
+     참조·도구(래퍼 div 안 버튼)의 패딩이 서로 달랐던 게(18px vs 12px) 4개 버튼 너비가 안 맞던
+     진짜 원인이었다: flex:1로 균등폭을 줘도, 패딩이 큰 쪽이 "최소 필요폭"에 먼저 걸려 더 넓게
+     고정되고 나머지가 남은 공간을 나눠 가지면서 어긋났다. */
   body.stage-grouped .work-tools-group > .tb-btn,
   body.stage-grouped .mode-menu-group > .tb-btn,
   body.stage-compact .work-tools-group > .tb-btn,
-  body.stage-compact .mode-menu-group > .tb-btn{ width:100%; justify-content:center; min-width:0; padding-left:6px; padding-right:6px; }
+  body.stage-compact .mode-menu-group > .tb-btn{ width:100%; justify-content:center; min-width:0; }
   /* [2026.08] spacer는 예전에 "왼쪽 묶음"과 "오른쪽 묶음"을 갈라놓던 자리인데, 지금은 그 사이에
      들어갈 내용(레이아웃버튼·선택바 등)이 이 단계들에선 전부 숨겨져 있어서 남겨두면 참조·도구
      버튼 사이만 유독 간격이 벌어져 보인다 — 아예 없앤다. */
@@ -221,8 +225,8 @@
   } /* 설정은 예전부터 화면 크기와 무관하게 항상 고정폭·아이콘만(폰에서) — 이건 위 실측과 무관하게 그대로 유지 */
   body.stage-compact #btnOpenSettings .tool-menu-label{ display:none; }
 
-  /* 라벨(버튼명) 표시 — 아래 body.topbar-buttons-labeled(JS 실측)로 결정한다. 탐색창은 지금
-     배치 상태 이름(좌우/상하/…) 대신 다른 3개와 통일된 고정 라벨("탐색창")을 쓴다(상태 바뀔
+  /* 라벨(버튼명) 표시 — 아래 body.topbar-buttons-labeled(JS 실측)로 결정한다. 탐색(작업창)은 지금
+     배치 상태 이름(좌우/상하/…) 대신 다른 3개와 통일된 고정 라벨("탐색")을 쓴다(상태 바뀔
      때마다 길이가 달라져 균등폭이 흐트러지는 걸 막기 위함 — 아이콘은 그대로 상태에 따라 바뀜).
      full(넓은 PC)은 이 메커니즘과 무관하게 항상 라벨이 보이므로 :not(.stage-full)로 뺀다. */
   body:not(.stage-full) #workspaceModeLabel{ display:none; }
@@ -913,7 +917,7 @@
     <div id="coverPathLabel" title="지금 작업 중인 폴더">&nbsp;</div>
     <!-- grouped·compact(PC 중간폭·폰) 전용 버튼들: 탐색창(레이아웃 순환) · 참조(자동참조·웹서치·
          가져오기·채팅기록지우기). 작업폴더(customerSelect) 바로 오른쪽에 위치, 항상 상단바에 있음. -->
-    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span><span class="tool-menu-label fixed-label">탐색창</span></button>
+    <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">좌우</span><span class="tool-menu-label fixed-label">탐색</span></button>
     <!-- [2026.08] 자동참조·웹서치·가져오기 버튼 3개를 체크박스 팝업 하나로 합쳤다. 셋 다
          독립적으로 켜고 끌 수 있는 상태라(하나 고르면 닫히는 액션메뉴와 달리) 체크해도 팝업이
          안 닫혀야 연달아 여러 개를 토글할 수 있다 — .toggle-item 참고. 자주 쓰는 기능은 아니지만
