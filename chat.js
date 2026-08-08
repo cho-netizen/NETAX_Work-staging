@@ -212,7 +212,7 @@
     // (다른 stage 판정처럼 topbarEl.scrollWidth로 재지 않는다 — scrollWidth는 내용이 컨테이너보다
     // 작을 땐 그냥 clientWidth로 눌러앉아버려서 "얼마나 남는지"를 알 수 없다. 대신 이 6개 요소의
     // 실제 폭을 직접 더해서 clientWidth와 비교한다.)
-    const LABEL_ROW_IDS = ['customerSelect', 'btnWorkspaceMode', 'modeMenuWrap', 'workToolsWrap', 'btnOpenMemo', 'btnOpenSettings'];
+    const LABEL_ROW_IDS = ['customerSelect', 'workspaceModeWrap', 'modeMenuWrap', 'workToolsWrap', 'memoWrap', 'btnOpenSettings'];
     let topbarButtonsLabeled = false;
     function updateTopbarButtonsLabeled(){
       if (currentStage === 'full'){
