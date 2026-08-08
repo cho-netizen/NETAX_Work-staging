@@ -204,6 +204,37 @@
       document.documentElement.style.setProperty('--topbar-h', topbarEl.getBoundingClientRect().height + 'px');
     }
 
+    // [2026.08] 탐색창·참조·도구·메모 4버튼(grouped·compact 공용)의 라벨(버튼명) 표시 여부 —
+    // "grouped면 항상 보이고 compact면 항상 숨김"으로 stage에 고정해뒀더니, 화면이 넓은데도
+    // (측정상 grouped 문턱을 못 넘어 compact로 판정된 경우) 라벨이 안 보이는 문제가 있었다.
+    // 그래서 stage와 별개로 "지금 이 4버튼이 라벨을 달고도 한 줄에 들어가는지"를 직접 재서
+    // body에 topbar-buttons-labeled를 붙였다 뗐다 한다 — 화면에 여유가 있으면 어느 stage든 보임.
+    let topbarButtonsLabeled = false;
+    function updateTopbarButtonsLabeled(){
+      if (currentStage === 'full'){
+        // full은 이 메커니즘과 무관하게 항상 라벨이 보이는 stage라 여기선 끄기만 한다.
+        if (topbarButtonsLabeled){ topbarButtonsLabeled = false; bodyEl.classList.remove('topbar-buttons-labeled'); }
+        return;
+      }
+      const prevBodyClass = bodyEl.className;
+      let required;
+      try {
+        bodyEl.className = prevBodyClass.includes('topbar-buttons-labeled')
+          ? prevBodyClass
+          : prevBodyClass + ' topbar-buttons-labeled';
+        topbarEl.classList.add('measuring'); // min-width:max-content로 임시 고정되어(CSS 참고) 진짜 필요한 폭이 잡힘
+        required = topbarEl.scrollWidth;
+      } finally {
+        topbarEl.classList.remove('measuring');
+        bodyEl.className = prevBodyClass; // 예외가 나든 안 나든 반드시 원상복구
+      }
+      const fits = required <= topbarEl.clientWidth - 4;
+      if (fits !== topbarButtonsLabeled){
+        topbarButtonsLabeled = fits;
+        bodyEl.classList.toggle('topbar-buttons-labeled', fits);
+      }
+    }
+
     let currentStage = null;
     function update(){
       const stage = resolveStage();
@@ -211,6 +242,7 @@
         currentStage = stage;
         bodyEl.className = bodyEl.className.replace(/\bstage-\S+/g, '').trim() + ' stage-' + stage;
       }
+      updateTopbarButtonsLabeled();
       updateTopbarHeightVar();
 
       // 커버화면모드(아주 작은 폰) 판정 — compact 단계 안에서, 그보다도 더 좁을 때만.

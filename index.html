@@ -159,13 +159,13 @@
      조금 다르게 렌더링되든 관계없이 "지금 실제로 한 줄에 맞는 가장 넉넉한 단계"가 항상 골라진다.
 
      세 단계의 역할:
-     - full(넓은 PC): 레이아웃 4버튼 + 도구 9버튼 개별 표시
-     - grouped(PC/탭 중간폭): [작업폴더](고정폭) + [탐색창·참조·도구·메모](균등폭, 라벨 항상
-       표시) + [설정](고정폭). 참조=자동참조·웹서치·가져오기 체크박스+채팅기록지우기, 도구=
-       현황판·경과지·계산기·관계도·스캔·엑셀열기. (2026.08: 예전엔 참조 기능을 컴퓨터에서
-       아예 쓸 수 없었는데 여기서도 쓸 수 있게 열었고, 버튼 4개를 균등폭으로 맞췄다.)
-     - compact(폰): grouped와 같은 4버튼+설정 구성이지만 화면이 더 좁아서 라벨 없이 아이콘만
-       표시. (2026.08 이전엔 도구·메모가 하단 고정바로 내려가 있었는데, 하단바를 없애고 전부
+     - full(넓은 PC): 레이아웃 4버튼 + 도구 9버튼 개별 표시, 라벨 항상 표시
+     - grouped(PC/탭 중간폭) · compact(폰): 둘 다 [작업폴더](고정폭) + [탐색창·참조·도구·메모]
+       (균등폭) + [설정](고정폭)으로 버튼 구성은 동일. 참조=자동참조·웹서치·가져오기 체크박스+
+       채팅기록지우기, 도구=현황판·경과지·계산기·관계도·스캔·엑셀열기. 라벨(버튼명)은 stage와
+       무관하게 "지금 폭에 라벨 달고도 들어가는지" 별도로 실측해서(body.topbar-buttons-labeled)
+       보이거나 숨는다 — 화면이 넉넉하면 어느 stage든 라벨이 보인다. (2026.08: 예전엔 참조
+       기능을 컴퓨터에서 아예 쓸 수 없었는데 열었고, 하단 고정바를 없애고 도구·메모를 전부
        상단바로 합쳤다.) */
 
   /* 기본값(=stage-full, JS 실행 전에도 일단 이 형태로 보이도록): 개별 버튼 전부 표시 */
@@ -183,51 +183,68 @@
   .mode-menu-group{ display:none; } /* 참조 통합버튼(자동참조·웹서치·가져오기·채팅기록지우기) — full(넓은 PC)에선 개별 버튼 자리가 없어 숨김, grouped·compact에서만 보임 */
   .fixed-label{ display:none; } /* 탐색창 버튼의 고정 라벨("탐색창") — grouped에서만 쓰고, 그 외엔 숨김(그룹에선 지금 배치 상태 이름이 대신 보임) */
 
-  /* ---- grouped(PC/탭 중간폭): 상단엔 [작업폴더](고정폭) + [탐색창·참조·도구·메모](균등폭,
-     라벨 항상 표시) + [설정](고정폭, 라벨 포함). [2026.08] 컴퓨터에서도 자동참조·웹서치·가져오기를
-     쓸 수 있어야 해서 참조(모드) 버튼을 여기서도 보이게 했고, 4개 버튼이 들쭉날쭉하게 배치되던
-     것을 균등폭으로 맞췄다. ---- */
-  body.stage-grouped .layout-buttons-wide{ display:none; }
-  body.stage-grouped .tool-buttons-wide{ display:none; }
+  /* ---- grouped·compact(PC 중간폭·폰) 공용: 상단엔 [작업폴더](고정폭) + [탐색창·참조·도구·메모]
+     (균등폭) + [설정](고정폭). [2026.08] 두 단계는 이 버튼 구성 자체는 완전히 같고, 라벨(버튼명)
+     표시 여부만 다르다 — 처음엔 "grouped면 항상 라벨, compact면 항상 숨김"으로 고정해뒀는데,
+     실제로는 화면이 넓은데도(측정상 grouped 문턱을 못 넘어 compact로 판정되는 경우) 라벨이
+     안 보이는 문제가 있었다. 그래서 라벨은 stage가 아니라 "지금 이 4버튼이 라벨을 달고도 한
+     줄에 들어가는지" 실측(JS updateTopbarButtonsLabeled, 아래 body.topbar-buttons-labeled)으로
+     따로 정한다 — 화면에 정말 여유가 있을 때만 보이고, 좁아지면 stage와 무관하게 바로 숨는다. */
+  body.stage-grouped .layout-buttons-wide,
+  body.stage-compact .layout-buttons-wide{ display:none; }
+  body.stage-grouped .tool-buttons-wide,
+  body.stage-compact .tool-buttons-wide{ display:none; }
   body.stage-grouped #btnWorkspaceMode,
   body.stage-grouped .mode-menu-group,
   body.stage-grouped .work-tools-group,
-  body.stage-grouped #btnOpenMemo{
-    display:flex; flex:1 1 0; min-width:0; justify-content:center;
-  }
-  body.stage-grouped .work-tools-group > .tb-btn,
-  body.stage-grouped .mode-menu-group > .tb-btn{ width:100%; justify-content:center; min-width:0; }
-  /* [2026.08] spacer는 예전에 "왼쪽 묶음"과 "오른쪽 묶음"을 갈라놓던 자리인데, 지금은 그 사이에
-     들어갈 내용(레이아웃버튼·선택바 등)이 이 단계에선 전부 숨겨져 있어서 남겨두면 참조·도구
-     버튼 사이만 유독 간격이 벌어져 보인다 — 아예 없앤다. */
-  body.stage-grouped .topbar .spacer{ display:none; }
-  body.stage-grouped .topbar{ column-gap:4px; }
-  /* 탐색창 버튼은 지금 배치 상태 이름(좌우/상하/…) 대신, 나머지 3개 버튼과 통일된 고정
-     라벨("탐색창")을 보여준다 — 상태가 바뀔 때마다 라벨 길이가 달라져 균등폭 배열이
-     들쭉날쭉해지는 걸 막기 위함(아이콘은 그대로 상태에 따라 바뀌므로 지금 배치를
-     알아보는 데는 지장 없다). */
-  body.stage-grouped #workspaceModeLabel{ display:none; }
-  body.stage-grouped .fixed-label{ display:inline; }
-
-  /* ---- compact(폰): 상단엔 [작업폴더] + [탐색창·참조·도구·메모](균등폭, 아이콘만) + [설정]
-     (고정폭, 아이콘만). [2026.08] 폰은 화면이 더 좁아서 아직은 아이콘만 유지 — 라벨을 넣을지는
-     나중에 폰에서 실제로 확인해보고 따로 정하기로 함. ---- */
-  body.stage-compact .layout-buttons-wide{ display:none; }
-  body.stage-compact .tool-buttons-wide{ display:none; }
+  body.stage-grouped #btnOpenMemo,
   body.stage-compact #btnWorkspaceMode,
   body.stage-compact .mode-menu-group,
   body.stage-compact .work-tools-group,
   body.stage-compact #btnOpenMemo{
     display:flex; flex:1 1 0; min-width:0; justify-content:center;
   }
+  body.stage-grouped .work-tools-group > .tb-btn,
+  body.stage-grouped .mode-menu-group > .tb-btn,
   body.stage-compact .work-tools-group > .tb-btn,
   body.stage-compact .mode-menu-group > .tb-btn{ width:100%; justify-content:center; min-width:0; padding-left:6px; padding-right:6px; }
+  /* [2026.08] spacer는 예전에 "왼쪽 묶음"과 "오른쪽 묶음"을 갈라놓던 자리인데, 지금은 그 사이에
+     들어갈 내용(레이아웃버튼·선택바 등)이 이 단계들에선 전부 숨겨져 있어서 남겨두면 참조·도구
+     버튼 사이만 유독 간격이 벌어져 보인다 — 아예 없앤다. */
+  body.stage-grouped .topbar .spacer,
+  body.stage-compact .topbar .spacer{ display:none; }
+  body.stage-grouped .topbar,
+  body.stage-compact .topbar{ column-gap:4px; }
+
   body.stage-compact #btnOpenSettings{
     display:inline-flex; flex:0 0 auto; padding-left:8px; padding-right:8px;
-  } /* 설정은 지금처럼 화면 크기와 무관하게 항상 고정폭·아이콘만 표시 */
-  body.stage-compact .tool-menu-label{ display:none; } /* 폰에서는 버튼명 없이 아이콘만 (탐색창·참조·도구·설정 전부) */
-  body.stage-compact .topbar .spacer{ display:none; } /* grouped와 같은 이유로 없앰 — 참조 참고 */
-  body.stage-compact .topbar{ column-gap:4px; }
+  } /* 설정은 예전부터 화면 크기와 무관하게 항상 고정폭·아이콘만(폰에서) — 이건 위 실측과 무관하게 그대로 유지 */
+  body.stage-compact #btnOpenSettings .tool-menu-label{ display:none; }
+
+  /* 라벨(버튼명) 표시 — 아래 body.topbar-buttons-labeled(JS 실측)로 결정한다. 탐색창은 지금
+     배치 상태 이름(좌우/상하/…) 대신 다른 3개와 통일된 고정 라벨("탐색창")을 쓴다(상태 바뀔
+     때마다 길이가 달라져 균등폭이 흐트러지는 걸 막기 위함 — 아이콘은 그대로 상태에 따라 바뀜).
+     full(넓은 PC)은 이 메커니즘과 무관하게 항상 라벨이 보이므로 :not(.stage-full)로 뺀다. */
+  body:not(.stage-full) #workspaceModeLabel{ display:none; }
+  body:not(.stage-full) .fixed-label,
+  body:not(.stage-full) .mode-menu-group .tool-menu-label,
+  body:not(.stage-full) .work-tools-group .tool-menu-label,
+  body:not(.stage-full) #btnOpenMemo .tool-menu-label{ display:none; }
+  body.topbar-buttons-labeled .fixed-label,
+  body.topbar-buttons-labeled .mode-menu-group .tool-menu-label,
+  body.topbar-buttons-labeled .work-tools-group .tool-menu-label,
+  body.topbar-buttons-labeled #btnOpenMemo .tool-menu-label{ display:inline; }
+  /* 실측(scrollWidth) 도중엔 flex-grow가 버튼을 늘려서 항상 남는 폭을 꽉 채워버리고(flex:1),
+     flex-shrink는 반대로 계속 줄여버려서(min-width:0) 두 경우 다 "진짜 필요한 폭"이 항상
+     clientWidth 안으로 들어와 버리는 문제가 있다 — 측정하는 그 순간만 grow·shrink를 끄고
+     내용 그대로의 자연폭(max-content)으로 고정해야 라벨 포함 실제 필요폭이 제대로 넘친다
+     (overflow). flex-shrink 있는 flex:1 1 0 자체를 override해야 하므로 shorthand로 덮어쓴다. */
+  .topbar.measuring #btnWorkspaceMode,
+  .topbar.measuring .mode-menu-group,
+  .topbar.measuring .work-tools-group,
+  .topbar.measuring #btnOpenMemo,
+  .topbar.measuring .work-tools-group > .tb-btn,
+  .topbar.measuring .mode-menu-group > .tb-btn{ flex:0 0 max-content !important; min-width:max-content !important; }
 
   /* 폰 세로모드에서만 설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게 한다(채팅기록지우기는
      이제 모드 팝업 안으로 들어가서 더 이상 단독 상단바 버튼이 아니므로 이 규칙에서 뺐다).
