@@ -209,6 +209,10 @@
     // (측정상 grouped 문턱을 못 넘어 compact로 판정된 경우) 라벨이 안 보이는 문제가 있었다.
     // 그래서 stage와 별개로 "지금 이 4버튼이 라벨을 달고도 한 줄에 들어가는지"를 직접 재서
     // body에 topbar-buttons-labeled를 붙였다 뗐다 한다 — 화면에 여유가 있으면 어느 stage든 보임.
+    // (다른 stage 판정처럼 topbarEl.scrollWidth로 재지 않는다 — scrollWidth는 내용이 컨테이너보다
+    // 작을 땐 그냥 clientWidth로 눌러앉아버려서 "얼마나 남는지"를 알 수 없다. 대신 이 6개 요소의
+    // 실제 폭을 직접 더해서 clientWidth와 비교한다.)
+    const LABEL_ROW_IDS = ['customerSelect', 'btnWorkspaceMode', 'modeMenuWrap', 'workToolsWrap', 'btnOpenMemo', 'btnOpenSettings'];
     let topbarButtonsLabeled = false;
     function updateTopbarButtonsLabeled(){
       if (currentStage === 'full'){
@@ -222,8 +226,13 @@
         bodyEl.className = prevBodyClass.includes('topbar-buttons-labeled')
           ? prevBodyClass
           : prevBodyClass + ' topbar-buttons-labeled';
-        topbarEl.classList.add('measuring'); // min-width:max-content로 임시 고정되어(CSS 참고) 진짜 필요한 폭이 잡힘
-        required = topbarEl.scrollWidth;
+        topbarEl.classList.add('measuring'); // flex:0 0 max-content로 임시 고정되어(CSS 참고) 진짜 필요한 폭이 잡힘
+        let sum = 0;
+        LABEL_ROW_IDS.forEach(id=>{
+          const el = document.getElementById(id);
+          if (el) sum += el.getBoundingClientRect().width;
+        });
+        required = sum + (LABEL_ROW_IDS.length - 1) * 4; // 요소 사이 간격(column-gap:4px)까지 포함
       } finally {
         topbarEl.classList.remove('measuring');
         bodyEl.className = prevBodyClass; // 예외가 나든 안 나든 반드시 원상복구
