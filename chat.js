@@ -987,6 +987,16 @@
     });
   }
 
+  // 긴 문장을 썼다가 그냥 취소하고 싶을 때 드래그로 전체선택할 필요 없이 한 번에 비우는 버튼.
+  const btnClearInput = document.getElementById('btnClearInput');
+  if (btnClearInput){
+    btnClearInput.addEventListener('click', ()=>{
+      if (!chatInputEl.value) return;
+      chatInputEl.value = '';
+      chatInputEl.focus();
+    });
+  }
+
   // ============================================================
   // Gem — 채팅창에서 지금 검토 중인 쟁점을 제미니 웹(gemini.google.com)에게 그대로 물어보고
   // 의견을 받아온다. NX(넥스)의 답변과는 별개로 참고용으로만 쓰기 위해, 답변은 보라색
