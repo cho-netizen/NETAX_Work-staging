@@ -92,7 +92,9 @@
     }
   });
 
-  loadCustomers();
+  // pwa.js가 "필기상담" 바로가기로 들어왔을 때 이 로딩이 끝날 때까지 기다렸다가 열 수 있도록,
+  // 완료 시점을 알 수 있는 프로미스를 전역에 걸어둔다.
+  window.__nxCustomersLoaded = loadCustomers();
 
 
   // ---- 업무도구 통합 팝업 — 예전엔 PC/탭(grouped)은 도구1/도구2 2그룹, 폰(compact)은 하단
