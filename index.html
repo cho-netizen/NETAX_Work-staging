@@ -218,11 +218,6 @@
   body.stage-grouped .topbar,
   body.stage-compact .topbar{ column-gap:4px; }
 
-  body.stage-compact #btnOpenSettings{
-    display:inline-flex; flex:0 0 auto; padding-left:8px; padding-right:8px;
-  } /* 설정은 예전부터 화면 크기와 무관하게 항상 고정폭·아이콘만(폰에서) — 이건 위 실측과 무관하게 그대로 유지 */
-  body.stage-compact #btnOpenSettings .tool-menu-label{ display:none; }
-
   /* 라벨(버튼명) 표시 — 아래 body.topbar-buttons-labeled(JS 실측)로 결정한다. 탐색(작업창)은 지금
      배치 상태 이름(좌우/상하/…) 대신 다른 3개와 통일된 고정 라벨("탐색")을 쓴다(상태 바뀔
      때마다 길이가 달라져 균등폭이 흐트러지는 걸 막기 위함 — 아이콘은 그대로 상태에 따라 바뀜).
@@ -234,7 +229,6 @@
      아이콘으로 — 아이콘+글자를 같이 보여주면 좁을 때(아이콘만)와 넓을 때(아이콘+글자)의
      정보량이 안 맞고, 같이 있으면 오히려 더 넓어 보인다는 피드백으로 서로 자리를 바꿨다. */
   body.topbar-buttons-labeled .topbar-equal-btn .tool-menu-icon{ display:none; }
-  body:not(.stage-compact) #btnOpenSettings .tool-menu-icon{ display:none; } /* 설정도 같은 규칙 — 라벨 보일 때(full·grouped)는 아이콘 숨김, 폰(아이콘만)에선 그대로 보임 */
   /* 실측(scrollWidth) 도중엔 flex-grow가 버튼을 늘려서 항상 남는 폭을 꽉 채워버리고(flex:1),
      flex-shrink는 반대로 계속 줄여버려서(min-width:0) 두 경우 다 "진짜 필요한 폭"이 항상
      clientWidth 안으로 들어와 버리는 문제가 있다 — 측정하는 그 순간만 grow·shrink를 끄고
@@ -243,13 +237,10 @@
   .topbar.measuring .topbar-equal-btn,
   .topbar.measuring .topbar-equal-btn > .tb-btn{ flex:0 0 max-content !important; min-width:max-content !important; }
 
-  /* [2026.08 제거] 예전엔 "폰 세로모드에서만 설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게"
-     하려고 orientation:portrait + stage-compact일 때 숨겼었는데, orientation은 기기가 아니라
-     "지금 창이 세로로 긴지"만 보는 조건이라 PC에서 창을 세로로 길게 쓰기만 해도 같이 걸려서
-     설정버튼이 오락가락하는 문제가 있었다. 더 결정적으로, 안드로이드는 PC(Alt+S)와 달리
-     설정을 열 단축키가 없어서 이 버튼이 숨으면 설정에 아예 접근할 방법이 없었다 — 그래서
-     규칙 자체를 없앴다(컴팩트 단계에서 항상 보임). 아주 좁은 커버화면(플립폰, 352px 이하)은
-     이 규칙과 무관하게 body.cover-mode 쪽에서 이미 따로 숨긴다. */
+  /* [2026.08] 설정 버튼은 상단바에서 완전히 빼서 채팅 입력창 버튼줄(chat-tools-row)로
+     옮겼다 — 예전엔 상단바 폭에 맞춰 숨겼다 보였다 하다가(orientation:portrait 등) 안드로이드처럼
+     단축키(Alt+S)가 없는 환경에서 접근 자체가 막히는 문제가 있었는데, 입력창 버튼줄은 폭이
+     좁으면 자동으로 줄바꿈(flex-wrap)되니 화면 크기와 무관하게 항상 보이게 둘 수 있다. */
 
   /* compact(폰) 단계의 도구·모드 팝업은 "그 버튼 기준"이 아니라 "화면 기준"으로 연다 — 버튼
      기준으로 열면 화면 오른쪽에 가까운 버튼을 눌렀을 때 220px짜리 팝업이 화면 밖으로 밀려나
@@ -980,8 +971,6 @@
     <!-- 커버화면모드(화면이 아주 작은 폰) 전용 마이크 — 채팅창·입력란이 없는 대신 이 버튼 하나로
          음성모드를 켜고 끈다. 일반 폰 모드에서는 숨겨져 있고, 원래 마이크(입력창 옆)가 그대로 쓰인다. -->
     <button type="button" id="btnVoiceInputFlip" class="tb-btn" title="음성모드" style="display:none;">🎤</button>
-    <!-- 설정은 화면 크기와 무관하게 항상 상단바 맨 우측에 고정 -->
-    <button id="btnOpenSettings" class="tb-btn" title="AI 설정"><span class="tool-menu-icon">⚙</span> <span class="tool-menu-label">설정</span></button>
   </div>
 
   <div class="modal-overlay" id="settingsOverlay" style="display:none;">
@@ -1359,6 +1348,7 @@
           <button type="button" id="btnAskBoth" class="icon-round-btn" title="같은 질문을 NX와 Gem에게 동시에 물어봅니다 — 서로 답을 보지 않은 채 독립적인 의견을 받고 싶을 때 (외부조회 커넥터 확장프로그램 필요)">⚖</button>
           <button type="button" id="btnChatSend" class="icon-round-btn send" title="보내기">➤</button>
           <button type="button" id="btnVoiceInput" class="icon-round-btn voice" title="음성모드 켜기/끄기">🎤</button>
+          <button type="button" id="btnOpenSettings" class="icon-round-btn" title="AI 설정">⚙</button>
         </div>
       </div>
     </div>

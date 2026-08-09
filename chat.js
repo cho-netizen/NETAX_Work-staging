@@ -212,9 +212,9 @@
     // 그래서 stage와 별개로 "지금 이 4버튼이 라벨을 달고도 한 줄에 들어가는지"를 직접 재서
     // body에 topbar-buttons-labeled를 붙였다 뗐다 한다 — 화면에 여유가 있으면 어느 stage든 보임.
     // (다른 stage 판정처럼 topbarEl.scrollWidth로 재지 않는다 — scrollWidth는 내용이 컨테이너보다
-    // 작을 땐 그냥 clientWidth로 눌러앉아버려서 "얼마나 남는지"를 알 수 없다. 대신 이 6개 요소의
+    // 작을 땐 그냥 clientWidth로 눌러앉아버려서 "얼마나 남는지"를 알 수 없다. 대신 이 5개 요소의
     // 실제 폭을 직접 더해서 clientWidth와 비교한다.)
-    const LABEL_ROW_IDS = ['customerSelect', 'workspaceModeWrap', 'modeMenuWrap', 'workToolsWrap', 'memoWrap', 'btnOpenSettings'];
+    const LABEL_ROW_IDS = ['customerSelect', 'workspaceModeWrap', 'modeMenuWrap', 'workToolsWrap', 'memoWrap'];
     let topbarButtonsLabeled = false;
     function updateTopbarButtonsLabeled(){
       if (currentStage === 'full'){
@@ -726,7 +726,7 @@
   }
 
   document.getElementById('btnOpenSettings').addEventListener('click', openSettingsModal);
-  // [2026.08] Alt+S 단축키 — 설정 버튼이 폰 세로모드 등 일부 화면에서 안 보일 때도 열 수 있게.
+  // [2026.08] Alt+S 단축키 — 마우스로 입력창 버튼줄까지 내려가지 않아도 바로 열 수 있게.
   // 이미 열려있으면 다시 눌렀을 때 닫히게(저장 포함) 해서 토글처럼 쓸 수 있다.
   document.addEventListener('keydown', (e)=>{
     if (!e.altKey || e.key.toLowerCase() !== 's') return;
@@ -788,8 +788,7 @@
   };
   const EFFORT_LABELS = { low: '빠름', medium: '보통', high: '신중' };
   const btnOpenSettingsEl = document.getElementById('btnOpenSettings');
-  // 버튼 글자는 항상 "설정"으로 고정(폭이 늘어나 상단바가 줄바꿈되던 문제 방지) —
-  // 대신 지금 모델·강도는 마우스를 올렸을 때 보이는 title(툴팁)로 옮겨서 정보는 유지한다.
+  // 버튼은 ⚙ 아이콘 하나뿐이라, 지금 모델·강도는 마우스를 올렸을 때 보이는 title(툴팁)로 알려준다.
   function updateChatModelBadge(){
     const modelName = MODEL_LABELS[aiSettings.model] || aiSettings.model;
     const effortName = EFFORT_LABELS[aiSettings.effort] || aiSettings.effort;
