@@ -243,12 +243,13 @@
   .topbar.measuring .topbar-equal-btn,
   .topbar.measuring .topbar-equal-btn > .tb-btn{ flex:0 0 max-content !important; min-width:max-content !important; }
 
-  /* 폰 세로모드에서만 설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게 한다(채팅기록지우기는
-     이제 모드 팝업 안으로 들어가서 더 이상 단독 상단바 버튼이 아니므로 이 규칙에서 뺐다).
-     가로모드나 PC(stage-compact 아님)에서는 그대로 보인다. */
-  @media (orientation: portrait){
-    body.stage-compact #btnOpenSettings{ display:none; }
-  }
+  /* [2026.08 제거] 예전엔 "폰 세로모드에서만 설정 버튼을 숨겨서 상단바가 2줄로 넘어가지 않게"
+     하려고 orientation:portrait + stage-compact일 때 숨겼었는데, orientation은 기기가 아니라
+     "지금 창이 세로로 긴지"만 보는 조건이라 PC에서 창을 세로로 길게 쓰기만 해도 같이 걸려서
+     설정버튼이 오락가락하는 문제가 있었다. 더 결정적으로, 안드로이드는 PC(Alt+S)와 달리
+     설정을 열 단축키가 없어서 이 버튼이 숨으면 설정에 아예 접근할 방법이 없었다 — 그래서
+     규칙 자체를 없앴다(컴팩트 단계에서 항상 보임). 아주 좁은 커버화면(플립폰, 352px 이하)은
+     이 규칙과 무관하게 body.cover-mode 쪽에서 이미 따로 숨긴다. */
 
   /* compact(폰) 단계의 도구·모드 팝업은 "그 버튼 기준"이 아니라 "화면 기준"으로 연다 — 버튼
      기준으로 열면 화면 오른쪽에 가까운 버튼을 눌렀을 때 220px짜리 팝업이 화면 밖으로 밀려나
