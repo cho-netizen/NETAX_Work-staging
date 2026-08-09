@@ -325,7 +325,7 @@
     explorerBody.addEventListener('pointerdown', (e)=>{
       if (e.pointerType === 'touch') return; // 터치는 스크롤 제스처와 겹쳐서 제외
       if (e.button !== 0) return; // 왼쪽 버튼만
-      if (e.target.closest('.file-row, .folder-row[data-item-id]')) return; // 항목 위에서 누르면 기존 클릭·드래그이동 동작 그대로
+      if (e.target.closest('.file-row, .folder-row')) return; // 항목 위에서 누르면(data-item-id 없는 ".." 상위폴더 행 포함) 기존 클릭 동작 그대로 — 러버밴드 선택을 시작하지 않는다
       removeOverlay(); // 혹시 이전 드래그가 비정상 종료돼 안 지워진 상자가 남아있으면 먼저 치움
       dragging = true;
       moved = false;
