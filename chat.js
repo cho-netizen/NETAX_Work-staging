@@ -1081,6 +1081,14 @@
     return nxExtConnected && !!nxExtPort;
   }
 
+  // 안드로이드는 브라우저가 크롬 확장프로그램 자체를 지원하지 않아 아래의 확장프로그램
+  // 자동화 경로(NX_GEM_ASK)를 쓸 수 없다. 그 대신 안드로이드 공유 시트(navigator.share)로
+  // 질문을 Gemini 앱에 그대로 넘기고, 답변은 사용자가 Gemini 앱에서 "공유" 버튼으로
+  // NX에 다시 보내면 기존 공유받기 경로(manifest.json share_target → insertCapturedText)가
+  // 입력창에 자동으로 넣어준다. 완전 자동은 아니고 공유 버튼을 한 번씩 눌러줘야 하는
+  // 반자동 방식이지만, 안드로이드에는 확장프로그램을 쓸 방법 자체가 없어 이게 최선이다.
+  const isAndroid_ = /Android/i.test(navigator.userAgent || '');
+
   async function askGem(rawQuestion, opts){
     opts = opts || {};
     if (!rawQuestion){ showToast('제미니에게 물어볼 내용이 없습니다.', 'warning'); return; }
@@ -1108,21 +1116,35 @@
       delete pendingGemAnswerPrefix[requestId];
     }
 
-    const connected = await ensureExtConnected_();
-    if (!connected){
-      fail('외부조회 커넥터 확장프로그램과 연결하지 못했습니다. 🔌 버튼으로 다시 연결해보세요.');
-      return;
-    }
-
-    pendingBubble.textContent = '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)';
     const contextText = buildRecentContextText_(turnCount);
     const fullQuestion = contextText + rawQuestion;
 
-    try{
-      nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
-    }catch(err){
-      fail('확장프로그램과 통신하지 못했습니다.');
+    const connected = await ensureExtConnected_();
+    if (connected){
+      pendingBubble.textContent = '🔮 Gem에게 물어보는 중… (제미니 탭에서 답변이 끝날 때까지 잠시 기다려주세요)';
+      try{
+        nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: fullQuestion });
+      }catch(err){
+        fail('확장프로그램과 통신하지 못했습니다.');
+      }
+      return;
     }
+
+    if (isAndroid_ && navigator.share){
+      pendingBubble.classList.remove('gem-pending');
+      pendingBubble.classList.add('gem');
+      pendingBubble.textContent = answerPrefix + ': 공유 시트로 질문을 전달했습니다. Gemini 앱에서 답변을 받은 뒤, 그 답변을 다시 "공유"로 NX에 보내면 입력창에 자동으로 들어옵니다.';
+      delete pendingGemBubbles[requestId];
+      delete pendingGemAnswerPrefix[requestId];
+      try{
+        await navigator.share({ title: 'Gem에게 질문', text: fullQuestion });
+      }catch(err){
+        // 사용자가 공유 시트를 취소한 경우(AbortError)는 정상적인 취소이니 별도 처리하지 않는다.
+      }
+      return;
+    }
+
+    fail('외부조회 커넥터 확장프로그램과 연결하지 못했습니다. 🔌 버튼으로 다시 연결해보세요.');
   }
 
   if (btnAskGem){
