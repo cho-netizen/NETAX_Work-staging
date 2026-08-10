@@ -1686,6 +1686,28 @@
     }
   };
 
+  // [2026.08] 탐색기에서 이미지 파일을 클릭했을 때 "스캔"을 고르면 여기로 온다. 지금까지
+  // 스캔 작업대(모서리 자동인식 등)는 촬영·갤러리에서 새로 고른 파일만 넣을 수 있었는데,
+  // 폴더에 이미 있는 이미지를 그대로 불러오는 길이 없어서 새로 만들었다 — readFileBinary로
+  // 원본 바이트를 받아 File 객체로 감싼 뒤, 로컬에서 고른 파일과 완전히 같은 경로(loadScanImage)로 넘긴다.
+  window.openExistingFileInScan = async function(file){
+    showToast(file.name + ' 불러오는 중입니다…', 'info');
+    try{
+      const res = await callGas('readFileBinary', { fileId: file.id });
+      if (res.error){ showToast('불러오기 실패: ' + res.error, 'error'); return; }
+      const binary = atob(res.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: file.mimeType || 'image/jpeg' });
+      const fileObj = new File([blob], file.name, { type: file.mimeType || 'image/jpeg' });
+
+      openScanModal();
+      loadScanImage(fileObj);
+    }catch(err){
+      showToast(file.name + ' 불러오기 중 오류: ' + (err && err.message ? err.message : err), 'error');
+    }
+  };
+
   document.getElementById('btnPdfMgrAdd').addEventListener('click', ()=> pdfMgrFileInput.click());
   pdfMgrFileInput.addEventListener('change', async (e)=>{
     const files = Array.from(e.target.files || []);

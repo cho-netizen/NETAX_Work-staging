@@ -479,12 +479,14 @@
           else toggleItemSelection_(itemMeta, row);
           return;
         }
-        // PDF는 단일 클릭 시 "파일보기/파일관리" 선택창이 뜨는데, 더블클릭으로는
-        // 바로 파일보기로 열리게 하려고 단일 클릭 처리를 살짝 지연시켜 더블클릭인지 구분한다.
-        if (f.mimeType === 'application/pdf'){
-          if (row._pdfClickTimer){ return; } // 더블클릭의 두 번째 클릭 — dblclick 핸들러가 처리
-          row._pdfClickTimer = setTimeout(()=>{
-            row._pdfClickTimer = null;
+        // PDF·이미지는 단일 클릭 시 선택창(PDF: 파일보기/파일관리, 이미지: 보기/스캔)이 뜨는데,
+        // 더블클릭으로는 바로 "보기"로 열리게 하려고 단일 클릭 처리를 살짝 지연시켜
+        // 더블클릭인지 구분한다.
+        const isImageFile = !!(f.mimeType && f.mimeType.indexOf('image/') === 0);
+        if (f.mimeType === 'application/pdf' || isImageFile){
+          if (row._openClickTimer){ return; } // 더블클릭의 두 번째 클릭 — dblclick 핸들러가 처리
+          row._openClickTimer = setTimeout(()=>{
+            row._openClickTimer = null;
             openEditor(f);
           }, 280);
           return;
@@ -493,9 +495,10 @@
       });
 
       row.addEventListener('dblclick', (e)=>{
-        if (f.mimeType !== 'application/pdf') return;
+        const isImageFile = !!(f.mimeType && f.mimeType.indexOf('image/') === 0);
+        if (f.mimeType !== 'application/pdf' && !isImageFile) return;
         if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-        if (row._pdfClickTimer){ clearTimeout(row._pdfClickTimer); row._pdfClickTimer = null; }
+        if (row._openClickTimer){ clearTimeout(row._openClickTimer); row._openClickTimer = null; }
         proceedToOpenFilePopup_(f);
       });
 
@@ -708,6 +711,12 @@
       showPdfOpenChoice_(file);
       return;
     }
+    // [2026.08] 이미지도 PDF와 마찬가지로 "그냥 보기"와 "스캔 작업(모서리 보정·흑백화 등)으로
+    // 바로 보내기" 둘 다 쓸모 있어서 클릭 한 번으로 정하지 않고 먼저 물어본다.
+    if (file.mimeType && file.mimeType.indexOf('image/') === 0){
+      showImageOpenChoice_(file);
+      return;
+    }
     proceedToOpenFilePopup_(file);
   }
 
@@ -749,6 +758,37 @@
         window.openExistingFileInPdfManager(file);
       } else {
         showToast('PDF 관리 도구를 아직 불러오지 못했습니다. 잠시 후 다시 시도해주세요.', 'warning');
+      }
+    });
+  }
+
+  // 이미지 클릭 시 "보기" / "스캔" 중 고르는 작은 선택창. showPdfOpenChoice_와 같은 패턴.
+  function showImageOpenChoice_(file){
+    const overlay = document.createElement('div');
+    overlay.className = 'pdf-choice-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;';
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) overlay.remove(); });
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel); color:var(--ink); border-radius:10px; width:min(320px, 88vw); padding:18px; box-shadow:0 8px 32px rgba(0,0,0,0.35);';
+    box.innerHTML = `
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px;">${escapeHtml(file.name)}</div>
+      <button id="imgChoiceOpen" style="width:100%;padding:11px;margin-bottom:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">🖼 보기</button>
+      <button id="imgChoiceScan" style="width:100%;padding:11px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;cursor:pointer;font-size:13.5px;">📷 스캔</button>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    document.getElementById('imgChoiceOpen').addEventListener('click', ()=>{
+      overlay.remove();
+      proceedToOpenFilePopup_(file);
+    });
+    document.getElementById('imgChoiceScan').addEventListener('click', ()=>{
+      overlay.remove();
+      if (typeof window.openExistingFileInScan === 'function'){
+        window.openExistingFileInScan(file);
+      } else {
+        showToast('스캔 도구를 아직 불러오지 못했습니다. 잠시 후 다시 시도해주세요.', 'warning');
       }
     });
   }
