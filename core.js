@@ -88,13 +88,13 @@
   const WORKSPACE_MODE_KEY = 'nx_workspace_mode'; // 'row' | 'col' | 'hide' | 'float' | 'max'
   const WORKSPACE_MODES = ['row', 'col', 'hide', 'float', 'max'];
   // [2026.08] label은 grouped·compact 단계의 균등폭 버튼(#workspaceModeLabel)에도 그대로 쓰인다 —
-  // full(넓은 PC)의 5개 개별 버튼(index.html에 직접 박힌 <Row> 등)과 항상 같은 풀네임으로 통일.
+  // full(넓은 PC)의 5개 개별 버튼(index.html에 직접 박힌 Row 등)과 항상 같은 풀네임으로 통일.
   const WORKSPACE_MODE_META = {
-    row:   { icon: '⬓', label: '<Row>', title: '좌우 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
-    col:   { icon: '⬒', label: '<Col>', title: '상하 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
-    hide:  { icon: '💬', label: '<Hide>', title: '탐색기 생략 · 채팅만 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
-    float: { icon: '🗗', label: '<Float>', title: '탐색기 띄우기 · 채팅 위에 잠깐 보기 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
-    max:   { icon: '⛶', label: '<Max>', title: '채팅 끄기 · 탐색작업창 최대화, 편집창을 크게 보는 용도 (클릭하면 다시 좌우 배치로)' }
+    row:   { icon: '⬓', label: 'Row', title: '좌우 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    col:   { icon: '⬒', label: 'Col', title: '상하 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    hide:  { icon: '💬', label: 'Hide', title: '탐색기 생략 · 채팅만 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    float: { icon: '🗗', label: 'Float', title: '탐색기 띄우기 · 채팅 위에 잠깐 보기 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)' },
+    max:   { icon: '⛶', label: 'Max', title: '채팅 끄기 · 탐색작업창 최대화, 편집창을 크게 보는 용도 (클릭하면 다시 좌우 배치로)' }
   };
   // 넓은 화면에서 보이는 5개 버튼(직접 선택용) — 지금 모드에 해당하는 것만 강조 표시
   const layoutModeButtons = {
