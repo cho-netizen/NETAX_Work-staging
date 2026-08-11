@@ -55,6 +55,14 @@
     return Math.min(actual, legalShare, 3000000000);
   }
 
+  // 금융재산 상속공제 (상증세법 §22) — 순금융재산 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)
+  function financialAssetInheritanceDeduction(netFinancialAssets) {
+    const net = Number(netFinancialAssets) || 0;
+    if (net <= 0) return 0;
+    if (net <= 20000000) return net;
+    return Math.min(200000000, Math.max(net * 0.2, 20000000));
+  }
+
   const TAX_FUNCS = {
     // 누진세(과세표준, "증여상속"|"양도") — 누진세율표를 적용한 산출세액(원)
     누진세: function (base, kind) {
@@ -85,6 +93,18 @@
     // 일괄공제비교(인적공제합계) — 일괄공제 5억과 (기초공제2억+인적공제) 중 큰 값(원)
     일괄공제비교: function (personalDeductionSum) {
       return Math.max(500000000, 200000000 + (Number(personalDeductionSum) || 0));
+    },
+    // 금융재산공제(순금융재산) — 상속세 금융재산상속공제액(원, 2천만~2억)
+    금융재산공제: function (netFinancialAssets) {
+      return financialAssetInheritanceDeduction(netFinancialAssets);
+    },
+    // 자경농지감면(산출세액) — 8년 자경농지 감면액(원, 연간 1억원 한도. 5년 합산 2억원 한도는 별도 확인)
+    자경농지감면: function (calculatedTax) {
+      return Math.min(Number(calculatedTax) || 0, 100000000);
+    },
+    // 최소값(a, b) — 두 값 중 작은 값. 동거주택상속공제(6억 한도), 감정평가수수료공제(500만 한도) 등 한도 계산에 사용.
+    최소값: function (a, b) {
+      return Math.min(Number(a) || 0, Number(b) || 0);
     }
   };
 

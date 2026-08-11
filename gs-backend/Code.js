@@ -279,31 +279,40 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_transfer_tax',
-    description: '양도소득세를 정확히 계산한다(기본세율 누진구조, 단기양도세율, 장기보유특별공제 — 일반 및 1세대1주택 특례, 1세대1주택 12억 비과세, 지방소득세 포함). 다주택자 중과세율·비사업용토지·각종 감면(8년자경 등)은 포함되지 않으므로 해당되면 별도로 안내하라.',
+    description: '양도소득세를 정확히 계산한다(기본세율 누진구조, 단기양도세율, 장기보유특별공제 — 일반 및 1세대1주택 특례, 1세대1주택 12억 비과세, 다주택자 중과, 비사업용토지 가산, 미등기양도 70%, 8년자경농지 감면, 필요경비 개산공제, 지방소득세 포함). 가업상속공제 관련 특례·수용/환지 등 조특법상 개별 감면은 포함되지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
         transferPrice: { type: 'number', description: '양도가액(원)' },
         acquisitionPrice: { type: 'number', description: '취득가액(원)' },
-        necessaryExpenses: { type: 'number', description: '필요경비(원, 중개보수·취득세·자본적지출 등). 생략 시 0.' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원, 중개보수·취득세·자본적지출 등). 생략 시 0(단, useEstimatedNecessaryExpense가 true면 개산공제로 자동 계산됨).' },
+        useEstimatedNecessaryExpense: { type: 'boolean', description: '실제 취득가액 증빙이 없어 필요경비를 개산공제(취득 당시 기준시가×3%)로 대체할지' },
+        acquisitionStandardPriceForExpense: { type: 'number', description: 'useEstimatedNecessaryExpense가 true일 때, 취득 당시 기준시가(원)' },
         acquisitionDate: { type: 'string', description: '취득일 YYYY-MM-DD' },
         transferDate: { type: 'string', description: '양도일 YYYY-MM-DD' },
         assetType: { type: 'string', enum: ['house', 'other'], description: 'house=주택·조합원입주권(단기세율 70%/60%), other=그 외 부동산(단기세율 50%/40%)' },
         isOneHouseOneFamily: { type: 'boolean', description: '1세대1주택 비과세 요건을 충족한다고 전제할지 여부(요건 자체는 이 도구가 검증하지 않음)' },
-        residenceYears: { type: 'number', description: '1세대1주택(고가주택) 장기보유특별공제 계산용 거주기간(년). isOneHouseOneFamily일 때만 사용.' }
+        residenceYears: { type: 'number', description: '1세대1주택(고가주택) 장기보유특별공제 계산용 거주기간(년). isOneHouseOneFamily일 때만 사용.' },
+        multiHouseCount: { type: 'integer', description: '조정대상지역 다주택 중과 판정용 소유 주택 수(2 또는 3 이상). isOneHouseOneFamily가 아닐 때만 의미가 있다.' },
+        isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라.' },
+        isNonBusinessLand: { type: 'boolean', description: '비사업용 토지인지 (기본세율+10%p 가산)' },
+        isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
+        isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
+        isCarryoverBasis: { type: 'boolean', description: '배우자·직계존비속에게 증여받은 자산을 10년 이내 양도하는 이월과세(소득세법 §97-2) 대상인지 — true면 acquisitionPrice/acquisitionDate를 증여자의 원 취득가액·취득일로 넣어야 한다는 안내가 결과에 포함된다' }
       },
       required: ['transferPrice', 'acquisitionPrice', 'acquisitionDate', 'transferDate']
     }
   },
   {
     name: 'calculate_gift_tax',
-    description: '증여세를 정확히 계산한다(증여재산공제, 누진세율, 세대생략할증, 신고세액공제 포함). 부담부증여 등 특례는 포함되지 않는다.',
+    description: '증여세를 정확히 계산한다(증여재산공제, 누진세율, 세대생략할증, 부담부증여 채무차감, 신고세액공제 포함). 창업자금·가업승계 증여세 과세특례는 포함되지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
-        giftAmount: { type: 'number', description: '이번 증여재산가액(원)' },
+        giftAmount: { type: 'number', description: '이번 증여재산가액(원, 채무인수분 포함 총액 — 부담부증여면 debtAssumedAmount로 채무액을 따로 알려줄 것)' },
         relation: { type: 'string', enum: ['배우자', '직계존속', '직계비속', '기타친족', '기타'], description: '증여자와 수증자의 관계 (수증자 기준)' },
         isMinor: { type: 'boolean', description: '수증자가 미성년자인지 (relation이 직계존속일 때 공제액에 영향)' },
+        debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원). 증여재산가액에서 제외되어 증여세만 줄어들고, 그만큼은 증여자에게 별도로 양도소득세가 과세되므로 calculate_transfer_tax를 함께 호출해야 한다.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산 합산액(원). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '위 기증여분에 대해 이미 납부한 증여세액(원). 없으면 생략.' },
         isGenerationSkip: { type: 'boolean', description: '세대를 건너뛴 증여(예: 조부모→손자녀)인지 여부' },
@@ -315,7 +324,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_inheritance_tax',
-    description: '상속세를 정확히 계산한다(기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제, 누진세율, 신고세액공제 포함). 금융재산상속공제·동거주택상속공제 등은 포함되지 않는다.',
+    description: '상속세를 정확히 계산한다(기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제, 금융재산상속공제, 동거주택상속공제, 감정평가수수료공제, 기납부증여세액공제, 누진세율, 신고세액공제 포함). 가업상속공제·재해손실공제는 포함되지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -327,6 +336,11 @@ const DRIVE_TOOLS = [
         minorHeirRemainingYears: { type: 'number', description: '미성년 상속인들의 19세까지 남은 잔여연수 합계 (1년당 1천만원 공제)' },
         elderlyHeirCount: { type: 'integer', description: '65세 이상 상속인 수 (1인당 5천만원 공제)' },
         disabledHeirRemainingYears: { type: 'number', description: '장애인 상속인들의 기대여명 잔여연수 합계 (1년당 1천만원 공제)' },
+        netFinancialAssets: { type: 'number', description: '순금융재산가액(금융재산-금융채무, 원). 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)이 공제된다.' },
+        hasCohabitingHouseDeduction: { type: 'boolean', description: '동거주택상속공제(10년 이상 동거·무주택 등 요건 충족 전제, 요건 자체는 검증하지 않음) 대상인지' },
+        cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
+        appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원). 500만원 한도로 공제.' },
+        priorGiftTaxPaid: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산에 대해 당시 이미 납부한 증여세액(원). 상속세 산출세액에서 공제된다.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고를 가정할지 (기본 true, 신고세액공제 3% 적용)' }
       },
       required: ['taxableEstateAmount']
@@ -2032,8 +2046,13 @@ function toolCalculateBuildingStandardPrice(structureName, useNo, officialLandPr
 // 양도소득세 · 증여세 · 상속세 세액계산
 // 세율·공제 구간은 이 코드 작성 시점 기준 현행법이며, 매년 개정될 수 있으므로
 // 실제 신고 전에는 반드시 홈택스 모의계산 등으로 재검증할 것.
-// 다주택 중과세율(조정대상지역 2·3주택 이상)처럼 시행령으로 수시로 유예·변경되는
-// 항목은 변동성이 너무 커서 이 계산에는 포함하지 않았다 — 해당 사안은 별도 확인 필요.
+//
+// 아래 세 함수는 각각의 "안내" 필드에 이번 계산이 포함/배제한 특례를 명시한다.
+// 의도적으로 배제한 항목(요건 판정 자체가 매우 개별적이거나, 적용대상이 극히 드물어
+// 잘못 넣으면 오히려 위험한 것들): 가업상속공제·창업자금 및 가업승계 증여세 과세특례
+// (지분율·사후관리 등 요건이 사안마다 달라 이 도구로 자동판정하면 위험),
+// 재해손실공제(발생 자체가 드묾), 조세특례제한법상 각종 감면(수용·환지·대토 등,
+// 자경농지 감면 외에는 개별 요건이 너무 다양함). 이 항목들이 필요하면 별도로 계산할 것.
 // ============================================================
 
 // 증여세·상속세 공통 누진세율표 (상속세및증여세법 §26, §56)
@@ -2114,11 +2133,20 @@ function basicOrLumpSumInheritanceDeduction_(personalDeductionSum) {
   return Math.max(500000000, 200000000 + (Number(personalDeductionSum) || 0));
 }
 
+// 금융재산 상속공제 (상증세법 §22) — 순금융재산가액(금융재산-금융채무) 2천만원 이하면 전액,
+// 초과하면 순금융재산가액의 20%와 2천만원 중 큰 금액(2억원 한도)
+function financialAssetInheritanceDeduction_(netFinancialAssets) {
+  const net = Number(netFinancialAssets) || 0;
+  if (net <= 0) return 0;
+  if (net <= 20000000) return net;
+  return Math.min(200000000, Math.max(net * 0.2, 20000000));
+}
+
 function toolCalculateTransferTax(p) {
   p = p || {};
   const transferPrice = Number(p.transferPrice);
+  let necessaryExpenses = Number(p.necessaryExpenses) || 0;
   const acquisitionPrice = Number(p.acquisitionPrice);
-  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
   if (!transferPrice || transferPrice <= 0) return { error: '양도가액(transferPrice)이 필요합니다.' };
   if (!acquisitionPrice || acquisitionPrice < 0) return { error: '취득가액(acquisitionPrice)이 필요합니다.' };
   if (!p.acquisitionDate || !p.transferDate) return { error: '취득일(acquisitionDate)과 양도일(transferDate)이 YYYY-MM-DD 형식으로 필요합니다.' };
@@ -2126,18 +2154,41 @@ function toolCalculateTransferTax(p) {
   const holdingYears = fullYearsElapsed_(p.acquisitionDate, p.transferDate);
   if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다. 날짜를 확인하세요.' };
 
+  // 실제 취득가액을 확인할 수 없을 때(매매계약서 분실 등)의 필요경비 개산공제:
+  // 취득 당시 기준시가 × 3%(토지·건물 일반 기준)를 필요경비로 대체 인정한다.
+  if (!p.necessaryExpenses && p.useEstimatedNecessaryExpense && Number(p.acquisitionStandardPriceForExpense) > 0) {
+    necessaryExpenses = Math.round(Number(p.acquisitionStandardPriceForExpense) * 0.03);
+  }
+
   const assetType = p.assetType === 'house' ? 'house' : 'other';
   const isOneHouse = !!p.isOneHouseOneFamily;
+  const isUnregistered = !!p.isUnregisteredTransfer;
   const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
 
+  // 미등기양도자산(소득세법 §104③) — 장기보유특별공제·기본공제·1세대1주택 특례 전부 배제,
+  // 양도차익 전액에 70% 단일세율. 다른 특례와 절대 함께 적용되지 않으므로 여기서 바로 반환.
+  if (isUnregistered) {
+    const uCalculatedTax = Math.max(0, Math.round(gainBeforeDeduction * 0.7));
+    const uLocalTax = Math.round(uCalculatedTax * 0.1);
+    return {
+      입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 미등기양도: true },
+      양도차익: Math.round(gainBeforeDeduction),
+      과세표준: Math.max(0, Math.round(gainBeforeDeduction)),
+      적용세율_설명: '미등기양도자산 — 장기보유특별공제·기본공제 배제, 70% 단일세율',
+      산출세액: uCalculatedTax,
+      지방소득세: uLocalTax,
+      납부세액_합계: uCalculatedTax + uLocalTax,
+      안내: '미등기양도로 전제하고 계산했습니다. 미등기 제외 대상(법령상 열거된 예외 사유)에 해당하는지는 별도로 확인하세요.'
+    };
+  }
+
   let taxableGain = gainBeforeDeduction;
-  let 비과세여부 = false;
   let longTermRate = 0;
 
   if (isOneHouse) {
     if (transferPrice <= 1200000000) {
       return {
-        입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: Math.floor(holdingYears * 100) / 100 },
+        입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
         비과세여부: true,
         납부세액: 0,
         안내: '1세대1주택 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다. 2년 이상 보유(조정대상지역은 거주요건 포함) 등 비과세 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
@@ -2150,12 +2201,18 @@ function toolCalculateTransferTax(p) {
     longTermRate = longTermHoldingDeductionRate_(holdingYears);
   }
 
+  // 다주택자 중과(소득세법 §104⑦, 조정대상지역 2주택 이상) — 적용되면 장기보유특별공제 자체가 배제된다.
+  const multiHouseCount = Number(p.multiHouseCount) || 0;
+  const isMultiHouseSurcharge = !isOneHouse && !!p.isAdjustedArea && multiHouseCount >= 2;
+  if (isMultiHouseSurcharge) longTermRate = 0;
+
   const longTermDeductionAmount = Math.round(taxableGain * longTermRate);
   const incomeAmount = taxableGain - longTermDeductionAmount;
   const basicDeduction = 2500000;
   const taxBase = Math.max(0, incomeAmount - basicDeduction);
 
   let calculatedTax, appliedRateNote;
+  const surchargeNotes = [];
   if (holdingYears < 1) {
     const shortRate = assetType === 'house' ? 0.70 : 0.50;
     calculatedTax = Math.round(taxBase * shortRate);
@@ -2167,6 +2224,27 @@ function toolCalculateTransferTax(p) {
   } else {
     calculatedTax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS);
     appliedRateNote = '보유기간 2년 이상 — 기본세율(누진 6~45%) 적용';
+    // 세율가산 특례는 "기본세율+n%p" 구조라서, 과세표준×가산율을 그대로 더하면 결과가 같다
+    // (구간마다 세율만 균일하게 오르면 누진공제 차이 없이 자동으로 이어짐). 단기세율 구간은
+    // 이미 단기세율 자체가 가산 후 세율보다 크므로 가산을 생략하고 안내만 남긴다.
+    if (isMultiHouseSurcharge) {
+      const surchargeRate = multiHouseCount >= 3 ? 0.30 : 0.20;
+      const surchargeAmount = Math.round(taxBase * surchargeRate);
+      calculatedTax += surchargeAmount;
+      surchargeNotes.push('다주택자 중과(+' + (surchargeRate * 100) + '%p): +' + surchargeAmount + '원');
+    }
+    if (p.isNonBusinessLand) {
+      const surchargeAmount = Math.round(taxBase * 0.10);
+      calculatedTax += surchargeAmount;
+      surchargeNotes.push('비사업용토지 가산(+10%p): +' + surchargeAmount + '원');
+    }
+  }
+
+  // 8년 자경농지 감면(조특법 §69) — 산출세액 전액 감면이나 연간 1억원 한도(5년 합산 2억원 한도는 여러 건에 걸친 것이라 이 도구가 추적하지 않음)
+  let farmlandReduction = 0;
+  if (p.isEightYearFarmland) {
+    farmlandReduction = Math.min(calculatedTax, 100000000);
+    calculatedTax -= farmlandReduction;
   }
 
   const localIncomeTax = Math.round(calculatedTax * 0.1);
@@ -2175,8 +2253,8 @@ function toolCalculateTransferTax(p) {
   return {
     입력값: {
       양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses,
-      보유기간_년: Math.round(holdingYears * 100) / 100, 자산종류: assetType === 'house' ? '주택·조합원입주권' : '그 외',
-      '1세대1주택_전제': isOneHouse
+      보유기간_년: holdingYears, 자산종류: assetType === 'house' ? '주택·조합원입주권' : '그 외',
+      '1세대1주택_전제': isOneHouse, 다주택중과_전제: isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland
     },
     양도차익: Math.round(gainBeforeDeduction),
     과세대상양도차익: Math.round(taxableGain),
@@ -2186,10 +2264,15 @@ function toolCalculateTransferTax(p) {
     기본공제: basicDeduction,
     과세표준: taxBase,
     적용세율_설명: appliedRateNote,
+    세율가산_내역: surchargeNotes,
+    자경농지감면액: farmlandReduction,
     산출세액: calculatedTax,
     지방소득세: localIncomeTax,
     납부세액_합계: totalTax,
-    안내: '기본공제 250만원은 해당 과세기간 중 다른 양도가 없다고 가정한 값입니다. 다주택자 중과세율, 비사업용토지, 8년자경농지 감면 등 특례는 포함되지 않았으니 해당 사안이면 별도로 확인하세요. 보유기간은 일수 기준 근사 계산입니다.'
+    안내: (p.isCarryoverBasis
+      ? '배우자·직계존비속 증여 후 10년 이내 양도(이월과세, 소득세법 §97-2)로 전제했습니다 — acquisitionPrice/acquisitionDate는 증여자의 원 취득가액·취득일이어야 합니다. '
+      : '') +
+      '기본공제 250만원은 해당 과세기간 중 다른 양도가 없다고 가정한 값입니다. 다주택자 중과는 조정대상지역 지정 현황·한시 배제 여부가 시행령으로 수시로 바뀌므로 반드시 최신 여부를 확인하고 isAdjustedArea를 넣으세요. 8년자경농지 감면은 5년 합산 2억원 한도를 이 도구가 추적하지 않으니 다른 감면 이력과 합산해서 확인하세요. 부담부증여로 취득한 자산의 양도, 가업상속공제 관련 특례 등은 포함되지 않았습니다.'
   };
 }
 
@@ -2207,8 +2290,14 @@ function toolCalculateGiftTax(p) {
   const generationSkipOver2Billion = !!p.generationSkipOver2Billion;
   const reportedInTime = p.reportedInTime !== false;
 
+  // 부담부증여(수증자가 증여자의 채무를 인수) — 인수한 채무액은 증여세 과세가액에서 제외된다.
+  // 대신 그 채무액에 상당하는 부분은 증여자에게 "양도"로 과세되므로, 필요하면 calculate_transfer_tax를
+  // (양도가액 = 증여재산가액×채무액/증여재산가액, 취득가액도 같은 비율로 안분해서) 별도로 호출해야 한다.
+  const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
+  const netGiftAmount = giftAmount - debtAssumedAmount;
+
   const deduction = giftPropertyDeduction_(relation, !!p.isMinor);
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - deduction);
+  const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - deduction);
   const taxBeforePremium = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
   const premiumRate = isGenerationSkip ? (generationSkipOver2Billion ? 0.4 : 0.3) : 0;
@@ -2220,7 +2309,8 @@ function toolCalculateGiftTax(p) {
   const finalTax = taxAfterPriorCredit - reportCredit;
 
   return {
-    입력값: { 증여재산가액: giftAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip },
+    입력값: { 증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip },
+    순수증여재산가액: netGiftAmount,
     증여재산공제: deduction,
     과세표준: taxBase,
     산출세액_할증전: taxBeforePremium,
@@ -2229,14 +2319,17 @@ function toolCalculateGiftTax(p) {
     기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
     신고세액공제: reportCredit,
     납부세액: finalTax,
-    안내: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산은 합산과세 대상입니다. priorGiftAmount·priorPaidTax를 정확히 넣지 않으면 결과가 부정확할 수 있으니 사안별로 재확인하세요. 채무부담부증여(부담부증여) 등 특례는 포함되지 않았습니다.'
+    안내: (debtAssumedAmount > 0
+      ? '부담부증여로 전제해 인수채무액 ' + debtAssumedAmount + '원을 증여재산가액에서 제외했습니다 — 이 채무액에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세되니 calculate_transfer_tax로 반드시 함께 계산하세요. '
+      : '') +
+      '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산은 합산과세 대상입니다. priorGiftAmount·priorPaidTax를 정확히 넣지 않으면 결과가 부정확할 수 있으니 사안별로 재확인하세요. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다.'
   };
 }
 
 function toolCalculateInheritanceTax(p) {
   p = p || {};
   const taxableEstateAmount = Number(p.taxableEstateAmount);
-  if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액(taxableEstateAmount — 총상속재산가액에서 공과금·장례비용·채무와 10년 이내 사전증여재산 가산 등을 이미 반영한 금액)이 필요합니다.' };
+  if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액(taxableEstateAmount — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산을 가산해 이미 반영한 금액)이 필요합니다.' };
 
   const hasSpouse = !!p.hasSpouse;
   const childCount = Number(p.childCount) || 0;
@@ -2248,24 +2341,43 @@ function toolCalculateInheritanceTax(p) {
   const personalDeduction = childCount * 50000000 + minorHeirRemainingYears * 10000000 + elderlyHeirCount * 50000000 + disabledHeirRemainingYears * 10000000;
   const basicOrLumpSum = basicOrLumpSumInheritanceDeduction_(personalDeduction);
   const spouseDeduction = hasSpouse ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, p.spouseLegalShareAmount) : 0;
-  const totalDeduction = basicOrLumpSum + spouseDeduction;
+
+  // 금융재산상속공제 (상증세법 §22)
+  const financialDeduction = financialAssetInheritanceDeduction_(p.netFinancialAssets);
+
+  // 동거주택상속공제 (상증세법 §23-2) — 10년 이상 동거·무주택 등 요건 충족을 전제(요건 자체는 이 도구가 검증하지 않음). 상속주택가액의 100%, 6억원 한도.
+  const cohabitingHouseDeduction = p.hasCohabitingHouseDeduction ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
+
+  // 감정평가수수료공제 (상증세법 §25) — 부동산 감정평가수수료 등, 500만원 한도(원칙, 유형별 세부한도는 별도)
+  const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+
+  const totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction;
 
   const taxBase = Math.max(0, taxableEstateAmount - totalDeduction);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
-  const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
-  const finalTax = calculatedTax - reportCredit;
+
+  // 10년 이내 사전증여재산을 taxableEstateAmount에 가산했다면, 그 증여 당시 이미 낸 증여세는 상속세 산출세액에서 공제한다 (상증세법 §28).
+  const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
+  const taxAfterGiftCredit = calculatedTax - priorGiftTaxCredit;
+
+  const reportCredit = reportedInTime ? Math.round(taxAfterGiftCredit * 0.03) : 0;
+  const finalTax = taxAfterGiftCredit - reportCredit;
 
   return {
     입력값: { 상속세과세가액: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount },
     인적공제: personalDeduction,
     '기초공제+인적공제_또는_일괄공제5억_중_큰값': basicOrLumpSum,
     배우자공제: spouseDeduction,
+    금융재산상속공제: financialDeduction,
+    동거주택상속공제: cohabitingHouseDeduction,
+    감정평가수수료공제: appraisalFeeDeduction,
     상속공제_합계: totalDeduction,
     과세표준: taxBase,
     산출세액: calculatedTax,
+    기납부증여세액공제: priorGiftTaxCredit,
     신고세액공제: reportCredit,
     납부세액: finalTax,
-    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. 금융재산상속공제·동거주택상속공제·감정평가수수료공제 등은 포함되지 않았습니다. spouseLegalShareAmount를 넣지 않으면 배우자공제에 30억 한도만 적용되고 법정상속분 한도는 반영되지 않으니, 실제 신고 전 정확한 법정상속분으로 재확인하세요.'
+    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. 가업상속공제·재해손실공제 등은 요건 판정이 사안마다 크게 달라 포함하지 않았습니다. spouseLegalShareAmount를 넣지 않으면 배우자공제에 30억 한도만 적용되고 법정상속분 한도는 반영되지 않으니, 실제 신고 전 정확한 법정상속분으로 재확인하세요. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요.'
   };
 }
 
