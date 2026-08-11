@@ -130,6 +130,9 @@
     padding:10px; min-width:220px; box-shadow:0 8px 24px rgba(0,0,0,0.4);
   }
   .nx-popup.show{ display:flex; }
+  /* 계산기 툴바에서 "기한계산"은 맨 오른쪽 끝 버튼이라, 기본값(left:0, 오른쪽으로 펼쳐짐)대로 열면
+     팝업(280px)이 화면 오른쪽 밖으로 밀려나가 잘려 보인다 — 이 팝업만 왼쪽으로 펼쳐지게 뒤집는다. */
+  #calcDeadlinePopup{ left:auto; right:0; }
   .nx-popup select{
     background:rgba(255,255,255,0.08); color:#fff; border:1px solid rgba(255,255,255,0.25);
     border-radius:6px; padding:6px 10px; font-family:inherit; font-size:12.5px; cursor:pointer;
