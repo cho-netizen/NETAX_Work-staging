@@ -991,7 +991,11 @@
         // [1], [2]처럼 대괄호+숫자로 참조 — 영문자를 아예 안 써서 한영전환·대소문자 신경 쓸 필요가 없음
         let expr = raw.slice(1).replace(/\[(\d+)\]/g, (m, n) => {
           return (n in results) ? String(results[n]) : '0';
-        }).replace(/%/g, '/100');
+        });
+        // 누진세(...)·장특공제율(...) 등 세무 계산 함수(tax-calc.js)를 먼저 실제 숫자로 치환한다.
+        // eval에 넘기기 전에 문자열 치환으로 끝내므로, 그 뒤 문자검증(아래 정규식)은 그대로 안전하게 통과시킬 수 있다.
+        if (typeof resolveCalcTaxFunctions === 'function') expr = resolveCalcTaxFunctions(expr);
+        expr = expr.replace(/%/g, '/100');
         if (/^[0-9+\-*/().\s]+$/.test(expr) && expr.trim()){
           try { val = Function('"use strict"; return (' + expr + ')')(); }
           catch(err){ val = NaN; }
@@ -1196,18 +1200,47 @@
 
   // ---- 계산기 템플릿 (자주 쓰는 세무 계산 패턴을 바로 불러오기) ----
   // formula가 숫자만 있는 건 "직접 입력하세요"용 자리표시 행, 실제 계산식(=[n]*...)이 있는 건 그대로 채움.
+  // 양도소득세·증여세·상속세는 누진세(...)·장특공제율(...) 등 tax-calc.js의 세무 함수를 써서
+  // 세율표·공제표를 자동으로 적용한다 — 사람이 세율·누진공제액을 직접 찾아 넣을 필요가 없다.
+  // 다만 관계(배우자/직계존속 등)·실제상속액처럼 사안마다 다른 값은 해당 행의 수식 안에 있는
+  // 괄호 안 값을 직접 고쳐서 써야 한다 (수식 예시를 그대로 남겨뒀으니 참고).
   const CALC_TEMPLATES = [
     {
-      name: '양도소득세 개산(기본)',
+      name: '양도소득세 개산(기본, 2년 이상 보유)',
       rows: [
         { label: '양도가액', formula: '' },
         { label: '취득가액', formula: '' },
         { label: '필요경비', formula: '' },
         { label: '양도차익', formula: '=[1]-[2]-[3]' },
-        { label: '장기보유특별공제(직접 계산해 입력)', formula: '' },
-        { label: '양도소득금액', formula: '=[4]-[5]' },
+        { label: '보유연수(만 단위, 직접 입력)', formula: '' },
+        { label: '장기보유특별공제율(일반)', formula: '=장특공제율([5])' },
+        { label: '장기보유특별공제액', formula: '=[4]*[6]' },
+        { label: '양도소득금액', formula: '=[4]-[7]' },
         { label: '기본공제', formula: '2500000' },
-        { label: '과세표준', formula: '=[6]-[7]' }
+        { label: '과세표준', formula: '=[8]-[9]' },
+        { label: '산출세액(기본세율)', formula: "=누진세([10],'양도')" },
+        { label: '지방소득세(10%)', formula: '=[11]*0.1' },
+        { label: '납부세액 합계', formula: '=[11]+[12]' }
+      ]
+    },
+    {
+      name: '양도소득세 개산(1세대1주택, 12억 초과분)',
+      rows: [
+        { label: '양도가액', formula: '' },
+        { label: '취득가액', formula: '' },
+        { label: '필요경비', formula: '' },
+        { label: '양도차익', formula: '=[1]-[2]-[3]' },
+        { label: '과세대상양도차익(12억 초과분 안분, 12억 이하면 전액 비과세이므로 이 템플릿 불필요)', formula: '=[4]*([1]-1200000000)/[1]' },
+        { label: '보유연수(만 단위, 직접 입력)', formula: '' },
+        { label: '거주연수(만 단위, 직접 입력)', formula: '' },
+        { label: '장기보유특별공제율(1세대1주택 특례)', formula: '=장특공제율1주택([6],[7])' },
+        { label: '장기보유특별공제액', formula: '=[5]*[8]' },
+        { label: '양도소득금액', formula: '=[5]-[9]' },
+        { label: '기본공제', formula: '2500000' },
+        { label: '과세표준', formula: '=[10]-[11]' },
+        { label: '산출세액(기본세율)', formula: "=누진세([12],'양도')" },
+        { label: '지방소득세(10%)', formula: '=[13]*0.1' },
+        { label: '납부세액 합계', formula: '=[13]+[14]' }
       ]
     },
     {
@@ -1222,25 +1255,31 @@
       ]
     },
     {
-      name: '증여세 개산(누진공제 방식)',
+      name: '증여세 개산(자동계산)',
       rows: [
         { label: '증여재산가액', formula: '' },
-        { label: '증여재산공제(배우자6억/직계존비속5천만 등 사안별)', formula: '' },
+        { label: '증여재산공제 (괄호 안 관계를 배우자/직계존속/직계비속/기타친족/기타 중 실제로 바꾸고, 미성년자면 뒤 숫자를 1로)', formula: '=증여공제(직계존속,0)' },
         { label: '과세표준', formula: '=[1]-[2]' },
-        { label: '세율(%, 구간별 확인 후 입력)', formula: '' },
-        { label: '누진공제액(구간표 확인 후 입력)', formula: '' },
-        { label: '산출세액', formula: '=[3]*([4]%)-[5]' }
+        { label: '산출세액(할증 전)', formula: "=누진세([3],'증여상속')" },
+        { label: '세대생략할증률(해당 없으면 0, 손자녀 등 세대생략이면 0.3, 미성년자+20억 초과면 0.4)', formula: '0' },
+        { label: '산출세액(할증 후)', formula: '=[4]+[4]*[5]' },
+        { label: '기납부세액공제(10년 이내 동일인 기증여분에 이미 낸 세액, 없으면 0)', formula: '0' },
+        { label: '신고세액공제(3%)', formula: '=([6]-[7])*0.03' },
+        { label: '납부세액', formula: '=[6]-[7]-[8]' }
       ]
     },
     {
-      name: '상속세 개산(누진공제 방식)',
+      name: '상속세 개산(자동계산)',
       rows: [
-        { label: '상속재산가액', formula: '' },
-        { label: '상속공제(일괄공제 5억 등 사안별 확인)', formula: '' },
-        { label: '과세표준', formula: '=[1]-[2]' },
-        { label: '세율(%, 구간별 확인 후 입력)', formula: '' },
-        { label: '누진공제액(구간표 확인 후 입력)', formula: '' },
-        { label: '산출세액', formula: '=[3]*([4]%)-[5]' }
+        { label: '상속세과세가액(총상속재산가액-공과금·장례비용·채무+10년내 사전증여 등 반영 후)', formula: '' },
+        { label: '인적공제 합계(자녀 5천만×인원 + 미성년 1천만×잔여연수 + 연로자 5천만×인원 + 장애인 1천만×잔여연수, 직접 계산해 입력)', formula: '' },
+        { label: '기초+인적공제 vs 일괄공제(5억) 중 큰 값', formula: '=일괄공제비교([2])' },
+        { label: '배우자공제 (괄호 안을 실제상속액,법정상속분으로 바꾸기 — 배우자가 없으면 이 행 전체를 0으로)', formula: '=배우자공제(0,0)' },
+        { label: '상속공제 합계', formula: '=[3]+[4]' },
+        { label: '과세표준', formula: '=[1]-[5]' },
+        { label: '산출세액', formula: "=누진세([6],'증여상속')" },
+        { label: '신고세액공제(3%)', formula: '=[7]*0.03' },
+        { label: '납부세액', formula: '=[7]-[8]' }
       ]
     }
   ];
@@ -1249,7 +1288,7 @@
   const btnCalcTemplate = document.getElementById('btnCalcTemplate');
 
   function renderCalcTemplateMenu(){
-    calcTemplatePopup.innerHTML = '<div class="log-hint" style="padding:0 0 4px; font-size:11px;">기존 행 뒤에 이어서 추가됩니다. 세율·공제 구간은 사안별로 반드시 직접 확인해서 채워 넣으세요.</div>';
+    calcTemplatePopup.innerHTML = '<div class="log-hint" style="padding:0 0 4px; font-size:11px;">기존 행 뒤에 이어서 추가됩니다. 세율·공제는 자동 계산되지만, 관계·보유기간·실제상속액처럼 사안마다 다른 값은 해당 행의 수식을 직접 고쳐 넣어야 합니다. 다주택 중과·각종 감면 등은 포함되지 않으니 별도로 확인하세요.</div>';
     CALC_TEMPLATES.forEach(tpl=>{
       const btn = document.createElement('button');
       btn.type = 'button';

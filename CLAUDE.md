@@ -11,4 +11,5 @@
 4. 위 두 단계가 끝난 뒤에만 `git commit`/`git push` 진행 여부를 평소 규칙대로 묻는다 (이건 실제 반영과 무관한 기록/백업용이라 순서상 나중이어도 무방).
 
 ### 이 저장소의 배포 ID
-(최초 1회 `clasp deployments`로 확인 후 이 줄에 기록: 배포 ID = ________________)
+배포 ID = AKfycbz9pam82WMSMKHYo6-6EtEguMbpZ0AaqHirVzwcW6ZFRsdq4WGluvhpPkYUoTE2l_bm
+(config.js의 GAS_URL과 동일한 ID인지 항상 확인할 것 — 다르면 잘못된 배포에 올리는 것임)
