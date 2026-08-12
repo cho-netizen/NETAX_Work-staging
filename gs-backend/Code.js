@@ -335,14 +335,18 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_inheritance_tax',
-    description: '상속세를 정확히 계산한다(기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제, 금융재산상속공제, 동거주택상속공제, 감정평가수수료공제, 기납부증여세액공제, 누진세율, 신고세액공제 포함). 가업상속공제·재해손실공제는 포함되지 않는다.',
+    description: '상속세를 정확히 계산한다([별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 기준 — 기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제 한도액 정밀공식, 금융재산·동거주택·감정평가수수료·재해손실공제, 상속공제 종합한도, 세대생략가산액, 기납부증여세액·외국납부세액·단기재상속세액공제, 누진세율, 신고세액공제, 무신고·과소신고·납부지연가산세 포함). 가업상속공제·영농상속공제는 포함되지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
         taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다.' },
         hasSpouse: { type: 'boolean', description: '배우자가 상속인에 포함되는지' },
         spouseActualInheritedAmount: { type: 'number', description: '배우자가 실제 상속받은 금액(원). 생략하거나 5억 미만이면 자동으로 최소 5억이 공제된다.' },
-        spouseLegalShareAmount: { type: 'number', description: '배우자의 법정상속분 상당액(원). 모르면 생략 가능하나, 그 경우 30억 한도만 적용되고 법정상속분 한도는 반영되지 않는다.' },
+        spouseLegalShareRatio: { type: 'number', description: '배우자의 법정상속분 비율(0~1, 예: 배우자+자녀2명이면 1.5/3.5≈0.4286). 이 값과 taxableEstateAmount 등으로 배우자공제 한도액을 정밀 계산한다. 생략하면 30억 한도만 적용된다.' },
+        nonHeirBequestAmount: { type: 'number', description: '상속인이 아닌 자(수유자)가 유증 등으로 받은 재산가액(원). 배우자공제 한도액과 상속공제 종합한도 계산에 쓰인다.' },
+        giftToHeirsWithin10Years: { type: 'number', description: '상속개시일 전 10년 이내에 피상속인이 상속인에게 증여한 재산가액 합계(원). 배우자공제 한도액 계산에 쓰인다.' },
+        priorGiftedAmountIncludedInEstate: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산가액의 원본(재산가액 자체, 과세표준 아님). 배우자공제 한도액 계산의 "상속재산의 가액" 산출에 쓰인다.' },
+        spouseTaxableBaseOfPriorGift: { type: 'number', description: '상속재산에 가산한 증여재산 중 배우자가 사전증여받은 부분의 증여세 과세표준(원). 배우자공제 한도액에서 차감된다.' },
         childCount: { type: 'integer', description: '자녀 수 (1인당 5천만원 공제)' },
         minorHeirRemainingYears: { type: 'number', description: '미성년 상속인들의 19세까지 남은 잔여연수 합계 (1년당 1천만원 공제)' },
         elderlyHeirCount: { type: 'integer', description: '65세 이상 상속인 수 (1인당 5천만원 공제)' },
@@ -351,8 +355,21 @@ const DRIVE_TOOLS = [
         hasCohabitingHouseDeduction: { type: 'boolean', description: '동거주택상속공제(10년 이상 동거·무주택 등 요건 충족 전제, 요건 자체는 검증하지 않음) 대상인지' },
         cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
         appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원). 500만원 한도로 공제.' },
+        disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 상속재산가액(원, 재해손실공제 §23). 없으면 생략.' },
+        priorGiftTaxableBaseForOverallLimit: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 상속재산에 가산된 사전증여재산 전체의 증여세 과세표준 합계(원, 배우자분만이 아니라 전체). 생략하면 종합한도가 사실상 적용되지 않는다.' },
+        disclaimedShareRedistributedAmount: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 선순위 상속인의 상속포기로 다음 순위 상속인이 받은 재산가액(원). 없으면 생략.' },
         priorGiftTaxPaid: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산에 대해 당시 이미 납부한 증여세액(원). 상속세 산출세액에서 공제된다.' },
-        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고를 가정할지 (기본 true, 신고세액공제 3% 적용)' }
+        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 상속세액(원, 외국납부세액공제 §29).' },
+        priorInheritanceTaxPortion: { type: 'number', description: '단기재상속세액공제(§30)용 — 10년 이내 재상속인 경우, 전의 상속세액 중 이번에 재상속되는 재산에 해당하는 부분(원).' },
+        yearsSincePriorInheritance: { type: 'integer', description: '단기재상속세액공제용 — 전의 상속개시일로부터 이번 상속개시일까지 경과연수(1~10, 1년마다 공제율 10%p씩 감소).' },
+        generationSkipHeirRatio: { type: 'number', description: '세대생략가산액(§27)용 — 상속인이 아닌 직계비속(예: 손자녀, 대습상속 제외)이 받는 상속재산이 전체에서 차지하는 비율(0~1). 없으면 세대생략가산액은 0.' },
+        generationSkipOver2Billion: { type: 'boolean', description: '세대생략 상속이면서 미성년자가 20억원을 초과해서 상속받는 경우(할증률 40%). 아니면 30%.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 재산은닉 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['taxableEstateAmount']
     }
@@ -2130,12 +2147,30 @@ function giftPropertyDeduction_(relation, isMinor) {
   }
 }
 
-// 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 법정상속분) 중 작은 값
-function spouseInheritanceDeduction_(actualAmount, legalShareAmount) {
+// 배우자 상속공제 한도액 (상증세법 §19, [별지 제9호서식] 부표3의2 계산식)
+// 한도액 = {(상속재산의 가액 - 상속인 아닌 자 유증재산가액 + 10년내 상속인에게 증여한 재산가액) × 배우자 법정상속분 비율} - 배우자가 사전증여받은 재산의 과세표준
+// spouseLegalShareRatio(0~1)를 모르면 한도를 계산할 수 없으므로 Infinity를 반환해 30억 한도만 적용한다(예전 방식과 동일하게 안전 폴백).
+function spouseInheritanceLimit_(estateValueForLimit, nonHeirBequestAmount, giftToHeirsWithin10Years, spouseLegalShareRatio, spouseTaxableBaseOfPriorGift) {
+  if (!(spouseLegalShareRatio > 0)) return Infinity;
+  const base = (Number(estateValueForLimit) || 0) - (Number(nonHeirBequestAmount) || 0) + (Number(giftToHeirsWithin10Years) || 0);
+  return Math.max(0, base * spouseLegalShareRatio - (Number(spouseTaxableBaseOfPriorGift) || 0));
+}
+
+// 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값
+function spouseInheritanceDeduction_(actualAmount, limitAmount) {
   const actual = Number(actualAmount) || 0;
   if (actual < 500000000) return 500000000; // 실제 상속액이 없거나 5억 미만이어도 최소 5억은 공제
-  const legalShare = Number(legalShareAmount) || Infinity; // 법정상속분을 모르면 일단 30억 한도만 적용
-  return Math.min(actual, legalShare, 3000000000);
+  const limit = Number.isFinite(limitAmount) ? limitAmount : Infinity;
+  return Math.min(actual, limit, 3000000000);
+}
+
+// 단기재상속세액공제 (상증세법 §30) — 10년 이내 재상속 시, 전의 상속세 중 이번 상속재산에 해당하는
+// 부분에 재상속 경과연수에 따른 공제율(1년마다 10%p씩 감소)을 곱한 금액을 공제한다.
+const SHORT_TERM_REINHERITANCE_RATES_ = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
+function shortTermReinheritanceCredit_(priorInheritanceTaxPortion, yearsSincePriorInheritance) {
+  const y = Math.ceil(Number(yearsSincePriorInheritance) || 0);
+  if (y < 1 || y > 10) return 0;
+  return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES_[y - 1]);
 }
 
 // 상속공제 — 기초공제(2억)+인적공제 합계와 일괄공제(5억) 중 큰 금액 선택 (상증세법 §21)
@@ -2388,11 +2423,16 @@ function toolCalculateInheritanceTax(p) {
   const minorHeirRemainingYears = Number(p.minorHeirRemainingYears) || 0;
   const elderlyHeirCount = Number(p.elderlyHeirCount) || 0;
   const disabledHeirRemainingYears = Number(p.disabledHeirRemainingYears) || 0;
-  const reportedInTime = p.reportedInTime !== false;
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
 
   const personalDeduction = childCount * 50000000 + minorHeirRemainingYears * 10000000 + elderlyHeirCount * 50000000 + disabledHeirRemainingYears * 10000000;
   const basicOrLumpSum = basicOrLumpSumInheritanceDeduction_(personalDeduction);
-  const spouseDeduction = hasSpouse ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, p.spouseLegalShareAmount) : 0;
+
+  // 배우자상속공제 한도액 ([별지 제9호서식] 부표3의2): {(상속재산의 가액-유증재산가액+10년내 상속인증여재산)×배우자법정상속분비율} - 배우자의 사전증여 과세표준
+  const estateValueForSpouseLimit = taxableEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
+  const spouseLimit = spouseInheritanceLimit_(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
+  const spouseDeduction = hasSpouse ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, spouseLimit) : 0;
 
   // 금융재산상속공제 (상증세법 §22)
   const financialDeduction = financialAssetInheritanceDeduction_(p.netFinancialAssets);
@@ -2403,33 +2443,72 @@ function toolCalculateInheritanceTax(p) {
   // 감정평가수수료공제 (상증세법 §25) — 부동산 감정평가수수료 등, 500만원 한도(원칙, 유형별 세부한도는 별도)
   const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
 
-  const totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction;
+  // 재해손실공제 (상증세법 §23) — 신고기한 이내 재난으로 멸실·훼손된 상속재산가액
+  const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+
+  let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction;
+
+  // 상속공제 종합한도액 (상증세법 §24) — 공제 총액은 무제한이 아니라
+  // "상속세과세가액 - 상속인 아닌 자 유증재산가액 - 상속인의 사전증여재산 과세표준상당액 - 상속포기로 다음 순위가 받은 재산가액" 한도 내에서만 인정된다.
+  // 해당 입력을 생략하면(모두 0) 사실상 과세가액 전체가 한도가 되어 예전처럼 제한 없이 동작한다.
+  const overallDeductionLimit = Math.max(0, taxableEstateAmount
+    - (Number(p.nonHeirBequestAmount) || 0)
+    - (Number(p.priorGiftTaxableBaseForOverallLimit) || 0)
+    - (Number(p.disclaimedShareRedistributedAmount) || 0));
+  const overallLimitApplied = totalDeduction > overallDeductionLimit;
+  if (overallLimitApplied) totalDeduction = overallDeductionLimit;
 
   const taxBase = Math.max(0, taxableEstateAmount - totalDeduction);
-  const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+  let calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+
+  // 세대생략가산액 (상증세법 §27) — 상속인이 아닌 직계비속(예: 손자녀)이 상속·유증받는 경우,
+  // 그 상속인이 받는 재산 비율에 해당하는 산출세액에 할증(30%, 미성년자 20억 초과분은 40%)한다.
+  const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
+  const generationSkipPremiumRate = p.generationSkipOver2Billion ? 0.4 : 0.3;
+  const generationSkipPremium = Math.round(calculatedTax * generationSkipHeirRatio * generationSkipPremiumRate);
+  calculatedTax += generationSkipPremium;
 
   // 10년 이내 사전증여재산을 taxableEstateAmount에 가산했다면, 그 증여 당시 이미 낸 증여세는 상속세 산출세액에서 공제한다 (상증세법 §28).
   const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
-  const taxAfterGiftCredit = calculatedTax - priorGiftTaxCredit;
+  // 외국납부세액공제 (상증세법 §29) — 국외재산에 대해 외국에서 이미 낸 상속세.
+  const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+  // 단기재상속세액공제 (상증세법 §30) — 10년 이내 재상속 시 전의 상속세 중 이번 상속재산 해당분에 경과연수별 공제율 적용.
+  const shortTermReinheritanceCredit = Math.min(
+    shortTermReinheritanceCredit_(p.priorInheritanceTaxPortion, p.yearsSincePriorInheritance),
+    Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit)
+  );
 
-  const reportCredit = reportedInTime ? Math.round(taxAfterGiftCredit * 0.03) : 0;
-  const finalTax = taxAfterGiftCredit - reportCredit;
+  const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit - shortTermReinheritanceCredit);
+  const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
+  const taxAfterReportCredit = taxAfterCredits - reportCredit;
+
+  const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty;
 
   return {
-    입력값: { 상속세과세가액: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount },
+    입력값: { 상속세과세가액: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount, 신고상태: filingStatus },
     인적공제: personalDeduction,
     '기초공제+인적공제_또는_일괄공제5억_중_큰값': basicOrLumpSum,
     배우자공제: spouseDeduction,
+    배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
     금융재산상속공제: financialDeduction,
     동거주택상속공제: cohabitingHouseDeduction,
     감정평가수수료공제: appraisalFeeDeduction,
+    재해손실공제: disasterLossDeduction,
     상속공제_합계: totalDeduction,
+    상속공제종합한도_적용여부: overallLimitApplied,
     과세표준: taxBase,
     산출세액: calculatedTax,
+    세대생략가산액: generationSkipPremium,
     기납부증여세액공제: priorGiftTaxCredit,
+    외국납부세액공제: foreignTaxCredit,
+    단기재상속세액공제: shortTermReinheritanceCredit,
     신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty,
+    과소신고가산세: penalties.underreportedPenalty,
+    납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
-    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. 가업상속공제·재해손실공제 등은 요건 판정이 사안마다 크게 달라 포함하지 않았습니다. spouseLegalShareAmount를 넣지 않으면 배우자공제에 30억 한도만 적용되고 법정상속분 한도는 반영되지 않으니, 실제 신고 전 정확한 법정상속분으로 재확인하세요. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요.'
+    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제는 요건 판정이 사안마다 크게 달라 포함하지 않았습니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
   };
 }
 

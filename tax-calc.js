@@ -47,12 +47,27 @@
     }
   }
 
-  // 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 법정상속분) 중 작은 값
-  function spouseInheritanceDeduction(actualAmount, legalShareAmount) {
+  // 배우자상속공제 한도액 ([별지 제9호서식] 부표3의2): {(상속재산의 가액-유증재산가액+10년내 상속인증여재산)×배우자법정상속분비율} - 배우자의 사전증여 과세표준
+  function spouseInheritanceLimit(estateValueForLimit, nonHeirBequestAmount, giftToHeirsWithin10Years, spouseLegalShareRatio, spouseTaxableBaseOfPriorGift) {
+    if (!(spouseLegalShareRatio > 0)) return Infinity;
+    const base = (Number(estateValueForLimit) || 0) - (Number(nonHeirBequestAmount) || 0) + (Number(giftToHeirsWithin10Years) || 0);
+    return Math.max(0, base * spouseLegalShareRatio - (Number(spouseTaxableBaseOfPriorGift) || 0));
+  }
+
+  // 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값
+  function spouseInheritanceDeduction(actualAmount, limitAmount) {
     const actual = Number(actualAmount) || 0;
     if (actual < 500000000) return 500000000; // 실제 상속액이 없거나 5억 미만이어도 최소 5억은 공제
-    const legalShare = Number(legalShareAmount) || Infinity; // 법정상속분을 모르면 일단 30억 한도만 적용
-    return Math.min(actual, legalShare, 3000000000);
+    const limit = Number.isFinite(limitAmount) ? limitAmount : Infinity;
+    return Math.min(actual, limit, 3000000000);
+  }
+
+  // 단기재상속세액공제 (상증세법 §30) — 10년 이내 재상속 시 전의 상속세 중 이번 상속재산 해당분에 경과연수별 공제율(1년마다 10%p씩 감소) 적용.
+  const SHORT_TERM_REINHERITANCE_RATES = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
+  function shortTermReinheritanceCredit(priorInheritanceTaxPortion, yearsSincePriorInheritance) {
+    const y = Math.ceil(Number(yearsSincePriorInheritance) || 0);
+    if (y < 1 || y > 10) return 0;
+    return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES[y - 1]);
   }
 
   // 금융재산 상속공제 (상증세법 §22) — 순금융재산 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)
@@ -468,7 +483,7 @@
     };
   };
 
-  // 상속세 — gs-backend toolCalculateInheritanceTax와 동일 로직.
+  // 상속세 — gs-backend toolCalculateInheritanceTax와 동일 로직([별지 제9호서식] 기준).
   window.calculateInheritanceTaxJS = function (p) {
     p = p || {};
     const taxableEstateAmount = Number(p.taxableEstateAmount);
@@ -478,28 +493,62 @@
     const minorHeirRemainingYears = Number(p.minorHeirRemainingYears) || 0;
     const elderlyHeirCount = Number(p.elderlyHeirCount) || 0;
     const disabledHeirRemainingYears = Number(p.disabledHeirRemainingYears) || 0;
-    const reportedInTime = p.reportedInTime !== false;
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
 
     const personalDeduction = childCount * 50000000 + minorHeirRemainingYears * 10000000 + elderlyHeirCount * 50000000 + disabledHeirRemainingYears * 10000000;
     const basicOrLumpSum = basicOrLumpSumDeduction(personalDeduction);
-    const spouseDeduction = p.hasSpouse ? spouseInheritanceDeduction(p.spouseActualInheritedAmount, p.spouseLegalShareAmount) : 0;
+
+    const estateValueForSpouseLimit = taxableEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
+    const spouseLimit = spouseInheritanceLimit(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
+    const spouseDeduction = p.hasSpouse ? spouseInheritanceDeduction(p.spouseActualInheritedAmount, spouseLimit) : 0;
+
     const financialDeduction = financialAssetInheritanceDeduction(p.netFinancialAssets);
     const cohabitingHouseDeduction = p.hasCohabitingHouseDeduction ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
     const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
-    const totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction;
+    const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+
+    let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction;
+
+    const overallDeductionLimit = Math.max(0, taxableEstateAmount
+      - (Number(p.nonHeirBequestAmount) || 0)
+      - (Number(p.priorGiftTaxableBaseForOverallLimit) || 0)
+      - (Number(p.disclaimedShareRedistributedAmount) || 0));
+    const overallLimitApplied = totalDeduction > overallDeductionLimit;
+    if (overallLimitApplied) totalDeduction = overallDeductionLimit;
 
     const taxBase = Math.max(0, taxableEstateAmount - totalDeduction);
-    const calculatedTax = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    let calculatedTax = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+
+    const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
+    const generationSkipPremiumRate = p.generationSkipOver2Billion ? 0.4 : 0.3;
+    const generationSkipPremium = Math.round(calculatedTax * generationSkipHeirRatio * generationSkipPremiumRate);
+    calculatedTax += generationSkipPremium;
+
     const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
-    const taxAfterGiftCredit = calculatedTax - priorGiftTaxCredit;
-    const reportCredit = reportedInTime ? Math.round(taxAfterGiftCredit * 0.03) : 0;
+    const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+    const shortTermCredit = Math.min(
+      shortTermReinheritanceCredit(p.priorInheritanceTaxPortion, p.yearsSincePriorInheritance),
+      Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit)
+    );
+
+    const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit - shortTermCredit);
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
+    const taxAfterReportCredit = taxAfterCredits - reportCredit;
+
+    const penalties = giftFilingPenalties(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
     return {
       상속세과세가액: taxableEstateAmount, 인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
-      배우자공제: spouseDeduction, 금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
-      감정평가수수료공제: appraisalFeeDeduction, 상속공제_합계: totalDeduction, 과세표준: taxBase,
-      산출세액: calculatedTax, 기납부증여세액공제: priorGiftTaxCredit, 신고세액공제: reportCredit,
-      납부세액: taxAfterGiftCredit - reportCredit
+      배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
+      금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
+      감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
+      상속공제_합계: totalDeduction, 상속공제종합한도_적용여부: overallLimitApplied, 과세표준: taxBase,
+      산출세액: calculatedTax, 세대생략가산액: generationSkipPremium,
+      기납부증여세액공제: priorGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit,
+      신고세액공제: reportCredit, 무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
+      납부지연가산세: penalties.latePenalty,
+      납부세액: taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
     };
   };
 })();

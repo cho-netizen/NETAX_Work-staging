@@ -212,23 +212,57 @@ function renderGiftResult(r){
 // ---- 상속세 ----
 function renderInheritancePane(){
   taxCalcInheritancePane.innerHTML =
-    '<div class="taxcalc-hint">상속세과세가액은 총상속재산가액에서 공과금·장례비용·채무를 빼고, 10년 이내 사전증여재산을 가산해 이미 계산된 값을 넣어야 합니다.</div>' +
+    '<div class="taxcalc-hint">국세청 [별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 상속세과세가액은 총상속재산가액에서 공과금·장례비용·채무를 빼고, 10년 이내 사전증여재산을 가산해 이미 계산된 값을 넣어야 합니다.</div>' +
     '<div class="taxcalc-asset">' +
+      '<div class="taxcalc-asset-head"><b>과세가액 · 인적공제</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>상속세과세가액</label><input type="number" id="ihEstate" placeholder="원"></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihHasSpouse"><label for="ihHasSpouse">배우자가 상속인에 포함</label></div>' +
-        '<div class="taxcalc-field"><label>배우자 실제 상속액</label><input type="number" id="ihSpouseActual" placeholder="원 (5억 미만/미입력이면 최소 5억 자동 적용)"></div>' +
-        '<div class="taxcalc-field"><label>배우자 법정상속분 상당액</label><input type="number" id="ihSpouseLegal" placeholder="원 (모르면 비움 → 30억 한도만 적용)"></div>' +
         '<div class="taxcalc-field"><label>자녀 수</label><input type="number" id="ihChildCount" placeholder="명 (1인당 5천만원)"></div>' +
         '<div class="taxcalc-field"><label>미성년 상속인 19세까지 잔여연수 합</label><input type="number" id="ihMinorYears" placeholder="년 (1년당 1천만원)"></div>' +
         '<div class="taxcalc-field"><label>65세 이상 상속인 수</label><input type="number" id="ihElderlyCount" placeholder="명 (1인당 5천만원)"></div>' +
         '<div class="taxcalc-field"><label>장애인 상속인 기대여명 잔여연수 합</label><input type="number" id="ihDisabledYears" placeholder="년 (1년당 1천만원)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>배우자상속공제 (부표3의2 한도액 계산)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihHasSpouse"><label for="ihHasSpouse">배우자가 상속인에 포함</label></div>' +
+        '<div class="taxcalc-field"><label>배우자 실제 상속액</label><input type="number" id="ihSpouseActual" placeholder="원 (5억 미만/미입력이면 최소 5억 자동 적용)"></div>' +
+        '<div class="taxcalc-field"><label>배우자 법정상속분 비율</label><input type="number" step="0.0001" id="ihSpouseRatio" placeholder="0~1 (예: 배우자+자녀2명=1.5/3.5≈0.4286)"></div>' +
+        '<div class="taxcalc-field"><label>상속인 아닌 자 유증재산가액</label><input type="number" id="ihNonHeirBequest" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>10년내 상속인에게 증여한 재산가액</label><input type="number" id="ihGiftToHeirs" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>과세가액에 가산된 사전증여재산 원본액</label><input type="number" id="ihPriorGiftedIncluded" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>배우자 사전증여분 증여세 과세표준</label><input type="number" id="ihSpouseGiftBase" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>그 밖의 상속공제</b></div>' +
+      '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>순금융재산가액(금융재산-금융채무)</label><input type="number" id="ihNetFinancial" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihHasCohabit"><label for="ihHasCohabit">동거주택상속공제 대상(10년 이상 동거·무주택 등)</label></div>' +
         '<div class="taxcalc-field"><label>동거주택가액</label><input type="number" id="ihCohabitValue" placeholder="원 (6억 한도)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ihAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
+        '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="ihDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>상속공제 종합한도(§24) · 세대생략가산액(§27)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>사전증여재산 전체 증여세 과세표준 합계</label><input type="number" id="ihPriorGiftBaseTotal" placeholder="원 (종합한도 계산용, 없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>상속포기로 다음순위가 받은 재산가액</label><input type="number" id="ihDisclaimedRedistributed" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>세대생략 상속인이 받는 재산 비율</label><input type="number" step="0.01" id="ihGenSkipRatio" placeholder="0~1 (없으면 0)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihGenSkipOver2B"><label for="ihGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>세액공제</b></div>' +
+      '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>기납부증여세액(10년내 사전증여분)</label><input type="number" id="ihPriorGiftTax" placeholder="원 (없으면 비움)"></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihReportedInTime" checked><label for="ihReportedInTime">법정신고기한 내 신고(신고세액공제 3%)</label></div>' +
+        '<div class="taxcalc-field"><label>외국납부세액</label><input type="number" id="ihForeignTax" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>전 상속세액 중 재상속분(단기재상속공제)</label><input type="number" id="ihPriorInheritanceTax" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>전 상속개시일로부터 경과연수</label><input type="number" id="ihYearsSincePrior" placeholder="1~10년 (재상속인 경우만)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="ihFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihReportedInTime" checked><label for="ihReportedInTime">(정상신고일 때) 법정신고기한 내 — 신고세액공제 3%</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihFraudulent"><label for="ihFraudulent">부정행위(무신고·과소신고 가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="ihUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="ihUnpaidDays" placeholder="일 (없으면 0)"></div>' +
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-inheritance">세액 계산하기</button>' +
@@ -242,16 +276,23 @@ function renderInheritanceResult(r){
   html += taxCalcResultRow('인적공제', won(r.인적공제));
   html += taxCalcResultRow('기초+인적공제 vs 일괄공제(5억) 중 큰 값', won(r['기초인적공제_또는_일괄공제']));
   html += taxCalcResultRow('배우자공제', won(r.배우자공제));
+  if (r.배우자공제한도액 != null) html += taxCalcResultRow('(배우자공제 한도액)', won(r.배우자공제한도액));
   if (r.금융재산상속공제) html += taxCalcResultRow('금융재산상속공제', won(r.금융재산상속공제));
   if (r.동거주택상속공제) html += taxCalcResultRow('동거주택상속공제', won(r.동거주택상속공제));
   if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', won(r.감정평가수수료공제));
-  html += taxCalcResultRow('상속공제 합계', won(r.상속공제_합계));
+  if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', won(r.재해손실공제));
+  html += taxCalcResultRow('상속공제 합계', won(r.상속공제_합계) + (r.상속공제종합한도_적용여부 ? ' (종합한도 적용됨)' : ''));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
-  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  html += taxCalcResultRow('산출세액', won(r.산출세액) + (r.세대생략가산액 ? ' (세대생략가산액 ' + won(r.세대생략가산액) + ' 포함)' : ''));
   if (r.기납부증여세액공제) html += taxCalcResultRow('기납부증여세액공제', '-' + won(r.기납부증여세액공제));
+  if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
+  if (r.단기재상속세액공제) html += taxCalcResultRow('단기재상속세액공제', '-' + won(r.단기재상속세액공제));
   html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
-  html += '<div class="taxcalc-result-note">배우자가 단독상속인이면 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 마세요. 가업상속공제·재해손실공제는 포함되지 않았습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<div class="taxcalc-result-note">배우자가 단독상속인이면 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 마세요. 가업상속공제·영농상속공제는 포함되지 않았습니다. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -332,7 +373,11 @@ taxCalcView.addEventListener('click', function(e){
       taxableEstateAmount: Number(document.getElementById('ihEstate').value) || 0,
       hasSpouse: document.getElementById('ihHasSpouse').checked,
       spouseActualInheritedAmount: Number(document.getElementById('ihSpouseActual').value) || 0,
-      spouseLegalShareAmount: Number(document.getElementById('ihSpouseLegal').value) || 0,
+      spouseLegalShareRatio: Number(document.getElementById('ihSpouseRatio').value) || 0,
+      nonHeirBequestAmount: Number(document.getElementById('ihNonHeirBequest').value) || 0,
+      giftToHeirsWithin10Years: Number(document.getElementById('ihGiftToHeirs').value) || 0,
+      priorGiftedAmountIncludedInEstate: Number(document.getElementById('ihPriorGiftedIncluded').value) || 0,
+      spouseTaxableBaseOfPriorGift: Number(document.getElementById('ihSpouseGiftBase').value) || 0,
       childCount: Number(document.getElementById('ihChildCount').value) || 0,
       minorHeirRemainingYears: Number(document.getElementById('ihMinorYears').value) || 0,
       elderlyHeirCount: Number(document.getElementById('ihElderlyCount').value) || 0,
@@ -341,7 +386,19 @@ taxCalcView.addEventListener('click', function(e){
       hasCohabitingHouseDeduction: document.getElementById('ihHasCohabit').checked,
       cohabitingHouseValue: Number(document.getElementById('ihCohabitValue').value) || 0,
       appraisalFeeAmount: Number(document.getElementById('ihAppraisalFee').value) || 0,
+      disasterLossAmount: Number(document.getElementById('ihDisasterLoss').value) || 0,
+      priorGiftTaxableBaseForOverallLimit: Number(document.getElementById('ihPriorGiftBaseTotal').value) || 0,
+      disclaimedShareRedistributedAmount: Number(document.getElementById('ihDisclaimedRedistributed').value) || 0,
+      generationSkipHeirRatio: Number(document.getElementById('ihGenSkipRatio').value) || 0,
+      generationSkipOver2Billion: document.getElementById('ihGenSkipOver2B').checked,
       priorGiftTaxPaid: Number(document.getElementById('ihPriorGiftTax').value) || 0,
+      foreignTaxPaidAmount: Number(document.getElementById('ihForeignTax').value) || 0,
+      priorInheritanceTaxPortion: Number(document.getElementById('ihPriorInheritanceTax').value) || 0,
+      yearsSincePriorInheritance: Number(document.getElementById('ihYearsSincePrior').value) || 0,
+      filingStatus: document.getElementById('ihFilingStatus').value,
+      isFraudulent: document.getElementById('ihFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('ihUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('ihUnpaidDays').value) || 0,
       reportedInTime: document.getElementById('ihReportedInTime').checked
     };
     renderInheritanceResult(calculateInheritanceTaxJS(input));
