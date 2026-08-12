@@ -324,6 +324,16 @@ function renderInheritancePane(){
     '<div class="taxcalc-hint">국세청 [별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 상속세과세가액은 총상속재산가액에서 공과금·장례비용·채무를 빼고, 10년 이내 사전증여재산을 가산해 이미 계산된 값을 넣어야 합니다.</div>' +
     '<div class="taxcalc-asset-head"><b>[부표1·2] 상속재산 및 평가명세 — 자산을 추가하면 아래 상속세과세가액에 반영할 수 있습니다(공과금·장례비용·채무 차감 전 재산가액 기준)</b></div>' +
     '<div id="inheritanceValuationList"></div>' +
+    '<div class="taxcalc-asset-head"><b>[부표4] 상속개시전 처분재산 등 산입액(§15) — 상속개시 전 1년 이내 재산종류별 2억원 이상(2년 이내 5억원 이상) 처분·인출·채무부담인데 용도가 불분명하면 자동으로 과세가액에 가산됩니다. 해당 없으면 비워두세요.</b></div>' +
+    '<div class="taxcalc-asset">' +
+      ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'].map(function(label, i){
+        return '<div class="taxcalc-grid" style="margin-bottom:6px;">' +
+          '<div class="taxcalc-field"><label>' + label + ' — 처분(인출)·차입금액</label><input type="number" data-disposal-idx="' + i + '" data-disposal-field="disposalAmount"></div>' +
+          '<div class="taxcalc-field"><label>소명금액</label><input type="number" data-disposal-idx="' + i + '" data-disposal-field="explainedAmount"></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-disposal-idx="' + i + '" data-disposal-field="meetsThreshold"><label>1년내 2억 또는 2년내 5억 이상</label></div>' +
+        '</div>';
+      }).join('') +
+    '</div>' +
     '<div class="taxcalc-asset">' +
       '<div class="taxcalc-asset-head"><b>과세가액 · 인적공제</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -385,6 +395,11 @@ function renderInheritanceResult(r){
   const box = document.getElementById('taxCalcInheritanceResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
+  if (r.상속개시전처분재산_추정합계) {
+    html += taxCalcResultRow('상속세과세가액(입력값)', won(r.상속세과세가액_입력값));
+    html += taxCalcResultRow('상속개시전 처분재산 추정 가산액(§15)', '+' + won(r.상속개시전처분재산_추정합계));
+    html += taxCalcResultRow('적용된 상속세과세가액', won(r.상속세과세가액_적용값));
+  }
   html += taxCalcResultRow('인적공제', won(r.인적공제));
   html += taxCalcResultRow('기초+인적공제 vs 일괄공제(5억) 중 큰 값', won(r['기초인적공제_또는_일괄공제']));
   html += taxCalcResultRow('배우자공제', won(r.배우자공제));
@@ -497,8 +512,16 @@ taxCalcView.addEventListener('click', function(e){
     };
     renderGiftResult(calculateGiftTaxJS(input));
   } else if (action === 'run-inheritance'){
+    const disposalLabels = ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'];
+    const disposalPresumptionItems = disposalLabels.map(function(label, i){
+      const disposalEl = document.querySelector('[data-disposal-idx="' + i + '"][data-disposal-field="disposalAmount"]');
+      const explainedEl = document.querySelector('[data-disposal-idx="' + i + '"][data-disposal-field="explainedAmount"]');
+      const thresholdEl = document.querySelector('[data-disposal-idx="' + i + '"][data-disposal-field="meetsThreshold"]');
+      return { category: label, disposalAmount: Number(disposalEl.value) || 0, explainedAmount: Number(explainedEl.value) || 0, meetsThreshold: thresholdEl.checked };
+    }).filter(function(item){ return item.disposalAmount > 0; });
     const input = {
       taxableEstateAmount: Number(document.getElementById('ihEstate').value) || 0,
+      disposalPresumptionItems: disposalPresumptionItems,
       hasSpouse: document.getElementById('ihHasSpouse').checked,
       spouseActualInheritedAmount: Number(document.getElementById('ihSpouseActual').value) || 0,
       spouseLegalShareRatio: Number(document.getElementById('ihSpouseRatio').value) || 0,

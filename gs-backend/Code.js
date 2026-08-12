@@ -339,7 +339,21 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
+        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다. 상속개시전 처분재산 추정액(disposalPresumptionItems)은 여기 포함하지 말 것 — 자동으로 더해진다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
+        disposalPresumptionItems: {
+          type: 'array',
+          description: '상속개시전 처분재산 등 산입액(§15, [별지 제9호서식] 부표4) — 상속개시 전 1년 이내 재산종류별 2억원 이상(2년 이내 5억원 이상) 처분·인출하거나 채무를 부담했는데 용도가 불분명하면 추정상속재산으로 자동 가산된다. 해당사항 없으면 생략.',
+          items: {
+            type: 'object',
+            properties: {
+              category: { type: 'string', description: '재산종류 (예: "현금·예금·유가증권", "부동산", "기타재산", "부담채무I", "부담채무II")' },
+              disposalAmount: { type: 'number', description: '처분(인출)금액 또는 차입금액 합계(원)' },
+              explainedAmount: { type: 'number', description: '용도가 객관적으로 소명된 금액 합계(원)' },
+              meetsThreshold: { type: 'boolean', description: '1년 이내 2억원 이상 또는 2년 이내 5억원 이상 기준을 충족하는지 — 충족하지 않으면 이 규정 자체가 적용되지 않는다' }
+            },
+            required: ['disposalAmount', 'meetsThreshold']
+          }
+        },
         hasSpouse: { type: 'boolean', description: '배우자가 상속인에 포함되는지' },
         spouseActualInheritedAmount: { type: 'number', description: '배우자가 실제 상속받은 금액(원). 생략하거나 5억 미만이면 자동으로 최소 5억이 공제된다.' },
         spouseLegalShareRatio: { type: 'number', description: '배우자의 법정상속분 비율(0~1, 예: 배우자+자녀2명이면 1.5/3.5≈0.4286). 이 값과 taxableEstateAmount 등으로 배우자공제 한도액을 정밀 계산한다. 생략하면 30억 한도만 적용된다.' },
@@ -2191,6 +2205,18 @@ function shortTermReinheritanceCredit_(priorInheritanceTaxPortion, yearsSincePri
   return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES_[y - 1]);
 }
 
+// 상속개시전 처분재산 등 산입액 (상증세법 §15, [별지 제9호서식] 부표4) — 재산종류별로 상속개시 전
+// 1년 이내 2억원 이상(2년 이내 5억원 이상) 처분·인출하거나 채무를 부담했는데 그 용도가 객관적으로
+// 명백하지 않으면, (미소명금액 - MIN(처분·차입금액×20%, 2억원))을 상속받은 것으로 추정해 과세가액에 가산한다.
+// meetsThreshold(위 금액기준 충족 여부)가 아니면 이 규정 자체가 적용되지 않아 0을 반환한다.
+function presumedInheritedFromDisposal_(disposalAmount, explainedAmount, meetsThreshold) {
+  if (!meetsThreshold) return 0;
+  const disposal = Number(disposalAmount) || 0;
+  const unexplained = Math.max(0, disposal - (Number(explainedAmount) || 0));
+  const deduction = Math.min(disposal * 0.2, 200000000);
+  return Math.max(0, unexplained - deduction);
+}
+
 // 상속공제 — 기초공제(2억)+인적공제 합계와 일괄공제(5억) 중 큰 금액 선택 (상증세법 §21)
 // 주의: 배우자 단독상속인 경우 일괄공제를 선택할 수 없고 기초공제+인적공제만 가능(법 §21③) — 이 함수는 그 예외를 판별하지 않으므로 해당 사안이면 결과를 그대로 쓰지 말 것.
 function basicOrLumpSumInheritanceDeduction_(personalDeductionSum) {
@@ -2476,7 +2502,19 @@ function toolCalculateGiftTax(p) {
 function toolCalculateInheritanceTax(p) {
   p = p || {};
   const taxableEstateAmount = Number(p.taxableEstateAmount);
-  if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액(taxableEstateAmount — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산을 가산해 이미 반영한 금액)이 필요합니다.' };
+  if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액(taxableEstateAmount — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산을 가산해 이미 반영한 금액. 상속개시전 처분재산 추정액은 포함하지 말 것 — disposalPresumptionItems로 넣으면 자동으로 더해진다)이 필요합니다.' };
+
+  // 상속개시전 처분재산 등 산입액(§15) — 재산종류별(현금·예금·유가증권/부동산/기타재산, 부담채무)로 각각 계산해 합산한다.
+  const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
+  const disposalPresumptionDetail = disposalItems.map(function (item) {
+    return {
+      구분: item.category || '', 처분·차입금액: Number(item.disposalAmount) || 0, 소명금액: Number(item.explainedAmount) || 0,
+      금액기준충족: !!item.meetsThreshold,
+      추정상속재산가액: presumedInheritedFromDisposal_(item.disposalAmount, item.explainedAmount, item.meetsThreshold)
+    };
+  });
+  const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);
+  const effectiveEstateAmount = taxableEstateAmount + disposalPresumptionTotal;
 
   const hasSpouse = !!p.hasSpouse;
   const childCount = Number(p.childCount) || 0;
@@ -2490,7 +2528,7 @@ function toolCalculateInheritanceTax(p) {
   const basicOrLumpSum = basicOrLumpSumInheritanceDeduction_(personalDeduction);
 
   // 배우자상속공제 한도액 ([별지 제9호서식] 부표3의2): {(상속재산의 가액-유증재산가액+10년내 상속인증여재산)×배우자법정상속분비율} - 배우자의 사전증여 과세표준
-  const estateValueForSpouseLimit = taxableEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
+  const estateValueForSpouseLimit = effectiveEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
   const spouseLimit = spouseInheritanceLimit_(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
   const spouseDeduction = hasSpouse ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, spouseLimit) : 0;
 
@@ -2511,14 +2549,14 @@ function toolCalculateInheritanceTax(p) {
   // 상속공제 종합한도액 (상증세법 §24) — 공제 총액은 무제한이 아니라
   // "상속세과세가액 - 상속인 아닌 자 유증재산가액 - 상속인의 사전증여재산 과세표준상당액 - 상속포기로 다음 순위가 받은 재산가액" 한도 내에서만 인정된다.
   // 해당 입력을 생략하면(모두 0) 사실상 과세가액 전체가 한도가 되어 예전처럼 제한 없이 동작한다.
-  const overallDeductionLimit = Math.max(0, taxableEstateAmount
+  const overallDeductionLimit = Math.max(0, effectiveEstateAmount
     - (Number(p.nonHeirBequestAmount) || 0)
     - (Number(p.priorGiftTaxableBaseForOverallLimit) || 0)
     - (Number(p.disclaimedShareRedistributedAmount) || 0));
   const overallLimitApplied = totalDeduction > overallDeductionLimit;
   if (overallLimitApplied) totalDeduction = overallDeductionLimit;
 
-  const taxBase = Math.max(0, taxableEstateAmount - totalDeduction);
+  const taxBase = Math.max(0, effectiveEstateAmount - totalDeduction);
   let calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
   // 세대생략가산액 (상증세법 §27) — 상속인이 아닌 직계비속(예: 손자녀)이 상속·유증받는 경우,
@@ -2546,7 +2584,10 @@ function toolCalculateInheritanceTax(p) {
   const finalTax = taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty;
 
   return {
-    입력값: { 상속세과세가액: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount, 신고상태: filingStatus },
+    입력값: { 상속세과세가액_입력값: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount, 신고상태: filingStatus },
+    상속개시전처분재산_추정내역: disposalPresumptionDetail,
+    상속개시전처분재산_추정합계: disposalPresumptionTotal,
+    상속세과세가액_적용값: effectiveEstateAmount,
     인적공제: personalDeduction,
     '기초공제+인적공제_또는_일괄공제5억_중_큰값': basicOrLumpSum,
     배우자공제: spouseDeduction,

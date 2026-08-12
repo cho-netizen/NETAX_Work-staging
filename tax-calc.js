@@ -70,6 +70,15 @@
     return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES[y - 1]);
   }
 
+  // 상속개시전 처분재산 등 산입액 (상증세법 §15, [별지 제9호서식] 부표4) — gs-backend와 동일 로직.
+  function presumedInheritedFromDisposal(disposalAmount, explainedAmount, meetsThreshold) {
+    if (!meetsThreshold) return 0;
+    const disposal = Number(disposalAmount) || 0;
+    const unexplained = Math.max(0, disposal - (Number(explainedAmount) || 0));
+    const deduction = Math.min(disposal * 0.2, 200000000);
+    return Math.max(0, unexplained - deduction);
+  }
+
   // 금융재산 상속공제 (상증세법 §22) — 순금융재산 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)
   function financialAssetInheritanceDeduction(netFinancialAssets) {
     const net = Number(netFinancialAssets) || 0;
@@ -489,6 +498,17 @@
     const taxableEstateAmount = Number(p.taxableEstateAmount);
     if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액이 필요합니다.' };
 
+    const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
+    const disposalPresumptionDetail = disposalItems.map(function (item) {
+      return {
+        구분: item.category || '', '처분·차입금액': Number(item.disposalAmount) || 0, 소명금액: Number(item.explainedAmount) || 0,
+        금액기준충족: !!item.meetsThreshold,
+        추정상속재산가액: presumedInheritedFromDisposal(item.disposalAmount, item.explainedAmount, item.meetsThreshold)
+      };
+    });
+    const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);
+    const effectiveEstateAmount = taxableEstateAmount + disposalPresumptionTotal;
+
     const childCount = Number(p.childCount) || 0;
     const minorHeirRemainingYears = Number(p.minorHeirRemainingYears) || 0;
     const elderlyHeirCount = Number(p.elderlyHeirCount) || 0;
@@ -499,7 +519,7 @@
     const personalDeduction = childCount * 50000000 + minorHeirRemainingYears * 10000000 + elderlyHeirCount * 50000000 + disabledHeirRemainingYears * 10000000;
     const basicOrLumpSum = basicOrLumpSumDeduction(personalDeduction);
 
-    const estateValueForSpouseLimit = taxableEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
+    const estateValueForSpouseLimit = effectiveEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
     const spouseLimit = spouseInheritanceLimit(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
     const spouseDeduction = p.hasSpouse ? spouseInheritanceDeduction(p.spouseActualInheritedAmount, spouseLimit) : 0;
 
@@ -510,14 +530,14 @@
 
     let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction;
 
-    const overallDeductionLimit = Math.max(0, taxableEstateAmount
+    const overallDeductionLimit = Math.max(0, effectiveEstateAmount
       - (Number(p.nonHeirBequestAmount) || 0)
       - (Number(p.priorGiftTaxableBaseForOverallLimit) || 0)
       - (Number(p.disclaimedShareRedistributedAmount) || 0));
     const overallLimitApplied = totalDeduction > overallDeductionLimit;
     if (overallLimitApplied) totalDeduction = overallDeductionLimit;
 
-    const taxBase = Math.max(0, taxableEstateAmount - totalDeduction);
+    const taxBase = Math.max(0, effectiveEstateAmount - totalDeduction);
     let calculatedTax = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
     const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
@@ -539,7 +559,9 @@
     const penalties = giftFilingPenalties(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
     return {
-      상속세과세가액: taxableEstateAmount, 인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
+      상속세과세가액_입력값: taxableEstateAmount, 상속개시전처분재산_추정내역: disposalPresumptionDetail,
+      상속개시전처분재산_추정합계: disposalPresumptionTotal, 상속세과세가액_적용값: effectiveEstateAmount,
+      인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
       감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
