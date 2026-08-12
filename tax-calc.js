@@ -854,6 +854,69 @@
     };
   };
 
+  // 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — Code.js toolCalculateInstallmentPaymentSchedule와 동일 로직.
+  window.calculateInstallmentPaymentScheduleJS = function (p) {
+    p = p || {};
+    const taxType = p.taxType;
+    if (['inheritance', 'gift'].indexOf(taxType) === -1) {
+      return { error: '세목을 상속세 또는 증여세 중에서 선택하세요.' };
+    }
+    const totalTaxAmount = Number(p.totalTaxAmount);
+    if (!totalTaxAmount || totalTaxAmount <= 0) return { error: '총 납부세액이 필요합니다.' };
+    if (totalTaxAmount <= 20000000) {
+      return { error: '상속세·증여세 납부세액이 2천만원 이하이면 연부연납을 신청할 수 없습니다(상증세법 §71①).' };
+    }
+    const installmentPeriodYears = Number(p.installmentPeriodYears);
+    if (!installmentPeriodYears || installmentPeriodYears <= 0) return { error: '연부연납기간(년)이 필요합니다.' };
+    const annualInterestRatePercent = Number(p.annualInterestRatePercent);
+    if (!(annualInterestRatePercent >= 0)) return { error: '연부연납 가산금 연이자율(%)이 필요합니다 — 신고 시점 기준 이자율을 직접 확인해서 넣어야 합니다.' };
+    const initialPaymentAmount = Math.min(Number(p.initialPaymentAmount) || 0, totalTaxAmount);
+
+    const installmentTaxAmount = totalTaxAmount - initialPaymentAmount;
+    const count = installmentPeriodYears + 1;
+    const basePrincipal = Math.floor(installmentTaxAmount / count);
+
+    let remaining = installmentTaxAmount;
+    const schedule = [];
+    for (let i = 1; i <= count; i++) {
+      const principal = (i === count) ? remaining : basePrincipal;
+      const interest = Math.round(remaining * annualInterestRatePercent / 100);
+      schedule.push({ 회차: i, 원금: principal, 가산금: interest, 납부예정세액: principal + interest });
+      remaining -= principal;
+    }
+    const totalInterest = schedule.reduce(function (s, r) { return s + r.가산금; }, 0);
+    const belowMinimumWarning = basePrincipal > 0 && basePrincipal < 10000000;
+
+    return {
+      세목: taxType === 'inheritance' ? '상속세' : '증여세', 총납부세액: totalTaxAmount, 최초납부세액: initialPaymentAmount,
+      연부연납대상금액: installmentTaxAmount,
+      회차별_납부예정세액: schedule,
+      가산금_합계: totalInterest,
+      총납부액_최초포함: initialPaymentAmount + installmentTaxAmount + totalInterest,
+      각회분_1천만원미만_경고: belowMinimumWarning
+    };
+  };
+
+  // 사후관리 위반 시 추징세액에 붙는 이자상당액 계산 — Code.js toolCalculateClawbackInterest와 동일 로직.
+  window.calculateClawbackInterestJS = function (p) {
+    p = p || {};
+    const taxAmount = Number(p.clawedBackTaxAmount);
+    if (!taxAmount || taxAmount <= 0) return { error: '사후관리 위반으로 결정된 추징세액이 필요합니다.' };
+    const daysBefore20220214 = Math.max(0, Number(p.daysBefore20220214) || 0);
+    const daysOnOrAfter20220214 = Math.max(0, Number(p.daysOnOrAfter20220214) || Number(p.days) || 0);
+
+    const interestBefore = Math.round(taxAmount * daysBefore20220214 * 25 / 100000);
+    const interestAfter = Math.round(taxAmount * daysOnOrAfter20220214 * 22 / 100000);
+    const totalInterest = interestBefore + interestAfter;
+
+    return {
+      추징세액: taxAmount, '2022.2.14.이전_일수': daysBefore20220214, '2022.2.14.이후_일수': daysOnOrAfter20220214,
+      '2022.2.14.이전_이자상당액': interestBefore, '2022.2.14.이후_이자상당액': interestAfter,
+      이자상당액_합계: totalInterest,
+      납부할세액: taxAmount + totalInterest
+    };
+  };
+
   // ============================================================
   // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
   // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.

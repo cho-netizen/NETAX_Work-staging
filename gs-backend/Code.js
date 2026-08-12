@@ -523,6 +523,35 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_installment_payment_schedule',
+    description: '상속세·증여세 연부연납(다년 분할납부) 회차별 납부예정세액을 계산한다([별지 제11호서식]). 연부연납대상금액을 (연부연납기간+1)회로 균등분할하고, 각 회분마다 그 시점의 잔여 미납액에 연이자율을 적용한 가산금을 더한다. 연이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않으니 신고 시점 기준 이자율을 반드시 확인해서 넣어야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속세, gift=증여세.' },
+        totalTaxAmount: { type: 'number', description: '연부연납 전 총 납부세액(원). 2천만원 이하면 연부연납 자체가 불가능하다.' },
+        initialPaymentAmount: { type: 'number', description: '신고·납부기한까지 먼저 납부하는 금액(원, 최초납부세액). 생략하면 0(전액을 연부연납대상금액으로 처리).' },
+        installmentPeriodYears: { type: 'integer', description: '연부연납기간(년). 한도: 상속세 일반재산 10년/가업상속재산 20년(또는 10년거치+10년), 증여세 일반재산 5년/조특법§30의6 특례재산 15년(한도 준수 여부는 검증하지 않음).' },
+        annualInterestRatePercent: { type: 'number', description: '연부연납 가산금 연이자율(%, 예: 3.5). 국세기본법 시행령§43의3②에 따른 현재 이자율을 반드시 확인해서 넣어야 한다.' }
+      },
+      required: ['taxType', 'totalTaxAmount', 'installmentPeriodYears', 'annualInterestRatePercent']
+    }
+  },
+  {
+    name: 'calculate_clawback_interest',
+    description: '증여세·상속세 각종 특례(영농자녀 증여농지 감면 §71, 창업자금 증여세 과세특례 §30의5, 가업승계 주식등 증여세 과세특례 §30의6 등)의 사후관리 요건을 위반해 추징되는 경우, 추징세액에 붙는 이자상당액을 계산한다([별지 제52호의2서식]/[별지 제11호의7서식]/[별지 제11호의10서식] 등 공통 계산식). 이자상당액 = 추징세액 × 일수 × 이자율(1일 10만분의22, 2022.2.14. 이전 기간은 10만분의25).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clawedBackTaxAmount: { type: 'number', description: '사후관리 위반으로 결정된 추징세액(원) — 당초 감면·특례로 줄어들었던 세액. 세액 자체의 산정은 이 도구가 하지 않으므로 별도로 계산해서 입력한다.' },
+        daysBefore20220214: { type: 'integer', description: '이자 계산기간 중 2022.2.14. 이전에 해당하는 일수(이자율 10만분의25). 해당사항 없으면 생략(0).' },
+        daysOnOrAfter20220214: { type: 'integer', description: '이자 계산기간 중 2022.2.14. 이후에 해당하는 일수(이자율 10만분의22). 전체 기간이 이 날짜 이후라면 이 값 하나만 넣어도 된다(days로도 받는다).' },
+        days: { type: 'integer', description: 'daysOnOrAfter20220214의 별칭 — 전체 기간이 2022.2.14. 이후라서 굳이 나눌 필요가 없을 때 이 값 하나만 넣으면 된다.' }
+      },
+      required: ['clawedBackTaxAmount']
+    }
+  },
+  {
     name: 'calculate_unlisted_stock_value',
     description: '비상장주식을 상증세법 §63·시행령 §54 보충적평가방법(순손익가치·순자산가치 가중평균)으로 평가한다. 증여재산가액·상속재산가액에 비상장주식이 포함될 때 그 평가액을 구하는 용도다.',
     input_schema: {
@@ -3102,6 +3131,79 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
   };
 }
 
+// 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — 원금은 연부연납대상금액을 (기간+1)회로 균등분할,
+// 각 회분의 가산금은 그 시점 잔여 미납액에 연이자율을 적용해 계산한다(잔액 감소식, declining balance).
+// 정확한 가산금 이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않고 반드시 입력받는다.
+function toolCalculateInstallmentPaymentSchedule(p) {
+  p = p || {};
+  const taxType = p.taxType;
+  if (['inheritance', 'gift'].indexOf(taxType) === -1) {
+    return { error: 'taxType은 "inheritance"(상속세) 또는 "gift"(증여세) 중 하나여야 합니다.' };
+  }
+  const totalTaxAmount = Number(p.totalTaxAmount);
+  if (!totalTaxAmount || totalTaxAmount <= 0) return { error: '총 납부세액(totalTaxAmount)이 필요합니다.' };
+  if (totalTaxAmount <= 20000000) {
+    return { error: '상속세·증여세 납부세액이 2천만원 이하이면 연부연납을 신청할 수 없습니다(상증세법 §71①).' };
+  }
+  const installmentPeriodYears = Number(p.installmentPeriodYears);
+  if (!installmentPeriodYears || installmentPeriodYears <= 0) return { error: '연부연납기간(installmentPeriodYears, 년)이 필요합니다.' };
+  const annualInterestRatePercent = Number(p.annualInterestRatePercent);
+  if (!(annualInterestRatePercent >= 0)) return { error: '연부연납 가산금 연이자율(annualInterestRatePercent, %)이 필요합니다 — 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 신고 시점 기준 이자율을 직접 확인해서 넣어야 한다.' };
+  const initialPaymentAmount = Math.min(Number(p.initialPaymentAmount) || 0, totalTaxAmount);
+
+  const installmentTaxAmount = totalTaxAmount - initialPaymentAmount; // 연부연납대상금액
+  const count = installmentPeriodYears + 1;
+  const basePrincipal = Math.floor(installmentTaxAmount / count);
+
+  let remaining = installmentTaxAmount;
+  const schedule = [];
+  for (let i = 1; i <= count; i++) {
+    const principal = (i === count) ? remaining : basePrincipal;
+    const interest = Math.round(remaining * annualInterestRatePercent / 100);
+    schedule.push({ 회차: i, 원금: principal, 가산금: interest, 납부예정세액: principal + interest });
+    remaining -= principal;
+  }
+  const totalInterest = schedule.reduce(function (s, r) { return s + r.가산금; }, 0);
+  const belowMinimumWarning = basePrincipal > 0 && basePrincipal < 10000000;
+
+  return {
+    입력값: { 세목: taxType === 'inheritance' ? '상속세' : '증여세', 총납부세액: totalTaxAmount, 최초납부세액: initialPaymentAmount, 연부연납기간: installmentPeriodYears, 연이자율퍼센트: annualInterestRatePercent },
+    연부연납대상금액: installmentTaxAmount,
+    회차별_납부예정세액: schedule,
+    가산금_합계: totalInterest,
+    총납부액_최초포함: initialPaymentAmount + installmentTaxAmount + totalInterest,
+    각회분_1천만원미만_경고: belowMinimumWarning,
+    안내: '각 회분의 납부예정 세액(가산금 제외한 원금)은 1천만원을 초과해야 합니다 — 미만이면 연부연납기간을 줄이세요. ' +
+      (belowMinimumWarning ? '⚠ 현재 입력으로는 회당 원금이 1천만원 미만입니다. ' : '') +
+      '연부연납기간 한도: 상속세는 일반재산 10년, 가업상속공제(§18의2)를 받았거나 요건충족 중소·중견기업 상속재산은 20년(또는 허가 후 10년 거치+10년), 증여세는 일반재산 5년, 조특법§30의6 특례를 적용받은 증여재산은 15년입니다(한도 준수 여부는 이 도구가 검증하지 않음). ' +
+      '가산금 계산은 잔여 미납액에 연이자율을 적용하는 근사 모델입니다 — 정확한 이자율(국세기본법 시행령§43의3②, 수시 변경)과 실제 납부예정일을 반영해 홈택스 모의계산으로 재검증하세요. 가업상속재산에 해당하는 부분과 그 외 부분의 연부연납기간이 다른 경우(예: 상속세) 각 부분을 별도로 이 도구를 호출해 계산한 뒤 합산하세요.'
+  };
+}
+
+// 사후관리 위반 시 추징세액에 붙는 이자상당액 계산 (영농자녀 증여세 감면 위반 [별지 제52호의2서식], 창업자금 증여세 과세특례 위반
+// [별지 제11호의7서식], 가업승계 주식등 증여세 과세특례 추징 [별지 제11호의10서식] 등에 공통되는 계산식).
+// 이자상당액 = 추징세액 × 일수 × 이자율(1일 10만분의22, 단 2022.2.14. 이전 기간은 10만분의25).
+function toolCalculateClawbackInterest(p) {
+  p = p || {};
+  const taxAmount = Number(p.clawedBackTaxAmount);
+  if (!taxAmount || taxAmount <= 0) return { error: '사후관리 위반으로 결정된 추징세액(clawedBackTaxAmount)이 필요합니다.' };
+  const daysBefore20220214 = Math.max(0, Number(p.daysBefore20220214) || 0);
+  const daysOnOrAfter20220214 = Math.max(0, Number(p.daysOnOrAfter20220214) || Number(p.days) || 0);
+
+  const interestBefore = Math.round(taxAmount * daysBefore20220214 * 25 / 100000);
+  const interestAfter = Math.round(taxAmount * daysOnOrAfter20220214 * 22 / 100000);
+  const totalInterest = interestBefore + interestAfter;
+  const totalPayable = taxAmount + totalInterest;
+
+  return {
+    입력값: { 추징세액: taxAmount, '2022.2.14.이전_일수': daysBefore20220214, '2022.2.14.이후_일수': daysOnOrAfter20220214 },
+    '2022.2.14.이전_이자상당액': interestBefore, '2022.2.14.이후_이자상당액': interestAfter,
+    이자상당액_합계: totalInterest,
+    납부할세액: totalPayable,
+    안내: '일수는 당초 감면·특례 적용받은 증여세(또는 상속세)의 과세표준 신고기한 다음 날부터 추징사유가 발생한 날까지의 기간입니다. 이자율은 2022.2.14. 전후로 10만분의25→10만분의22로 바뀌었으므로, 그 날짜를 걸치는 기간이면 daysBefore20220214·daysOnOrAfter20220214를 나눠서 넣으세요(하나만 있으면 나머지는 0으로 생략 가능). 이 이자율도 향후 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -3944,6 +4046,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_special_rate_gift_tax' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
+        b.name === 'calculate_installment_payment_schedule' ||
+        b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -4068,6 +4172,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_business_opportunity_gift_tax') {
         const resultObj = toolCalculateBusinessOpportunityGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_installment_payment_schedule') {
+        const resultObj = toolCalculateInstallmentPaymentSchedule(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_clawback_interest') {
+        const resultObj = toolCalculateClawbackInterest(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

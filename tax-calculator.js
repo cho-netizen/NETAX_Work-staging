@@ -405,6 +405,28 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-business-opportunity-gift">일감떼어주기 증여세 계산하기</button>' +
       '<div id="taxCalcBusinessOpportunityGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제11호서식] 연부연납(다년 분할납부) 계산 — 신고 후 매년 나눠 낼 회차별 세액을 계산합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="ipGiftTaxType"><option value="gift" selected>증여세</option><option value="inheritance">상속세</option></select></div>' +
+        '<div class="taxcalc-field"><label>총 납부세액</label><input type="number" id="ipGiftTotal" placeholder="원 (2천만원 초과해야 신청 가능)"></div>' +
+        '<div class="taxcalc-field"><label>최초 납부세액(신고기한까지 먼저 납부)</label><input type="number" id="ipGiftInitial" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>연부연납기간</label><input type="number" id="ipGiftYears" placeholder="년 (증여세 일반5/특례15, 상속세 일반10/가업20)"></div>' +
+        '<div class="taxcalc-field"><label>연부연납 가산금 연이자율</label><input type="number" step="0.01" id="ipGiftRate" placeholder="% (신고 시점 기준 확인 필요)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-installment-gift">연부연납 계산하기</button>' +
+      '<div id="taxCalcInstallmentGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>사후관리 위반 추징 이자상당액 계산 — 영농자녀 증여농지 감면·창업자금 특례·가업승계 주식등 특례 등 사후관리 위반으로 추징될 때 공통으로 씁니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>추징세액(당초 감면·특례로 줄었던 세액)</label><input type="number" id="ckAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>2022.2.14. 이전 일수</label><input type="number" id="ckDaysBefore" placeholder="일 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>2022.2.14. 이후 일수</label><input type="number" id="ckDaysAfter" placeholder="일 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-clawback-interest">이자상당액 계산하기</button>' +
+      '<div id="taxCalcClawbackResult"></div>' +
     '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
@@ -515,6 +537,39 @@ function renderBusinessOpportunityGiftResult(r){
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderInstallmentResult(r, boxId){
+  const box = document.getElementById(boxId);
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('연부연납대상금액', won(r.연부연납대상금액));
+  html += '<div class="taxcalc-result-note" style="margin:6px 0;"><table style="width:100%; border-collapse:collapse; font-size:0.9em;">' +
+    '<tr><th style="text-align:left;">회차</th><th style="text-align:right;">원금</th><th style="text-align:right;">가산금</th><th style="text-align:right;">납부예정세액</th></tr>' +
+    r.회차별_납부예정세액.map(function(row){
+      return '<tr><td>' + row.회차 + '</td><td style="text-align:right;">' + won(row.원금) + '</td><td style="text-align:right;">' + won(row.가산금) + '</td><td style="text-align:right;">' + won(row.납부예정세액) + '</td></tr>';
+    }).join('') +
+  '</table></div>';
+  html += taxCalcResultRow('가산금 합계', won(r.가산금_합계));
+  html += taxCalcResultRow('총 납부액(최초납부 포함)', won(r.총납부액_최초포함), { total: true });
+  if (r.각회분_1천만원미만_경고) html += '<div class="taxcalc-result-note">⚠ 회당 원금이 1천만원 미만입니다 — 연부연납기간을 줄이거나 신청 요건을 재확인하세요.</div>';
+  html += '<div class="taxcalc-result-note">가산금은 잔여 미납액에 연이자율을 적용하는 근사 모델입니다. 연부연납기간 한도(증여세 일반5년/특례15년, 상속세 일반10년/가업상속20년)와 정확한 이자율은 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderClawbackResult(r){
+  const box = document.getElementById('taxCalcClawbackResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('추징세액', won(r.추징세액));
+  if (r['2022.2.14.이전_이자상당액']) html += taxCalcResultRow('2022.2.14. 이전 이자상당액', won(r['2022.2.14.이전_이자상당액']));
+  if (r['2022.2.14.이후_이자상당액']) html += taxCalcResultRow('2022.2.14. 이후 이자상당액', won(r['2022.2.14.이후_이자상당액']));
+  html += taxCalcResultRow('이자상당액 합계', won(r.이자상당액_합계));
+  html += taxCalcResultRow('납부할 세액', won(r.납부할세액), { total: true });
+  html += '<div class="taxcalc-result-note">일수는 당초 감면·특례 적용받은 신고기한 다음 날부터 추징사유가 발생한 날까지의 기간입니다. 이자율은 향후 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -633,7 +688,19 @@ function renderInheritancePane(){
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-inheritance">세액 계산하기</button>' +
-    '<div id="taxCalcInheritanceResult"></div>';
+    '<div id="taxCalcInheritanceResult"></div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제11호서식] 연부연납(다년 분할납부) 계산 — 신고 후 매년 나눠 낼 회차별 세액을 계산합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="ipIhTaxType"><option value="inheritance" selected>상속세</option><option value="gift">증여세</option></select></div>' +
+        '<div class="taxcalc-field"><label>총 납부세액</label><input type="number" id="ipIhTotal" placeholder="원 (2천만원 초과해야 신청 가능)"></div>' +
+        '<div class="taxcalc-field"><label>최초 납부세액(신고기한까지 먼저 납부)</label><input type="number" id="ipIhInitial" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>연부연납기간</label><input type="number" id="ipIhYears" placeholder="년 (상속세 일반10/가업20, 증여세 일반5/특례15)"></div>' +
+        '<div class="taxcalc-field"><label>연부연납 가산금 연이자율</label><input type="number" step="0.01" id="ipIhRate" placeholder="% (신고 시점 기준 확인 필요)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-installment-inheritance">연부연납 계산하기</button>' +
+      '<div id="taxCalcInstallmentInheritanceResult"></div>' +
+    '</div>';
   renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
 }
 
@@ -842,6 +909,31 @@ taxCalcView.addEventListener('click', function(e){
       reportedInTime: document.getElementById('jtReportedInTime').checked
     };
     renderBusinessOpportunityGiftResult(calculateBusinessOpportunityGiftTaxJS(input));
+  } else if (action === 'run-installment-gift'){
+    const input = {
+      taxType: document.getElementById('ipGiftTaxType').value,
+      totalTaxAmount: Number(document.getElementById('ipGiftTotal').value) || 0,
+      initialPaymentAmount: Number(document.getElementById('ipGiftInitial').value) || 0,
+      installmentPeriodYears: Number(document.getElementById('ipGiftYears').value) || 0,
+      annualInterestRatePercent: Number(document.getElementById('ipGiftRate').value)
+    };
+    renderInstallmentResult(calculateInstallmentPaymentScheduleJS(input), 'taxCalcInstallmentGiftResult');
+  } else if (action === 'run-clawback-interest'){
+    const input = {
+      clawedBackTaxAmount: Number(document.getElementById('ckAmount').value) || 0,
+      daysBefore20220214: Number(document.getElementById('ckDaysBefore').value) || 0,
+      daysOnOrAfter20220214: Number(document.getElementById('ckDaysAfter').value) || 0
+    };
+    renderClawbackResult(calculateClawbackInterestJS(input));
+  } else if (action === 'run-installment-inheritance'){
+    const input = {
+      taxType: document.getElementById('ipIhTaxType').value,
+      totalTaxAmount: Number(document.getElementById('ipIhTotal').value) || 0,
+      initialPaymentAmount: Number(document.getElementById('ipIhInitial').value) || 0,
+      installmentPeriodYears: Number(document.getElementById('ipIhYears').value) || 0,
+      annualInterestRatePercent: Number(document.getElementById('ipIhRate').value)
+    };
+    renderInstallmentResult(calculateInstallmentPaymentScheduleJS(input), 'taxCalcInstallmentInheritanceResult');
   } else if (action === 'run-inheritance'){
     const disposalLabels = ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'];
     const disposalPresumptionItems = disposalLabels.map(function(label, i){
