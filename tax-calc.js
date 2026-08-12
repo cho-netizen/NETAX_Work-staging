@@ -459,7 +459,11 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
-    const netGiftAmount = giftAmount - debtAssumedAmount;
+    const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
+    const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
+    const publicTrustAmount = Number(p.publicTrustAmount) || 0;
+    const disabledTrustAmount = Number(p.disabledTrustAmount) || 0;
+    const netGiftAmount = Math.max(0, giftAmount - debtAssumedAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount - disabledTrustAmount);
 
     const relationDeduction = giftPropertyDeduction(p.relation, !!p.isMinor);
     const marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
@@ -474,21 +478,38 @@
     const premiumRate = isGenerationSkip ? (p.generationSkipOver2Billion ? 0.4 : 0.3) : 0;
     const premiumAmount = Math.round(taxBeforePremium * premiumRate);
     const taxAfterPremium = taxBeforePremium + premiumAmount;
-    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax);
+
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
+    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax - foreignTaxPaidAmount - otherCreditsAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
     const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
     const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
+    const interestAmount = Number(p.interestAmount) || 0;
+    const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
+    const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
+    const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
+
+    const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+      - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount);
+
     return {
-      증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 순수증여재산가액: netGiftAmount,
+      증여재산가액: giftAmount, 인수채무액: debtAssumedAmount,
+      비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount, 장애인신탁재산가액: disabledTrustAmount,
+      순수증여재산가액: netGiftAmount,
       증여재산공제: relationDeduction, 혼인출산증여재산공제: marriageBirthDeduction,
       합산배제증여재산공제: aggregationExclusionDeduction, 감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
       과세표준: taxBase, 산출세액_할증전: taxBeforePremium, 세대생략할증액: premiumAmount,
       산출세액_할증후: taxAfterPremium, 기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
-      신고세액공제: reportCredit, 무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
+      외국납부세액공제: foreignTaxPaidAmount, 그밖의공제감면세액: otherCreditsAmount,
+      신고세액공제: reportCredit, 이자상당액: interestAmount, 공익법인등관련가산세: publicInterestOrgPenalty,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
-      납부세액: taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+      박물관자료등징수유예세액: museumDeferredTaxAmount, 가업승계납부유예세액: businessSuccessionDeferredTaxAmount,
+      납부세액: finalTax
     };
   };
 
@@ -527,8 +548,11 @@
     const cohabitingHouseDeduction = p.hasCohabitingHouseDeduction ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
     const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+    const businessInheritanceDeduction = Number(p.businessInheritanceDeduction) || 0;
+    const farmingInheritanceDeduction = Number(p.farmingInheritanceDeduction) || 0;
 
-    let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction;
+    let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
+      + businessInheritanceDeduction + farmingInheritanceDeduction;
 
     const overallDeductionLimit = Math.max(0, effectiveEstateAmount
       - (Number(p.nonHeirBequestAmount) || 0)
@@ -546,17 +570,32 @@
     calculatedTax += generationSkipPremium;
 
     const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
-    const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+    const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+    const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
     const shortTermCredit = Math.min(
       shortTermReinheritanceCredit(p.priorInheritanceTaxPortion, p.yearsSincePriorInheritance),
-      Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit)
+      Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit)
     );
+    const otherCreditsAmount = Math.min(Number(p.otherCreditsAmount) || 0,
+      Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit));
 
-    const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit - shortTermCredit);
+    const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit - otherCreditsAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
     const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
     const penalties = giftFilingPenalties(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+
+    const interestAmount = Number(p.interestAmount) || 0;
+    const forProfitBequestAmount = Number(p.forProfitBequestAmount) || 0;
+    const forProfitExemptedTaxAmount = Number(p.forProfitExemptedTaxAmount) || 0;
+    const forProfitHeirShareRatio = Math.max(0, Math.min(1, Number(p.forProfitHeirShareRatio) || 0));
+    const forProfitPayableByHeirs = Math.max(0, Math.round((forProfitExemptedTaxAmount - forProfitBequestAmount * 0.10) * forProfitHeirShareRatio));
+    const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
+    const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
+
+    const finalTax = Math.max(0, taxAfterReportCredit + interestAmount + forProfitPayableByHeirs
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+      - culturalPropertyDeferredTaxAmount - businessInheritanceDeferredTaxAmount);
 
     return {
       상속세과세가액_입력값: taxableEstateAmount, 상속개시전처분재산_추정내역: disposalPresumptionDetail,
@@ -565,12 +604,15 @@
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
       감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
+      가업상속공제: businessInheritanceDeduction, 영농상속공제: farmingInheritanceDeduction,
       상속공제_합계: totalDeduction, 상속공제종합한도_적용여부: overallLimitApplied, 과세표준: taxBase,
       산출세액: calculatedTax, 세대생략가산액: generationSkipPremium,
-      기납부증여세액공제: priorGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit,
-      신고세액공제: reportCredit, 무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
+      기납부증여세액공제: priorGiftTaxCredit, 특례증여세액공제: specialGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit, 그밖의공제: otherCreditsAmount,
+      신고세액공제: reportCredit, 이자상당액: interestAmount, 영리법인면제분납부세액: forProfitPayableByHeirs,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
-      납부세액: taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+      문화재등징수유예세액: culturalPropertyDeferredTaxAmount, 가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
+      납부세액: finalTax
     };
   };
 

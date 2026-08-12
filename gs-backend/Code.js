@@ -305,7 +305,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_gift_tax',
-    description: '증여세를 정확히 계산한다([별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 기준 — 증여재산공제, 혼인·출산증여재산공제, 합산배제증여재산공제, 감정평가수수료공제, 재해손실공제, 누진세율, 세대생략할증, 부담부증여 채무차감, 신고세액공제, 무신고·과소신고·납부지연가산세 포함). 창업자금·가업승계 증여세 과세특례는 포함되지 않는다.',
+    description: '증여세를 정확히 계산한다([별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 기준 — 비과세·과세가액불산입, 증여재산공제, 혼인·출산증여재산공제, 합산배제증여재산공제, 감정평가수수료공제, 재해손실공제, 누진세율, 세대생략할증, 부담부증여 채무차감, 외국납부세액공제, 신고세액공제, 이자상당액, 각종 징수유예·납부유예, 무신고·과소신고·납부지연가산세, 수증자·증여자 인적사항 포함). 창업자금·가업승계 증여세 과세특례의 세액 자체는 포함되지 않는다(해당 유예세액만 입력받는다).',
     input_schema: {
       type: 'object',
       properties: {
@@ -323,6 +323,23 @@ const DRIVE_TOOLS = [
         isExcludedFromAggregation: { type: 'boolean', description: '상증세법 §55①3호에 따른 합산배제증여재산인지 — 해당하면 3천만원 고정 공제(합산배제증여재산공제)가 적용된다.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가수수료(원). 500만원 한도로 공제.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, 재해손실공제 §54). 없으면 생략.' },
+        nonTaxableAmount: { type: 'number', description: '비과세되는 증여재산가액(원, §46 — 사회통념상 인정되는 축의금·학자금 등). 없으면 생략.' },
+        publicInterestOrgAmount: { type: 'number', description: '공익법인등에 출연한 재산가액(원, §48 — 과세가액 불산입). 없으면 생략.' },
+        publicTrustAmount: { type: 'number', description: '공익신탁을 통해 공익법인등에 출연한 재산가액(원, §52 — 과세가액 불산입). 없으면 생략.' },
+        disabledTrustAmount: { type: 'number', description: '장애인이 증여받아 신탁한 재산가액(원, §52의2 — 과세가액 불산입, 5억원 한도). 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59). 없으면 생략.' },
+        otherCreditsAmount: { type: 'number', description: '그 밖에 별도로 계산한 공제·감면세액(원). 이 도구는 세액 자체를 계산하지 않으므로 미리 계산해서 넣어야 한다. 없으면 생략.' },
+        interestAmount: { type: 'number', description: '각종 사후관리 위반에 따른 추징 시 붙는 이자상당액(원). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
+        publicInterestOrgPenalty: { type: 'number', description: '공익법인등 관련 가산세(§78, 출연재산 미사용 등). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
+        museumDeferredTaxAmount: { type: 'number', description: '박물관자료·미술관자료 징수유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        businessSuccessionDeferredTaxAmount: { type: 'number', description: '가업승계 증여세 납부유예세액(조특법§30의6, 원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        doneeName: { type: 'string', description: '수증자 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
+        doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
+        doneeAddress: { type: 'string', description: '수증자 주소. 위와 같은 방식으로 확인.' },
+        donorName: { type: 'string', description: '증여자 성명. 위와 같은 방식으로 확인.' },
+        donorRegNo: { type: 'string', description: '증여자 주민등록번호. 위와 같은 방식으로 확인.' },
+        donorAddress: { type: 'string', description: '증여자 주소. 위와 같은 방식으로 확인.' },
+        giftDate: { type: 'string', description: '증여일자(YYYY-MM-DD). 위와 같은 방식으로 확인.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부담부증여 은폐 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
@@ -335,7 +352,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_inheritance_tax',
-    description: '상속세를 정확히 계산한다([별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 기준 — 기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제 한도액 정밀공식, 금융재산·동거주택·감정평가수수료·재해손실공제, 상속공제 종합한도, 세대생략가산액, 기납부증여세액·외국납부세액·단기재상속세액공제, 누진세율, 신고세액공제, 무신고·과소신고·납부지연가산세 포함). 가업상속공제·영농상속공제는 포함되지 않는다.',
+    description: '상속세를 정확히 계산한다([별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 기준 — 기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제 한도액 정밀공식, 금융재산·동거주택·감정평가수수료·재해손실·가업상속·영농상속공제, 상속공제 종합한도, 세대생략가산액, 기납부증여세액·특례증여세액·외국납부세액·단기재상속세액공제, 누진세율, 신고세액공제, 이자상당액, 영리법인 상속세 면제, 각종 징수유예·납부유예, 무신고·과소신고·납부지연가산세, 신고인·피상속인 인적사항 포함). 가업상속공제·영농상속공제·특례증여세액공제·영리법인 면제세액의 자격요건 판정과 세액 산출 자체는 이 도구가 하지 않으므로 별도로 계산한 값을 입력받는다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -370,14 +387,30 @@ const DRIVE_TOOLS = [
         cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
         appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원). 500만원 한도로 공제.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 상속재산가액(원, 재해손실공제 §23). 없으면 생략.' },
+        businessInheritanceDeduction: { type: 'number', description: '가업상속공제(§18의2, 최대 600억원). 자격요건 판정과 한도 산출은 이 도구가 하지 않으므로 별도로 계산한 공제액을 그대로 입력한다. 없으면 생략.' },
+        farmingInheritanceDeduction: { type: 'number', description: '영농상속공제(§18의3, 최대 30억원). 자격요건 판정과 한도 산출은 이 도구가 하지 않으므로 별도로 계산한 공제액을 그대로 입력한다. 없으면 생략.' },
         priorGiftTaxableBaseForOverallLimit: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 상속재산에 가산된 사전증여재산 전체의 증여세 과세표준 합계(원, 배우자분만이 아니라 전체). 생략하면 종합한도가 사실상 적용되지 않는다.' },
         disclaimedShareRedistributedAmount: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 선순위 상속인의 상속포기로 다음 순위 상속인이 받은 재산가액(원). 없으면 생략.' },
         priorGiftTaxPaid: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산에 대해 당시 이미 납부한 증여세액(원). 상속세 산출세액에서 공제된다.' },
+        specialGiftTaxCredit: { type: 'number', description: '조특법§30의5·6(창업자금·가업승계 증여세 과세특례)에 따라 이미 납부한 증여세액공제(원). 세액 자체는 이 도구가 계산하지 않으므로 별도로 계산해서 입력한다. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 상속세액(원, 외국납부세액공제 §29).' },
         priorInheritanceTaxPortion: { type: 'number', description: '단기재상속세액공제(§30)용 — 10년 이내 재상속인 경우, 전의 상속세액 중 이번에 재상속되는 재산에 해당하는 부분(원).' },
         yearsSincePriorInheritance: { type: 'integer', description: '단기재상속세액공제용 — 전의 상속개시일로부터 이번 상속개시일까지 경과연수(1~10, 1년마다 공제율 10%p씩 감소).' },
+        otherCreditsAmount: { type: 'number', description: '그 밖에 별도로 계산한 세액공제(원). 이 도구는 세액 자체를 계산하지 않으므로 미리 계산해서 넣어야 한다. 없으면 생략.' },
         generationSkipHeirRatio: { type: 'number', description: '세대생략가산액(§27)용 — 상속인이 아닌 직계비속(예: 손자녀, 대습상속 제외)이 받는 상속재산이 전체에서 차지하는 비율(0~1). 없으면 세대생략가산액은 0.' },
         generationSkipOver2Billion: { type: 'boolean', description: '세대생략 상속이면서 미성년자가 20억원을 초과해서 상속받는 경우(할증률 40%). 아니면 30%.' },
+        interestAmount: { type: 'number', description: '각종 사후관리 위반에 따른 추징 시 붙는 이자상당액(원). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
+        forProfitBequestAmount: { type: 'number', description: '영리법인 상속세 면제(§3의2)용 — 영리법인이 유증받은 재산가액(원). 영리법인 자체의 상속세는 면제되지만, 상속인·직계비속이 그 법인의 최대주주 등인 경우 지분 상당액만큼 상속인에게 별도 납부의무가 생긴다. 없으면 생략.' },
+        forProfitExemptedTaxAmount: { type: 'number', description: '영리법인이 유증받아 면제된 상속세액(원). (면제세액 - 유증재산가액×10%)×상속인 지분비율만큼을 상속인이 납부해야 한다. 없으면 생략.' },
+        forProfitHeirShareRatio: { type: 'number', description: '영리법인 최대주주 등에 해당하는 상속인·직계비속의 지분 상당 비율(0~1). 없으면 생략(0).' },
+        culturalPropertyDeferredTaxAmount: { type: 'number', description: '문화재자료·박물관자료등 징수유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        businessInheritanceDeferredTaxAmount: { type: 'number', description: '가업상속 상속세 납부유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        reporterName: { type: 'string', description: '신고인(상속인) 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
+        reporterRegNo: { type: 'string', description: '신고인 주민등록번호. 위와 같은 방식으로 확인.' },
+        reporterRelationToDeceased: { type: 'string', description: '신고인의 피상속인과의 관계(예: 자녀, 배우자). 위와 같은 방식으로 확인.' },
+        deceasedName: { type: 'string', description: '피상속인 성명. 위와 같은 방식으로 확인.' },
+        deceasedRegNo: { type: 'string', description: '피상속인 주민등록번호. 위와 같은 방식으로 확인.' },
+        dateOfDeath: { type: 'string', description: '상속개시일(사망일, YYYY-MM-DD). 위와 같은 방식으로 확인.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 재산은닉 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
@@ -2449,7 +2482,12 @@ function toolCalculateGiftTax(p) {
   // 대신 그 채무액에 상당하는 부분은 증여자에게 "양도"로 과세되므로, 필요하면 calculate_transfer_tax를
   // (양도가액 = 증여재산가액×채무액/증여재산가액, 취득가액도 같은 비율로 안분해서) 별도로 호출해야 한다.
   const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
-  const netGiftAmount = giftAmount - debtAssumedAmount;
+  // 비과세재산가액(§46)·공익법인등출연재산가액(§48)·공익신탁재산가액(§52)·장애인신탁재산가액(§52의2) — 모두 과세가액 불산입.
+  const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
+  const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
+  const publicTrustAmount = Number(p.publicTrustAmount) || 0;
+  const disabledTrustAmount = Number(p.disabledTrustAmount) || 0;
+  const netGiftAmount = Math.max(0, giftAmount - debtAssumedAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount - disabledTrustAmount);
 
   const relationDeduction = giftPropertyDeduction_(relation, !!p.isMinor);
   const marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
@@ -2466,15 +2504,36 @@ function toolCalculateGiftTax(p) {
   const premiumAmount = Math.round(taxBeforePremium * premiumRate);
   const taxAfterPremium = taxBeforePremium + premiumAmount;
 
-  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax);
+  // 외국납부세액공제(§59), 그 밖의 공제·감면세액(조특법상 각종 감면 등 — 세액 산출 자체는 별도로 계산해서 이 값에 넣어야 한다).
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
+  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax - foreignTaxPaidAmount - otherCreditsAmount);
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
   const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
   const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
-  const finalTax = taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty;
+
+  // 이자상당액(각종 사후관리 위반 시 추징세액에 붙는 이자), 공익법인등관련가산세(§78) — 해당 사안일 때만 별도로 계산해서 더한다.
+  const interestAmount = Number(p.interestAmount) || 0;
+  const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
+  // 박물관자료등징수유예세액, 가업승계납부유예세액(조특법§30의6) — 유예된 세액은 이번 신고 시 납부할 세액에서 뺀다.
+  const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
+  const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
+
+  const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+    - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount);
 
   return {
-    입력값: { 증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip, 신고상태: filingStatus },
+    입력값: {
+      증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip, 신고상태: filingStatus,
+      수증자: { 성명: p.doneeName || '', 주민등록번호: p.doneeRegNo || '', 주소: p.doneeAddress || '' },
+      증여자: { 성명: p.donorName || '', 주민등록번호: p.donorRegNo || '', 주소: p.donorAddress || '', 증여일자: p.giftDate || '' }
+    },
+    비과세재산가액: nonTaxableAmount,
+    공익법인출연재산가액: publicInterestOrgAmount,
+    공익신탁재산가액: publicTrustAmount,
+    장애인신탁재산가액: disabledTrustAmount,
     순수증여재산가액: netGiftAmount,
     증여재산공제: relationDeduction,
     혼인출산증여재산공제: marriageBirthDeduction,
@@ -2486,16 +2545,23 @@ function toolCalculateGiftTax(p) {
     세대생략할증액: premiumAmount,
     산출세액_할증후: taxAfterPremium,
     기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
+    외국납부세액공제: foreignTaxPaidAmount,
+    그밖의공제감면세액: otherCreditsAmount,
     신고세액공제: reportCredit,
+    이자상당액: interestAmount,
+    공익법인등관련가산세: publicInterestOrgPenalty,
     무신고가산세: penalties.unreportedPenalty,
     과소신고가산세: penalties.underreportedPenalty,
     납부지연가산세: penalties.latePenalty,
+    박물관자료등징수유예세액: museumDeferredTaxAmount,
+    가업승계납부유예세액: businessSuccessionDeferredTaxAmount,
     납부세액: finalTax,
     안내: (debtAssumedAmount > 0
       ? '부담부증여로 전제해 인수채무액 ' + debtAssumedAmount + '원을 증여재산가액에서 제외했습니다 — 이 채무액에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세되니 calculate_transfer_tax로 반드시 함께 계산하세요. '
       : '') +
       '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산은 합산과세 대상입니다. priorGiftAmount·priorPaidTax를 정확히 넣지 않으면 결과가 부정확할 수 있으니 사안별로 재확인하세요. ' +
-      '혼인·출산 증여재산공제는 혼인일 전후 2년(출산은 출생·입양일부터 2년) 이내 증여인지 사안별로 확인하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다.'
+      '혼인·출산 증여재산공제는 혼인일 전후 2년(출산은 출생·입양일부터 2년) 이내 증여인지 사안별로 확인하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요. ' +
+      '가업승계납부유예세액·박물관자료등징수유예세액·이자상당액·공익법인등관련가산세는 해당 사안일 때만 직접 계산해서 넣어야 하는 값이며, 창업자금·가업승계 증여세 과세특례(조특법 §30의5·6)의 세액 자체는 이 도구가 계산하지 않는다 — 해당 특례를 적용받는 경우 그 부분은 별도로 계산해서 이 결과와 합산하세요.'
   };
 }
 
@@ -2544,7 +2610,12 @@ function toolCalculateInheritanceTax(p) {
   // 재해손실공제 (상증세법 §23) — 신고기한 이내 재난으로 멸실·훼손된 상속재산가액
   const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
 
-  let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction;
+  // 가업상속공제(§18의2, 최대 600억)·영농상속공제(§18의3, 최대 30억) — 자격요건 판정과 한도 산정은 이 도구가 하지 않으므로, 별도로 계산한 공제액을 그대로 입력해야 한다.
+  const businessInheritanceDeduction = Number(p.businessInheritanceDeduction) || 0;
+  const farmingInheritanceDeduction = Number(p.farmingInheritanceDeduction) || 0;
+
+  let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
+    + businessInheritanceDeduction + farmingInheritanceDeduction;
 
   // 상속공제 종합한도액 (상증세법 §24) — 공제 총액은 무제한이 아니라
   // "상속세과세가액 - 상속인 아닌 자 유증재산가액 - 상속인의 사전증여재산 과세표준상당액 - 상속포기로 다음 순위가 받은 재산가액" 한도 내에서만 인정된다.
@@ -2568,23 +2639,45 @@ function toolCalculateInheritanceTax(p) {
 
   // 10년 이내 사전증여재산을 taxableEstateAmount에 가산했다면, 그 증여 당시 이미 낸 증여세는 상속세 산출세액에서 공제한다 (상증세법 §28).
   const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
+  // 특례증여세액공제(조특법§30의5·6, 창업자금·가업승계 증여세 과세특례분) — 세액 자체는 이 도구가 계산하지 않으므로 별도로 계산한 값을 입력한다.
+  const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
   // 외국납부세액공제 (상증세법 §29) — 국외재산에 대해 외국에서 이미 낸 상속세.
-  const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+  const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
   // 단기재상속세액공제 (상증세법 §30) — 10년 이내 재상속 시 전의 상속세 중 이번 상속재산 해당분에 경과연수별 공제율 적용.
   const shortTermReinheritanceCredit = Math.min(
     shortTermReinheritanceCredit_(p.priorInheritanceTaxPortion, p.yearsSincePriorInheritance),
-    Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit)
+    Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit)
   );
+  const otherCreditsAmount = Math.min(Number(p.otherCreditsAmount) || 0,
+    Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermReinheritanceCredit));
 
-  const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - foreignTaxCredit - shortTermReinheritanceCredit);
+  const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermReinheritanceCredit - otherCreditsAmount);
   const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
   const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
   const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
-  const finalTax = taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty;
+
+  // 이자상당액(사후관리 위반 추징 시), 영리법인 상속세 면제(상증세법 §3의2) — 영리법인이 유증받으면 그 법인의 상속세는 면제되지만,
+  // 상속인 및 직계비속이 최대주주 등인 경우 그 지분 상당액만큼은 상속인이 납부할 의무를 진다: (면제세액 - 유증재산가액×10%) × 지분비율.
+  const interestAmount = Number(p.interestAmount) || 0;
+  const forProfitBequestAmount = Number(p.forProfitBequestAmount) || 0;
+  const forProfitExemptedTaxAmount = Number(p.forProfitExemptedTaxAmount) || 0;
+  const forProfitHeirShareRatio = Math.max(0, Math.min(1, Number(p.forProfitHeirShareRatio) || 0));
+  const forProfitPayableByHeirs = Math.max(0, Math.round((forProfitExemptedTaxAmount - forProfitBequestAmount * 0.10) * forProfitHeirShareRatio));
+  // 문화재등징수유예세액, 가업상속납부유예세액 — 유예된 세액은 이번 신고 시 납부할 세액에서 뺀다.
+  const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
+  const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
+
+  const finalTax = Math.max(0, taxAfterReportCredit + interestAmount + forProfitPayableByHeirs
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
+    - culturalPropertyDeferredTaxAmount - businessInheritanceDeferredTaxAmount);
 
   return {
-    입력값: { 상속세과세가액_입력값: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount, 신고상태: filingStatus },
+    입력값: {
+      상속세과세가액_입력값: taxableEstateAmount, 배우자유무: hasSpouse, 자녀수: childCount, 연로자65세이상: elderlyHeirCount, 신고상태: filingStatus,
+      신고인: { 성명: p.reporterName || '', 주민등록번호: p.reporterRegNo || '', 피상속인과의관계: p.reporterRelationToDeceased || '' },
+      피상속인: { 성명: p.deceasedName || '', 주민등록번호: p.deceasedRegNo || '', 상속개시일: p.dateOfDeath || '' }
+    },
     상속개시전처분재산_추정내역: disposalPresumptionDetail,
     상속개시전처분재산_추정합계: disposalPresumptionTotal,
     상속세과세가액_적용값: effectiveEstateAmount,
@@ -2596,20 +2689,28 @@ function toolCalculateInheritanceTax(p) {
     동거주택상속공제: cohabitingHouseDeduction,
     감정평가수수료공제: appraisalFeeDeduction,
     재해손실공제: disasterLossDeduction,
+    가업상속공제: businessInheritanceDeduction,
+    영농상속공제: farmingInheritanceDeduction,
     상속공제_합계: totalDeduction,
     상속공제종합한도_적용여부: overallLimitApplied,
     과세표준: taxBase,
     산출세액: calculatedTax,
     세대생략가산액: generationSkipPremium,
     기납부증여세액공제: priorGiftTaxCredit,
+    특례증여세액공제: specialGiftTaxCredit,
     외국납부세액공제: foreignTaxCredit,
     단기재상속세액공제: shortTermReinheritanceCredit,
+    그밖의공제: otherCreditsAmount,
     신고세액공제: reportCredit,
+    이자상당액: interestAmount,
+    영리법인면제분납부세액: forProfitPayableByHeirs,
     무신고가산세: penalties.unreportedPenalty,
     과소신고가산세: penalties.underreportedPenalty,
     납부지연가산세: penalties.latePenalty,
+    문화재등징수유예세액: culturalPropertyDeferredTaxAmount,
+    가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
     납부세액: finalTax,
-    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제는 요건 판정이 사안마다 크게 달라 포함하지 않았습니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
+    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제·특례증여세액공제는 자격요건 판정과 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
   };
 }
 

@@ -277,6 +277,32 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="giftAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
         '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="giftDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
       '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>비과세·과세가액 불산입(§46·§48·§52·§52의2)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>비과세재산가액</label><input type="number" id="giftNonTaxable" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>공익법인등출연재산가액</label><input type="number" id="giftPublicOrg" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>공익신탁재산가액</label><input type="number" id="giftPublicTrust" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>장애인신탁재산가액</label><input type="number" id="giftDisabledTrust" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>기타 세액공제·가산세·유예 (해당 사안일 때만 별도로 계산하여 입력)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>외국납부세액공제</label><input type="number" id="giftForeignTax" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>그 밖의 공제·감면세액</label><input type="number" id="giftOtherCredits" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>이자상당액</label><input type="number" id="giftInterest" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>공익법인등 관련 가산세</label><input type="number" id="giftPublicOrgPenalty" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>박물관자료등 징수유예세액</label><input type="number" id="giftMuseumDeferred" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>가업승계 납부유예세액</label><input type="number" id="giftBizSuccessionDeferred" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>수증자·증여자 정보 — 사건 폴더에 가족관계증명서·신분증 사본이 있으면 AI에게 찾아 채우도록 요청하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>수증자 성명</label><input type="text" id="giftDoneeName"></div>' +
+        '<div class="taxcalc-field"><label>수증자 주민등록번호</label><input type="text" id="giftDoneeRegNo" placeholder="000000-0000000"></div>' +
+        '<div class="taxcalc-field"><label>수증자 주소</label><input type="text" id="giftDoneeAddress"></div>' +
+        '<div class="taxcalc-field"><label>증여자 성명</label><input type="text" id="giftDonorName"></div>' +
+        '<div class="taxcalc-field"><label>증여자 주민등록번호</label><input type="text" id="giftDonorRegNo" placeholder="000000-0000000"></div>' +
+        '<div class="taxcalc-field"><label>증여자 주소</label><input type="text" id="giftDonorAddress"></div>' +
+        '<div class="taxcalc-field"><label>증여일자</label><input type="date" id="giftDate"></div>' +
+      '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>신고 상태</label><select id="giftFilingStatus">' +
@@ -297,7 +323,11 @@ function renderGiftResult(r){
   const box = document.getElementById('taxCalcGiftResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
-  if (r.인수채무액) html += taxCalcResultRow('순수증여재산가액(채무 제외)', won(r.순수증여재산가액));
+  if (r.비과세재산가액) html += taxCalcResultRow('비과세재산가액', '-' + won(r.비과세재산가액));
+  if (r.공익법인출연재산가액) html += taxCalcResultRow('공익법인등출연재산가액', '-' + won(r.공익법인출연재산가액));
+  if (r.공익신탁재산가액) html += taxCalcResultRow('공익신탁재산가액', '-' + won(r.공익신탁재산가액));
+  if (r.장애인신탁재산가액) html += taxCalcResultRow('장애인신탁재산가액', '-' + won(r.장애인신탁재산가액));
+  if (r.인수채무액 || r.비과세재산가액 || r.공익법인출연재산가액 || r.공익신탁재산가액 || r.장애인신탁재산가액) html += taxCalcResultRow('순수증여재산가액', won(r.순수증여재산가액));
   html += taxCalcResultRow('증여재산공제', won(r.증여재산공제));
   if (r.혼인출산증여재산공제) html += taxCalcResultRow('혼인·출산 증여재산공제', won(r.혼인출산증여재산공제));
   if (r.합산배제증여재산공제) html += taxCalcResultRow('합산배제증여재산공제', won(r.합산배제증여재산공제));
@@ -307,10 +337,16 @@ function renderGiftResult(r){
   html += taxCalcResultRow('산출세액(할증 전)', won(r.산출세액_할증전));
   if (r.세대생략할증액) html += taxCalcResultRow('세대생략할증액', won(r.세대생략할증액));
   if (r.기납부세액공제) html += taxCalcResultRow('기납부세액공제', '-' + won(r.기납부세액공제));
+  if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
+  if (r.그밖의공제감면세액) html += taxCalcResultRow('그 밖의 공제·감면세액', '-' + won(r.그밖의공제감면세액));
   html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.이자상당액) html += taxCalcResultRow('이자상당액', '+' + won(r.이자상당액));
+  if (r.공익법인등관련가산세) html += taxCalcResultRow('공익법인등 관련 가산세', '+' + won(r.공익법인등관련가산세));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  if (r.박물관자료등징수유예세액) html += taxCalcResultRow('박물관자료등 징수유예세액', '-' + won(r.박물관자료등징수유예세액));
+  if (r.가업승계납부유예세액) html += taxCalcResultRow('가업승계 납부유예세액', '-' + won(r.가업승계납부유예세액));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.인수채무액) html += '<div class="taxcalc-result-note">인수채무액 ' + won(r.인수채무액) + '에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세됩니다 — 양도소득세 탭에서 함께 계산하세요.</div>';
   html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
@@ -360,6 +396,8 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>동거주택가액</label><input type="number" id="ihCohabitValue" placeholder="원 (6억 한도)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ihAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
         '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="ihDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
+        '<div class="taxcalc-field"><label>가업상속공제(§18의2)</label><input type="number" id="ihBusinessDeduction" placeholder="원 (자격요건·한도는 별도 계산 후 입력)"></div>' +
+        '<div class="taxcalc-field"><label>영농상속공제(§18의3)</label><input type="number" id="ihFarmingDeduction" placeholder="원 (자격요건·한도는 별도 계산 후 입력)"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>상속공제 종합한도(§24) · 세대생략가산액(§27)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -374,6 +412,26 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>외국납부세액</label><input type="number" id="ihForeignTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>전 상속세액 중 재상속분(단기재상속공제)</label><input type="number" id="ihPriorInheritanceTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>전 상속개시일로부터 경과연수</label><input type="number" id="ihYearsSincePrior" placeholder="1~10년 (재상속인 경우만)"></div>' +
+        '<div class="taxcalc-field"><label>조특법§30의5·6 특례증여세액공제</label><input type="number" id="ihSpecialGiftCredit" placeholder="원 (별도 계산 후 입력)"></div>' +
+        '<div class="taxcalc-field"><label>그 밖의 공제</label><input type="number" id="ihOtherCredits" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>이자상당액 · 영리법인 상속세 면제(§3의2) · 징수유예</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>이자상당액</label><input type="number" id="ihInterest" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>영리법인 유증재산가액</label><input type="number" id="ihForProfitBequest" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>영리법인 면제세액</label><input type="number" id="ihForProfitExempted" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>상속인 등의 지분 상당 비율</label><input type="number" step="0.01" id="ihForProfitRatio" placeholder="0~1 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>문화재등 징수유예세액</label><input type="number" id="ihCulturalDeferred" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>가업상속 납부유예세액</label><input type="number" id="ihBizInheritDeferred" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고인·피상속인 정보 — 사건 폴더에 가족관계증명서·신분증 사본이 있으면 AI에게 찾아 채우도록 요청하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고인(상속인) 성명</label><input type="text" id="ihReporterName"></div>' +
+        '<div class="taxcalc-field"><label>신고인 주민등록번호</label><input type="text" id="ihReporterRegNo" placeholder="000000-0000000"></div>' +
+        '<div class="taxcalc-field"><label>신고인의 피상속인과의 관계</label><input type="text" id="ihReporterRelation" placeholder="예: 자녀, 배우자"></div>' +
+        '<div class="taxcalc-field"><label>피상속인 성명</label><input type="text" id="ihDeceasedName"></div>' +
+        '<div class="taxcalc-field"><label>피상속인 주민등록번호</label><input type="text" id="ihDeceasedRegNo" placeholder="000000-0000000"></div>' +
+        '<div class="taxcalc-field"><label>상속개시일</label><input type="date" id="ihDeathDate"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -408,18 +466,26 @@ function renderInheritanceResult(r){
   if (r.동거주택상속공제) html += taxCalcResultRow('동거주택상속공제', won(r.동거주택상속공제));
   if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', won(r.감정평가수수료공제));
   if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', won(r.재해손실공제));
+  if (r.가업상속공제) html += taxCalcResultRow('가업상속공제', won(r.가업상속공제));
+  if (r.영농상속공제) html += taxCalcResultRow('영농상속공제', won(r.영농상속공제));
   html += taxCalcResultRow('상속공제 합계', won(r.상속공제_합계) + (r.상속공제종합한도_적용여부 ? ' (종합한도 적용됨)' : ''));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
   html += taxCalcResultRow('산출세액', won(r.산출세액) + (r.세대생략가산액 ? ' (세대생략가산액 ' + won(r.세대생략가산액) + ' 포함)' : ''));
   if (r.기납부증여세액공제) html += taxCalcResultRow('기납부증여세액공제', '-' + won(r.기납부증여세액공제));
+  if (r.특례증여세액공제) html += taxCalcResultRow('특례증여세액공제', '-' + won(r.특례증여세액공제));
   if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
   if (r.단기재상속세액공제) html += taxCalcResultRow('단기재상속세액공제', '-' + won(r.단기재상속세액공제));
+  if (r.그밖의공제) html += taxCalcResultRow('그 밖의 공제', '-' + won(r.그밖의공제));
   html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.이자상당액) html += taxCalcResultRow('이자상당액', '+' + won(r.이자상당액));
+  if (r.영리법인면제분납부세액) html += taxCalcResultRow('영리법인 면제분 상속인 납부세액', '+' + won(r.영리법인면제분납부세액));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  if (r.문화재등징수유예세액) html += taxCalcResultRow('문화재등 징수유예세액', '-' + won(r.문화재등징수유예세액));
+  if (r.가업상속납부유예세액) html += taxCalcResultRow('가업상속 납부유예세액', '-' + won(r.가업상속납부유예세액));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
-  html += '<div class="taxcalc-result-note">배우자가 단독상속인이면 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 마세요. 가업상속공제·영농상속공제는 포함되지 않았습니다. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<div class="taxcalc-result-note">배우자가 단독상속인이면 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 마세요. 가업상속공제·영농상속공제·특례증여세액공제·영리법인 면제세액은 자격요건 판정과 세액 자체를 이 계산기가 산출하지 않으므로 별도로 계산한 값을 직접 입력해야 합니다. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -504,6 +570,23 @@ taxCalcView.addEventListener('click', function(e){
       isExcludedFromAggregation: document.getElementById('giftExcludedAgg').checked,
       appraisalFeeAmount: Number(document.getElementById('giftAppraisalFee').value) || 0,
       disasterLossAmount: Number(document.getElementById('giftDisasterLoss').value) || 0,
+      nonTaxableAmount: Number(document.getElementById('giftNonTaxable').value) || 0,
+      publicInterestOrgAmount: Number(document.getElementById('giftPublicOrg').value) || 0,
+      publicTrustAmount: Number(document.getElementById('giftPublicTrust').value) || 0,
+      disabledTrustAmount: Number(document.getElementById('giftDisabledTrust').value) || 0,
+      foreignTaxPaidAmount: Number(document.getElementById('giftForeignTax').value) || 0,
+      otherCreditsAmount: Number(document.getElementById('giftOtherCredits').value) || 0,
+      interestAmount: Number(document.getElementById('giftInterest').value) || 0,
+      publicInterestOrgPenalty: Number(document.getElementById('giftPublicOrgPenalty').value) || 0,
+      museumDeferredTaxAmount: Number(document.getElementById('giftMuseumDeferred').value) || 0,
+      businessSuccessionDeferredTaxAmount: Number(document.getElementById('giftBizSuccessionDeferred').value) || 0,
+      doneeName: document.getElementById('giftDoneeName').value,
+      doneeRegNo: document.getElementById('giftDoneeRegNo').value,
+      doneeAddress: document.getElementById('giftDoneeAddress').value,
+      donorName: document.getElementById('giftDonorName').value,
+      donorRegNo: document.getElementById('giftDonorRegNo').value,
+      donorAddress: document.getElementById('giftDonorAddress').value,
+      giftDate: document.getElementById('giftDate').value,
       filingStatus: document.getElementById('giftFilingStatus').value,
       isFraudulent: document.getElementById('giftFraudulent').checked,
       underreportedTaxAmount: Number(document.getElementById('giftUnderreportedTax').value) || 0,
@@ -538,6 +621,8 @@ taxCalcView.addEventListener('click', function(e){
       cohabitingHouseValue: Number(document.getElementById('ihCohabitValue').value) || 0,
       appraisalFeeAmount: Number(document.getElementById('ihAppraisalFee').value) || 0,
       disasterLossAmount: Number(document.getElementById('ihDisasterLoss').value) || 0,
+      businessInheritanceDeduction: Number(document.getElementById('ihBusinessDeduction').value) || 0,
+      farmingInheritanceDeduction: Number(document.getElementById('ihFarmingDeduction').value) || 0,
       priorGiftTaxableBaseForOverallLimit: Number(document.getElementById('ihPriorGiftBaseTotal').value) || 0,
       disclaimedShareRedistributedAmount: Number(document.getElementById('ihDisclaimedRedistributed').value) || 0,
       generationSkipHeirRatio: Number(document.getElementById('ihGenSkipRatio').value) || 0,
@@ -546,6 +631,20 @@ taxCalcView.addEventListener('click', function(e){
       foreignTaxPaidAmount: Number(document.getElementById('ihForeignTax').value) || 0,
       priorInheritanceTaxPortion: Number(document.getElementById('ihPriorInheritanceTax').value) || 0,
       yearsSincePriorInheritance: Number(document.getElementById('ihYearsSincePrior').value) || 0,
+      specialGiftTaxCredit: Number(document.getElementById('ihSpecialGiftCredit').value) || 0,
+      otherCreditsAmount: Number(document.getElementById('ihOtherCredits').value) || 0,
+      interestAmount: Number(document.getElementById('ihInterest').value) || 0,
+      forProfitBequestAmount: Number(document.getElementById('ihForProfitBequest').value) || 0,
+      forProfitExemptedTaxAmount: Number(document.getElementById('ihForProfitExempted').value) || 0,
+      forProfitHeirShareRatio: Number(document.getElementById('ihForProfitRatio').value) || 0,
+      culturalPropertyDeferredTaxAmount: Number(document.getElementById('ihCulturalDeferred').value) || 0,
+      businessInheritanceDeferredTaxAmount: Number(document.getElementById('ihBizInheritDeferred').value) || 0,
+      reporterName: document.getElementById('ihReporterName').value,
+      reporterRegNo: document.getElementById('ihReporterRegNo').value,
+      reporterRelationToDeceased: document.getElementById('ihReporterRelation').value,
+      deceasedName: document.getElementById('ihDeceasedName').value,
+      deceasedRegNo: document.getElementById('ihDeceasedRegNo').value,
+      dateOfDeath: document.getElementById('ihDeathDate').value,
       filingStatus: document.getElementById('ihFilingStatus').value,
       isFraudulent: document.getElementById('ihFraudulent').checked,
       underreportedTaxAmount: Number(document.getElementById('ihUnderreportedTax').value) || 0,
