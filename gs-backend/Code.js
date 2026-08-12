@@ -309,7 +309,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        giftAmount: { type: 'number', description: '이번 증여재산가액(원, 채무인수분 포함 총액 — 부담부증여면 debtAssumedAmount로 채무액을 따로 알려줄 것)' },
+        giftAmount: { type: 'number', description: '이번 증여재산가액(원, 채무인수분 포함 총액 — 부담부증여면 debtAssumedAmount로 채무액을 따로 알려줄 것). 이 금액을 정할 때는 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 지금 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 이 중 어느 것도 확인할 수 없는 값(공시지가 자체, 감정평가액 등)은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         relation: { type: 'string', enum: ['배우자', '직계존속', '직계비속', '기타친족', '기타'], description: '증여자와 수증자의 관계 (수증자 기준)' },
         isMinor: { type: 'boolean', description: '수증자가 미성년자인지 (relation이 직계존속일 때 공제액에 영향)' },
         debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원). 증여재산가액에서 제외되어 증여세만 줄어들고, 그만큼은 증여자에게 별도로 양도소득세가 과세되므로 calculate_transfer_tax를 함께 호출해야 한다.' },
@@ -339,7 +339,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다.' },
+        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         hasSpouse: { type: 'boolean', description: '배우자가 상속인에 포함되는지' },
         spouseActualInheritedAmount: { type: 'number', description: '배우자가 실제 상속받은 금액(원). 생략하거나 5억 미만이면 자동으로 최소 5억이 공제된다.' },
         spouseLegalShareRatio: { type: 'number', description: '배우자의 법정상속분 비율(0~1, 예: 배우자+자녀2명이면 1.5/3.5≈0.4286). 이 값과 taxableEstateAmount 등으로 배우자공제 한도액을 정밀 계산한다. 생략하면 30억 한도만 적용된다.' },

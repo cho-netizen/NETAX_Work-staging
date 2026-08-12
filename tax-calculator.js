@@ -36,7 +36,8 @@ const VALUATION_METHOD_LABELS = {
   land: '토지(개별공시지가 × 면적 × 지분)',
   house: '주택(고시된 개별·공동주택가격 × 지분)',
   listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
-  unlistedStock: '비상장주식(순손익·순자산가치 가중평균)'
+  unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
+  rental: '임대 중인 부동산(임대료환산가액)'
 };
 
 function computeValuationAssetValue(a){
@@ -44,6 +45,7 @@ function computeValuationAssetValue(a){
     case 'land': return calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100);
     case 'house': return calculateHouseValueJS(a.housePrice, a.houseShare || 100);
     case 'listedStock': return calculateListedStockValueJS(a.listedPrice, a.listedShares);
+    case 'rental': return calculateRentalConversionValueJS(a.rentalAnnualRent, a.rentalDeposit);
     case 'unlistedStock': {
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
@@ -67,6 +69,10 @@ function valuationAssetMethodFieldsHtml(m, a){
   if (m === 'listedStock') return '' +
     '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
     '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>';
+  if (m === 'rental') return '' +
+    '<div class="taxcalc-field"><label>연간 임대료 합계</label><input type="number" data-field="rentalAnnualRent" value="' + (a.rentalAnnualRent || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>임대보증금</label><input type="number" data-field="rentalDeposit" value="' + (a.rentalDeposit || '') + '"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 이 환산가액과 별도로 계산한 기준시가 중 큰 금액을 실제 평가액으로 쓰세요</label></div>';
   if (m === 'unlistedStock') return '' +
     '<div class="taxcalc-field"><label>발행주식총수</label><input type="number" data-field="uTotalShares" value="' + (a.uTotalShares || '') + '"></div>' +
     '<div class="taxcalc-field"><label>평가대상 주식수</label><input type="number" data-field="uOwnedShares" value="' + (a.uOwnedShares || '') + '"></div>' +

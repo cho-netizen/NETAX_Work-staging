@@ -603,4 +603,10 @@
   window.calculateListedStockValueJS = function (averageClosingPrice, shares) {
     return Math.round((Number(averageClosingPrice) || 0) * (Number(shares) || 0));
   };
+
+  // 임대료 등의 환산가액 (§61⑤, 시행령 §50) — 임대 중인 부동산은 이 환산가액과 기준시가(보충적평가액)
+  // 중 큰 금액을 그 자산의 가액으로 한다. 환산율은 12%(시행규칙 §15).
+  window.calculateRentalConversionValueJS = function (annualRent, deposit) {
+    return Math.round((Number(annualRent) || 0) / 0.12 + (Number(deposit) || 0));
+  };
 })();
