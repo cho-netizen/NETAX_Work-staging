@@ -105,6 +105,10 @@
     // 최소값(a, b) — 두 값 중 작은 값. 동거주택상속공제(6억 한도), 감정평가수수료공제(500만 한도) 등 한도 계산에 사용.
     최소값: function (a, b) {
       return Math.min(Number(a) || 0, Number(b) || 0);
+    },
+    // 최댓값(a, b) — 두 값 중 큰 값. 과세표준·산출세액처럼 음수가 나오면 안 되는 값을 0으로 바닥 처리(=최댓값(값,0))할 때 사용.
+    최댓값: function (a, b) {
+      return Math.max(Number(a) || 0, Number(b) || 0);
     }
   };
 
@@ -118,7 +122,16 @@
       return s.slice(1, -1);
     }
     const n = Number(s.replace(/,/g, ''));
-    return Number.isFinite(n) ? n : s; // 숫자로 안 읽히면 그대로 문자열(관계 키워드 등)로 취급
+    if (Number.isFinite(n)) return n;
+    // 순수 숫자가 아니면 "최댓값([4]-[5],0)"처럼 [n] 참조가 이미 치환된 산술식(+-*/())일 수 있으니
+    // 같은 안전한 문자 화이트리스트로 계산해본다 — 실패하면 관계 키워드 등 문자열로 취급.
+    if (/^[0-9+\-*/().\s]+$/.test(s)) {
+      try {
+        const v = Function('"use strict"; return (' + s + ')')();
+        if (Number.isFinite(v)) return v;
+      } catch (err) { /* fall through to string */ }
+    }
+    return s;
   }
 
   function splitArgs(argsStr) {
