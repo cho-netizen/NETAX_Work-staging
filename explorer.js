@@ -65,6 +65,7 @@
     explorerView.style.display = 'none';
     if (typeof logView !== 'undefined' && logView) logView.style.display = 'none';
     if (typeof calcView !== 'undefined' && calcView) calcView.style.display = 'none';
+    if (typeof taxCalcView !== 'undefined' && taxCalcView) taxCalcView.style.display = 'none';
     if (typeof diagramView !== 'undefined' && diagramView) diagramView.style.display = 'none';
     if (typeof captureView !== 'undefined' && captureView) captureView.style.display = 'none';
     if (typeof trashView !== 'undefined' && trashView) trashView.style.display = 'none';
@@ -1368,13 +1369,21 @@
   const btnCalcTemplate = document.getElementById('btnCalcTemplate');
 
   function renderCalcTemplateMenu(){
-    calcTemplatePopup.innerHTML = '<div class="log-hint" style="padding:0 0 4px; font-size:11px;">기존 행 뒤에 이어서 추가됩니다. 세율·공제는 자동 계산되지만, 관계·보유기간·실제상속액처럼 사안마다 다른 값은 해당 행의 수식을 직접 고쳐 넣어야 합니다. 다주택 중과·각종 감면 등은 포함되지 않으니 별도로 확인하세요.</div>';
+    calcTemplatePopup.innerHTML = '<div class="log-hint" style="padding:0 0 4px; font-size:11px;">세율·공제는 자동 계산되지만, 관계·보유기간·실제상속액처럼 사안마다 다른 값은 해당 행의 수식을 직접 고쳐 넣어야 합니다. 다주택 중과·각종 감면 등은 포함되지 않으니 별도로 확인하세요.</div>';
     CALC_TEMPLATES.forEach(tpl=>{
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tool-menu-item';
       btn.textContent = tpl.name;
       btn.addEventListener('click', ()=>{
+        // 이미 입력된 행이 있는 상태에서 다른 템플릿을 누르면 기존 행 뒤에 무한정 이어붙기만 해서
+        // 헷갈린다는 문제가 있었다 — 내용이 있으면 "지우고 새로 시작할지" 먼저 물어본다.
+        const hasContent = calcRows.some(r => (r.label && r.label.trim()) || (r.formula && r.formula.trim()));
+        if (hasContent){
+          if (confirm('기존 계산기 내용이 있습니다.\n확인 = 지우고 이 템플릿으로 새로 시작\n취소 = 기존 행 뒤에 이어붙이기')){
+            calcRows = [];
+          }
+        }
         const offset = calcRows.length;
         tpl.rows.forEach(r=>{
           // 템플릿 안의 [n] 참조는 "템플릿 자체 기준 n번째 행"이므로, 실제로 뒤에 이어붙일 때는

@@ -804,6 +804,55 @@
   .calc-del{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:16px; font-weight:800; }
   .calc-del:hover{ color:#a83232; }
 
+  /* ===== 정밀 세액계산기 (항목별 입력폼, 수식 문자열 없음) ===== */
+  .taxcalc-tabs{ display:flex; gap:0; border-bottom:1px solid var(--line); padding:0 14px; flex-shrink:0; }
+  .taxcalc-tab{
+    background:none; border:none; border-bottom:2px solid transparent; padding:10px 14px;
+    font-family:inherit; font-size:13px; font-weight:700; color:var(--sub); cursor:pointer;
+  }
+  .taxcalc-tab.active{ color:var(--navy); border-bottom-color:var(--gold); }
+  body.dark-mode .taxcalc-tab.active{ color:var(--gold-light); }
+  .taxcalc-body{ flex:1; overflow-y:auto; padding:14px; }
+  .taxcalc-hint{ font-size:11.5px; color:var(--sub); margin-bottom:12px; line-height:1.5; }
+  .taxcalc-asset{ border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; background:var(--panel); }
+  .taxcalc-asset-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .taxcalc-asset-head b{ font-size:12.5px; color:var(--sub); }
+  .taxcalc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:8px 10px; }
+  .taxcalc-field{ display:flex; flex-direction:column; gap:3px; }
+  .taxcalc-field label{ font-size:11.5px; color:var(--sub); }
+  .taxcalc-field input, .taxcalc-field select{
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-family:inherit;
+    font-size:13px; box-sizing:border-box; background:var(--panel); color:var(--ink);
+  }
+  .taxcalc-field.checkbox{ flex-direction:row; align-items:center; gap:6px; }
+  .taxcalc-field.checkbox label{ font-size:12.5px; color:var(--ink); }
+  .taxcalc-field.checkbox input{ width:15px; height:15px; accent-color:var(--gold); }
+  .taxcalc-del-asset{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:12.5px; }
+  .taxcalc-del-asset:hover{ color:#a83232; }
+  .taxcalc-add-asset{
+    width:100%; padding:10px; border:1px dashed var(--line); border-radius:8px; background:none;
+    color:var(--sub); font-family:inherit; font-size:12.5px; cursor:pointer; margin-bottom:14px;
+  }
+  .taxcalc-add-asset:hover{ border-color:var(--gold); color:var(--navy); }
+  body.dark-mode .taxcalc-add-asset:hover{ color:var(--gold-light); }
+  .taxcalc-run-btn{
+    width:100%; padding:11px; border:none; border-radius:8px; background:var(--navy); color:#fff;
+    font-family:inherit; font-size:13.5px; font-weight:700; cursor:pointer; margin-bottom:14px;
+  }
+  .taxcalc-run-btn:hover{ background:var(--navy-deep); }
+  .taxcalc-result{ border:1px solid var(--line); border-radius:10px; padding:14px; background:#f9fafb; }
+  body.dark-mode .taxcalc-result{ background:#20242f; }
+  .taxcalc-result-row{
+    display:flex; justify-content:space-between; padding:5px 0; font-size:13px;
+    border-bottom:1px solid rgba(0,0,0,0.06);
+  }
+  body.dark-mode .taxcalc-result-row{ border-bottom-color:rgba(255,255,255,0.06); }
+  .taxcalc-result-row.total{ font-weight:800; font-size:15px; color:var(--navy); border-bottom:none; padding-top:10px; }
+  body.dark-mode .taxcalc-result-row.total{ color:var(--gold-light); }
+  .taxcalc-result-row .v{ font-variant-numeric:tabular-nums; }
+  .taxcalc-result-note{ font-size:11.5px; color:var(--sub); margin-top:10px; line-height:1.5; }
+  .taxcalc-error{ color:#a83232; font-size:13px; font-weight:600; padding:10px; }
+
   /* ===== 관계도/구조도 캔버스 ===== */
   .diagram-split{ flex:1; display:flex; min-height:0; }
   .diagram-input{
@@ -982,6 +1031,7 @@
       <button type="button" id="btnOpenDashboard" class="tb-btn" title="모든 폴더의 처리일지·마감일을 한눈에">📊 현황판</button>
       <button type="button" id="btnOpenLog" class="tb-btn" title="이 폴더의 경과지 보기">📝 경과지</button>
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
+      <button type="button" id="btnOpenTaxCalc" class="tb-btn" title="양도소득세·증여세·상속세 정밀 계산 (항목별 입력폼)">📐 세액계산</button>
       <button type="button" id="btnOpenDiagram" class="tb-btn" title="이 폴더의 관계도/구조도 보기">🕸 관계도</button>
       <button id="btnOpenScan" class="tb-btn" title="문서 스캔 · PDF 조립">📷 스캔</button>
     </div>
@@ -989,7 +1039,7 @@
          기록·분석·도구 3그룹으로 따로 나뉘어 있었는데, 어차피 같은 6개 기능이라 하나로 합쳤다.
          grouped·compact 두 단계 모두 이 버튼 하나를 그대로 재사용한다(.work-tools-group 참고). -->
     <div class="topbar-item work-tools-group topbar-equal-btn" id="workToolsWrap">
-      <button type="button" id="btnWorkTools" class="tb-btn" title="현황판 · 경과지 · 계산기 · 관계도 · 스캔 · 엑셀 열기"><span class="tool-menu-icon">🛠</span> <span class="tool-menu-label">도구</span></button>
+      <button type="button" id="btnWorkTools" class="tb-btn" title="현황판 · 경과지 · 계산기 · 세액계산 · 관계도 · 스캔 · 엑셀 열기"><span class="tool-menu-icon">🛠</span> <span class="tool-menu-label">도구</span></button>
       <div id="workToolsPopup" class="nx-popup"></div>
     </div>
     <!-- 메모(빠른메모+사건개시 통합, ✍ 버튼으로 필기상담 전환) — 통화하면서 바로 눌러야 하는
@@ -1489,6 +1539,26 @@ graph TD
         </div>
       </div>
 
+      <!-- 정밀 세액계산기 — 계산기 워크시트(수식 문자열)와 달리, 항목별 입력폼과 tax-calc.js의
+           구조화된 계산함수(calculateTransferTaxMultiJS 등)를 그대로 호출해서 결과를 만든다. -->
+      <div id="taxCalcView" style="display:none; flex:1; flex-direction:column; min-height:0;">
+        <div class="editor-toolbar">
+          <button class="back-btn" id="btnTaxCalcBack" title="닫기">✕</button>
+          <span class="editor-filename">정밀 세액계산기</span>
+          <div class="spacer"></div>
+        </div>
+        <div class="taxcalc-tabs">
+          <button type="button" class="taxcalc-tab active" data-tab="transfer">양도소득세</button>
+          <button type="button" class="taxcalc-tab" data-tab="gift">증여세</button>
+          <button type="button" class="taxcalc-tab" data-tab="inheritance">상속세</button>
+        </div>
+        <div class="taxcalc-body">
+          <div id="taxCalcTransferPane" class="taxcalc-pane"></div>
+          <div id="taxCalcGiftPane" class="taxcalc-pane" style="display:none;"></div>
+          <div id="taxCalcInheritancePane" class="taxcalc-pane" style="display:none;"></div>
+        </div>
+      </div>
+
       <div id="trashView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnTrashBack" title="닫기">✕</button>
@@ -1538,6 +1608,7 @@ graph TD
 <script src="/tax-calc.js"></script>
 <script src="/explorer.js"></script>
 <script src="/document-tools.js"></script>
+<script src="/tax-calculator.js"></script>
 <script src="/chat.js"></script>
 <script src="/pwa.js"></script>
 

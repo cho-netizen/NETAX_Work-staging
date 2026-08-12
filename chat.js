@@ -104,6 +104,7 @@
     { icon: '📊', label: '현황판', handler: openDashboardView },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
+    { icon: '📐', label: '세액계산', handler: openTaxCalcView },
     { icon: '🕸', label: '관계도', handler: openDiagramView },
     { icon: '📷', label: '스캔', handler: openScanModal },
     { icon: '📊', label: '엑셀 열기', handler: () => window.openExcelViewer() }
