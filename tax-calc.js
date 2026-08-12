@@ -751,6 +751,109 @@
     };
   };
 
+  // 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 증여재산공제 없이 일반 누진세율+신고세액공제(3%)만 적용.
+  function taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime) {
+    const taxBase = Math.max(0, Math.round(deemedGiftProfit));
+    const calculatedTax = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
+    const taxAfterCredit = calculatedTax - reportCredit;
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty);
+    const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return { taxBase, calculatedTax, reportCredit, penalties, finalTax };
+  }
+
+  // 일감몰아주기 증여의제 (상증세법 §45의3, [별지 제10호의3서식]) — Code.js toolCalculateRelatedPartyTransactionGiftTax와 동일 로직.
+  window.calculateRelatedPartyTransactionGiftTaxJS = function (p) {
+    p = p || {};
+    const companySize = p.companySize;
+    if (['general', 'medium', 'small'].indexOf(companySize) === -1) {
+      return { error: '기업규모를 일반/중견기업/중소기업 중에서 선택하세요.' };
+    }
+    const afterTaxOperatingIncome = Number(p.afterTaxOperatingIncome) || 0;
+    const tradeRatio = Number(p.relatedPartyTransactionRatio) || 0;
+    const shareRatio = Number(p.shareholderOwnershipRatio) || 0;
+
+    const gateTradeThreshold = companySize === 'general' ? 30 : (companySize === 'medium' ? 40 : 50);
+    const gateShareThreshold = companySize === 'general' ? 3 : 10;
+    const meetsGate = afterTaxOperatingIncome > 0 && tradeRatio > gateTradeThreshold && shareRatio > gateShareThreshold;
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false,
+        과세요건_거래비율기준: gateTradeThreshold, 과세요건_지분율기준: gateShareThreshold,
+        증여의제이익: 0, 납부세액: 0,
+        안내: '과세요건(세후영업이익 존재, 거래비율 ' + gateTradeThreshold + '% 초과, 주식보유비율 ' + gateShareThreshold + '% 초과)을 충족하지 못해 일감몰아주기 증여의제 과세대상이 아닙니다.'
+      };
+    }
+
+    const formulaTradeSubtract = companySize === 'general' ? 5 : (companySize === 'medium' ? 20 : 50);
+    const formulaShareSubtract = companySize === 'general' ? 0 : (companySize === 'medium' ? 5 : 10);
+    const netTradeRatio = Math.max(0, (tradeRatio - formulaTradeSubtract) / 100);
+    const netShareRatio = Math.max(0, (shareRatio - formulaShareSubtract) / 100);
+    const dividendDeduction = Number(p.dividendDeduction) || 0;
+    const deemedGiftProfit = Math.max(0, Math.round(afterTaxOperatingIncome * netTradeRatio * netShareRatio) - dividendDeduction);
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+
+    return {
+      과세대상여부: true,
+      증여의제이익_계산식차감비율_거래: formulaTradeSubtract, 증여의제이익_계산식차감비율_지분: formulaShareSubtract,
+      배당소득공제: dividendDeduction,
+      증여의제이익: deemedGiftProfit,
+      과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+      무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+      납부세액: r.finalTax,
+      안내: '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 특수관계법인거래비율·주식보유비율은 과세제외매출액을 반영해 이미 계산된 최종 비율을 입력해야 하며, 이 도구는 매출액 세부내역으로부터의 비율 산출 자체는 하지 않습니다. 지배주주 판정, 다수 특수관계법인이 있는 경우의 증여자별 안분 등은 별도로 확인하세요. 지배주주가 수혜법인에 직접출자와 간접출자를 모두 하고 있는 경우에는 출자관계별로 각각 계산한 뒤 증여의제이익을 합산해야 합니다.'
+    };
+  };
+
+  // 일감떼어주기 증여의제 (상증세법 §45의4, [별지 제10호의4서식]) — Code.js toolCalculateBusinessOpportunityGiftTax와 동일 로직.
+  window.calculateBusinessOpportunityGiftTaxJS = function (p) {
+    p = p || {};
+    const phase = p.phase;
+    if (['initial', 'settlement'].indexOf(phase) === -1) {
+      return { error: '단계를 개시사업연도 또는 정산사업연도 중에서 선택하세요.' };
+    }
+    const profitFromOpportunity = Number(p.profitFromOpportunity) || 0;
+    const shareRatio = Number(p.shareholderOwnershipRatio) || 0;
+    const corporateTaxPortion = Number(p.corporateTaxPortion) || 0;
+
+    const meetsGate = profitFromOpportunity > 0 && shareRatio >= 30;
+    if (!meetsGate) {
+      return {
+        과세대상여부: false,
+        증여의제이익: 0, 납부세액: 0,
+        안내: '과세요건(사업기회로 인한 부문별 영업이익 존재, 지배주주+친족 주식보유비율 30% 이상)을 충족하지 못해 일감떼어주기 증여의제 과세대상이 아닙니다.'
+      };
+    }
+
+    let deemedGiftProfit;
+    if (phase === 'initial') {
+      const monthsInInitialYear = Number(p.monthsInInitialYear) || 12;
+      deemedGiftProfit = Math.round(Math.max(0, (profitFromOpportunity * (shareRatio / 100) - corporateTaxPortion) / monthsInInitialYear * 12) * 3);
+    } else {
+      const dividendDeduction = Number(p.dividendDeduction) || 0;
+      deemedGiftProfit = Math.max(0, Math.round(profitFromOpportunity * (shareRatio / 100) - corporateTaxPortion) - dividendDeduction);
+    }
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+
+    return {
+      과세대상여부: true,
+      증여의제이익: deemedGiftProfit,
+      과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+      무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+      안내: (phase === 'initial'
+        ? '개시사업연도 신고는 잠정치입니다 — 2년 경과 후 정산사업연도에 재계산·정산신고해야 합니다. '
+        : '') + '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정, 법인세 납부세액 중 상당액 계산은 별도로 확인해서 정확한 값을 입력해야 합니다.',
+      납부세액: r.finalTax
+    };
+  };
+
   // ============================================================
   // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
   // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.
@@ -779,10 +882,11 @@
     const ownedShares = Number(p.ownedShares) || 0;
     const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
     let totalValue = Math.round(result.평가액_1주당 * ownedShares);
-    const majorShareholderPremium = p.isMajorShareholder ? Math.round(totalValue * 0.2) : 0;
+    const isPremiumExempt = !!p.isSmallBusiness || !!p.isMediumBusinessUnder500B;
+    const majorShareholderPremium = (p.isMajorShareholder && !isPremiumExempt) ? Math.round(totalValue * 0.2) : 0;
     totalValue += majorShareholderPremium;
     return Object.assign({
-      발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 평가총액: totalValue
+      발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 평가총액: totalValue
     }, result);
   };
 

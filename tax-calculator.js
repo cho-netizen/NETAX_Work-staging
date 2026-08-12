@@ -50,7 +50,8 @@ function computeValuationAssetValue(a){
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
         netProfit1YearAgo: a.uProfit1, netProfit2YearsAgo: a.uProfit2, netProfit3YearsAgo: a.uProfit3,
-        netAssetValue: a.uNetAsset, isRealEstateHeavy: a.uRealEstateHeavy, isMajorShareholder: a.uMajorShareholder
+        netAssetValue: a.uNetAsset, isRealEstateHeavy: a.uRealEstateHeavy, isMajorShareholder: a.uMajorShareholder,
+        isSmallBusiness: a.uIsSmallBusiness, isMediumBusinessUnder500B: a.uIsMediumUnder500B
       });
       return r.error ? 0 : r.평가총액;
     }
@@ -81,7 +82,9 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>3년전 법인 전체 순손익액</label><input type="number" data-field="uProfit3" value="' + (a.uProfit3 || '') + '"></div>' +
     '<div class="taxcalc-field"><label>순자산가액</label><input type="number" data-field="uNetAsset" value="' + (a.uNetAsset || '') + '"></div>' +
     '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uRealEstateHeavy" ' + (a.uRealEstateHeavy ? 'checked' : '') + '><label>부동산과다보유법인(순손익2:순자산3)</label></div>' +
-    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uMajorShareholder" ' + (a.uMajorShareholder ? 'checked' : '') + '><label>최대주주 등 할증(20%)</label></div>';
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uMajorShareholder" ' + (a.uMajorShareholder ? 'checked' : '') + '><label>최대주주 등 할증(20%)</label></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uIsSmallBusiness" ' + (a.uIsSmallBusiness ? 'checked' : '') + '><label>중소기업이 발행한 주식(할증 배제)</label></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uIsMediumUnder500B" ' + (a.uIsMediumUnder500B ? 'checked' : '') + '><label>중견기업(직전3년 매출평균 5천억 미만)이 발행한 주식(할증 배제)</label></div>';
   return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"></div>';
 }
 
@@ -353,6 +356,55 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-special-rate-gift">특례세율 증여세 계산하기</button>' +
       '<div id="taxCalcSpecialRateGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제10호의3서식] 일감몰아주기 증여의제(§45의3) — 지배주주+친족이 지분을 가진 법인이 특수관계법인과 매출비중이 높고 지분율도 높을 때 과세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>수혜법인 기업규모</label><select id="jmCompanySize">' +
+          '<option value="general">일반(중견·중소 아님)</option><option value="medium">중견기업</option><option value="small">중소기업</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>수혜법인 세후영업이익</label><input type="number" id="jmOperatingIncome" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>특수관계법인거래비율</label><input type="number" step="0.01" id="jmTradeRatio" placeholder="% (과세제외매출액 반영한 최종비율)"></div>' +
+        '<div class="taxcalc-field"><label>지배주주+친족 주식보유비율(직접 또는 간접, 출자관계별로 따로 계산)</label><input type="number" step="0.01" id="jmShareRatio" placeholder="%"></div>' +
+        '<div class="taxcalc-field"><label>배당소득공제</label><input type="number" id="jmDividendDeduction" placeholder="원 (신고기한 내 받은 배당소득 공제액, 없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="jmFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="jmReportedInTime" checked><label for="jmReportedInTime">(정상신고일 때) 법정신고기한 내 — 신고세액공제 3%</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="jmFraudulent"><label for="jmFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="jmUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="jmUnpaidDays" placeholder="일 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-related-party-gift">일감몰아주기 증여세 계산하기</button>' +
+      '<div id="taxCalcRelatedPartyGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제10호의4서식] 일감떼어주기 증여의제(§45의4) — 특수관계법인의 사업기회를 지분 30% 이상 보유한 법인에 제공했을 때 과세. 개시사업연도에 잠정신고 후 2년 경과 시 정산사업연도로 반드시 재계산</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 단계</label><select id="jtPhase">' +
+          '<option value="initial">개시사업연도(잠정)</option><option value="settlement">정산사업연도(2년 경과, 확정)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>사업기회로 인한 수혜법인 이익</label><input type="number" id="jtProfit" placeholder="원 (개시: 해당연도분 / 정산: 누적 합계)"></div>' +
+        '<div class="taxcalc-field"><label>지배주주+친족 주식보유비율</label><input type="number" step="0.01" id="jtShareRatio" placeholder="% (30% 이상이어야 과세)"></div>' +
+        '<div class="taxcalc-field"><label>법인세 납부세액 중 상당액</label><input type="number" id="jtCorporateTax" placeholder="원 (개시: 해당연도분 / 정산: 누적 합계)"></div>' +
+        '<div class="taxcalc-field"><label>(개시사업연도만) 개시사업연도 월수</label><input type="number" id="jtMonths" placeholder="보통 12"></div>' +
+        '<div class="taxcalc-field"><label>(정산사업연도만) 배당소득공제액</label><input type="number" id="jtDividendDeduction" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="jtFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="jtReportedInTime" checked><label for="jtReportedInTime">(정상신고일 때) 법정신고기한 내 — 신고세액공제 3%</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="jtFraudulent"><label for="jtFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="jtUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="jtUnpaidDays" placeholder="일 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-business-opportunity-gift">일감떼어주기 증여세 계산하기</button>' +
+      '<div id="taxCalcBusinessOpportunityGiftResult"></div>' +
     '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
@@ -418,6 +470,51 @@ function renderSpecialRateGiftResult(r){
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.기본세율적용대상_증여재산가액) html += '<div class="taxcalc-result-note">한도를 초과하는 ' + won(r.기본세율적용대상_증여재산가액) + '은 이 결과와 별개로 위 일반 증여세 계산기로 반드시 신고하세요.</div>';
   html += '<div class="taxcalc-result-note">이 특례에는 신고세액공제(3%)가 적용되지 않습니다. 가업영위기간·중소/중견기업 여부 등 자격요건은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderRelatedPartyGiftResult(r){
+  const box = document.getElementById('taxCalcRelatedPartyGiftResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (!r.과세대상여부) {
+    html += '<div class="taxcalc-result-note">' + r.안내 + '</div></div>';
+    box.innerHTML = html;
+    return;
+  }
+  if (r.배당소득공제) html += taxCalcResultRow('배당소득공제', '-' + won(r.배당소득공제));
+  html += taxCalcResultRow('증여의제이익', won(r.증여의제이익));
+  html += taxCalcResultRow('과세표준(증여재산공제 없음)', won(r.과세표준));
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  html += '<div class="taxcalc-result-note">특수관계법인거래비율·주식보유비율은 과세제외매출액을 반영해 이미 계산된 최종 비율을 넣어야 합니다. 지배주주 판정, 다수 특수관계법인이 있는 경우의 증여자별 안분은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderBusinessOpportunityGiftResult(r){
+  const box = document.getElementById('taxCalcBusinessOpportunityGiftResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (!r.과세대상여부) {
+    html += '<div class="taxcalc-result-note">' + r.안내 + '</div></div>';
+    box.innerHTML = html;
+    return;
+  }
+  html += taxCalcResultRow('증여의제이익', won(r.증여의제이익));
+  html += taxCalcResultRow('과세표준(증여재산공제 없음)', won(r.과세표준));
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -716,6 +813,35 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: Number(document.getElementById('srUnpaidDays').value) || 0
     };
     renderSpecialRateGiftResult(calculateSpecialRateGiftTaxJS(input));
+  } else if (action === 'run-related-party-gift'){
+    const input = {
+      companySize: document.getElementById('jmCompanySize').value,
+      afterTaxOperatingIncome: Number(document.getElementById('jmOperatingIncome').value) || 0,
+      relatedPartyTransactionRatio: Number(document.getElementById('jmTradeRatio').value) || 0,
+      shareholderOwnershipRatio: Number(document.getElementById('jmShareRatio').value) || 0,
+      dividendDeduction: Number(document.getElementById('jmDividendDeduction').value) || 0,
+      filingStatus: document.getElementById('jmFilingStatus').value,
+      isFraudulent: document.getElementById('jmFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('jmUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('jmUnpaidDays').value) || 0,
+      reportedInTime: document.getElementById('jmReportedInTime').checked
+    };
+    renderRelatedPartyGiftResult(calculateRelatedPartyTransactionGiftTaxJS(input));
+  } else if (action === 'run-business-opportunity-gift'){
+    const input = {
+      phase: document.getElementById('jtPhase').value,
+      profitFromOpportunity: Number(document.getElementById('jtProfit').value) || 0,
+      shareholderOwnershipRatio: Number(document.getElementById('jtShareRatio').value) || 0,
+      corporateTaxPortion: Number(document.getElementById('jtCorporateTax').value) || 0,
+      monthsInInitialYear: Number(document.getElementById('jtMonths').value) || 0,
+      dividendDeduction: Number(document.getElementById('jtDividendDeduction').value) || 0,
+      filingStatus: document.getElementById('jtFilingStatus').value,
+      isFraudulent: document.getElementById('jtFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('jtUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('jtUnpaidDays').value) || 0,
+      reportedInTime: document.getElementById('jtReportedInTime').checked
+    };
+    renderBusinessOpportunityGiftResult(calculateBusinessOpportunityGiftTaxJS(input));
   } else if (action === 'run-inheritance'){
     const disposalLabels = ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'];
     const disposalPresumptionItems = disposalLabels.map(function(label, i){

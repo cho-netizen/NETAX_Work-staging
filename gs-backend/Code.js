@@ -476,6 +476,53 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_related_party_transaction_gift_tax',
+    description: '일감몰아주기 증여의제(상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제, [별지 제10호의3서식])를 계산한다. 지배주주와 그 친족이 지분을 보유한 법인(수혜법인)이 특수관계법인에 대한 매출비중이 높고 그 지분율도 높으면, 수혜법인의 세후영업이익 중 일부(배당소득공제 반영)를 지배주주등이 증여받은 것으로 간주해 과세한다. 증여재산공제는 적용되지 않고 일반 누진세율과 신고세액공제만 적용된다. 직접출자관계와 간접출자관계가 함께 있으면 각각 별도로 계산해서 합산해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        companySize: { type: 'string', enum: ['general', 'medium', 'small'], description: '수혜법인의 기업규모. general=일반(중견·중소기업 아님), medium=중견기업, small=중소기업(조특법§6① 각 호 외 부분에 따른 중소기업).' },
+        afterTaxOperatingIncome: { type: 'number', description: '수혜법인의 세후영업이익(원). 없거나 0 이하면 과세대상이 아니다.' },
+        relatedPartyTransactionRatio: { type: 'number', description: '특수관계법인거래비율(%, 0~100) — (특수관계법인 매출액-과세제외매출액)/(수혜법인 총매출액-과세제외매출액)×100. 과세제외매출액(중소기업간 거래, 수출관련 거래 등 8개 항목) 반영이 끝난 최종 비율을 입력해야 한다.' },
+        shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족(배우자, 6촌 이내 혈족, 4촌 이내 인척)의 수혜법인에 대한 직접 또는 간접 주식보유비율(%, 0~100). 직접출자와 간접출자를 모두 하고 있는 경우, 출자관계별로 세후영업이익·거래비율이 달라질 수 있으므로 이 도구를 출자관계별로 각각 호출해 증여의제이익을 따로 계산한 뒤 합산해야 한다(하나의 합계 비율로 한 번에 계산하지 말 것).' },
+        dividendDeduction: { type: 'number', description: '지배주주등이 수혜법인의 직전 사업연도 증여세 과세표준 신고기한 다음날부터 이번 사업연도 신고기한까지 수혜법인(또는 간접출자법인)으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
+        doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
+        doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime. 법정신고기한은 수혜법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월이 되는 날.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
+      },
+      required: ['companySize', 'afterTaxOperatingIncome', 'relatedPartyTransactionRatio', 'shareholderOwnershipRatio']
+    }
+  },
+  {
+    name: 'calculate_business_opportunity_gift_tax',
+    description: '일감떼어주기 증여의제(상증세법 §45의4, 특수관계법인으로부터 제공받은 사업기회로 발생한 이익의 증여의제, [별지 제10호의4서식])를 계산한다. 특수관계법인이 직접 하던(또는 다른 사업자가 하던) 사업기회를 지배주주등이 지분 30% 이상 보유한 법인에 제공해 그 법인의 영업이익이 늘면, 지배주주등이 증여받은 것으로 간주해 과세한다. 개시사업연도에 잠정 신고하고, 사업기회제공일로부터 2년 경과한 사업연도(정산사업연도)에 반드시 재계산해서 정산신고해야 한다. 증여재산공제는 적용되지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        phase: { type: 'string', enum: ['initial', 'settlement'], description: 'initial=개시사업연도(사업기회를 제공받은 날이 속하는 사업연도 종료일 이후 신고), settlement=정산사업연도(사업기회제공일로부터 2년이 경과한 날이 속하는 사업연도 종료일 이후 신고, 반드시 필요).' },
+        profitFromOpportunity: { type: 'number', description: 'initial이면 제공받은 사업기회로 인하여 발생한 개시사업연도 수혜법인의 이익(원), settlement이면 개시사업연도부터 정산사업연도까지 발생한 수혜법인의 이익 합계액(원).' },
+        shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족의 수혜법인에 대한 직·간접 주식보유비율(%, 0~100). 30% 이상이어야 과세대상이다.' },
+        corporateTaxPortion: { type: 'number', description: 'initial이면 개시사업연도분의 법인세 납부세액 중 상당액(원), settlement이면 개시사업연도부터 정산사업연도분까지의 법인세 납부세액 중 상당액 합계(원).' },
+        monthsInInitialYear: { type: 'integer', description: 'phase가 initial일 때만 — 개시사업연도의 월수(보통 12, 사업연도가 짧으면 그 미만).' },
+        dividendDeduction: { type: 'number', description: 'phase가 settlement일 때만 — 신고기한까지 수혜법인으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
+        doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
+        doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
+      },
+      required: ['phase', 'profitFromOpportunity', 'shareholderOwnershipRatio']
+    }
+  },
+  {
     name: 'calculate_unlisted_stock_value',
     description: '비상장주식을 상증세법 §63·시행령 §54 보충적평가방법(순손익가치·순자산가치 가중평균)으로 평가한다. 증여재산가액·상속재산가액에 비상장주식이 포함될 때 그 평가액을 구하는 용도다.',
     input_schema: {
@@ -488,7 +535,9 @@ const DRIVE_TOOLS = [
         netProfit3YearsAgo: { type: 'number', description: '평가기준일 3년 전 사업연도의 법인 전체 순손익액(원)' },
         netAssetValue: { type: 'number', description: '평가기준일 현재 법인의 순자산가액(자산총액-부채총액, 상증세법 기준 재평가액, 원)' },
         isRealEstateHeavy: { type: 'boolean', description: '자산총액 중 부동산 등의 비율이 50% 이상인 부동산과다보유법인인지 (가중치가 순손익2:순자산3으로 바뀜, 기본은 순손익3:순자산2)' },
-        isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 중소기업 등 배제 대상 여부는 별도 확인 필요)' }
+        isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨)' },
+        isSmallBusiness: { type: 'boolean', description: '평가대상 법인이 중소기업기본법상 중소기업인지 — true면 최대주주 할증평가가 항상 배제된다(상증세법§63③, 시행령§53⑥9호).' },
+        isMediumBusinessUnder500B: { type: 'boolean', description: '평가대상 법인이 중견기업이면서 직전 3개 사업연도 매출액 평균이 5천억원 미만인지 — true면 최대주주 할증평가가 배제된다(상증세법§63③).' }
       },
       required: ['totalIssuedShares', 'ownedShares']
     }
@@ -2405,12 +2454,14 @@ function toolCalculateUnlistedStockValue(p) {
   const ownedShares = Number(p.ownedShares) || 0;
   const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
   let totalValue = Math.round(result.평가액_1주당 * ownedShares);
-  const majorShareholderPremium = p.isMajorShareholder ? Math.round(totalValue * 0.2) : 0;
+  // 최대주주 등 할증평가(§63③, 원칙 20%) — 중소기업이 발행한 주식이거나, 직전 3개년 매출액 평균 5천억원 미만인 중견기업이 발행한 주식이면 할증평가를 배제한다.
+  const isPremiumExempt = !!p.isSmallBusiness || (!!p.isMediumBusinessUnder500B);
+  const majorShareholderPremium = (p.isMajorShareholder && !isPremiumExempt) ? Math.round(totalValue * 0.2) : 0;
   totalValue += majorShareholderPremium;
   return Object.assign({
-    발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 평가총액: totalValue
+    발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 평가총액: totalValue
   }, result, {
-    안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. 최대주주 등 할증평가는 원칙 20%이나 중소기업 등 배제 대상 여부는 검증하지 않으니 별도로 확인하세요.'
+    안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. 최대주주 등 할증평가(20%)는 중소기업기본법상 중소기업이 발행한 주식이거나 직전 3개년 매출액 평균 5천억원 미만인 중견기업이 발행한 주식이면 배제되며(isSmallBusiness/isMediumBusinessUnder500B로 표시), 결손금 있는 법인·전부매각·신설법인 등 그 밖의 배제사유(상증령 §53⑥)는 이 도구가 검증하지 않으니 별도로 확인하세요.'
   });
 }
 
@@ -2930,6 +2981,124 @@ function toolCalculateSpecialRateGiftTax(p) {
         ? '법인 자산내역(totalAssetValue 등)을 넣지 않아 주식등 가액 전체를 가업자산으로 간주했습니다 — 사업무관자산이 있다면 정확한 값을 넣어 재계산하세요. '
         : '') +
       '가업영위기간·중소/중견기업 여부 등 자격요건 자체는 이 도구가 검증하지 않으니 별도로 확인하세요.'
+  };
+}
+
+// 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 상증세법 §45의3·§45의4는 증여재산공제가 적용되지 않고
+// (과세표준 = 증여의제이익 그대로), 일반 누진세율과 신고세액공제(3%)만 적용된다.
+function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime) {
+  const taxBase = Math.max(0, Math.round(deemedGiftProfit));
+  const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+  const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
+  const taxAfterCredit = calculatedTax - reportCredit;
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty);
+  const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+  return { taxBase, calculatedTax, reportCredit, penalties, finalTax };
+}
+
+// 일감몰아주기 증여의제 (상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제) — [별지 제10호의3서식]
+function toolCalculateRelatedPartyTransactionGiftTax(p) {
+  p = p || {};
+  const companySize = p.companySize;
+  if (['general', 'medium', 'small'].indexOf(companySize) === -1) {
+    return { error: 'companySize는 "general"(일반), "medium"(중견기업), "small"(중소기업) 중 하나여야 합니다.' };
+  }
+  const afterTaxOperatingIncome = Number(p.afterTaxOperatingIncome) || 0;
+  const tradeRatio = Number(p.relatedPartyTransactionRatio) || 0; // %
+  const shareRatio = Number(p.shareholderOwnershipRatio) || 0; // %
+
+  // 과세요건(게이트): 세후영업이익>0, 거래비율이 정상거래비율(30%/중견40%/중소50%) 초과, 지분율이 한계보유비율(3%/중견중소10%) 초과.
+  const gateTradeThreshold = companySize === 'general' ? 30 : (companySize === 'medium' ? 40 : 50);
+  const gateShareThreshold = companySize === 'general' ? 3 : 10;
+  const meetsGate = afterTaxOperatingIncome > 0 && tradeRatio > gateTradeThreshold && shareRatio > gateShareThreshold;
+
+  if (!meetsGate) {
+    return {
+      과세대상여부: false,
+      입력값: { 기업규모: companySize, 세후영업이익: afterTaxOperatingIncome, 특수관계법인거래비율: tradeRatio, 주식보유비율: shareRatio },
+      과세요건_거래비율기준: gateTradeThreshold, 과세요건_지분율기준: gateShareThreshold,
+      증여의제이익: 0, 납부세액: 0,
+      안내: '과세요건(세후영업이익 존재, 거래비율 ' + gateTradeThreshold + '% 초과, 주식보유비율 ' + gateShareThreshold + '% 초과)을 충족하지 못해 일감몰아주기 증여의제 과세대상이 아닙니다.'
+    };
+  }
+
+  // 증여의제이익 계산식의 차감비율은 위 과세요건 게이트 비율과 다르다(법정 구조): 일반 5%/0%, 중견 20%/5%, 중소 50%/10%.
+  const formulaTradeSubtract = companySize === 'general' ? 5 : (companySize === 'medium' ? 20 : 50);
+  const formulaShareSubtract = companySize === 'general' ? 0 : (companySize === 'medium' ? 5 : 10);
+  const netTradeRatio = Math.max(0, (tradeRatio - formulaTradeSubtract) / 100);
+  const netShareRatio = Math.max(0, (shareRatio - formulaShareSubtract) / 100);
+  // 신고기한 내 수혜법인(또는 간접출자법인)으로부터 받은 배당소득에 대한 공제액 — 별도로 계산해서 입력해야 한다.
+  const dividendDeduction = Number(p.dividendDeduction) || 0;
+  const deemedGiftProfit = Math.max(0, Math.round(afterTaxOperatingIncome * netTradeRatio * netShareRatio) - dividendDeduction);
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+
+  return {
+    과세대상여부: true,
+    입력값: {
+      기업규모: companySize, 세후영업이익: afterTaxOperatingIncome, 특수관계법인거래비율: tradeRatio, 주식보유비율: shareRatio,
+      수증자: { 성명: p.doneeName || '', 주민등록번호: p.doneeRegNo || '' }
+    },
+    증여의제이익_계산식차감비율_거래: formulaTradeSubtract, 증여의제이익_계산식차감비율_지분: formulaShareSubtract,
+    배당소득공제: dividendDeduction,
+    증여의제이익: deemedGiftProfit,
+    과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+    무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+    납부세액: r.finalTax,
+    안내: '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 특수관계법인거래비율·주식보유비율은 과세제외매출액을 반영해 이미 계산된 최종 비율을 입력해야 하며, 이 도구는 매출액 세부내역으로부터의 비율 산출 자체는 하지 않습니다. 지배주주 판정, 다수 특수관계법인이 있는 경우의 증여자별 안분 등은 별도로 확인하세요. 지배주주가 수혜법인에 직접출자와 간접출자를 모두 하고 있는 경우에는 출자관계별로 세후영업이익·거래비율·과세제외매출액이 달라질 수 있어 직접출자관계와 간접출자관계를 각각 이 도구로 따로 계산한 뒤 증여의제이익을 합산해야 합니다.'
+  };
+}
+
+// 일감떼어주기 증여의제 (상증세법 §45의4, 특수관계법인으로부터 제공받은 사업기회로 발생한 이익의 증여의제) — [별지 제10호의4서식]
+function toolCalculateBusinessOpportunityGiftTax(p) {
+  p = p || {};
+  const phase = p.phase;
+  if (['initial', 'settlement'].indexOf(phase) === -1) {
+    return { error: 'phase는 "initial"(개시사업연도) 또는 "settlement"(정산사업연도, 사업기회제공일 이후 2년 경과) 중 하나여야 합니다.' };
+  }
+  const profitFromOpportunity = Number(p.profitFromOpportunity) || 0;
+  const shareRatio = Number(p.shareholderOwnershipRatio) || 0; // %
+  const corporateTaxPortion = Number(p.corporateTaxPortion) || 0;
+
+  const meetsGate = profitFromOpportunity > 0 && shareRatio >= 30;
+  if (!meetsGate) {
+    return {
+      과세대상여부: false,
+      입력값: { 단계: phase, 사업기회로인한이익: profitFromOpportunity, 주식보유비율: shareRatio },
+      증여의제이익: 0, 납부세액: 0,
+      안내: '과세요건(사업기회로 인한 부문별 영업이익 존재, 지배주주+친족 주식보유비율 30% 이상)을 충족하지 못해 일감떼어주기 증여의제 과세대상이 아닙니다.'
+    };
+  }
+
+  let deemedGiftProfit;
+  if (phase === 'initial') {
+    const monthsInInitialYear = Number(p.monthsInInitialYear) || 12;
+    deemedGiftProfit = Math.round(Math.max(0, (profitFromOpportunity * (shareRatio / 100) - corporateTaxPortion) / monthsInInitialYear * 12) * 3);
+  } else {
+    const dividendDeduction = Number(p.dividendDeduction) || 0;
+    deemedGiftProfit = Math.max(0, Math.round(profitFromOpportunity * (shareRatio / 100) - corporateTaxPortion) - dividendDeduction);
+  }
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+
+  return {
+    과세대상여부: true,
+    입력값: {
+      단계: phase === 'initial' ? '개시사업연도' : '정산사업연도', 사업기회로인한이익: profitFromOpportunity, 주식보유비율: shareRatio,
+      수증자: { 성명: p.doneeName || '', 주민등록번호: p.doneeRegNo || '' }
+    },
+    증여의제이익: deemedGiftProfit,
+    과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+    무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+    납부세액: r.finalTax,
+    안내: (phase === 'initial'
+      ? '개시사업연도 신고는 잠정치입니다 — 2년 경과 후 정산사업연도에 phase="settlement"로 반드시 재계산·정산신고해야 합니다. '
+      : '') +
+      '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정, 법인세 납부세액 중 상당액 계산은 별도로 확인해서 정확한 값을 입력해야 합니다.'
   };
 }
 
@@ -3773,6 +3942,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
         b.name === 'calculate_special_rate_gift_tax' ||
+        b.name === 'calculate_related_party_transaction_gift_tax' ||
+        b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -3887,6 +4058,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_special_rate_gift_tax') {
         const resultObj = toolCalculateSpecialRateGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_related_party_transaction_gift_tax') {
+        const resultObj = toolCalculateRelatedPartyTransactionGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_business_opportunity_gift_tax') {
+        const resultObj = toolCalculateBusinessOpportunityGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
