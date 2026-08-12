@@ -305,7 +305,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_gift_tax',
-    description: '증여세를 정확히 계산한다(증여재산공제, 누진세율, 세대생략할증, 부담부증여 채무차감, 신고세액공제 포함). 창업자금·가업승계 증여세 과세특례는 포함되지 않는다.',
+    description: '증여세를 정확히 계산한다([별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 기준 — 증여재산공제, 혼인·출산증여재산공제, 합산배제증여재산공제, 감정평가수수료공제, 재해손실공제, 누진세율, 세대생략할증, 부담부증여 채무차감, 신고세액공제, 무신고·과소신고·납부지연가산세 포함). 창업자금·가업승계 증여세 과세특례는 포함되지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -317,7 +317,18 @@ const DRIVE_TOOLS = [
         priorPaidTax: { type: 'number', description: '위 기증여분에 대해 이미 납부한 증여세액(원). 없으면 생략.' },
         isGenerationSkip: { type: 'boolean', description: '세대를 건너뛴 증여(예: 조부모→손자녀)인지 여부' },
         generationSkipOver2Billion: { type: 'boolean', description: '세대생략 증여이면서 미성년자가 20억원을 초과해서 증여받는 경우(할증률 40%). 아니면 30%.' },
-        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고를 가정할지 (기본 true, 신고세액공제 3% 적용)' }
+        isMarriageGift: { type: 'boolean', description: '혼인일 전후 2년 이내의 증여(혼인증여재산공제 대상)인지' },
+        isBirthGift: { type: 'boolean', description: '자녀 출생일·입양일부터 2년 이내의 증여(출산증여재산공제 대상)인지' },
+        priorMarriageOrBirthDeductionUsed: { type: 'number', description: '이 수증자가 과거에 이미 받은 혼인·출산증여재산공제 누적액(원). 혼인+출산 합쳐 평생통산 1억원 한도이므로, 이미 쓴 만큼 이번 공제 한도가 줄어든다.' },
+        isExcludedFromAggregation: { type: 'boolean', description: '상증세법 §55①3호에 따른 합산배제증여재산인지 — 해당하면 3천만원 고정 공제(합산배제증여재산공제)가 적용된다.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가수수료(원). 500만원 한도로 공제.' },
+        disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, 재해손실공제 §54). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부담부증여 은폐 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['giftAmount', 'relation']
     }
@@ -2276,6 +2287,28 @@ function toolCalculateTransferTax(p) {
   };
 }
 
+// 혼인·출산 증여재산공제 (상증세법 §53의2, 2024.1.1. 이후 증여분부터) — 혼인일 전후 2년(또는
+// 출생일·입양일부터 2년) 이내 증여받은 재산에 대해 혼인·출산을 합쳐 평생통산 1억원 한도로 공제.
+// 10년마다 리셋되는 일반 증여재산공제와 달리 한 번 쓰면 끝나는 한도라, 이미 쓴 금액을 그대로 차감한다.
+function marriageOrBirthGiftDeduction_(eligibleGiftAmount, priorUsedAmount) {
+  const remaining = Math.max(0, 100000000 - (Number(priorUsedAmount) || 0));
+  return Math.min(Math.max(0, Number(eligibleGiftAmount) || 0), remaining);
+}
+
+// 무신고·과소신고·납부지연가산세 (국세기본법 §47의2~§47의4) — 일반 20%/10%, 부정행위 40%,
+// 납부지연은 1일 10만분의22(2022.2.15. 이후 세율 기준, 시행령 개정 시 바뀔 수 있으니 확인 필요).
+function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride) {
+  let unreportedPenalty = 0, underreportedPenalty = 0;
+  if (filingStatus === 'unreported') {
+    unreportedPenalty = Math.round(taxAfterCredit * (isFraudulent ? 0.40 : 0.20));
+  } else if (filingStatus === 'underreported') {
+    underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? 0.40 : 0.10));
+  }
+  const base = Number.isFinite(unpaidTaxOverride) ? unpaidTaxOverride : taxAfterCredit;
+  const latePenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
+  return { unreportedPenalty, underreportedPenalty, latePenalty };
+}
+
 function toolCalculateGiftTax(p) {
   p = p || {};
   const giftAmount = Number(p.giftAmount);
@@ -2288,7 +2321,8 @@ function toolCalculateGiftTax(p) {
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   const isGenerationSkip = !!p.isGenerationSkip;
   const generationSkipOver2Billion = !!p.generationSkipOver2Billion;
-  const reportedInTime = p.reportedInTime !== false;
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
 
   // 부담부증여(수증자가 증여자의 채무를 인수) — 인수한 채무액은 증여세 과세가액에서 제외된다.
   // 대신 그 채무액에 상당하는 부분은 증여자에게 "양도"로 과세되므로, 필요하면 calculate_transfer_tax를
@@ -2296,8 +2330,15 @@ function toolCalculateGiftTax(p) {
   const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
   const netGiftAmount = giftAmount - debtAssumedAmount;
 
-  const deduction = giftPropertyDeduction_(relation, !!p.isMinor);
-  const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - deduction);
+  const relationDeduction = giftPropertyDeduction_(relation, !!p.isMinor);
+  const marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
+    ? marriageOrBirthGiftDeduction_(netGiftAmount, p.priorMarriageOrBirthDeductionUsed) : 0;
+  const aggregationExclusionDeduction = p.isExcludedFromAggregation ? 30000000 : 0; // §55①3호 합산배제증여재산, 고정 3천만원
+  const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+  const totalDeduction = relationDeduction + marriageBirthDeduction + aggregationExclusionDeduction + appraisalFeeDeduction + disasterLossDeduction;
+
+  const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - totalDeduction);
   const taxBeforePremium = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
   const premiumRate = isGenerationSkip ? (generationSkipOver2Billion ? 0.4 : 0.3) : 0;
@@ -2306,23 +2347,34 @@ function toolCalculateGiftTax(p) {
 
   const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax);
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
-  const finalTax = taxAfterPriorCredit - reportCredit;
+  const taxAfterCredit = taxAfterPriorCredit - reportCredit;
+
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty;
 
   return {
-    입력값: { 증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip },
+    입력값: { 증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 관계: relation, 미성년자여부: !!p.isMinor, '10년내_동일인_기증여합산액': priorGiftAmount, 세대생략여부: isGenerationSkip, 신고상태: filingStatus },
     순수증여재산가액: netGiftAmount,
-    증여재산공제: deduction,
+    증여재산공제: relationDeduction,
+    혼인출산증여재산공제: marriageBirthDeduction,
+    합산배제증여재산공제: aggregationExclusionDeduction,
+    감정평가수수료공제: appraisalFeeDeduction,
+    재해손실공제: disasterLossDeduction,
     과세표준: taxBase,
     산출세액_할증전: taxBeforePremium,
     세대생략할증액: premiumAmount,
     산출세액_할증후: taxAfterPremium,
     기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
     신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty,
+    과소신고가산세: penalties.underreportedPenalty,
+    납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
     안내: (debtAssumedAmount > 0
       ? '부담부증여로 전제해 인수채무액 ' + debtAssumedAmount + '원을 증여재산가액에서 제외했습니다 — 이 채무액에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세되니 calculate_transfer_tax로 반드시 함께 계산하세요. '
       : '') +
-      '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산은 합산과세 대상입니다. priorGiftAmount·priorPaidTax를 정확히 넣지 않으면 결과가 부정확할 수 있으니 사안별로 재확인하세요. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다.'
+      '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산은 합산과세 대상입니다. priorGiftAmount·priorPaidTax를 정확히 넣지 않으면 결과가 부정확할 수 있으니 사안별로 재확인하세요. ' +
+      '혼인·출산 증여재산공제는 혼인일 전후 2년(출산은 출생·입양일부터 2년) 이내 증여인지 사안별로 확인하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다.'
   };
 }
 

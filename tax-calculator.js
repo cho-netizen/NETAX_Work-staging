@@ -138,11 +138,12 @@ function renderTransferResult(r){
   box.innerHTML = html;
 }
 
-// ---- 증여세 ----
+// ---- 증여세 (국세청 [별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 기준) ----
 function renderGiftPane(){
   taxCalcGiftPane.innerHTML =
-    '<div class="taxcalc-hint">10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산이 있으면 합산액과 기납부세액을 함께 넣으세요.</div>' +
+    '<div class="taxcalc-hint">국세청 [별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산이 있으면 합산액과 기납부세액을 함께 넣으세요.</div>' +
     '<div class="taxcalc-asset">' +
+      '<div class="taxcalc-asset-head"><b>증여재산 · 관계</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>증여재산가액</label><input type="number" id="giftAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="giftRelation">' +
@@ -155,7 +156,28 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>위 기증여분 기납부세액</label><input type="number" id="giftPriorPaidTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkip"><label for="giftGenSkip">세대생략 증여(예: 조부모→손자녀)</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkipOver2B"><label for="giftGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftReportedInTime" checked><label for="giftReportedInTime">법정신고기한 내 신고(신고세액공제 3%)</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>㉙㉚ 혼인·출산 증여재산공제 (혼인+출산 평생통산 1억원 한도)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftIsMarriage"><label for="giftIsMarriage">혼인일 전후 2년 이내 증여</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftIsBirth"><label for="giftIsBirth">출생일·입양일부터 2년 이내 증여</label></div>' +
+        '<div class="taxcalc-field"><label>과거에 이미 받은 혼인·출산공제 누적액</label><input type="number" id="giftPriorMarriageBirth" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>㉜㉝ 그 밖의 공제</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftExcludedAgg"><label for="giftExcludedAgg">상증세법 §55①3호 합산배제증여재산(3천만원 고정공제)</label></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="giftAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
+        '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="giftDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="giftFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftReportedInTime" checked><label for="giftReportedInTime">(정상신고일 때) 법정신고기한 내 — 신고세액공제 3%</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftFraudulent"><label for="giftFraudulent">부정행위(무신고·과소신고 가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="giftUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="giftUnpaidDays" placeholder="일 (없으면 0)"></div>' +
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-gift">세액 계산하기</button>' +
@@ -168,14 +190,21 @@ function renderGiftResult(r){
   let html = '<div class="taxcalc-result">';
   if (r.인수채무액) html += taxCalcResultRow('순수증여재산가액(채무 제외)', won(r.순수증여재산가액));
   html += taxCalcResultRow('증여재산공제', won(r.증여재산공제));
+  if (r.혼인출산증여재산공제) html += taxCalcResultRow('혼인·출산 증여재산공제', won(r.혼인출산증여재산공제));
+  if (r.합산배제증여재산공제) html += taxCalcResultRow('합산배제증여재산공제', won(r.합산배제증여재산공제));
+  if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', won(r.감정평가수수료공제));
+  if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', won(r.재해손실공제));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
   html += taxCalcResultRow('산출세액(할증 전)', won(r.산출세액_할증전));
   if (r.세대생략할증액) html += taxCalcResultRow('세대생략할증액', won(r.세대생략할증액));
   if (r.기납부세액공제) html += taxCalcResultRow('기납부세액공제', '-' + won(r.기납부세액공제));
   html += taxCalcResultRow('신고세액공제(3%)', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.인수채무액) html += '<div class="taxcalc-result-note">인수채무액 ' + won(r.인수채무액) + '에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세됩니다 — 양도소득세 탭에서 함께 계산하세요.</div>';
-  html += '<div class="taxcalc-result-note">실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -285,6 +314,16 @@ taxCalcView.addEventListener('click', function(e){
       priorPaidTax: Number(document.getElementById('giftPriorPaidTax').value) || 0,
       isGenerationSkip: document.getElementById('giftGenSkip').checked,
       generationSkipOver2Billion: document.getElementById('giftGenSkipOver2B').checked,
+      isMarriageGift: document.getElementById('giftIsMarriage').checked,
+      isBirthGift: document.getElementById('giftIsBirth').checked,
+      priorMarriageOrBirthDeductionUsed: Number(document.getElementById('giftPriorMarriageBirth').value) || 0,
+      isExcludedFromAggregation: document.getElementById('giftExcludedAgg').checked,
+      appraisalFeeAmount: Number(document.getElementById('giftAppraisalFee').value) || 0,
+      disasterLossAmount: Number(document.getElementById('giftDisasterLoss').value) || 0,
+      filingStatus: document.getElementById('giftFilingStatus').value,
+      isFraudulent: document.getElementById('giftFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('giftUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('giftUnpaidDays').value) || 0,
       reportedInTime: document.getElementById('giftReportedInTime').checked
     };
     renderGiftResult(calculateGiftTaxJS(input));

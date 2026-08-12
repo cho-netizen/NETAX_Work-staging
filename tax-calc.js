@@ -401,7 +401,27 @@
     };
   };
 
-  // 증여세 — gs-backend toolCalculateGiftTax와 동일 로직.
+  // 혼인·출산 증여재산공제 (상증세법 §53의2, 2024.1.1. 이후) — 혼인·출산 합쳐 평생통산 1억원 한도.
+  function marriageOrBirthGiftDeduction(eligibleGiftAmount, priorUsedAmount) {
+    const remaining = Math.max(0, 100000000 - (Number(priorUsedAmount) || 0));
+    return Math.min(Math.max(0, Number(eligibleGiftAmount) || 0), remaining);
+  }
+
+  // 무신고·과소신고·납부지연가산세 (국세기본법 §47의2~§47의4) — 일반 20%/10%, 부정행위 40%,
+  // 납부지연 1일 10만분의22(시행령 개정 시 바뀔 수 있음).
+  function giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride) {
+    let unreportedPenalty = 0, underreportedPenalty = 0;
+    if (filingStatus === 'unreported') {
+      unreportedPenalty = Math.round(taxAfterCredit * (isFraudulent ? 0.40 : 0.20));
+    } else if (filingStatus === 'underreported') {
+      underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? 0.40 : 0.10));
+    }
+    const base = Number.isFinite(unpaidTaxOverride) ? unpaidTaxOverride : taxAfterCredit;
+    const latePenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
+    return { unreportedPenalty: unreportedPenalty, underreportedPenalty: underreportedPenalty, latePenalty: latePenalty };
+  }
+
+  // 증여세 — gs-backend toolCalculateGiftTax와 동일 로직([별지 제10호서식] 기준).
   window.calculateGiftTaxJS = function (p) {
     p = p || {};
     const giftAmount = Number(p.giftAmount);
@@ -412,24 +432,39 @@
     const priorGiftAmount = Number(p.priorGiftAmount) || 0;
     const priorPaidTax = Number(p.priorPaidTax) || 0;
     const isGenerationSkip = !!p.isGenerationSkip;
-    const reportedInTime = p.reportedInTime !== false;
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
     const netGiftAmount = giftAmount - debtAssumedAmount;
 
-    const deduction = giftPropertyDeduction(p.relation, !!p.isMinor);
-    const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - deduction);
+    const relationDeduction = giftPropertyDeduction(p.relation, !!p.isMinor);
+    const marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
+      ? marriageOrBirthGiftDeduction(netGiftAmount, p.priorMarriageOrBirthDeductionUsed) : 0;
+    const aggregationExclusionDeduction = p.isExcludedFromAggregation ? 30000000 : 0;
+    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+    const totalDeduction = relationDeduction + marriageBirthDeduction + aggregationExclusionDeduction + appraisalFeeDeduction + disasterLossDeduction;
+
+    const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - totalDeduction);
     const taxBeforePremium = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const premiumRate = isGenerationSkip ? (p.generationSkipOver2Billion ? 0.4 : 0.3) : 0;
     const premiumAmount = Math.round(taxBeforePremium * premiumRate);
     const taxAfterPremium = taxBeforePremium + premiumAmount;
     const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax);
     const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
+    const taxAfterCredit = taxAfterPriorCredit - reportCredit;
+
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
     return {
       증여재산가액: giftAmount, 인수채무액: debtAssumedAmount, 순수증여재산가액: netGiftAmount,
-      증여재산공제: deduction, 과세표준: taxBase, 산출세액_할증전: taxBeforePremium, 세대생략할증액: premiumAmount,
+      증여재산공제: relationDeduction, 혼인출산증여재산공제: marriageBirthDeduction,
+      합산배제증여재산공제: aggregationExclusionDeduction, 감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
+      과세표준: taxBase, 산출세액_할증전: taxBeforePremium, 세대생략할증액: premiumAmount,
       산출세액_할증후: taxAfterPremium, 기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
-      신고세액공제: reportCredit, 납부세액: taxAfterPriorCredit - reportCredit
+      신고세액공제: reportCredit, 무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
+      납부지연가산세: penalties.latePenalty,
+      납부세액: taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
     };
   };
 
