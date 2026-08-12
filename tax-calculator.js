@@ -23,6 +23,106 @@ function taxCalcResultRow(label, value, opts){
   return '<div class="' + cls + '"><span>' + label + '</span><span class="v">' + value + '</span></div>';
 }
 
+// ---- 상속증여재산 평가(자산 목록) — 증여세·상속세 화면 공통 ----
+// [별지 제10호서식 부표1](증여재산 및 평가명세서)·[별지 제9호서식 부표1·2](상속재산 및 평가명세서)의
+// "자산을 하나씩 나열해서 합산"하는 구조를 그대로 반영한다. 평가방법 자체(상증세법 §60~66
+// 보충적평가방법)는 토지·주택·상장주식·비상장주식만 계산해주고, 그 외(시가·감정가액 등)는
+// 이미 알고 있는 금액을 직접 입력하게 한다.
+let giftValuationAssets = [];
+let inheritanceValuationAssets = [];
+
+const VALUATION_METHOD_LABELS = {
+  direct: '직접입력(시가·감정가액·매매사례가액 등)',
+  land: '토지(개별공시지가 × 면적 × 지분)',
+  house: '주택(고시된 개별·공동주택가격 × 지분)',
+  listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
+  unlistedStock: '비상장주식(순손익·순자산가치 가중평균)'
+};
+
+function computeValuationAssetValue(a){
+  switch (a.method){
+    case 'land': return calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100);
+    case 'house': return calculateHouseValueJS(a.housePrice, a.houseShare || 100);
+    case 'listedStock': return calculateListedStockValueJS(a.listedPrice, a.listedShares);
+    case 'unlistedStock': {
+      const r = calculateUnlistedStockValueJS({
+        totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
+        netProfit1YearAgo: a.uProfit1, netProfit2YearsAgo: a.uProfit2, netProfit3YearsAgo: a.uProfit3,
+        netAssetValue: a.uNetAsset, isRealEstateHeavy: a.uRealEstateHeavy, isMajorShareholder: a.uMajorShareholder
+      });
+      return r.error ? 0 : r.평가총액;
+    }
+    default: return Number(a.directValue) || 0;
+  }
+}
+
+function valuationAssetMethodFieldsHtml(m, a){
+  if (m === 'land') return '' +
+    '<div class="taxcalc-field"><label>개별공시지가(원/㎡)</label><input type="number" data-field="landPrice" value="' + (a.landPrice || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="landShare" placeholder="기본 100" value="' + (a.landShare || '') + '"></div>';
+  if (m === 'house') return '' +
+    '<div class="taxcalc-field"><label>고시된 주택가격</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="houseShare" placeholder="기본 100" value="' + (a.houseShare || '') + '"></div>';
+  if (m === 'listedStock') return '' +
+    '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>';
+  if (m === 'unlistedStock') return '' +
+    '<div class="taxcalc-field"><label>발행주식총수</label><input type="number" data-field="uTotalShares" value="' + (a.uTotalShares || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>평가대상 주식수</label><input type="number" data-field="uOwnedShares" value="' + (a.uOwnedShares || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>1년전 법인 전체 순손익액</label><input type="number" data-field="uProfit1" value="' + (a.uProfit1 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>2년전 법인 전체 순손익액</label><input type="number" data-field="uProfit2" value="' + (a.uProfit2 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>3년전 법인 전체 순손익액</label><input type="number" data-field="uProfit3" value="' + (a.uProfit3 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>순자산가액</label><input type="number" data-field="uNetAsset" value="' + (a.uNetAsset || '') + '"></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uRealEstateHeavy" ' + (a.uRealEstateHeavy ? 'checked' : '') + '><label>부동산과다보유법인(순손익2:순자산3)</label></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uMajorShareholder" ' + (a.uMajorShareholder ? 'checked' : '') + '><label>최대주주 등 할증(20%)</label></div>';
+  return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"></div>';
+}
+
+function renderValuationAssetRow(a, idx){
+  const method = a.method || 'direct';
+  const value = computeValuationAssetValue(a);
+  return '' +
+    '<div class="taxcalc-asset" data-idx="' + idx + '">' +
+      '<div class="taxcalc-asset-head"><b>자산 ' + (idx + 1) + '</b><button type="button" class="taxcalc-del-asset" data-action="del-valuation-asset" data-idx="' + idx + '">✕ 삭제</button></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>자산명(메모)</label><input type="text" data-field="label" value="' + (a.label || '').replace(/"/g, '&quot;') + '"></div>' +
+        '<div class="taxcalc-field"><label>평가방법</label><select data-field="method">' +
+          Object.keys(VALUATION_METHOD_LABELS).map(function (k) { return '<option value="' + k + '"' + (method === k ? ' selected' : '') + '>' + VALUATION_METHOD_LABELS[k] + '</option>'; }).join('') +
+        '</select></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid" style="margin-top:6px;">' + valuationAssetMethodFieldsHtml(method, a) + '</div>' +
+      '<div class="taxcalc-result-row"><span>평가액</span><span class="v">' + won(value) + '</span></div>' +
+    '</div>';
+}
+
+function renderValuationAssetList(containerId, assets){
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const total = assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0);
+  container.innerHTML =
+    assets.map(function (a, idx) { return renderValuationAssetRow(a, idx); }).join('') +
+    '<button type="button" class="taxcalc-add-asset" data-action="add-valuation-asset" data-target="' + containerId + '">+ 자산 추가</button>' +
+    (assets.length ? '<div class="taxcalc-result-row total"><span>자산 평가액 합계</span><span class="v">' + won(total) + '</span></div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="apply-valuation-total" data-target="' + containerId + '">이 합계를 위 금액란에 반영</button>' : '');
+
+  container.querySelectorAll('[data-field]').forEach(function (el) {
+    el.addEventListener((el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input', function () {
+      const idx = Number(el.closest('.taxcalc-asset').dataset.idx);
+      const key = el.dataset.field;
+      assets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
+      if (key === 'method'){
+        renderValuationAssetList(containerId, assets); // 필드 구성 자체가 바뀌므로 다시 그림
+      } else {
+        const row = el.closest('.taxcalc-asset');
+        row.querySelector('.taxcalc-result-row .v').textContent = won(computeValuationAssetValue(assets[idx]));
+        const totalEl = container.querySelector('.taxcalc-result-row.total .v');
+        if (totalEl) totalEl.textContent = won(assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0));
+      }
+    });
+  });
+}
+
 // ---- 양도소득세 (다건 합산) ----
 let transferAssets = [{}]; // 각 원소는 입력값 객체(비어있는 채로 시작)
 
@@ -142,6 +242,8 @@ function renderTransferResult(r){
 function renderGiftPane(){
   taxCalcGiftPane.innerHTML =
     '<div class="taxcalc-hint">국세청 [별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산이 있으면 합산액과 기납부세액을 함께 넣으세요.</div>' +
+    '<div class="taxcalc-asset-head"><b>[부표1] 증여재산 및 평가명세 — 자산을 추가하면 아래 증여재산가액에 반영할 수 있습니다</b></div>' +
+    '<div id="giftValuationList"></div>' +
     '<div class="taxcalc-asset">' +
       '<div class="taxcalc-asset-head"><b>증여재산 · 관계</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -182,6 +284,7 @@ function renderGiftPane(){
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-gift">세액 계산하기</button>' +
     '<div id="taxCalcGiftResult"></div>';
+  renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
 
 function renderGiftResult(r){
@@ -213,6 +316,8 @@ function renderGiftResult(r){
 function renderInheritancePane(){
   taxCalcInheritancePane.innerHTML =
     '<div class="taxcalc-hint">국세청 [별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 상속세과세가액은 총상속재산가액에서 공과금·장례비용·채무를 빼고, 10년 이내 사전증여재산을 가산해 이미 계산된 값을 넣어야 합니다.</div>' +
+    '<div class="taxcalc-asset-head"><b>[부표1·2] 상속재산 및 평가명세 — 자산을 추가하면 아래 상속세과세가액에 반영할 수 있습니다(공과금·장례비용·채무 차감 전 재산가액 기준)</b></div>' +
+    '<div id="inheritanceValuationList"></div>' +
     '<div class="taxcalc-asset">' +
       '<div class="taxcalc-asset-head"><b>과세가액 · 인적공제</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -267,6 +372,7 @@ function renderInheritancePane(){
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-inheritance">세액 계산하기</button>' +
     '<div id="taxCalcInheritanceResult"></div>';
+  renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
 }
 
 function renderInheritanceResult(r){
@@ -341,6 +447,22 @@ taxCalcView.addEventListener('click', function(e){
     const idx = Number(btn.dataset.idx);
     transferAssets.splice(idx, 1);
     renderTransferPane();
+  } else if (action === 'add-valuation-asset'){
+    const target = btn.dataset.target;
+    const assets = target === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
+    assets.push({ method: 'direct' });
+    renderValuationAssetList(target, assets);
+  } else if (action === 'del-valuation-asset'){
+    const containerId = btn.closest('[id="giftValuationList"], [id="inheritanceValuationList"]').id;
+    const assets = containerId === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
+    assets.splice(Number(btn.dataset.idx), 1);
+    renderValuationAssetList(containerId, assets);
+  } else if (action === 'apply-valuation-total'){
+    const target = btn.dataset.target;
+    const assets = target === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
+    const total = assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0);
+    if (target === 'giftValuationList') document.getElementById('giftAmount').value = total;
+    else document.getElementById('ihEstate').value = total;
   } else if (action === 'run-transfer'){
     const inputs = transferAssets.map(collectTransferInput);
     const result = calculateTransferTaxMultiJS(inputs);

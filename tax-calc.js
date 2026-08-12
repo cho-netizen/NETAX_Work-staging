@@ -551,4 +551,56 @@
       납부세액: taxAfterReportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
     };
   };
+
+  // ============================================================
+  // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
+  // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.
+  // ============================================================
+
+  // 비상장주식 1주당 평가액 (§63, 시행령 §54) — 순손익가치·순자산가치 가중평균(일반 3:2, 부동산과다보유법인 2:3), 순자산가치 80% 하한.
+  function unlistedStockValuePerShare(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy) {
+    const shares = Number(totalIssuedShares) || 0;
+    if (shares <= 0) return null;
+    const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
+    const weightedNetProfitPerShare = (weightedNetProfitSum / 6) / shares;
+    const profitValuePerShare = weightedNetProfitPerShare / 0.10;
+    const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
+    const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
+    let valuePerShare = (profitValuePerShare * weights[0] + netAssetValuePerShare * weights[1]) / (weights[0] + weights[1]);
+    const floor = netAssetValuePerShare * 0.8;
+    const floorApplied = valuePerShare < floor;
+    if (floorApplied) valuePerShare = floor;
+    return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치80퍼센트_하한적용: floorApplied };
+  }
+
+  window.calculateUnlistedStockValueJS = function (p) {
+    p = p || {};
+    const totalIssuedShares = Number(p.totalIssuedShares);
+    if (!totalIssuedShares || totalIssuedShares <= 0) return { error: '발행주식총수가 필요합니다.' };
+    const ownedShares = Number(p.ownedShares) || 0;
+    const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
+    let totalValue = Math.round(result.평가액_1주당 * ownedShares);
+    const majorShareholderPremium = p.isMajorShareholder ? Math.round(totalValue * 0.2) : 0;
+    totalValue += majorShareholderPremium;
+    return Object.assign({
+      발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 평가총액: totalValue
+    }, result);
+  };
+
+  // 토지 평가 (§61) — 개별공시지가 × 면적 × 지분율(%)
+  window.calculateLandValueJS = function (officialPricePerSqm, areaSqm, shareRatioPercent) {
+    const ratio = (Number(shareRatioPercent) || 100) / 100;
+    return Math.round((Number(officialPricePerSqm) || 0) * (Number(areaSqm) || 0) * ratio);
+  };
+
+  // 주택(개별/공동주택) 평가 (§61) — 고시된 주택가격 × 지분율(%)
+  window.calculateHouseValueJS = function (officialHousePrice, shareRatioPercent) {
+    const ratio = (Number(shareRatioPercent) || 100) / 100;
+    return Math.round((Number(officialHousePrice) || 0) * ratio);
+  };
+
+  // 상장주식 평가 (§63) — 평가기준일 전후 2개월 종가평균 × 주식수
+  window.calculateListedStockValueJS = function (averageClosingPrice, shares) {
+    return Math.round((Number(averageClosingPrice) || 0) * (Number(shares) || 0));
+  };
 })();

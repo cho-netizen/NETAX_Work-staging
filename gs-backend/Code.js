@@ -375,6 +375,24 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_unlisted_stock_value',
+    description: '비상장주식을 상증세법 §63·시행령 §54 보충적평가방법(순손익가치·순자산가치 가중평균)으로 평가한다. 증여재산가액·상속재산가액에 비상장주식이 포함될 때 그 평가액을 구하는 용도다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        totalIssuedShares: { type: 'number', description: '평가대상 법인의 발행주식총수' },
+        ownedShares: { type: 'number', description: '실제 증여·상속받는(평가할) 주식수' },
+        netProfit1YearAgo: { type: 'number', description: '평가기준일 직전 사업연도의 법인 전체 순손익액(원, 세무조정 반영 후). 1주당 값이 아니라 법인 전체 금액.' },
+        netProfit2YearsAgo: { type: 'number', description: '평가기준일 2년 전 사업연도의 법인 전체 순손익액(원)' },
+        netProfit3YearsAgo: { type: 'number', description: '평가기준일 3년 전 사업연도의 법인 전체 순손익액(원)' },
+        netAssetValue: { type: 'number', description: '평가기준일 현재 법인의 순자산가액(자산총액-부채총액, 상증세법 기준 재평가액, 원)' },
+        isRealEstateHeavy: { type: 'boolean', description: '자산총액 중 부동산 등의 비율이 50% 이상인 부동산과다보유법인인지 (가중치가 순손익2:순자산3으로 바뀜, 기본은 순손익3:순자산2)' },
+        isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 중소기업 등 배제 대상 여부는 별도 확인 필요)' }
+      },
+      required: ['totalIssuedShares', 'ownedShares']
+    }
+  },
+  {
     name: 'manage_task_plan',
     description: '여러 단계로 나눠서 진행해야 하는 복잡한 작업(예: 세무구조 3축 분석, 여러 날에 걸친 보고서 작성)을 시작할 때, 계획을 세워 저장하고 진행 상황을 기록·갱신하는 도구다. 지금 사용자가 보고 있는 폴더 안에 "_작업진행.json" 파일로 저장되어, 대화가 끊기거나 나중에 다시 열어도 어디까지 했는지 이어서 확인할 수 있다. ' +
       '사용 방법: (1) 복잡한 요청을 받으면 먼저 action="create"로 하위작업 목록(steps)을 만들어 저장하라. (2) 각 하위작업을 실제로 진행할 때마다 action="update"로 그 단계의 status를 pending→in_progress→done으로 바꾸고 note에 결과 요약을 적어 다시 저장하라(steps는 매번 전체 목록을 다시 줘야 한다, 일부만 주면 안 됨). (3) 사용자가 "지난번 그 작업 어디까지 했지?"처럼 물으면 action="read"로 확인하라. ' +
@@ -2188,6 +2206,48 @@ function financialAssetInheritanceDeduction_(netFinancialAssets) {
   return Math.min(200000000, Math.max(net * 0.2, 20000000));
 }
 
+// ============================================================
+// 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법)
+// 양도소득세·증여세·상속세 계산에 들어가는 "증여재산가액"·"상속세과세가액"은
+// 결국 이 아래 방식으로 자산 하나하나를 평가해서 합산한 값이다 — 이 계산을
+// 사람이 전부 손으로 해서 최종 숫자 하나만 넣게 하면 그 앞단이 통째로 빠지는
+// 것이므로, 증여세·상속세 공통으로 쓰는 평가 함수를 별도로 둔다.
+// ============================================================
+
+// 비상장주식 평가 (상증세법 §63, 시행령 §54) — 1주당 순손익가치와 순자산가치의 가중평균
+// (일반법인 순손익3:순자산2, 부동산 등 보유비율 50% 이상인 부동산과다보유법인은 순손익2:순자산3).
+// 계산값이 순자산가치의 80%보다 작으면 순자산가치의 80%를 하한으로 한다.
+function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy) {
+  const shares = Number(totalIssuedShares) || 0;
+  if (shares <= 0) return null;
+  const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
+  const weightedNetProfitPerShare = (weightedNetProfitSum / 6) / shares;
+  const profitValuePerShare = weightedNetProfitPerShare / 0.10; // 순손익가치환원율 10%(상증세법 시행규칙 §17의3)
+  const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
+  const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
+  let valuePerShare = (profitValuePerShare * weights[0] + netAssetValuePerShare * weights[1]) / (weights[0] + weights[1]);
+  const floor = netAssetValuePerShare * 0.8;
+  const floorApplied = valuePerShare < floor;
+  if (floorApplied) valuePerShare = floor;
+  return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치80퍼센트_하한적용: floorApplied };
+}
+
+function toolCalculateUnlistedStockValue(p) {
+  p = p || {};
+  const totalIssuedShares = Number(p.totalIssuedShares);
+  if (!totalIssuedShares || totalIssuedShares <= 0) return { error: '발행주식총수(totalIssuedShares)가 필요합니다.' };
+  const ownedShares = Number(p.ownedShares) || 0;
+  const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
+  let totalValue = Math.round(result.평가액_1주당 * ownedShares);
+  const majorShareholderPremium = p.isMajorShareholder ? Math.round(totalValue * 0.2) : 0;
+  totalValue += majorShareholderPremium;
+  return Object.assign({
+    발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 평가총액: totalValue
+  }, result, {
+    안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. 최대주주 등 할증평가는 원칙 20%이나 중소기업 등 배제 대상 여부는 검증하지 않으니 별도로 확인하세요.'
+  });
+}
+
 function toolCalculateTransferTax(p) {
   p = p || {};
   const transferPrice = Number(p.transferPrice);
@@ -3351,6 +3411,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_transfer_tax' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
+        b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
         b.name === 'search_emails' ||
@@ -3459,6 +3520,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_inheritance_tax') {
         const resultObj = toolCalculateInheritanceTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_unlisted_stock_value') {
+        const resultObj = toolCalculateUnlistedStockValue(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
