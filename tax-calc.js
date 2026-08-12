@@ -87,6 +87,56 @@
     return Math.min(200000000, Math.max(net * 0.2, 20000000));
   }
 
+  // 사업관련자산가액 비율 (상증세법 시행령 §15⑤2호가목~마목) — 가업상속공제·영농상속공제·조특법 가업승계 증여세 특례 공통 사용
+  function businessRelatedAssetRatio(totalAssetValue, nonBiz) {
+    const total = Number(totalAssetValue) || 0;
+    const n = nonBiz || {};
+    const nonBizTotal = (Number(n.asset55) || 0) + (Number(n.asset49) || 0) + (Number(n.asset61) || 0)
+      + (Number(n.excessCash) || 0) + (Number(n.nonBizStock) || 0);
+    const businessRelatedAssetValue = Math.max(0, total - nonBizTotal);
+    const ratio = total > 0 ? businessRelatedAssetValue / total : 0;
+    return { nonBizTotal, businessRelatedAssetValue, ratio };
+  }
+
+  // 가업상속공제 ([별지 제1호서식] 기준) — 소득세법 적용가업(순자산액 합계) 또는 법인세법 적용가업(주식등가액×사업관련자산비율).
+  // 가업영위기간별 한도(10~20년 300억/20~30년 400억/30년이상 600억).
+  function businessInheritanceDeductionDetailed(p) {
+    const years = Number(p.businessOwnershipYears) || 0;
+    const individualNet = Number(p.businessInheritanceIndividualNetAssetValue) || 0;
+    const stockValue = Number(p.businessInheritanceStockValue) || 0;
+    if (years <= 0 || (individualNet <= 0 && stockValue <= 0)) return null;
+
+    const targetIndividual = individualNet;
+    const ratioInfo = stockValue > 0 ? businessRelatedAssetRatio(p.businessInheritanceTotalAssetValue, {
+      asset55: p.businessInheritanceNonBizAsset55, asset49: p.businessInheritanceNonBizAsset49,
+      asset61: p.businessInheritanceNonBizAsset61, excessCash: p.businessInheritanceExcessCash, nonBizStock: p.businessInheritanceNonBizStock
+    }) : null;
+    const targetCorporate = ratioInfo ? Math.round(stockValue * ratioInfo.ratio) : 0;
+    const targetAmount = targetIndividual + targetCorporate;
+
+    const limitAmount = years < 10 ? 0 : (years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000));
+    const deductionAmount = Math.min(targetAmount, limitAmount);
+    return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo };
+  }
+
+  // 영농상속공제 ([별지 제2호서식] 기준) — 소득세법 적용영농(①합계) + 법인세법 적용영농(주식등가액×사업관련자산비율), 30억원 고정한도.
+  function farmingInheritanceDeductionDetailed(p) {
+    const individualTotal = Number(p.farmingIndividualAssetValue) || 0;
+    const stockValue = Number(p.farmingStockValue) || 0;
+    if (individualTotal <= 0 && stockValue <= 0) return null;
+
+    const ratioInfo = stockValue > 0 ? businessRelatedAssetRatio(p.farmingTotalAssetValue, {
+      asset55: p.farmingNonBizAsset55, asset49: p.farmingNonBizAsset49,
+      asset61: p.farmingNonBizAsset61, excessCash: p.farmingExcessCash, nonBizStock: p.farmingNonBizStock
+    }) : null;
+    const targetCorporate = ratioInfo ? Math.round(stockValue * ratioInfo.ratio) : 0;
+    const targetAmount = individualTotal + targetCorporate;
+
+    const limitAmount = 3000000000;
+    const deductionAmount = Math.min(targetAmount, limitAmount);
+    return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo };
+  }
+
   const TAX_FUNCS = {
     // 누진세(과세표준, "증여상속"|"양도") — 누진세율표를 적용한 산출세액(원)
     누진세: function (base, kind) {
@@ -491,10 +541,11 @@
     const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
     const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
     const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
+    const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
 
     const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
-      - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount);
+      - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
 
     return {
       증여재산가액: giftAmount, 인수채무액: debtAssumedAmount,
@@ -509,6 +560,7 @@
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
       박물관자료등징수유예세액: museumDeferredTaxAmount, 가업승계납부유예세액: businessSuccessionDeferredTaxAmount,
+      영농자녀증여농지세액감면: farmlandGiftTaxExemptionAmount,
       납부세액: finalTax
     };
   };
@@ -548,8 +600,10 @@
     const cohabitingHouseDeduction = p.hasCohabitingHouseDeduction ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
     const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
-    const businessInheritanceDeduction = Number(p.businessInheritanceDeduction) || 0;
-    const farmingInheritanceDeduction = Number(p.farmingInheritanceDeduction) || 0;
+    const businessInheritanceDetail = businessInheritanceDeductionDetailed(p);
+    const businessInheritanceDeduction = businessInheritanceDetail ? businessInheritanceDetail.deductionAmount : (Number(p.businessInheritanceDeduction) || 0);
+    const farmingInheritanceDetail = farmingInheritanceDeductionDetailed(p);
+    const farmingInheritanceDeduction = farmingInheritanceDetail ? farmingInheritanceDetail.deductionAmount : (Number(p.farmingInheritanceDeduction) || 0);
 
     let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
       + businessInheritanceDeduction + farmingInheritanceDeduction;
@@ -604,7 +658,18 @@
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
       감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
-      가업상속공제: businessInheritanceDeduction, 영농상속공제: farmingInheritanceDeduction,
+      가업상속공제: businessInheritanceDeduction,
+      가업상속공제_계산내역: businessInheritanceDetail ? {
+        대상금액: businessInheritanceDetail.targetAmount, 한도액: businessInheritanceDetail.limitAmount,
+        소득세법적용분: businessInheritanceDetail.targetIndividual, 법인세법적용분: businessInheritanceDetail.targetCorporate,
+        사업관련자산가액비율: businessInheritanceDetail.ratioInfo ? businessInheritanceDetail.ratioInfo.ratio : null
+      } : null,
+      영농상속공제: farmingInheritanceDeduction,
+      영농상속공제_계산내역: farmingInheritanceDetail ? {
+        대상금액: farmingInheritanceDetail.targetAmount, 한도액: farmingInheritanceDetail.limitAmount,
+        소득세법적용분: farmingInheritanceDetail.individualTotal, 법인세법적용분: farmingInheritanceDetail.targetCorporate,
+        사업관련자산가액비율: farmingInheritanceDetail.ratioInfo ? farmingInheritanceDetail.ratioInfo.ratio : null
+      } : null,
       상속공제_합계: totalDeduction, 상속공제종합한도_적용여부: overallLimitApplied, 과세표준: taxBase,
       산출세액: calculatedTax, 세대생략가산액: generationSkipPremium,
       기납부증여세액공제: priorGiftTaxCredit, 특례증여세액공제: specialGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit, 그밖의공제: otherCreditsAmount,
@@ -612,6 +677,76 @@
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
       문화재등징수유예세액: culturalPropertyDeferredTaxAmount, 가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
+      납부세액: finalTax
+    };
+  };
+
+  // 조특법§30의5(창업자금)·§30의6(가업승계 주식등) 증여세 과세특례 ([별지 제10호의2서식]) — Code.js toolCalculateSpecialRateGiftTax와 동일 로직.
+  window.calculateSpecialRateGiftTaxJS = function (p) {
+    p = p || {};
+    const specialType = p.specialType;
+    if (['startup', 'business_succession'].indexOf(specialType) === -1) {
+      return { error: '특례 종류를 창업자금 또는 가업승계 주식등 중에서 선택하세요.' };
+    }
+    const giftAmount = Number(p.giftAmount);
+    if (!giftAmount || giftAmount <= 0) return { error: '증여재산가액이 필요합니다.' };
+
+    const priorSpecialGiftAmount = Number(p.priorSpecialGiftAmount) || 0;
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+
+    let grossBase, ratioInfo = null, businessAssetAmount = null, debtAssumedAmount = 0;
+    if (specialType === 'business_succession') {
+      const hasAssetDetail = (Number(p.totalAssetValue) || 0) > 0;
+      ratioInfo = hasAssetDetail ? businessRelatedAssetRatio(p.totalAssetValue, {
+        asset55: p.nonBizAsset55, asset49: p.nonBizAsset49, asset61: p.nonBizAsset61, excessCash: p.excessCash, nonBizStock: p.nonBizStock
+      }) : null;
+      const ratio = hasAssetDetail ? ratioInfo.ratio : 1;
+      businessAssetAmount = Math.round(giftAmount * ratio);
+      grossBase = businessAssetAmount + priorSpecialGiftAmount;
+    } else {
+      debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
+      grossBase = Math.max(0, giftAmount - debtAssumedAmount) + priorSpecialGiftAmount;
+    }
+
+    let totalLimit;
+    if (specialType === 'startup') {
+      totalLimit = p.jobsCreated10Plus ? 10000000000 : 5000000000;
+    } else {
+      const years = Number(p.businessOwnershipYearsOfParent) || 0;
+      totalLimit = years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000);
+    }
+    const remainingLimit = Math.max(0, totalLimit - priorSpecialGiftAmount);
+    const specialRateApplicableAmount = grossBase < totalLimit
+      ? Math.max(0, grossBase - priorSpecialGiftAmount)
+      : Math.min(grossBase, remainingLimit);
+    const baseRateApplicableAmount = Math.max(0, giftAmount - specialRateApplicableAmount);
+
+    const propertyDeductionLimit = specialType === 'startup' ? 500000000 : 1000000000;
+    const propertyDeduction = Math.min(propertyDeductionLimit, specialRateApplicableAmount);
+    const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const taxBase = Math.max(0, specialRateApplicableAmount - propertyDeduction - disasterLossDeduction - appraisalFeeDeduction);
+
+    const calculatedTax = specialType === 'startup'
+      ? Math.round(taxBase * 0.10)
+      : Math.round(Math.min(taxBase, 12000000000) * 0.10 + Math.max(0, taxBase - 12000000000) * 0.20);
+
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+
+    return {
+      특례종류: specialType === 'startup' ? '창업자금(조특법 §30의5)' : '가업승계주식등(조특법 §30의6)', 증여재산가액: giftAmount,
+      인수채무액: debtAssumedAmount, 가업자산상당액: businessAssetAmount, 사업관련자산가액비율: ratioInfo ? ratioInfo.ratio : null,
+      과세특례적용전_증여세과세가액_계: grossBase, 총한도액: totalLimit,
+      과세특례적용대상_증여세과세가액: specialRateApplicableAmount, 기본세율적용대상_증여재산가액: baseRateApplicableAmount,
+      증여재산공제: propertyDeduction, 재해손실공제: disasterLossDeduction, 감정평가수수료공제: appraisalFeeDeduction,
+      과세표준: taxBase, 세율: specialType === 'startup' ? '10%' : '10%(120억 초과분 20%)', 산출세액: calculatedTax,
+      납부세액공제: priorPaidTax, 외국납부세액공제: foreignTaxPaidAmount,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax
     };
   };

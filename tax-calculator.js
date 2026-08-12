@@ -292,6 +292,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>공익법인등 관련 가산세</label><input type="number" id="giftPublicOrgPenalty" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>박물관자료등 징수유예세액</label><input type="number" id="giftMuseumDeferred" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>가업승계 납부유예세액</label><input type="number" id="giftBizSuccessionDeferred" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>영농자녀 증여농지 세액감면(조특법§71)</label><input type="number" id="giftFarmlandExemption" placeholder="원 (감면요건·한도는 별도 확인 후 입력)"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>수증자·증여자 정보 — 사건 폴더에 가족관계증명서·신분증 사본이 있으면 AI에게 찾아 채우도록 요청하세요</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -315,7 +316,44 @@ function renderGiftPane(){
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-gift">세액 계산하기</button>' +
-    '<div id="taxCalcGiftResult"></div>';
+    '<div id="taxCalcGiftResult"></div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제10호의2서식] 조특법§30의5·§30의6 증여세 과세특례(창업자금·가업승계주식) — 해당하는 경우에만 별도로 계산합니다. 일반 증여세와는 세율·공제·한도가 전혀 다릅니다.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>특례 종류</label><select id="srGiftType">' +
+          '<option value="startup">창업자금(§30의5)</option><option value="business_succession">가업승계 주식등(§30의6)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>해당 증여재산가액</label><input type="number" id="srGiftAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>인수채무액(부담부증여, 창업자금만)</label><input type="number" id="srDebtAssumed" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>기 과세특례적용분 증여세과세가액</label><input type="number" id="srPriorSpecialGift" placeholder="원 (동일특례 재차증여, 없으면 비움)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="srJobsCreated10Plus"><label for="srJobsCreated10Plus">(창업자금) 창업으로 10명 이상 신규고용 — 한도 100억(아니면 50억)</label></div>' +
+        '<div class="taxcalc-field"><label>(가업승계) 증여자(부모)의 가업영위기간</label><input type="number" id="srBusinessYears" placeholder="년 — 20미만 300억/20~30 400억/30이상 600억"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>(가업승계 주식등만) 사업관련자산가액 비율 — 비워두면 주식가액 전체를 가업자산으로 간주</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>총자산가액</label><input type="number" id="srTotalAsset" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>사업무관자산 - §55의2</label><input type="number" id="srNonBiz55" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>사업무관자산 - 시행령§49</label><input type="number" id="srNonBiz49" placeholder="원 (임대용부동산 포함)"></div>' +
+        '<div class="taxcalc-field"><label>사업무관자산 - 시행령§61①2호</label><input type="number" id="srNonBiz61" placeholder="원 (대여금)"></div>' +
+        '<div class="taxcalc-field"><label>과다보유현금</label><input type="number" id="srExcessCash" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>영업무관 주식·채권·금융상품</label><input type="number" id="srNonBizStock" placeholder="원"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>공제 · 세액공제 · 신고 상태</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="srDisasterLoss" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="srAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
+        '<div class="taxcalc-field"><label>납부세액공제(§58, 재차증여 기납부분)</label><input type="number" id="srPriorPaidTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>외국납부세액공제(§59)</label><input type="number" id="srForeignTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="srFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="srFraudulent"><label for="srFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="srUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="srUnpaidDays" placeholder="일 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-special-rate-gift">특례세율 증여세 계산하기</button>' +
+      '<div id="taxCalcSpecialRateGiftResult"></div>' +
+    '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
 
@@ -347,9 +385,39 @@ function renderGiftResult(r){
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   if (r.박물관자료등징수유예세액) html += taxCalcResultRow('박물관자료등 징수유예세액', '-' + won(r.박물관자료등징수유예세액));
   if (r.가업승계납부유예세액) html += taxCalcResultRow('가업승계 납부유예세액', '-' + won(r.가업승계납부유예세액));
+  if (r.영농자녀증여농지세액감면) html += taxCalcResultRow('영농자녀 증여농지 세액감면', '-' + won(r.영농자녀증여농지세액감면));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.인수채무액) html += '<div class="taxcalc-result-note">인수채무액 ' + won(r.인수채무액) + '에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세됩니다 — 양도소득세 탭에서 함께 계산하세요.</div>';
-  html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례는 포함되지 않았습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례(조특법§30의5·6)를 적용받는 경우 이 계산이 아니라 아래 별도의 특례세율 증여세 계산기를 쓰세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderSpecialRateGiftResult(r){
+  const box = document.getElementById('taxCalcSpecialRateGiftResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('특례 종류', r.특례종류);
+  if (r.가업자산상당액 != null) html += taxCalcResultRow('가업자산상당액', won(r.가업자산상당액) + (r.사업관련자산가액비율 != null ? ' (사업관련자산비율 ' + (r.사업관련자산가액비율 * 100).toFixed(1) + '%)' : ''));
+  if (r.인수채무액) html += taxCalcResultRow('인수채무액', won(r.인수채무액));
+  html += taxCalcResultRow('과세특례 적용전 과세가액 계', won(r.과세특례적용전_증여세과세가액_계));
+  html += taxCalcResultRow('총한도액', won(r.총한도액));
+  html += taxCalcResultRow('과세특례 적용대상 과세가액', won(r.과세특례적용대상_증여세과세가액));
+  if (r.기본세율적용대상_증여재산가액) html += taxCalcResultRow('기본세율 적용대상 증여재산가액(한도초과분)', won(r.기본세율적용대상_증여재산가액));
+  html += taxCalcResultRow('증여재산공제', won(r.증여재산공제));
+  if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', won(r.재해손실공제));
+  if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', won(r.감정평가수수료공제));
+  html += taxCalcResultRow('과세표준', won(r.과세표준));
+  html += taxCalcResultRow('세율', r.세율);
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.납부세액공제) html += taxCalcResultRow('납부세액공제(§58)', '-' + won(r.납부세액공제));
+  if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제(§59)', '-' + won(r.외국납부세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  if (r.기본세율적용대상_증여재산가액) html += '<div class="taxcalc-result-note">한도를 초과하는 ' + won(r.기본세율적용대상_증여재산가액) + '은 이 결과와 별개로 위 일반 증여세 계산기로 반드시 신고하세요.</div>';
+  html += '<div class="taxcalc-result-note">이 특례에는 신고세액공제(3%)가 적용되지 않습니다. 가업영위기간·중소/중견기업 여부 등 자격요건은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -396,8 +464,31 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>동거주택가액</label><input type="number" id="ihCohabitValue" placeholder="원 (6억 한도)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ihAppraisalFee" placeholder="원 (500만원 한도)"></div>' +
         '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="ihDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
-        '<div class="taxcalc-field"><label>가업상속공제(§18의2)</label><input type="number" id="ihBusinessDeduction" placeholder="원 (자격요건·한도는 별도 계산 후 입력)"></div>' +
-        '<div class="taxcalc-field"><label>영농상속공제(§18의3)</label><input type="number" id="ihFarmingDeduction" placeholder="원 (자격요건·한도는 별도 계산 후 입력)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>가업상속공제(§18의2, [별지 제1호서식]) — 아래 상세내역을 채우면 자동계산됩니다. 모르면 최종 공제액만 직접 입력하세요.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>최종 공제액(직접 입력, 상세내역 없을 때만)</label><input type="number" id="ihBusinessDeduction" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>가업영위기간</label><input type="number" id="ihBusinessYears" placeholder="년 (10년 미만이면 공제 불가)"></div>' +
+        '<div class="taxcalc-field"><label>[개인사업] 사업용자산 순액 합계</label><input type="number" id="ihBusinessIndividualNet" placeholder="원 (토지·건축물·기계장치 등-담보채무, 부표1가 ①계)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 상속개시일 현재 주식등 가액</label><input type="number" id="ihBusinessStockValue" placeholder="원 (가업법인 주식가액)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 총자산가액</label><input type="number" id="ihBusinessTotalAsset" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - §55의2</label><input type="number" id="ihBusinessNonBiz55" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - 시행령§49</label><input type="number" id="ihBusinessNonBiz49" placeholder="원 (임대용부동산 포함)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - 시행령§61①2호</label><input type="number" id="ihBusinessNonBiz61" placeholder="원 (대여금)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 과다보유현금</label><input type="number" id="ihBusinessExcessCash" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 영업무관 주식·채권·금융상품</label><input type="number" id="ihBusinessNonBizStock" placeholder="원"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>영농상속공제(§18의3, [별지 제2호서식], 30억 고정한도) — 마찬가지로 상세내역을 채우면 자동계산됩니다.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>최종 공제액(직접 입력, 상세내역 없을 때만)</label><input type="number" id="ihFarmingDeduction" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[개인] 영농재산가액 합계</label><input type="number" id="ihFarmingIndividualAsset" placeholder="원 (농지·초지·산림지·어선 등, 별지2호 ①합계)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 상속개시일 현재 주식등 가액</label><input type="number" id="ihFarmingStockValue" placeholder="원 (영농법인 주식가액)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 총자산가액</label><input type="number" id="ihFarmingTotalAsset" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - §55의2</label><input type="number" id="ihFarmingNonBiz55" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - 시행령§49</label><input type="number" id="ihFarmingNonBiz49" placeholder="원 (임대용부동산 포함)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 사업무관자산 - 시행령§61①2호</label><input type="number" id="ihFarmingNonBiz61" placeholder="원 (대여금)"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 과다보유현금</label><input type="number" id="ihFarmingExcessCash" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[법인] 영업무관 주식·채권·금융상품</label><input type="number" id="ihFarmingNonBizStock" placeholder="원"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>상속공제 종합한도(§24) · 세대생략가산액(§27)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -466,8 +557,14 @@ function renderInheritanceResult(r){
   if (r.동거주택상속공제) html += taxCalcResultRow('동거주택상속공제', won(r.동거주택상속공제));
   if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', won(r.감정평가수수료공제));
   if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', won(r.재해손실공제));
-  if (r.가업상속공제) html += taxCalcResultRow('가업상속공제', won(r.가업상속공제));
-  if (r.영농상속공제) html += taxCalcResultRow('영농상속공제', won(r.영농상속공제));
+  if (r.가업상속공제) {
+    html += taxCalcResultRow('가업상속공제', won(r.가업상속공제));
+    if (r.가업상속공제_계산내역) html += '<div class="taxcalc-result-note">자동계산: 대상금액 ' + won(r.가업상속공제_계산내역.대상금액) + ' / 한도액 ' + won(r.가업상속공제_계산내역.한도액) + '</div>';
+  }
+  if (r.영농상속공제) {
+    html += taxCalcResultRow('영농상속공제', won(r.영농상속공제));
+    if (r.영농상속공제_계산내역) html += '<div class="taxcalc-result-note">자동계산: 대상금액 ' + won(r.영농상속공제_계산내역.대상금액) + ' / 한도액 ' + won(r.영농상속공제_계산내역.한도액) + '</div>';
+  }
   html += taxCalcResultRow('상속공제 합계', won(r.상속공제_합계) + (r.상속공제종합한도_적용여부 ? ' (종합한도 적용됨)' : ''));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
   html += taxCalcResultRow('산출세액', won(r.산출세액) + (r.세대생략가산액 ? ' (세대생략가산액 ' + won(r.세대생략가산액) + ' 포함)' : ''));
@@ -580,6 +677,7 @@ taxCalcView.addEventListener('click', function(e){
       publicInterestOrgPenalty: Number(document.getElementById('giftPublicOrgPenalty').value) || 0,
       museumDeferredTaxAmount: Number(document.getElementById('giftMuseumDeferred').value) || 0,
       businessSuccessionDeferredTaxAmount: Number(document.getElementById('giftBizSuccessionDeferred').value) || 0,
+      farmlandGiftTaxExemptionAmount: Number(document.getElementById('giftFarmlandExemption').value) || 0,
       doneeName: document.getElementById('giftDoneeName').value,
       doneeRegNo: document.getElementById('giftDoneeRegNo').value,
       doneeAddress: document.getElementById('giftDoneeAddress').value,
@@ -594,6 +692,30 @@ taxCalcView.addEventListener('click', function(e){
       reportedInTime: document.getElementById('giftReportedInTime').checked
     };
     renderGiftResult(calculateGiftTaxJS(input));
+  } else if (action === 'run-special-rate-gift'){
+    const input = {
+      specialType: document.getElementById('srGiftType').value,
+      giftAmount: Number(document.getElementById('srGiftAmount').value) || 0,
+      debtAssumedAmount: Number(document.getElementById('srDebtAssumed').value) || 0,
+      priorSpecialGiftAmount: Number(document.getElementById('srPriorSpecialGift').value) || 0,
+      jobsCreated10Plus: document.getElementById('srJobsCreated10Plus').checked,
+      businessOwnershipYearsOfParent: Number(document.getElementById('srBusinessYears').value) || 0,
+      totalAssetValue: Number(document.getElementById('srTotalAsset').value) || 0,
+      nonBizAsset55: Number(document.getElementById('srNonBiz55').value) || 0,
+      nonBizAsset49: Number(document.getElementById('srNonBiz49').value) || 0,
+      nonBizAsset61: Number(document.getElementById('srNonBiz61').value) || 0,
+      excessCash: Number(document.getElementById('srExcessCash').value) || 0,
+      nonBizStock: Number(document.getElementById('srNonBizStock').value) || 0,
+      disasterLossAmount: Number(document.getElementById('srDisasterLoss').value) || 0,
+      appraisalFeeAmount: Number(document.getElementById('srAppraisalFee').value) || 0,
+      priorPaidTax: Number(document.getElementById('srPriorPaidTax').value) || 0,
+      foreignTaxPaidAmount: Number(document.getElementById('srForeignTax').value) || 0,
+      filingStatus: document.getElementById('srFilingStatus').value,
+      isFraudulent: document.getElementById('srFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('srUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('srUnpaidDays').value) || 0
+    };
+    renderSpecialRateGiftResult(calculateSpecialRateGiftTaxJS(input));
   } else if (action === 'run-inheritance'){
     const disposalLabels = ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'];
     const disposalPresumptionItems = disposalLabels.map(function(label, i){
@@ -622,7 +744,24 @@ taxCalcView.addEventListener('click', function(e){
       appraisalFeeAmount: Number(document.getElementById('ihAppraisalFee').value) || 0,
       disasterLossAmount: Number(document.getElementById('ihDisasterLoss').value) || 0,
       businessInheritanceDeduction: Number(document.getElementById('ihBusinessDeduction').value) || 0,
+      businessOwnershipYears: Number(document.getElementById('ihBusinessYears').value) || 0,
+      businessInheritanceIndividualNetAssetValue: Number(document.getElementById('ihBusinessIndividualNet').value) || 0,
+      businessInheritanceStockValue: Number(document.getElementById('ihBusinessStockValue').value) || 0,
+      businessInheritanceTotalAssetValue: Number(document.getElementById('ihBusinessTotalAsset').value) || 0,
+      businessInheritanceNonBizAsset55: Number(document.getElementById('ihBusinessNonBiz55').value) || 0,
+      businessInheritanceNonBizAsset49: Number(document.getElementById('ihBusinessNonBiz49').value) || 0,
+      businessInheritanceNonBizAsset61: Number(document.getElementById('ihBusinessNonBiz61').value) || 0,
+      businessInheritanceExcessCash: Number(document.getElementById('ihBusinessExcessCash').value) || 0,
+      businessInheritanceNonBizStock: Number(document.getElementById('ihBusinessNonBizStock').value) || 0,
       farmingInheritanceDeduction: Number(document.getElementById('ihFarmingDeduction').value) || 0,
+      farmingIndividualAssetValue: Number(document.getElementById('ihFarmingIndividualAsset').value) || 0,
+      farmingStockValue: Number(document.getElementById('ihFarmingStockValue').value) || 0,
+      farmingTotalAssetValue: Number(document.getElementById('ihFarmingTotalAsset').value) || 0,
+      farmingNonBizAsset55: Number(document.getElementById('ihFarmingNonBiz55').value) || 0,
+      farmingNonBizAsset49: Number(document.getElementById('ihFarmingNonBiz49').value) || 0,
+      farmingNonBizAsset61: Number(document.getElementById('ihFarmingNonBiz61').value) || 0,
+      farmingExcessCash: Number(document.getElementById('ihFarmingExcessCash').value) || 0,
+      farmingNonBizStock: Number(document.getElementById('ihFarmingNonBizStock').value) || 0,
       priorGiftTaxableBaseForOverallLimit: Number(document.getElementById('ihPriorGiftBaseTotal').value) || 0,
       disclaimedShareRedistributedAmount: Number(document.getElementById('ihDisclaimedRedistributed').value) || 0,
       generationSkipHeirRatio: Number(document.getElementById('ihGenSkipRatio').value) || 0,

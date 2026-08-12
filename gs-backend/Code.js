@@ -333,6 +333,7 @@ const DRIVE_TOOLS = [
         publicInterestOrgPenalty: { type: 'number', description: '공익법인등 관련 가산세(§78, 출연재산 미사용 등). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
         museumDeferredTaxAmount: { type: 'number', description: '박물관자료·미술관자료 징수유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
         businessSuccessionDeferredTaxAmount: { type: 'number', description: '가업승계 증여세 납부유예세액(조특법§30의6, 원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        farmlandGiftTaxExemptionAmount: { type: 'number', description: '영농자녀 증여농지등 세액감면(조특법§71, [별지 제52호서식], 원) — 자경농민이 8년 이상 자경한 농지·초지·산림지를 영농자녀에게 증여할 때 증여세를 감면. 감면요건 판정과 한도액 산정은 이 도구가 하지 않으므로 관할세무서에 확인했거나 별도로 계산한 감면세액을 그대로 입력한다. 없으면 생략.' },
         doneeName: { type: 'string', description: '수증자 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
         doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
         doneeAddress: { type: 'string', description: '수증자 주소. 위와 같은 방식으로 확인.' },
@@ -387,8 +388,25 @@ const DRIVE_TOOLS = [
         cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
         appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원). 500만원 한도로 공제.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 상속재산가액(원, 재해손실공제 §23). 없으면 생략.' },
-        businessInheritanceDeduction: { type: 'number', description: '가업상속공제(§18의2, 최대 600억원). 자격요건 판정과 한도 산출은 이 도구가 하지 않으므로 별도로 계산한 공제액을 그대로 입력한다. 없으면 생략.' },
-        farmingInheritanceDeduction: { type: 'number', description: '영농상속공제(§18의3, 최대 30억원). 자격요건 판정과 한도 산출은 이 도구가 하지 않으므로 별도로 계산한 공제액을 그대로 입력한다. 없으면 생략.' },
+        businessInheritanceDeduction: { type: 'number', description: '가업상속공제 최종 공제액(§18의2, 원) — 아래 상세 자산내역([별지 제1호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다. 상세 내역을 모르거나 이미 계산이 끝난 경우에만 최종 공제액을 직접 입력한다. 자격요건(가업 종사기간·최대주주 여부·중소/중견기업 여부 등) 판정은 이 도구가 하지 않는다.' },
+        businessOwnershipYears: { type: 'number', description: '가업상속공제용 — 피상속인의 가업영위기간(년). 10년 미만이면 공제 불가, 10~20년 300억/20~30년 400억/30년이상 600억원 한도가 자동 적용된다.' },
+        businessInheritanceIndividualNetAssetValue: { type: 'number', description: '가업상속공제용 — 소득세법을 적용받는 가업(개인사업)인 경우, 가업에 직접 사용되는 토지(비사업용 토지 제외)·건축물·기계장치 등 사업용자산가액에서 담보채무액을 뺀 순액의 합계([별지 제1호서식 부표1] ①계). 법인세법 적용가업이면 생략.' },
+        businessInheritanceStockValue: { type: 'number', description: '가업상속공제용 — 법인세법을 적용받는 가업(법인)인 경우, 상속재산 중 가업에 해당하는 법인의 주식등 가액([별지 제1호서식 부표1] ②). 개인사업이면 생략.' },
+        businessInheritanceTotalAssetValue: { type: 'number', description: '가업상속공제용(법인) — 상속개시일 현재 해당 법인의 총자산가액(상증세법 제4장 평가액, [별지 제1호서식 부표1] ③).' },
+        businessInheritanceNonBizAsset55: { type: 'number', description: '가업상속공제용(법인) — 사업무관자산 중 법인세법§55의2 해당자산(비사업용 부동산 등)가액.' },
+        businessInheritanceNonBizAsset49: { type: 'number', description: '가업상속공제용(법인) — 사업무관자산 중 법인세법시행령§49 해당자산 및 임대용부동산가액.' },
+        businessInheritanceNonBizAsset61: { type: 'number', description: '가업상속공제용(법인) — 사업무관자산 중 법인세법시행령§61①2호 해당자산(대여금)가액.' },
+        businessInheritanceExcessCash: { type: 'number', description: '가업상속공제용(법인) — 과다보유현금(직전 5개 사업연도말 평균 현금성자산 보유액의 150% 초과분). 이미 계산된 금액을 입력한다.' },
+        businessInheritanceNonBizStock: { type: 'number', description: '가업상속공제용(법인) — 영업활동과 직접 관련없이 보유하는 주식·채권 및 금융상품 가액(과다보유현금 제외분).' },
+        farmingInheritanceDeduction: { type: 'number', description: '영농상속공제 최종 공제액(§18의3, 원, 30억한도) — 아래 상세 자산내역([별지 제2호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다. 자격요건(8년 이상 영농 등) 판정은 이 도구가 하지 않는다.' },
+        farmingIndividualAssetValue: { type: 'number', description: '영농상속공제용 — 소득세법을 적용받는 영농재산(농지·초지·산림지·어선·어업권 등)가액 합계([별지 제2호서식] ①합계).' },
+        farmingStockValue: { type: 'number', description: '영농상속공제용 — 법인세법을 적용받는 영농(영농법인)인 경우, 상속재산 중 해당 법인 주식등 가액([별지 제2호서식] ③=②합계).' },
+        farmingTotalAssetValue: { type: 'number', description: '영농상속공제용(법인) — 상속개시일 현재 해당 법인의 총자산가액.' },
+        farmingNonBizAsset55: { type: 'number', description: '영농상속공제용(법인) — 사업무관자산 중 법인세법§55의2 해당자산가액.' },
+        farmingNonBizAsset49: { type: 'number', description: '영농상속공제용(법인) — 사업무관자산 중 법인세법시행령§49 해당자산 및 임대용부동산가액.' },
+        farmingNonBizAsset61: { type: 'number', description: '영농상속공제용(법인) — 사업무관자산 중 법인세법시행령§61①2호 해당자산(대여금)가액.' },
+        farmingExcessCash: { type: 'number', description: '영농상속공제용(법인) — 과다보유현금(직전 5개 사업연도말 평균 현금성자산 보유액의 150% 초과분).' },
+        farmingNonBizStock: { type: 'number', description: '영농상속공제용(법인) — 영업활동과 직접 관련없이 보유하는 주식·채권 및 금융상품 가액.' },
         priorGiftTaxableBaseForOverallLimit: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 상속재산에 가산된 사전증여재산 전체의 증여세 과세표준 합계(원, 배우자분만이 아니라 전체). 생략하면 종합한도가 사실상 적용되지 않는다.' },
         disclaimedShareRedistributedAmount: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 선순위 상속인의 상속포기로 다음 순위 상속인이 받은 재산가액(원). 없으면 생략.' },
         priorGiftTaxPaid: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산에 대해 당시 이미 납부한 증여세액(원). 상속세 산출세액에서 공제된다.' },
@@ -419,6 +437,42 @@ const DRIVE_TOOLS = [
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['taxableEstateAmount']
+    }
+  },
+  {
+    name: 'calculate_special_rate_gift_tax',
+    description: '조세특례제한법 §30의5(창업자금) 또는 §30의6(가업승계 주식등) 증여세 과세특례를 계산한다([별지 제10호의2서식] 기준 — 일반 증여세 누진세율이 아니라 10%(가업승계는 120억 초과분 20%) 특례세율, 증여재산공제(창업자금 5억/가업승계 10억), 별도 총한도(창업자금 50억~신규고용10명이상 100억/가업승계 가업영위기간별 300~600억)를 적용하고 신고세액공제는 적용하지 않는다. 거주자는 이 특례를 §30의5·§30의6·§30의7 중 하나만 적용받을 수 있다. 한도를 초과하는 금액은 기본세율 적용대상이므로 반드시 calculate_gift_tax로 별도 신고해야 한다(이 도구가 baseRateApplicableAmount로 그 금액을 알려준다).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        specialType: { type: 'string', enum: ['startup', 'business_succession'], description: 'startup=조특법§30의5 창업자금 특례, business_succession=조특법§30의6 가업승계 주식등 특례.' },
+        giftAmount: { type: 'number', description: '해당 증여재산가액(원) — 창업자금이면 증여받은 현금·자산 총액, 가업승계면 증여받은 가업법인 주식등의 가액(시가). 시가 확인은 calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
+        debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원, 창업자금 특례에서만 의미가 있음). 없으면 생략.' },
+        priorSpecialGiftAmount: { type: 'number', description: '이전에 이미 같은 특례(§30의5 또는 §30의6)를 적용받은 증여재산에 대한 과세가액(원, 동일인 합산). 없으면 생략.' },
+        jobsCreated10Plus: { type: 'boolean', description: 'specialType이 startup일 때만 — 창업을 통하여 10명 이상을 신규 고용했는지. true면 총한도 100억원, 아니면 50억원.' },
+        businessOwnershipYearsOfParent: { type: 'number', description: 'specialType이 business_succession일 때만 — 증여자(부모)의 가업영위기간(년). 20년미만 300억/20~30년 400억/30년이상 600억원 한도가 자동 적용된다.' },
+        totalAssetValue: { type: 'number', description: 'specialType이 business_succession이고 법인 자산내역으로 가업자산상당액을 계산하려는 경우 — 증여일 현재 해당 법인의 총자산가액. 생략하면 주식등 가액 전체를 가업자산으로 간주한다.' },
+        nonBizAsset55: { type: 'number', description: '사업무관자산 중 법인세법§55의2 해당자산가액.' },
+        nonBizAsset49: { type: 'number', description: '사업무관자산 중 법인세법시행령§49 해당자산 및 임대용부동산가액.' },
+        nonBizAsset61: { type: 'number', description: '사업무관자산 중 법인세법시행령§61①2호 해당자산(대여금)가액.' },
+        excessCash: { type: 'number', description: '과다보유현금(직전 5개 사업연도말 평균 현금성자산 보유액의 150% 초과분).' },
+        nonBizStock: { type: 'number', description: '영업활동과 직접 관련없이 보유하는 주식·채권 및 금융상품 가액.' },
+        disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, 재해손실공제 §54). 없으면 생략.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가수수료(원). 500만원 한도로 공제.' },
+        priorPaidTax: { type: 'number', description: '상증세법 §58 납부세액공제 — 동일인 재차증여 합산과세시 이미 납부한 증여세액. 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        doneeName: { type: 'string', description: '수증자 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
+        doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
+        donorName: { type: 'string', description: '증여자 성명. 위와 같은 방식으로 확인.' },
+        donorRegNo: { type: 'string', description: '증여자 주민등록번호. 위와 같은 방식으로 확인.' },
+        giftDate: { type: 'string', description: '증여일자(YYYY-MM-DD). 위와 같은 방식으로 확인.' }
+      },
+      required: ['specialType', 'giftAmount']
     }
   },
   {
@@ -2265,6 +2319,59 @@ function financialAssetInheritanceDeduction_(netFinancialAssets) {
   return Math.min(200000000, Math.max(net * 0.2, 20000000));
 }
 
+// 사업관련자산가액 비율 (상증세법 시행령 §15⑤2호가목~마목 — 가업상속공제·영농상속공제·조특법 가업승계 증여세 특례에 공통 사용)
+// 사업무관자산 = 법인세법§55의2 해당자산 + 법인세법시행령§49 해당자산및임대용부동산 + 법인세법시행령§61①2호 해당자산(대여금)
+//              + 과다보유현금 + 영업무관 보유 주식·채권·금융상품
+function businessRelatedAssetRatio_(totalAssetValue, nonBiz) {
+  const total = Number(totalAssetValue) || 0;
+  const n = nonBiz || {};
+  const nonBizTotal = (Number(n.asset55) || 0) + (Number(n.asset49) || 0) + (Number(n.asset61) || 0)
+    + (Number(n.excessCash) || 0) + (Number(n.nonBizStock) || 0);
+  const businessRelatedAssetValue = Math.max(0, total - nonBizTotal);
+  const ratio = total > 0 ? businessRelatedAssetValue / total : 0;
+  return { nonBizTotal, businessRelatedAssetValue, ratio };
+}
+
+// 가업상속공제 (§18의2, [별지 제1호서식]) — 소득세법 적용가업(순자산액 합계) 또는 법인세법 적용가업(주식등가액×사업관련자산비율) 중
+// 해당하는 방식으로 대상금액을 계산하고, 가업영위기간별 한도(10~20년 300억/20~30년 400억/30년이상 600억)를 적용한다.
+// 상세 입력(법인 자산내역 등)이 없으면 businessInheritanceDeduction(직접 입력한 최종 공제액)을 그대로 쓴다.
+function businessInheritanceDeductionDetailed_(p) {
+  const years = Number(p.businessOwnershipYears) || 0;
+  const individualNet = Number(p.businessInheritanceIndividualNetAssetValue) || 0;
+  const stockValue = Number(p.businessInheritanceStockValue) || 0;
+  if (years <= 0 || (individualNet <= 0 && stockValue <= 0)) return null;
+
+  const targetIndividual = individualNet;
+  const ratioInfo = stockValue > 0 ? businessRelatedAssetRatio_(p.businessInheritanceTotalAssetValue, {
+    asset55: p.businessInheritanceNonBizAsset55, asset49: p.businessInheritanceNonBizAsset49,
+    asset61: p.businessInheritanceNonBizAsset61, excessCash: p.businessInheritanceExcessCash, nonBizStock: p.businessInheritanceNonBizStock
+  }) : null;
+  const targetCorporate = ratioInfo ? Math.round(stockValue * ratioInfo.ratio) : 0;
+  const targetAmount = targetIndividual + targetCorporate;
+
+  const limitAmount = years < 10 ? 0 : (years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000));
+  const deductionAmount = Math.min(targetAmount, limitAmount);
+  return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo };
+}
+
+// 영농상속공제 (§18의3, [별지 제2호서식]) — 소득세법 적용영농(①합계) + 법인세법 적용영농(주식등가액×사업관련자산비율), 30억원 고정한도.
+function farmingInheritanceDeductionDetailed_(p) {
+  const individualTotal = Number(p.farmingIndividualAssetValue) || 0;
+  const stockValue = Number(p.farmingStockValue) || 0;
+  if (individualTotal <= 0 && stockValue <= 0) return null;
+
+  const ratioInfo = stockValue > 0 ? businessRelatedAssetRatio_(p.farmingTotalAssetValue, {
+    asset55: p.farmingNonBizAsset55, asset49: p.farmingNonBizAsset49,
+    asset61: p.farmingNonBizAsset61, excessCash: p.farmingExcessCash, nonBizStock: p.farmingNonBizStock
+  }) : null;
+  const targetCorporate = ratioInfo ? Math.round(stockValue * ratioInfo.ratio) : 0;
+  const targetAmount = individualTotal + targetCorporate;
+
+  const limitAmount = 3000000000;
+  const deductionAmount = Math.min(targetAmount, limitAmount);
+  return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo };
+}
+
 // ============================================================
 // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법)
 // 양도소득세·증여세·상속세 계산에 들어가는 "증여재산가액"·"상속세과세가액"은
@@ -2519,10 +2626,13 @@ function toolCalculateGiftTax(p) {
   // 박물관자료등징수유예세액, 가업승계납부유예세액(조특법§30의6) — 유예된 세액은 이번 신고 시 납부할 세액에서 뺀다.
   const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
   const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
+  // 영농자녀 증여농지등 세액감면(조특법§71, [별지 제52호서식]) — 자경농민이 8년 이상 자경한 농지·초지·산림지를 영농자녀에게 증여할 때 감면.
+  // 감면요건(자경기간·계속영농 등)과 한도액 산정은 이 도구가 하지 않으므로, 관할세무서에 신청해 확정된(또는 별도로 계산한) 감면세액을 그대로 입력해야 한다.
+  const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
 
   const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
-    - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount);
+    - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
 
   return {
     입력값: {
@@ -2555,6 +2665,7 @@ function toolCalculateGiftTax(p) {
     납부지연가산세: penalties.latePenalty,
     박물관자료등징수유예세액: museumDeferredTaxAmount,
     가업승계납부유예세액: businessSuccessionDeferredTaxAmount,
+    영농자녀증여농지세액감면: farmlandGiftTaxExemptionAmount,
     납부세액: finalTax,
     안내: (debtAssumedAmount > 0
       ? '부담부증여로 전제해 인수채무액 ' + debtAssumedAmount + '원을 증여재산가액에서 제외했습니다 — 이 채무액에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세되니 calculate_transfer_tax로 반드시 함께 계산하세요. '
@@ -2610,9 +2721,12 @@ function toolCalculateInheritanceTax(p) {
   // 재해손실공제 (상증세법 §23) — 신고기한 이내 재난으로 멸실·훼손된 상속재산가액
   const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
 
-  // 가업상속공제(§18의2, 최대 600억)·영농상속공제(§18의3, 최대 30억) — 자격요건 판정과 한도 산정은 이 도구가 하지 않으므로, 별도로 계산한 공제액을 그대로 입력해야 한다.
-  const businessInheritanceDeduction = Number(p.businessInheritanceDeduction) || 0;
-  const farmingInheritanceDeduction = Number(p.farmingInheritanceDeduction) || 0;
+  // 가업상속공제(§18의2, 최대 600억)·영농상속공제(§18의3, 최대 30억) — 상세 자산내역([별지 제1호서식]/[별지 제2호서식] 기준)이 있으면 자동계산하고,
+  // 없으면 별도로 계산한 최종 공제액(businessInheritanceDeduction/farmingInheritanceDeduction)을 그대로 쓴다. 자격요건(가업 종사기간·최대주주 여부 등) 판정은 이 도구가 하지 않는다.
+  const businessInheritanceDetail_ = businessInheritanceDeductionDetailed_(p);
+  const businessInheritanceDeduction = businessInheritanceDetail_ ? businessInheritanceDetail_.deductionAmount : (Number(p.businessInheritanceDeduction) || 0);
+  const farmingInheritanceDetail_ = farmingInheritanceDeductionDetailed_(p);
+  const farmingInheritanceDeduction = farmingInheritanceDetail_ ? farmingInheritanceDetail_.deductionAmount : (Number(p.farmingInheritanceDeduction) || 0);
 
   let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
     + businessInheritanceDeduction + farmingInheritanceDeduction;
@@ -2690,7 +2804,17 @@ function toolCalculateInheritanceTax(p) {
     감정평가수수료공제: appraisalFeeDeduction,
     재해손실공제: disasterLossDeduction,
     가업상속공제: businessInheritanceDeduction,
+    가업상속공제_계산내역: businessInheritanceDetail_ ? {
+      대상금액: businessInheritanceDetail_.targetAmount, 한도액: businessInheritanceDetail_.limitAmount,
+      소득세법적용분: businessInheritanceDetail_.targetIndividual, 법인세법적용분: businessInheritanceDetail_.targetCorporate,
+      사업관련자산가액비율: businessInheritanceDetail_.ratioInfo ? businessInheritanceDetail_.ratioInfo.ratio : null
+    } : null,
     영농상속공제: farmingInheritanceDeduction,
+    영농상속공제_계산내역: farmingInheritanceDetail_ ? {
+      대상금액: farmingInheritanceDetail_.targetAmount, 한도액: farmingInheritanceDetail_.limitAmount,
+      소득세법적용분: farmingInheritanceDetail_.individualTotal, 법인세법적용분: farmingInheritanceDetail_.targetCorporate,
+      사업관련자산가액비율: farmingInheritanceDetail_.ratioInfo ? farmingInheritanceDetail_.ratioInfo.ratio : null
+    } : null,
     상속공제_합계: totalDeduction,
     상속공제종합한도_적용여부: overallLimitApplied,
     과세표준: taxBase,
@@ -2711,6 +2835,101 @@ function toolCalculateInheritanceTax(p) {
     가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
     납부세액: finalTax,
     안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제·특례증여세액공제는 자격요건 판정과 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
+  };
+}
+
+// 조특법§30의5(창업자금)·§30의6(가업승계 주식등) 증여세 과세특례 ([별지 제10호의2서식]) —
+// 일반 증여세 누진세율이 아니라 10%(가업승계 120억 초과분 20%) 특례세율, 별도 증여재산공제, 별도 총한도를 적용하며 신고세액공제는 적용하지 않는다.
+function toolCalculateSpecialRateGiftTax(p) {
+  p = p || {};
+  const specialType = p.specialType;
+  if (['startup', 'business_succession'].indexOf(specialType) === -1) {
+    return { error: 'specialType은 "startup"(창업자금) 또는 "business_succession"(가업승계 주식등) 중 하나여야 합니다.' };
+  }
+  const giftAmount = Number(p.giftAmount);
+  if (!giftAmount || giftAmount <= 0) return { error: '증여재산가액(giftAmount)이 필요합니다.' };
+
+  const priorSpecialGiftAmount = Number(p.priorSpecialGiftAmount) || 0;
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+
+  let grossBase, ratioInfo = null, businessAssetAmount = null, debtAssumedAmount = 0;
+  if (specialType === 'business_succession') {
+    const hasAssetDetail = (Number(p.totalAssetValue) || 0) > 0;
+    ratioInfo = hasAssetDetail ? businessRelatedAssetRatio_(p.totalAssetValue, {
+      asset55: p.nonBizAsset55, asset49: p.nonBizAsset49, asset61: p.nonBizAsset61, excessCash: p.excessCash, nonBizStock: p.nonBizStock
+    }) : null;
+    const ratio = hasAssetDetail ? ratioInfo.ratio : 1;
+    businessAssetAmount = Math.round(giftAmount * ratio);
+    grossBase = businessAssetAmount + priorSpecialGiftAmount;
+  } else {
+    debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
+    grossBase = Math.max(0, giftAmount - debtAssumedAmount) + priorSpecialGiftAmount;
+  }
+
+  let totalLimit;
+  if (specialType === 'startup') {
+    totalLimit = p.jobsCreated10Plus ? 10000000000 : 5000000000;
+  } else {
+    const years = Number(p.businessOwnershipYearsOfParent) || 0;
+    totalLimit = years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000);
+  }
+  const remainingLimit = Math.max(0, totalLimit - priorSpecialGiftAmount);
+  const specialRateApplicableAmount = grossBase < totalLimit
+    ? Math.max(0, grossBase - priorSpecialGiftAmount)
+    : Math.min(grossBase, remainingLimit);
+  const baseRateApplicableAmount = Math.max(0, giftAmount - specialRateApplicableAmount);
+
+  const propertyDeductionLimit = specialType === 'startup' ? 500000000 : 1000000000;
+  const propertyDeduction = Math.min(propertyDeductionLimit, specialRateApplicableAmount);
+  const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+  const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const taxBase = Math.max(0, specialRateApplicableAmount - propertyDeduction - disasterLossDeduction - appraisalFeeDeduction);
+
+  const calculatedTax = specialType === 'startup'
+    ? Math.round(taxBase * 0.10)
+    : Math.round(Math.min(taxBase, 12000000000) * 0.10 + Math.max(0, taxBase - 12000000000) * 0.20);
+
+  const priorPaidTax = Number(p.priorPaidTax) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+
+  return {
+    입력값: {
+      특례종류: specialType === 'startup' ? '창업자금(조특법 §30의5)' : '가업승계주식등(조특법 §30의6)', 증여재산가액: giftAmount,
+      수증자: { 성명: p.doneeName || '', 주민등록번호: p.doneeRegNo || '' },
+      증여자: { 성명: p.donorName || '', 주민등록번호: p.donorRegNo || '', 증여일자: p.giftDate || '' }
+    },
+    인수채무액: debtAssumedAmount,
+    가업자산상당액: businessAssetAmount,
+    사업관련자산가액비율: ratioInfo ? ratioInfo.ratio : null,
+    과세특례적용전_증여세과세가액_계: grossBase,
+    총한도액: totalLimit,
+    과세특례적용대상_증여세과세가액: specialRateApplicableAmount,
+    기본세율적용대상_증여재산가액: baseRateApplicableAmount,
+    증여재산공제: propertyDeduction,
+    재해손실공제: disasterLossDeduction,
+    감정평가수수료공제: appraisalFeeDeduction,
+    과세표준: taxBase,
+    세율: specialType === 'startup' ? '10%' : '10%(120억 초과분 20%)',
+    산출세액: calculatedTax,
+    납부세액공제: priorPaidTax,
+    외국납부세액공제: foreignTaxPaidAmount,
+    무신고가산세: penalties.unreportedPenalty,
+    과소신고가산세: penalties.underreportedPenalty,
+    납부지연가산세: penalties.latePenalty,
+    납부세액: finalTax,
+    안내: '이 특례에는 상증세법 §69②의 신고세액공제(3%)가 적용되지 않습니다. ' +
+      (baseRateApplicableAmount > 0
+        ? '한도(' + totalLimit + '원)를 초과하는 기본세율적용대상_증여재산가액 ' + baseRateApplicableAmount + '원은 이 결과와 별개로 calculate_gift_tax(일반 증여세, [별지 제10호서식])로 반드시 신고해야 합니다. '
+        : '') +
+      '거주자는 조특법 §30의5(창업자금)·§30의6(가업승계 주식등)·§30의7 중 어느 하나만 적용받을 수 있습니다. ' +
+      (specialType === 'business_succession' && !(Number(p.totalAssetValue) > 0)
+        ? '법인 자산내역(totalAssetValue 등)을 넣지 않아 주식등 가액 전체를 가업자산으로 간주했습니다 — 사업무관자산이 있다면 정확한 값을 넣어 재계산하세요. '
+        : '') +
+      '가업영위기간·중소/중견기업 여부 등 자격요건 자체는 이 도구가 검증하지 않으니 별도로 확인하세요.'
   };
 }
 
@@ -3553,6 +3772,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_transfer_tax' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
+        b.name === 'calculate_special_rate_gift_tax' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -3662,6 +3882,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_inheritance_tax') {
         const resultObj = toolCalculateInheritanceTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_special_rate_gift_tax') {
+        const resultObj = toolCalculateSpecialRateGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
