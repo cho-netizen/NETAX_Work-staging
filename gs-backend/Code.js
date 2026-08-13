@@ -485,6 +485,30 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'allocate_inheritance_tax_by_heir',
+    description: '상속인이 여러 명일 때, calculate_inheritance_tax로 계산한 전체 상속세(산출세액·세액공제·가산세·납부세액)를 각 상속인이 실제 받았거나 받을 재산 비율로 안분해 상속인별 납부세액을 계산한다(상증세법 §3조의2②, 유산세 방식). calculate_inheritance_tax를 먼저 호출해 그 결과를 aggregateResult로 그대로 넘겨야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        aggregateResult: { type: 'object', description: 'calculate_inheritance_tax의 반환값(JSON) 전체를 그대로 넣는다.' },
+        heirs: {
+          type: 'array',
+          description: '상속인별 명세',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: '상속인 성명' },
+              relation: { type: 'string', description: '피상속인과의 관계(예: 자, 배우자, 대습상속/손)' },
+              actualInheritedValue: { type: 'number', description: '이 상속인이 실제로 받았거나 받을 상속재산가액(원) — 채무 등을 부담한다면 그만큼 차감한 순액을 넣는 것이 원칙이다.' }
+            },
+            required: ['name', 'actualInheritedValue']
+          }
+        }
+      },
+      required: ['aggregateResult', 'heirs']
+    }
+  },
+  {
     name: 'calculate_special_rate_gift_tax',
     description: '조세특례제한법 §30의5(창업자금) 또는 §30의6(가업승계 주식등) 증여세 과세특례를 계산한다([별지 제10호의2서식] 기준 — 일반 증여세 누진세율이 아니라 10%(가업승계는 120억 초과분 20%) 특례세율, 증여재산공제(창업자금 5억/가업승계 10억), 별도 총한도(창업자금 50억~신규고용10명이상 100억/가업승계 가업영위기간별 300~600억)를 적용하고 신고세액공제는 적용하지 않는다. 거주자는 이 특례를 §30의5·§30의6·§30의7 중 하나만 적용받을 수 있다. 한도를 초과하는 금액은 기본세율 적용대상이므로 반드시 calculate_gift_tax로 별도 신고해야 한다(이 도구가 baseRateApplicableAmount로 그 금액을 알려준다).',
     input_schema: {
@@ -3148,6 +3172,52 @@ function toolCalculateInheritanceTax(p) {
   };
 }
 
+// 상속인별 납부세액 안분 (상증세법 §3조의2②) — 우리나라 상속세는 유산세 방식이라 상속재산 전체에 대해
+// 하나의 세액을 계산한 뒤, 각 상속인은 "자신이 받았거나 받을 재산이 전체 상속재산에서 차지하는 비율"만큼만
+// 납세의무를 진다. toolCalculateInheritanceTax의 결과(전체 세액)와 상속인별 실제상속재산가액만 있으면 계산되며,
+// 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계가 전체 금액과 정확히 일치하게 한다.
+function toolAllocateInheritanceTaxByHeir(aggregateResult, heirs) {
+  if (!aggregateResult || aggregateResult.error) return { error: '전체 상속세 계산 결과(toolCalculateInheritanceTax의 반환값)가 필요합니다.' };
+  if (!Array.isArray(heirs) || heirs.length === 0) return { error: '상속인을 1명 이상 입력해야 합니다.' };
+  const values = heirs.map(function (h) { return Number(h.actualInheritedValue) || 0; });
+  const totalInherited = values.reduce(function (s, v) { return s + v; }, 0);
+  if (totalInherited <= 0) return { error: '상속인별 실제상속재산가액(actualInheritedValue) 합계가 0보다 커야 합니다.' };
+
+  const totalCreditAmount = (aggregateResult.기납부증여세액공제 || 0) + (aggregateResult.특례증여세액공제 || 0)
+    + (aggregateResult.외국납부세액공제 || 0) + (aggregateResult.단기재상속세액공제 || 0)
+    + (aggregateResult.그밖의공제 || 0) + (aggregateResult.신고세액공제 || 0);
+  const totalGrossTax = (aggregateResult.산출세액 || 0) + (aggregateResult.세대생략가산액 || 0);
+  const totalPenaltyAmount = (aggregateResult.무신고가산세 || 0) + (aggregateResult.과소신고가산세 || 0) + (aggregateResult.납부지연가산세 || 0);
+  const fields = [
+    { key: '상속세과세가액', total: aggregateResult.상속세과세가액_적용값 || 0 },
+    { key: '과세표준', total: aggregateResult.과세표준 || 0 },
+    { key: '산출세액_합계', total: totalGrossTax },
+    { key: '세액공제_합계', total: totalCreditAmount },
+    { key: '영리법인면제분납부세액', total: aggregateResult.영리법인면제분납부세액 || 0 },
+    { key: '가산세_합계', total: totalPenaltyAmount },
+    { key: '납부세액', total: aggregateResult.납부세액 || 0 }
+  ];
+
+  const maxIdx = values.indexOf(Math.max.apply(null, values));
+  const rows = heirs.map(function (h, i) {
+    const ratio = values[i] / totalInherited;
+    const row = { 성명: h.name || ('상속인' + (i + 1)), 관계: h.relation || '', 실제상속재산가액: values[i], 지분율: ratio };
+    fields.forEach(function (f) { row[f.key] = Math.round(f.total * ratio); });
+    return row;
+  });
+  // 반올림으로 합계가 어긋나면 실제상속재산가액이 가장 큰 상속인에게 잔액을 몰아 전체 합계와 정확히 맞춘다.
+  fields.forEach(function (f) {
+    const sumAllocated = rows.reduce(function (s, r) { return s + r[f.key]; }, 0);
+    rows[maxIdx][f.key] += (f.total - sumAllocated);
+  });
+
+  return {
+    상속인별_내역: rows,
+    합계검증: { 실제상속재산가액_합계: totalInherited, 납부세액_합계: aggregateResult.납부세액 || 0 },
+    안내: '상증세법 §3조의2②에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식). 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다. 각 상속인은 자신이 받았거나 받을 재산을 한도로 연대납부의무를 지므로, 실제 배분·납부는 상속인 간 협의나 유언에 따른 실제 취득재산 기준으로 재확인하세요.'
+  };
+}
+
 // 조특법§30의5(창업자금)·§30의6(가업승계 주식등) 증여세 과세특례 ([별지 제10호의2서식]) —
 // 일반 증여세 누진세율이 아니라 10%(가업승계 120억 초과분 20%) 특례세율, 별도 증여재산공제, 별도 총한도를 적용하며 신고세액공제는 적용하지 않는다.
 function toolCalculateSpecialRateGiftTax(p) {
@@ -4417,6 +4487,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_transfer_tax' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
+        b.name === 'allocate_inheritance_tax_by_heir' ||
         b.name === 'calculate_special_rate_gift_tax' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
@@ -4540,6 +4611,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_inheritance_tax') {
         const resultObj = toolCalculateInheritanceTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'allocate_inheritance_tax_by_heir') {
+        const input = block.input || {};
+        const resultObj = toolAllocateInheritanceTaxByHeir(input.aggregateResult, input.heirs);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

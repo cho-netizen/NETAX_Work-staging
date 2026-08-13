@@ -34,7 +34,9 @@ let inheritanceValuationAssets = [];
 const VALUATION_METHOD_LABELS = {
   direct: '직접입력(시가·감정가액·매매사례가액 등)',
   land: '토지(개별공시지가 × 면적 × 지분)',
-  house: '주택(고시된 개별·공동주택가격 × 지분)',
+  house: '단독주택(고시된 개별주택가격 × 지분)',
+  apartment: '공동주택/아파트(고시된 공동주택가격 × 지분)',
+  officetel: '오피스텔·상업용건물(고시된 기준시가 × 지분)',
   listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
   unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
   rental: '임대 중인 부동산(임대료환산가액)'
@@ -44,7 +46,7 @@ function computeValuationAssetValue(a){
   let value;
   switch (a.method){
     case 'land': value = calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100); break;
-    case 'house': value = calculateHouseValueJS(a.housePrice, a.houseShare || 100); break;
+    case 'house': case 'apartment': case 'officetel': value = calculateHouseValueJS(a.housePrice, a.houseShare || 100); break;
     case 'listedStock': value = calculateListedStockValueJS(a.listedPrice, a.listedShares); break;
     case 'rental': value = calculateRentalConversionValueJS(a.rentalAnnualRent, a.rentalDeposit); break;
     case 'unlistedStock': {
@@ -59,9 +61,13 @@ function computeValuationAssetValue(a){
     }
     default: value = Number(a.directValue) || 0;
   }
-  // 저당권·질권 등이 설정된 재산의 평가(상증세법 §66) — 시가·보충적평가액과 그 재산이 담보하는 채권액(또는 등기된 전세금) 중 큰 금액으로 평가.
+  // 저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법 §66, 시행령 §63①1호) —
+  // 시가·보충적평가액, 그 재산이 담보하는 채권액(또는 등기된 전세금), 임대보증금 환산가액(임대보증금+연간임대료÷12%)
+  // 중 가장 큰 금액으로 평가한다. 세 가지는 서로 다른 근거이므로 해당되는 값만 입력하면 자동으로 셋 중 최댓값을 쓴다.
   const securedDebtAmount = Number(a.securedDebtAmount) || 0;
-  return Math.max(value, securedDebtAmount);
+  const hasRentalCapInput = (Number(a.rentalAnnualRentForCap) || 0) > 0 || (Number(a.rentalDepositForCap) || 0) > 0;
+  const rentalCapValue = hasRentalCapInput ? calculateRentalConversionValueJS(a.rentalAnnualRentForCap, a.rentalDepositForCap) : 0;
+  return Math.max(value, securedDebtAmount, rentalCapValue);
 }
 
 function valuationAssetMethodFieldsHtml(m, a){
@@ -69,8 +75,8 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>개별공시지가(원/㎡)</label><input type="number" data-field="landPrice" value="' + (a.landPrice || '') + '"></div>' +
     '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>' +
     '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="landShare" placeholder="기본 100" value="' + (a.landShare || '') + '"></div>';
-  if (m === 'house') return '' +
-    '<div class="taxcalc-field"><label>고시된 주택가격</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>' +
+  if (m === 'house' || m === 'apartment' || m === 'officetel') return '' +
+    '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>' +
     '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="houseShare" placeholder="기본 100" value="' + (a.houseShare || '') + '"></div>';
   if (m === 'listedStock') return '' +
     '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
@@ -105,6 +111,8 @@ function renderValuationAssetRow(a, idx){
           Object.keys(VALUATION_METHOD_LABELS).map(function (k) { return '<option value="' + k + '"' + (method === k ? ' selected' : '') + '>' + VALUATION_METHOD_LABELS[k] + '</option>'; }).join('') +
         '</select></div>' +
         '<div class="taxcalc-field"><label>담보채권액(저당권·질권 등, §66)</label><input type="number" data-field="securedDebtAmount" placeholder="원 (있으면 시가/보충적평가액과 비교해 큰 금액 적용)" value="' + (a.securedDebtAmount || '') + '"></div>' +
+        '<div class="taxcalc-field"><label>임대보증금(평가특례, §66)</label><input type="number" data-field="rentalDepositForCap" placeholder="원 (임대차 있으면 입력)" value="' + (a.rentalDepositForCap || '') + '"></div>' +
+        '<div class="taxcalc-field"><label>연간임대료(평가특례, §66)</label><input type="number" data-field="rentalAnnualRentForCap" placeholder="원 (임대차 있으면 입력)" value="' + (a.rentalAnnualRentForCap || '') + '"></div>' +
       '</div>' +
       '<div class="taxcalc-grid" style="margin-top:6px;">' + valuationAssetMethodFieldsHtml(method, a) + '</div>' +
       '<div class="taxcalc-result-row"><span>평가액</span><span class="v">' + won(value) + '</span></div>' +
@@ -793,6 +801,41 @@ function renderGiftPane(){
   renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
 
+// [별지 제10호서식] 증여세과세표준신고 스타일로 단계별 수식+실제금액 텍스트를 만든다(계산근거 표시용, UI 전용 — 새 계산 로직 없이 결과값만 다시 서술).
+function buildGiftCalcBasisLines(r){
+  const lines = [];
+  lines.push('증여재산가액 = ' + won(r.증여재산가액));
+  if (r.인수채무액) lines.push('인수채무액(부담부증여) = -' + won(r.인수채무액));
+  if (r.비과세재산가액) lines.push('비과세재산가액(§46) = -' + won(r.비과세재산가액));
+  if (r.공익법인출연재산가액) lines.push('공익법인출연재산가액(§48) = -' + won(r.공익법인출연재산가액));
+  if (r.공익신탁재산가액) lines.push('공익신탁재산가액(§52) = -' + won(r.공익신탁재산가액));
+  if (r.장애인신탁재산가액) lines.push('장애인신탁재산가액(§52의2) = -' + won(r.장애인신탁재산가액));
+  lines.push('순수증여재산가액 = ' + won(r.순수증여재산가액));
+  lines.push('증여재산공제(§53) = -' + won(r.증여재산공제));
+  if (r.혼인출산증여재산공제) lines.push('혼인·출산 증여재산공제(§53의2) = -' + won(r.혼인출산증여재산공제));
+  if (r.합산배제증여재산공제) lines.push('합산배제증여재산공제 = -' + won(r.합산배제증여재산공제));
+  if (r.감정평가수수료공제) lines.push('감정평가수수료공제 = -' + won(r.감정평가수수료공제));
+  if (r.재해손실공제) lines.push('재해손실공제 = -' + won(r.재해손실공제));
+  lines.push('과세표준 = 순수증여재산가액 - 공제 합계 = ' + won(r.과세표준));
+  lines.push('산출세액(할증 전, 누진세율) = ' + won(r.산출세액_할증전));
+  if (r.세대생략할증액) lines.push('세대생략할증액(§57) = +' + won(r.세대생략할증액));
+  lines.push('산출세액(할증 후) = ' + won(r.산출세액_할증후));
+  if (r.기납부세액공제) lines.push('기납부세액공제(10년내 동일인 기증여분) = -' + won(r.기납부세액공제));
+  if (r.외국납부세액공제) lines.push('외국납부세액공제(§59) = -' + won(r.외국납부세액공제));
+  if (r.그밖의공제감면세액) lines.push('그 밖의 공제·감면세액 = -' + won(r.그밖의공제감면세액));
+  lines.push('신고세액공제(3%) = -' + won(r.신고세액공제));
+  if (r.이자상당액) lines.push('이자상당액 = +' + won(r.이자상당액));
+  if (r.공익법인등관련가산세) lines.push('공익법인등 관련 가산세(§78) = +' + won(r.공익법인등관련가산세));
+  if (r.무신고가산세) lines.push('무신고가산세 = +' + won(r.무신고가산세));
+  if (r.과소신고가산세) lines.push('과소신고가산세 = +' + won(r.과소신고가산세));
+  if (r.납부지연가산세) lines.push('납부지연가산세 = +' + won(r.납부지연가산세));
+  if (r.박물관자료등징수유예세액) lines.push('박물관자료등 징수유예세액 = -' + won(r.박물관자료등징수유예세액));
+  if (r.가업승계납부유예세액) lines.push('가업승계 납부유예세액(조특법§30의6) = -' + won(r.가업승계납부유예세액));
+  if (r.영농자녀증여농지세액감면) lines.push('영농자녀 증여농지 세액감면(조특법§71) = -' + won(r.영농자녀증여농지세액감면));
+  lines.push('납부세액 = ' + won(r.납부세액));
+  return lines;
+}
+
 function renderGiftResult(r){
   const box = document.getElementById('taxCalcGiftResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
@@ -825,6 +868,11 @@ function renderGiftResult(r){
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.인수채무액) html += '<div class="taxcalc-result-note">인수채무액 ' + won(r.인수채무액) + '에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세됩니다 — 양도소득세 탭에서 함께 계산하세요.</div>';
   html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례(조특법§30의5·6)를 적용받는 경우 이 계산이 아니라 아래 별도의 특례세율 증여세 계산기를 쓰세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-gift-calc-basis" style="margin-top:8px;">🧮 계산근거 보기</button>';
+  html += '<div class="taxcalc-calcbasis" id="giftCalcBasis" style="display:none;">' +
+    '<div class="taxcalc-calcbasis-title">계산근거([별지 제10호서식] 증여세과세표준신고 기준)</div>' +
+    buildGiftCalcBasisLines(r).map(function(l){ return '<div class="taxcalc-calcbasis-line">' + l + '</div>'; }).join('') +
+  '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -1080,6 +1128,8 @@ function renderInheritancePane(){
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-inheritance">세액 계산하기</button>' +
     '<div id="taxCalcInheritanceResult"></div>' +
+    '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-heir-tool" style="margin-bottom:10px;">👪 상속인별 세액 안분(상증세법§3조의2②)</button>' +
+    '<div id="taxCalcHeirTool"></div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제11호서식] 연부연납(다년 분할납부) 계산 — 신고 후 매년 나눠 낼 회차별 세액을 계산합니다</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -1093,11 +1143,56 @@ function renderInheritancePane(){
       '<div id="taxCalcInstallmentInheritanceResult"></div>' +
     '</div>';
   renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
+  renderHeirTool();
+}
+
+let lastInheritanceResult = null;
+let inheritanceHeirs = [{}, {}];
+let inheritanceHeirToolShown = false;
+
+// [별지 제9호서식] 상속세과세표준신고 스타일로 단계별 수식+실제금액 텍스트를 만든다(계산근거 표시용, UI 전용).
+function buildInheritanceCalcBasisLines(r){
+  const lines = [];
+  lines.push('상속세과세가액(입력값) = ' + won(r.상속세과세가액_입력값));
+  if (r.비과세재산가액) lines.push('비과세되는 상속재산가액(§12) = -' + won(r.비과세재산가액));
+  if (r.공익법인출연재산가액) lines.push('공익법인출연재산가액(§16) = -' + won(r.공익법인출연재산가액));
+  if (r.공익신탁재산가액) lines.push('공익신탁재산가액(§17) = -' + won(r.공익신탁재산가액));
+  if (r.상속개시전처분재산_추정합계) lines.push('상속개시전 처분재산 등 산입액(§15) = +' + won(r.상속개시전처분재산_추정합계));
+  lines.push('적용된 상속세과세가액 = ' + won(r.상속세과세가액_적용값));
+  lines.push('기초공제+인적공제(' + won(r.인적공제) + ') vs 일괄공제(5억) 중 큰 값 = -' + won(r['기초인적공제_또는_일괄공제']));
+  if (r.배우자공제) lines.push('배우자상속공제(§19) = -' + won(r.배우자공제));
+  if (r.금융재산상속공제) lines.push('금융재산상속공제(§22) = -' + won(r.금융재산상속공제));
+  if (r.동거주택상속공제) lines.push('동거주택상속공제(§23의2) = -' + won(r.동거주택상속공제));
+  if (r.감정평가수수료공제) lines.push('감정평가수수료공제(§25) = -' + won(r.감정평가수수료공제));
+  if (r.재해손실공제) lines.push('재해손실공제(§23) = -' + won(r.재해손실공제));
+  if (r.가업상속공제) lines.push('가업상속공제(§18의2) = -' + won(r.가업상속공제));
+  if (r.영농상속공제) lines.push('영농상속공제(§18의3) = -' + won(r.영농상속공제));
+  lines.push('상속공제 합계' + (r.상속공제종합한도_적용여부 ? '(§24 종합한도 적용됨)' : '') + ' = -' + won(r.상속공제_합계));
+  lines.push('과세표준 = 적용된 상속세과세가액 - 상속공제 합계 = ' + won(r.과세표준));
+  lines.push('산출세액(누진세율) = ' + won(r.산출세액 - (r.세대생략가산액 || 0)));
+  if (r.세대생략가산액) lines.push('세대생략가산액(§27) = +' + won(r.세대생략가산액));
+  lines.push('산출세액 합계 = ' + won(r.산출세액));
+  if (r.기납부증여세액공제) lines.push('기납부증여세액공제(§28) = -' + won(r.기납부증여세액공제));
+  if (r.특례증여세액공제) lines.push('특례증여세액공제(조특법§30의5·6) = -' + won(r.특례증여세액공제));
+  if (r.외국납부세액공제) lines.push('외국납부세액공제(§29) = -' + won(r.외국납부세액공제));
+  if (r.단기재상속세액공제) lines.push('단기재상속세액공제(§30) = -' + won(r.단기재상속세액공제));
+  if (r.그밖의공제) lines.push('그 밖의 공제 = -' + won(r.그밖의공제));
+  lines.push('신고세액공제(3%) = -' + won(r.신고세액공제));
+  if (r.이자상당액) lines.push('이자상당액 = +' + won(r.이자상당액));
+  if (r.영리법인면제분납부세액) lines.push('영리법인면제분 상속인 납부세액(§3의2) = +' + won(r.영리법인면제분납부세액));
+  if (r.무신고가산세) lines.push('무신고가산세 = +' + won(r.무신고가산세));
+  if (r.과소신고가산세) lines.push('과소신고가산세 = +' + won(r.과소신고가산세));
+  if (r.납부지연가산세) lines.push('납부지연가산세 = +' + won(r.납부지연가산세));
+  if (r.문화재등징수유예세액) lines.push('문화재등 징수유예세액 = -' + won(r.문화재등징수유예세액));
+  if (r.가업상속납부유예세액) lines.push('가업상속 납부유예세액(§72의2) = -' + won(r.가업상속납부유예세액));
+  lines.push('납부세액 = ' + won(r.납부세액));
+  return lines;
 }
 
 function renderInheritanceResult(r){
   const box = document.getElementById('taxCalcInheritanceResult');
-  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  lastInheritanceResult = r.error ? null : r;
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; renderHeirTool(); return; }
   let html = '<div class="taxcalc-result">';
   if (r.비과세재산가액) html += taxCalcResultRow('비과세재산가액', '-' + won(r.비과세재산가액));
   if (r.공익법인출연재산가액) html += taxCalcResultRow('공익법인출연재산가액', '-' + won(r.공익법인출연재산가액));
@@ -1142,6 +1237,66 @@ function renderInheritanceResult(r){
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.가업상속납부유예_가능세액 != null) html += '<div class="taxcalc-result-note">참고: §72의2에 따라 가업상속 납부유예를 신청할 경우 최대 ' + won(r.가업상속납부유예_가능세액) + '까지 유예 가능합니다(가업상속공제와 별개로 선택 가능 — 실제 유예받으려면 위 "가업상속 납부유예세액" 입력란에 이 금액을 넣고 다시 계산하세요).</div>';
   html += '<div class="taxcalc-result-note">배우자가 단독상속인이면 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 마세요. 가업상속공제·영농상속공제·특례증여세액공제·영리법인 면제세액은 자격요건 판정과 세액 자체를 이 계산기가 산출하지 않으므로 별도로 계산한 값을 직접 입력해야 합니다. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-inheritance-calc-basis" style="margin-top:8px;">🧮 계산근거 보기</button>';
+  html += '<div class="taxcalc-calcbasis" id="inheritanceCalcBasis" style="display:none;">' +
+    '<div class="taxcalc-calcbasis-title">계산근거([별지 제9호서식] 상속세과세표준신고 기준)</div>' +
+    buildInheritanceCalcBasisLines(r).map(function(l){ return '<div class="taxcalc-calcbasis-line">' + l + '</div>'; }).join('') +
+  '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+  renderHeirTool();
+}
+
+function renderHeirTool(){
+  const box = document.getElementById('taxCalcHeirTool');
+  if (!box) return;
+  if (!inheritanceHeirToolShown){ box.innerHTML = ''; return; }
+  if (!lastInheritanceResult){
+    box.innerHTML = '<div class="taxcalc-result-note" style="margin-top:10px;">먼저 위에서 전체 상속세를 계산하세요.</div>';
+    return;
+  }
+  const rowsHtml = inheritanceHeirs.map(function(h, idx){
+    return '<div class="taxcalc-grid" data-heir-idx="' + idx + '" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);">' +
+      '<div class="taxcalc-field"><label>성명</label><input type="text" data-hfield="name" value="' + (h.name || '').replace(/"/g,'&quot;') + '"></div>' +
+      '<div class="taxcalc-field"><label>관계</label><input type="text" data-hfield="relation" value="' + (h.relation || '').replace(/"/g,'&quot;') + '" placeholder="예: 자, 배우자, 대습상속/손"></div>' +
+      '<div class="taxcalc-field"><label>실제상속재산가액</label><input type="number" data-hfield="actualInheritedValue" value="' + (h.actualInheritedValue || '') + '" placeholder="원 (채무부담분은 차감한 순액)"></div>' +
+      (inheritanceHeirs.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-heir-row" data-idx="' + idx + '">✕ 삭제</button>' : '') +
+    '</div>';
+  }).join('');
+
+  box.innerHTML =
+    '<div class="taxcalc-asset" style="margin-top:10px;">' +
+      '<div class="taxcalc-asset-head"><b>상속인별 세액 안분 — 전체 산출세액·세액공제·가산세를 각자 실제상속재산가액 비율로 나눕니다(유산세 방식)</b></div>' +
+      '<div id="heirRows">' + rowsHtml + '</div>' +
+      '<button type="button" class="taxcalc-add-asset" data-action="add-heir-row" style="margin-top:8px;">+ 상속인 추가</button>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-heir-allocation">상속인별 세액 안분 계산하기</button>' +
+      '<div id="taxCalcHeirResult"></div>' +
+    '</div>';
+
+  box.querySelectorAll('[data-hfield]').forEach(function(el){
+    el.addEventListener('input', function(){
+      const idx = Number(el.closest('[data-heir-idx]').dataset.heirIdx);
+      inheritanceHeirs[idx][el.dataset.hfield] = el.value;
+    });
+  });
+}
+
+function renderHeirResult(r){
+  const box = document.getElementById('taxCalcHeirResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result" style="margin-top:10px;">';
+  r.상속인별_내역.forEach(function(row){
+    html += '<div class="taxcalc-result-row total"><span>' + row.성명 + (row.관계 ? ' (' + row.관계 + ')' : '') + '</span><span class="v"></span></div>';
+    html += taxCalcResultRow('실제상속재산가액 / 지분율', won(row.실제상속재산가액) + ' / ' + (row.지분율 * 100).toFixed(2) + '%');
+    html += taxCalcResultRow('상속세과세가액(안분)', won(row.상속세과세가액));
+    html += taxCalcResultRow('과세표준(안분)', won(row.과세표준));
+    html += taxCalcResultRow('산출세액 합계(안분)', won(row.산출세액_합계));
+    if (row.세액공제_합계) html += taxCalcResultRow('세액공제 합계(안분)', '-' + won(row.세액공제_합계));
+    if (row.영리법인면제분납부세액) html += taxCalcResultRow('영리법인면제분납부세액(안분)', '+' + won(row.영리법인면제분납부세액));
+    if (row.가산세_합계) html += taxCalcResultRow('가산세 합계(안분)', '+' + won(row.가산세_합계));
+    html += taxCalcResultRow('납부세액(안분)', won(row.납부세액), { total: true });
+  });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -1539,5 +1694,26 @@ taxCalcView.addEventListener('click', function(e){
       reportedInTime: document.getElementById('ihReportedInTime').checked
     };
     renderInheritanceResult(calculateInheritanceTaxJS(input));
+  } else if (action === 'toggle-gift-calc-basis'){
+    const b = document.getElementById('giftCalcBasis');
+    b.style.display = b.style.display === 'none' ? 'block' : 'none';
+  } else if (action === 'toggle-inheritance-calc-basis'){
+    const b = document.getElementById('inheritanceCalcBasis');
+    b.style.display = b.style.display === 'none' ? 'block' : 'none';
+  } else if (action === 'toggle-heir-tool'){
+    inheritanceHeirToolShown = !inheritanceHeirToolShown;
+    renderHeirTool();
+  } else if (action === 'add-heir-row'){
+    inheritanceHeirs.push({});
+    renderHeirTool();
+  } else if (action === 'del-heir-row'){
+    inheritanceHeirs.splice(Number(btn.dataset.idx), 1);
+    renderHeirTool();
+  } else if (action === 'run-heir-allocation'){
+    const heirs = inheritanceHeirs.map(function(h){
+      return { name: h.name, relation: h.relation, actualInheritedValue: Number(h.actualInheritedValue) || 0 };
+    });
+    const result = allocateInheritanceTaxByHeirJS(lastInheritanceResult, heirs);
+    renderHeirResult(result);
   }
 });

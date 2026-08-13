@@ -1076,6 +1076,49 @@
     };
   };
 
+  // 상속인별 납부세액 안분 (상증세법 §3조의2②, gs-backend toolAllocateInheritanceTaxByHeir와 동일 로직) — 유산세 방식이라
+  // 전체 세액을 실제상속재산가액 비율로 나눈다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아 합계를 맞춘다.
+  window.allocateInheritanceTaxByHeirJS = function (aggregateResult, heirs) {
+    if (!aggregateResult || aggregateResult.error) return { error: '전체 상속세 계산 결과가 필요합니다.' };
+    if (!Array.isArray(heirs) || heirs.length === 0) return { error: '상속인을 1명 이상 입력해야 합니다.' };
+    const values = heirs.map(function (h) { return Number(h.actualInheritedValue) || 0; });
+    const totalInherited = values.reduce(function (s, v) { return s + v; }, 0);
+    if (totalInherited <= 0) return { error: '상속인별 실제상속재산가액 합계가 0보다 커야 합니다.' };
+
+    const totalCreditAmount = (aggregateResult.기납부증여세액공제 || 0) + (aggregateResult.특례증여세액공제 || 0)
+      + (aggregateResult.외국납부세액공제 || 0) + (aggregateResult.단기재상속세액공제 || 0)
+      + (aggregateResult.그밖의공제 || 0) + (aggregateResult.신고세액공제 || 0);
+    const totalGrossTax = (aggregateResult.산출세액 || 0) + (aggregateResult.세대생략가산액 || 0);
+    const totalPenaltyAmount = (aggregateResult.무신고가산세 || 0) + (aggregateResult.과소신고가산세 || 0) + (aggregateResult.납부지연가산세 || 0);
+    const fields = [
+      { key: '상속세과세가액', total: aggregateResult.상속세과세가액_적용값 || 0 },
+      { key: '과세표준', total: aggregateResult.과세표준 || 0 },
+      { key: '산출세액_합계', total: totalGrossTax },
+      { key: '세액공제_합계', total: totalCreditAmount },
+      { key: '영리법인면제분납부세액', total: aggregateResult.영리법인면제분납부세액 || 0 },
+      { key: '가산세_합계', total: totalPenaltyAmount },
+      { key: '납부세액', total: aggregateResult.납부세액 || 0 }
+    ];
+
+    const maxIdx = values.indexOf(Math.max.apply(null, values));
+    const rows = heirs.map(function (h, i) {
+      const ratio = values[i] / totalInherited;
+      const row = { 성명: h.name || ('상속인' + (i + 1)), 관계: h.relation || '', 실제상속재산가액: values[i], 지분율: ratio };
+      fields.forEach(function (f) { row[f.key] = Math.round(f.total * ratio); });
+      return row;
+    });
+    fields.forEach(function (f) {
+      const sumAllocated = rows.reduce(function (s, r) { return s + r[f.key]; }, 0);
+      rows[maxIdx][f.key] += (f.total - sumAllocated);
+    });
+
+    return {
+      상속인별_내역: rows,
+      합계검증: { 실제상속재산가액_합계: totalInherited, 납부세액_합계: aggregateResult.납부세액 || 0 },
+      안내: '상증세법 §3조의2②에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식). 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다.'
+    };
+  };
+
   // 조특법§30의5(창업자금)·§30의6(가업승계 주식등) 증여세 과세특례 ([별지 제10호의2서식]) — Code.js toolCalculateSpecialRateGiftTax와 동일 로직.
   window.calculateSpecialRateGiftTaxJS = function (p) {
     p = p || {};
