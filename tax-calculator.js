@@ -164,6 +164,23 @@ function renderTransferPane(){
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isNonBusinessLand" id="nbl-' + idx + '"><label for="nbl-' + idx + '">비사업용토지</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isUnregisteredTransfer" id="unreg-' + idx + '"><label for="unreg-' + idx + '">미등기양도</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isEightYearFarmland" id="farm-' + idx + '"><label for="farm-' + idx + '">8년 자경농지 감면</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isNewBuildingWithin5Years" id="newbldg-' + idx + '"><label for="newbldg-' + idx + '">신축(증축) 후 5년 이내 양도 + 환산취득가액 사용</label></div>' +
+          '<div class="taxcalc-field"><label>환산취득가액 중 건물분</label><input type="number" data-field="convertedBuildingAcquisitionValueForPenalty" placeholder="원 (위 체크 시, 가산세 5%)"></div>' +
+          '<div class="taxcalc-field"><label>등록임대주택 장특공제 특례</label><select data-field="rentalSpecialType">' +
+            '<option value="">해당없음</option>' +
+            '<option value="rental_general">장기일반민간임대주택(조특법§97의3, 10년↑70%/8년↑50%)</option>' +
+            '<option value="rental_long">장기임대주택(조특법§97의4, 일반공제+임대기간별 추가공제)</option>' +
+          '</select></div>' +
+          '<div class="taxcalc-field"><label>임대기간</label><input type="number" data-field="rentalYears" placeholder="년 (위 특례 선택 시)"></div>' +
+          '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의13, 양도대금 중 6개월 내 납입액)"></div>' +
+          '<div class="taxcalc-field"><label>공익사업용토지 수용감면</label><select data-field="compensationType">' +
+            '<option value="">해당없음</option>' +
+            '<option value="cash">현금보상(조특법§77, 10%)</option>' +
+            '<option value="bond">채권보상 - 만기특약 없음(15%)</option>' +
+            '<option value="bond_3y">채권보상 - 3년만기특약(30%)</option>' +
+            '<option value="bond_5y">채권보상 - 5년만기특약(40%)</option>' +
+          '</select></div>' +
+          '<div class="taxcalc-field"><label>다운계약서 등 계약서·실거래 차액</label><input type="number" data-field="downContractPriceDifference" placeholder="원 (소득세법§91② 비과세·감면 배제 추징용, 해당 시만)"></div>' +
         '</div>' +
       '</div>';
   }).join('');
@@ -172,8 +189,47 @@ function renderTransferPane(){
     '<div class="taxcalc-hint">여러 건을 추가하면 2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 자동으로 합산해서 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용합니다(확정신고 합산 개념). 단기양도·미등기양도는 건별로 따로 계산해서 더합니다. 다주택 중과는 조정대상지역 지정·한시배제 여부를 신고 시점 기준으로 직접 확인한 뒤 체크하세요.</div>' +
     '<div id="taxCalcTransferCards">' + cardsHtml + '</div>' +
     '<button type="button" class="taxcalc-add-asset" data-action="add-asset">+ 거래 추가</button>' +
+    '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세(확정신고 전체 기준)</b></div>' +
+    '<div class="taxcalc-grid">' +
+      '<div class="taxcalc-field"><label>신고 상태</label><select id="trFilingStatus">' +
+        '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+      '</select></div>' +
+      '<div class="taxcalc-field checkbox"><input type="checkbox" id="trFraudulent"><label for="trFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+      '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="trUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+      '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="trUnpaidDays" placeholder="일 (없으면 0)"></div>' +
+      '<div class="taxcalc-field checkbox"><input type="checkbox" id="trSelfEfiling"><label for="trSelfEfiling">납세자 본인이 직접 전자신고(2만원 공제)</label></div>' +
+    '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-transfer">세액 계산하기</button>' +
-    '<div id="taxCalcTransferResult"></div>';
+    '<div id="taxCalcTransferResult"></div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
+          '<option value="domestic_stock">국내주식등</option><option value="foreign_stock">국외주식등</option>' +
+          '<option value="derivative">파생상품등</option><option value="other_asset">기타자산(특정주식·부동산과다보유법인)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="stTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="stAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도비용</label><input type="number" id="stTransferExpenses" placeholder="원 (증권거래세 등, 없으면 0)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="stIsDaejuju"><label for="stIsDaejuju">대주주(국내주식만 해당, 지분율·시가총액 기준은 별도 확인)</label></div>' +
+        '<div class="taxcalc-field"><label>보유기간(대주주만)</label><input type="number" id="stHoldingMonths" placeholder="개월 (12개월 미만이면 30%)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="stIsSmallMedium"><label for="stIsSmallMedium">중소기업 발행주식</label></div>' +
+        '<div class="taxcalc-field"><label>같은 기간 다른 국내외주식 순손익</label><input type="number" id="stPriorNetGain" placeholder="원 (이익+/손실-, 손익통산용, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>이미 사용한 기본공제액</label><input type="number" id="stBasicDeductionUsed" placeholder="원 (같은 기간 다른 주식양도에서 이미 썼으면)"></div>' +
+        '<div class="taxcalc-field"><label>외국납부세액공제</label><input type="number" id="stForeignTax" placeholder="원 (국외주식, 없으면 0)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="stFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="stFraudulent"><label for="stFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="stUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수</label><input type="number" id="stUnpaidDays" placeholder="일 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-stock-transfer">세액 계산하기</button>' +
+      '<div id="taxCalcStockTransferResult"></div>' +
+    '</div>';
 
   // 저장해뒀던 입력값 다시 채워넣기(카드 추가/삭제로 다시 그릴 때 기존 입력 유지)
   transferAssets.forEach(function(vals, idx){
@@ -225,7 +281,14 @@ function collectTransferInput(vals){
     multiHouseCount: Number(vals.multiHouseCount) || 0,
     isNonBusinessLand: !!vals.isNonBusinessLand,
     isUnregisteredTransfer: !!vals.isUnregisteredTransfer,
-    isEightYearFarmland: !!vals.isEightYearFarmland
+    isEightYearFarmland: !!vals.isEightYearFarmland,
+    isNewBuildingWithin5Years: !!vals.isNewBuildingWithin5Years,
+    convertedBuildingAcquisitionValueForPenalty: Number(vals.convertedBuildingAcquisitionValueForPenalty) || 0,
+    rentalSpecialType: vals.rentalSpecialType || '',
+    rentalYears: Number(vals.rentalYears) || 0,
+    pensionAccountContribution: Number(vals.pensionAccountContribution) || 0,
+    compensationType: vals.compensationType || '',
+    downContractPriceDifference: Number(vals.downContractPriceDifference) || 0
   };
 }
 
@@ -242,13 +305,43 @@ function renderTransferResult(r){
   html += taxCalcResultRow('합산과세표준', won(r.합산과세표준));
   if (r.합산가산액) html += taxCalcResultRow('다주택중과·비사업용토지 가산', won(r.합산가산액));
   if (r.합산자경감면액) html += taxCalcResultRow('8년자경농지 감면', '-' + won(r.합산자경감면액));
+  if (r.합산수용감면액) html += taxCalcResultRow('공익사업용토지 수용감면(조특법§77)', '-' + won(r.합산수용감면액));
+  if (r.다운계약서_감면배제_추징액) html += taxCalcResultRow('다운계약서 감면배제 추징액', '+' + won(r.다운계약서_감면배제_추징액));
+  if (r.비과세거래_다운계약서_추징액) html += taxCalcResultRow('다운계약서 비과세배제 추징액(별건)', '+' + won(r.비과세거래_다운계약서_추징액));
   html += taxCalcResultRow('합산(장기) 그룹 산출세액', won(r.합산그룹_산출세액));
   if (r.단기거래_산출세액_합계) html += taxCalcResultRow('단기양도 산출세액 합계', won(r.단기거래_산출세액_합계));
   if (r.미등기거래_산출세액_합계) html += taxCalcResultRow('미등기양도 산출세액 합계', won(r.미등기거래_산출세액_합계));
+  if (r.연금계좌세액공제_합계) html += taxCalcResultRow('연금계좌세액공제(조특법§99의13)', '-' + won(r.연금계좌세액공제_합계));
+  if (r.전자신고세액공제) html += taxCalcResultRow('전자신고세액공제', '-' + won(r.전자신고세액공제));
+  if (r.환산취득가액가산세_합계) html += taxCalcResultRow('환산취득가액 가산세', '+' + won(r.환산취득가액가산세_합계));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '<div class="taxcalc-result-note">이 결과는 참고용 개산이며, 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderStockTransferResult(r){
+  const box = document.getElementById('taxCalcStockTransferResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('양도차익', won(r.양도차익));
+  if (r.손익통산_적용후_소득금액 !== r.양도차익) html += taxCalcResultRow('손익통산 적용후 소득금액', won(r.손익통산_적용후_소득금액));
+  html += taxCalcResultRow('기본공제', won(r.기본공제));
+  html += taxCalcResultRow('과세표준', won(r.과세표준));
+  html += taxCalcResultRow('적용세율', r.적용세율_설명);
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
+  html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
+  html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -872,8 +965,33 @@ taxCalcView.addEventListener('click', function(e){
     else document.getElementById('ihEstate').value = total;
   } else if (action === 'run-transfer'){
     const inputs = transferAssets.map(collectTransferInput);
-    const result = calculateTransferTaxMultiJS(inputs);
+    const filingParams = {
+      filingStatus: document.getElementById('trFilingStatus').value,
+      isFraudulent: document.getElementById('trFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('trUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('trUnpaidDays').value) || 0,
+      isSelfElectronicFiling: document.getElementById('trSelfEfiling').checked
+    };
+    const result = calculateTransferTaxMultiJS(inputs, filingParams);
     renderTransferResult(result);
+  } else if (action === 'run-stock-transfer'){
+    const input = {
+      assetCategory: document.getElementById('stAssetCategory').value,
+      transferPrice: Number(document.getElementById('stTransferPrice').value) || 0,
+      acquisitionPrice: Number(document.getElementById('stAcquisitionPrice').value) || 0,
+      transferExpenses: Number(document.getElementById('stTransferExpenses').value) || 0,
+      isDaejuju: document.getElementById('stIsDaejuju').checked,
+      holdingMonths: document.getElementById('stHoldingMonths').value === '' ? null : Number(document.getElementById('stHoldingMonths').value),
+      isSmallMediumCompany: document.getElementById('stIsSmallMedium').checked,
+      priorNetGainOrLoss: Number(document.getElementById('stPriorNetGain').value) || 0,
+      basicDeductionAlreadyUsed: Number(document.getElementById('stBasicDeductionUsed').value) || 0,
+      foreignTaxPaidAmount: Number(document.getElementById('stForeignTax').value) || 0,
+      filingStatus: document.getElementById('stFilingStatus').value,
+      isFraudulent: document.getElementById('stFraudulent').checked,
+      underreportedTaxAmount: Number(document.getElementById('stUnderreportedTax').value) || 0,
+      unpaidDays: Number(document.getElementById('stUnpaidDays').value) || 0
+    };
+    renderStockTransferResult(calculateStockTransferTaxJS(input));
   } else if (action === 'run-gift'){
     const input = {
       giftAmount: Number(document.getElementById('giftAmount').value) || 0,

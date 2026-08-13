@@ -260,6 +260,26 @@
     return ownRate + liveRate;
   }
 
+  // 장기임대주택 등 장기보유특별공제 특례([별지 제84호서식] 코드04·05, 조특법 §97의3·§97의4)
+  function rentalLongTermRate(type, holdingYears, rentalYears) {
+    const ry = Number(rentalYears) || 0;
+    if (type === 'rental_general') {
+      if (ry >= 10) return 0.70;
+      if (ry >= 8) return 0.50;
+      return 0;
+    }
+    if (type === 'rental_long') {
+      let addRate = 0;
+      if (ry >= 10) addRate = 0.10;
+      else if (ry >= 9) addRate = 0.08;
+      else if (ry >= 8) addRate = 0.06;
+      else if (ry >= 7) addRate = 0.04;
+      else if (ry >= 6) addRate = 0.02;
+      return longTermRate(holdingYears) + addRate;
+    }
+    return null;
+  }
+
   function basicOrLumpSumDeduction(personalDeductionSum) {
     return Math.max(500000000, 200000000 + (Number(personalDeductionSum) || 0));
   }
@@ -304,19 +324,28 @@
       ltRate = longTermRate(holdingYears);
     }
 
+    const rentalRate = rentalLongTermRate(t.rentalSpecialType, holdingYears, t.rentalYears);
+    const isRentalSpecial = rentalRate !== null;
+    if (isRentalSpecial) ltRate = rentalRate;
+
     const multiHouseCount = Number(t.multiHouseCount) || 0;
-    const isMultiHouseSurcharge = !isOneHouse && !!t.isAdjustedArea && multiHouseCount >= 2;
+    const isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2;
     if (isMultiHouseSurcharge) ltRate = 0;
 
     const longTermDeductionAmount = Math.round(taxableGain * ltRate);
     const incomeAmount = taxableGain - longTermDeductionAmount;
     const isPoolable = holdingYears >= 2; // 2년 이상 보유 → 기본세율(누진) 대상, 합산 가능
 
+    const convertedBuildingAcquisitionValueForPenalty = Number(t.convertedBuildingAcquisitionValueForPenalty) || 0;
+    const conversionValuePenalty = (t.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
+      ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
+
     return {
       holdingYears, exempt: false, isUnregistered: false, isPoolable,
-      transferPrice, acquisitionPrice, necessaryExpenses, assetType, isOneHouse,
+      transferPrice, acquisitionPrice, necessaryExpenses, assetType, isOneHouse, isRentalSpecial,
       gainBeforeDeduction, taxableGain, longTermRate: ltRate, longTermDeductionAmount, incomeAmount,
       isMultiHouseSurcharge, multiHouseCount, isNonBusinessLand: !!t.isNonBusinessLand, isEightYearFarmland: !!t.isEightYearFarmland,
+      conversionValuePenalty, pensionAccountContribution: Number(t.pensionAccountContribution) || 0,
       raw: t
     };
   }
@@ -337,6 +366,18 @@
       };
     }
     if (core.exempt) {
+      const downContractDiff = Number(t.downContractPriceDifference) || 0;
+      if (downContractDiff > 0) {
+        const wouldBeResult = window.calculateTransferTaxSingleJS(Object.assign({}, t, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
+        const wouldBeTax = (wouldBeResult && typeof wouldBeResult.납부세액_합계 === 'number') ? wouldBeResult.납부세액_합계 : 0;
+        const clawback = Math.min(wouldBeTax, downContractDiff);
+        return {
+          입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+          비과세여부: false, 다운계약서_비과세배제: true,
+          비과세미적용시_산출세액: wouldBeTax, 계약서_실거래_차액: downContractDiff,
+          납부세액: clawback, 납부세액_합계: clawback
+        };
+      }
       return {
         입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
         비과세여부: true, 납부세액: 0
@@ -375,14 +416,39 @@
       farmlandReduction = Math.min(calculatedTax, 100000000);
       calculatedTax -= farmlandReduction;
     }
+    const COMPENSATION_REDUCTION_RATES = { cash: 0.10, bond: 0.15, bond_3y: 0.30, bond_5y: 0.40 };
+    let compensationReduction = 0;
+    if (COMPENSATION_REDUCTION_RATES[t.compensationType] !== undefined) {
+      compensationReduction = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES[t.compensationType]);
+      calculatedTax -= compensationReduction;
+    }
+    const downContractDiff2 = Number(t.downContractPriceDifference) || 0;
+    let downContractClawback = 0;
+    if (downContractDiff2 > 0 && (farmlandReduction + compensationReduction) > 0) {
+      downContractClawback = Math.min(farmlandReduction + compensationReduction, downContractDiff2);
+      calculatedTax += downContractClawback;
+    }
+    const pensionCreditBase = Math.min(core.pensionAccountContribution, Math.max(0, Math.round(core.gainBeforeDeduction)), 100000000);
+    const pensionAccountCredit = core.pensionAccountContribution > 0 ? Math.round(pensionCreditBase * 0.1) : 0;
+    const eFilingCredit = t.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(t.filingStatus) !== -1 ? t.filingStatus : 'ontime';
+    const penalties = giftFilingPenalties(calculatedTax, filingStatus, !!t.isFraudulent, t.underreportedTaxAmount, t.unpaidDays, Number(t.unpaidTaxForLatePenalty));
     const localIncomeTax = Math.round(calculatedTax * 0.1);
+    const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + core.conversionValuePenalty
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
     return {
       입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
       양도차익: Math.round(core.gainBeforeDeduction), 과세대상양도차익: Math.round(core.taxableGain),
       장기보유특별공제율: core.longTermRate, 장기보유특별공제액: core.longTermDeductionAmount,
       양도소득금액: Math.round(core.incomeAmount), 기본공제: basicDeduction, 과세표준: taxBase,
       적용세율_설명: appliedRateNote, 세율가산_내역: surchargeNotes, 자경농지감면액: farmlandReduction,
-      산출세액: calculatedTax, 지방소득세: localIncomeTax, 납부세액_합계: calculatedTax + localIncomeTax
+      수용감면액: compensationReduction, 다운계약서_감면배제_추징액: downContractClawback,
+      장기임대주택특례_적용여부: core.isRentalSpecial,
+      산출세액: calculatedTax, 연금계좌세액공제: pensionAccountCredit, 전자신고세액공제: eFilingCredit,
+      환산취득가액가산세: core.conversionValuePenalty,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      지방소득세: localIncomeTax, 납부세액_합계: totalTax
     };
   };
 
@@ -393,8 +459,9 @@
   // 개별 계산해서 더하고, 8년자경 감면은 합산세액을 자산별 소득금액 비중으로 안분한 뒤 자산당 1억 한도로 적용한다
   // — 이는 실제 시행령상 안분규정과 100% 일치를 보장하지 않는 단순화이니, 특례가 여러 건 섞인 복잡한 합산은
   // 결과를 참고용으로만 쓰고 반드시 재검토할 것.
-  window.calculateTransferTaxMultiJS = function (transactions) {
+  window.calculateTransferTaxMultiJS = function (transactions, filingParams) {
     if (!Array.isArray(transactions) || !transactions.length) return { error: '거래를 1건 이상 입력하세요.' };
+    filingParams = filingParams || {};
     const cores = transactions.map(function (t, idx) {
       const c = transferAssetCore(t);
       c.idx = idx;
@@ -430,15 +497,58 @@
     let poolTaxWithSurcharge = poolBaseTax + poolSurchargeTotal;
 
     let farmlandReductionTotal = 0;
+    const reductionByIdx_ = {};
     pooled.forEach(function (c) {
       if (c.isEightYearFarmland && poolIncomeSum > 0) {
         const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
         const reduction = Math.min(share, 100000000);
         farmlandReductionTotal += reduction;
+        reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
         assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '8년자경농지감면(안분)', 감면액: reduction });
       }
     });
     poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal);
+
+    // 공익사업용 토지 등 수용감면(조특법§77, 안분) — 소득금액 비중으로 배분한 세액에 보상유형별 비율을 곱한다.
+    const COMPENSATION_REDUCTION_RATES_M = { cash: 0.10, bond: 0.15, bond_3y: 0.30, bond_5y: 0.40 };
+    let compensationReductionTotal = 0;
+    pooled.forEach(function (c) {
+      const rate = COMPENSATION_REDUCTION_RATES_M[c.raw.compensationType];
+      if (rate !== undefined && poolIncomeSum > 0) {
+        const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
+        const reduction = Math.round(share * rate);
+        compensationReductionTotal += reduction;
+        reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
+        assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '수용감면(안분)', 감면액: reduction });
+      }
+    });
+    poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal);
+
+    // 다운계약서 등 거짓 계약으로 위 감면을 받은 경우(소득세법§91②) — 거래별 MIN(그 거래에 배분된 감면액, 계약서·실거래 차액)을 배제·추징한다.
+    let downContractClawbackTotal = 0;
+    pooled.forEach(function (c) {
+      const diff = Number(c.raw.downContractPriceDifference) || 0;
+      const red = reductionByIdx_[c.idx] || 0;
+      if (diff > 0 && red > 0) {
+        const clawback = Math.min(red, diff);
+        downContractClawbackTotal += clawback;
+        assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '다운계약서 감면배제', 추징액: clawback });
+      }
+    });
+    poolTaxWithSurcharge += downContractClawbackTotal;
+
+    // 비과세 거래인데 다운계약서로 비과세를 적용받은 경우 — 비과세 미적용시 세액과 차액 중 작은 금액을 별도로 추징한다.
+    let exemptClawbackTotal = 0;
+    exempt.forEach(function (c) {
+      const diff = Number(c.raw.downContractPriceDifference) || 0;
+      if (diff > 0) {
+        const wouldBe = window.calculateTransferTaxSingleJS(Object.assign({}, c.raw, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
+        const wouldBeTax = (wouldBe && typeof wouldBe.납부세액_합계 === 'number') ? wouldBe.납부세액_합계 : 0;
+        const clawback = Math.min(wouldBeTax, diff);
+        exemptClawbackTotal += clawback;
+        assetNotes.push({ idx: c.idx, 구분: '비과세거래(개별)', 특례: '다운계약서 비과세배제', 추징액: clawback });
+      }
+    });
 
     let usedBasicOnShort = !basicDeductionUsedInPool ? false : true; // 이미 장기그룹에서 썼으면 단기에서 또 쓰지 않음
     const shortResults = shortTerm.map(function (c) {
@@ -459,19 +569,39 @@
     });
     const unregisteredTaxTotal = unregisteredResults.reduce(function (s, v) { return s + v; }, 0);
 
+    const conversionValuePenaltyTotal = active.reduce(function (s, c) { return s + (c.conversionValuePenalty || 0); }, 0);
+
+    const pensionAccountCreditTotal = active.reduce(function (s, c) {
+      const base = Math.min(c.pensionAccountContribution, Math.max(0, Math.round(c.gainBeforeDeduction)), 100000000);
+      return s + (c.pensionAccountContribution > 0 ? Math.round(base * 0.1) : 0);
+    }, 0);
+
+    // exemptClawbackTotal(다운계약서 비과세배제 추징액)은 calculateTransferTaxSingleJS의 완전 계산 결과(지방소득세 포함)를
+    // 상한으로 삼아 MIN한 값이라 이미 지방소득세가 녹아 있으므로, 아래 totalCalculatedTax에는 포함하지 않고
+    // (그러면 다시 10% 지방소득세가 얹혀 이중계산된다) 최종 합계에만 그대로 더한다.
     const totalCalculatedTax = poolTaxWithSurcharge + shortTaxTotal + unregisteredTaxTotal;
+    const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
+    const penalties = giftFilingPenalties(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty));
     const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
+    const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
 
     return {
       거래건수: transactions.length, 비과세건수: exempt.length,
       합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
       기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
       합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
+      합산수용감면액: compensationReductionTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
       합산그룹_산출세액: poolTaxWithSurcharge,
       단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
-      산출세액_합계: totalCalculatedTax, 지방소득세: localIncomeTax, 납부세액_합계: totalCalculatedTax + localIncomeTax,
+      산출세액_합계: totalCalculatedTax,
+      연금계좌세액공제_합계: pensionAccountCreditTotal, 전자신고세액공제: eFilingCredit,
+      환산취득가액가산세_합계: conversionValuePenaltyTotal,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      지방소득세: localIncomeTax, 납부세액_합계: grandTotal,
       자산별_내역: assetNotes,
-      안내: '2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 소득금액을 합산해 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용했습니다. 단기양도(2년 미만)·미등기양도는 합산 누진세 대상이 아니라 건별로 따로 계산해 더했습니다. 다주택중과·비사업용토지 가산액과 8년자경농지 감면액은 자산별 소득금액 비중으로 계산한 근사치이니, 특례가 여러 건 섞인 복잡한 합산은 결과를 참고용으로만 쓰고 반드시 재검토하세요.'
+      안내: '2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 소득금액을 합산해 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용했습니다. 단기양도(2년 미만)·미등기양도는 합산 누진세 대상이 아니라 건별로 따로 계산해 더했습니다. 다주택중과·비사업용토지 가산액과 8년자경농지 감면액은 자산별 소득금액 비중으로 계산한 근사치이니, 특례가 여러 건 섞인 복잡한 합산은 결과를 참고용으로만 쓰고 반드시 재검토하세요. 신고불성실·납부지연가산세는 전체 확정신고 기준(산출세액 합계)으로 한 번만 계산했습니다.'
     };
   };
 
@@ -983,6 +1113,85 @@
       과세대상여부: true, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
       증여재산가액: deemedGiftAmount,
       안내: '대출기간이 1년을 초과하면 매년 다시 계산해야 합니다. 이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+    };
+  };
+
+  // 국내주식등 세율(대주주, 2020.1.1. 이후) — 3억 이하 20%, 3억 초과 25%(누진공제 1500만원)
+  const DOMESTIC_STOCK_DAEJUJU_BRACKETS = [
+    { max: 300000000, rate: 0.20, deduction: 0 },
+    { max: Infinity, rate: 0.25, deduction: 15000000 }
+  ];
+
+  // 주식등 양도소득세 — Code.js toolCalculateStockTransferTax와 동일 로직. 부동산 양도세와 완전히 별도 세목.
+  window.calculateStockTransferTaxJS = function (p) {
+    p = p || {};
+    const assetCategory = p.assetCategory;
+    if (['domestic_stock', 'foreign_stock', 'derivative', 'other_asset'].indexOf(assetCategory) === -1) {
+      return { error: '자산구분을 국내주식/국외주식/파생상품/기타자산 중에서 선택하세요.' };
+    }
+    const transferPrice = Number(p.transferPrice);
+    if (!transferPrice || transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const transferExpenses = Number(p.transferExpenses) || 0;
+
+    const gain = transferPrice - acquisitionPrice - transferExpenses;
+    const priorNetGainOrLoss = (assetCategory === 'domestic_stock' || assetCategory === 'foreign_stock') ? (Number(p.priorNetGainOrLoss) || 0) : 0;
+    const combinedGain = gain + priorNetGainOrLoss;
+
+    const basicDeductionAlreadyUsed = Number(p.basicDeductionAlreadyUsed) || 0;
+    const basicDeduction = Math.max(0, Math.min(2500000, Math.max(0, combinedGain)) - basicDeductionAlreadyUsed);
+    const taxBase = Math.max(0, combinedGain - basicDeduction);
+
+    let calculatedTax, rateNote;
+    if (assetCategory === 'domestic_stock') {
+      const isDaejuju = !!p.isDaejuju;
+      const isSmallMediumCompany = !!p.isSmallMediumCompany;
+      const holdingMonths = Number(p.holdingMonths);
+      if (isDaejuju && Number.isFinite(holdingMonths) && holdingMonths < 12) {
+        calculatedTax = Math.round(taxBase * 0.30);
+        rateNote = '대주주, 1년 미만 보유 — 30% 단일세율';
+      } else if (isDaejuju) {
+        calculatedTax = progressiveTax(taxBase, DOMESTIC_STOCK_DAEJUJU_BRACKETS);
+        rateNote = '대주주, 1년 이상 보유(또는 보유기간 미상) — 3억 이하 20%, 3억 초과분 25%';
+      } else {
+        const rate = isSmallMediumCompany ? 0.10 : 0.20;
+        calculatedTax = Math.round(taxBase * rate);
+        rateNote = '소액주주(대주주 아님), ' + (isSmallMediumCompany ? '중소기업 10%' : '중소기업외 20%');
+      }
+    } else if (assetCategory === 'foreign_stock') {
+      const rate = p.isSmallMediumCompany ? 0.10 : 0.20;
+      calculatedTax = Math.round(taxBase * rate);
+      rateNote = '국외주식등, ' + (p.isSmallMediumCompany ? '중소기업주식등 10%' : '그 밖의 주식등 20%');
+    } else if (assetCategory === 'derivative') {
+      calculatedTax = Math.round(taxBase * 0.10);
+      rateNote = '파생상품등 — 10%(기본세율 20%에 대한 한시적 탄력세율)';
+    } else {
+      calculatedTax = progressiveTax(taxBase, TRANSFER_TAX_BRACKETS);
+      rateNote = '기타자산(특정주식·부동산과다보유법인 주식등) — 기본세율(누진 6~45%)';
+    }
+
+    const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, calculatedTax);
+    const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+
+    const localIncomeTax = Math.round(taxAfterCredit * 0.1);
+    const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+
+    return {
+      양도차익: Math.round(gain),
+      손익통산_적용후_소득금액: Math.round(combinedGain),
+      기본공제: basicDeduction,
+      과세표준: taxBase,
+      적용세율_설명: rateNote,
+      산출세액: calculatedTax,
+      외국납부세액공제: foreignTaxCredit,
+      무신고가산세: penalties.unreportedPenalty,
+      과소신고가산세: penalties.underreportedPenalty,
+      납부지연가산세: penalties.latePenalty,
+      지방소득세: localIncomeTax,
+      납부세액_합계: totalTax
     };
   };
 

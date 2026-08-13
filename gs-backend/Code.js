@@ -279,7 +279,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_transfer_tax',
-    description: '양도소득세를 정확히 계산한다(기본세율 누진구조, 단기양도세율, 장기보유특별공제 — 일반 및 1세대1주택 특례, 1세대1주택 12억 비과세, 다주택자 중과, 비사업용토지 가산, 미등기양도 70%, 8년자경농지 감면, 필요경비 개산공제, 지방소득세 포함). 가업상속공제 관련 특례·수용/환지 등 조특법상 개별 감면은 포함되지 않는다.',
+    description: '양도소득세를 정확히 계산한다(기본세율 누진구조, 단기양도세율, 장기보유특별공제 — 일반 및 1세대1주택 특례, 1세대1주택 12억 비과세, 다주택자 중과, 비사업용토지 가산, 미등기양도 70%, 8년자경농지 감면, 필요경비 개산공제, 환산취득가액 가산세, 무신고·과소신고·납부지연가산세, 지방소득세 포함). 가업상속공제 관련 특례·수용/환지 등 조특법상 개별 감면은 포함되지 않는다. 주식등 양도는 이 도구가 아니라 calculate_stock_transfer_tax를 써야 한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -294,11 +294,24 @@ const DRIVE_TOOLS = [
         isOneHouseOneFamily: { type: 'boolean', description: '1세대1주택 비과세 요건을 충족한다고 전제할지 여부(요건 자체는 이 도구가 검증하지 않음)' },
         residenceYears: { type: 'number', description: '1세대1주택(고가주택) 장기보유특별공제 계산용 거주기간(년). isOneHouseOneFamily일 때만 사용.' },
         multiHouseCount: { type: 'integer', description: '조정대상지역 다주택 중과 판정용 소유 주택 수(2 또는 3 이상). isOneHouseOneFamily가 아닐 때만 의미가 있다.' },
-        isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라.' },
+        isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라(다주택자 중과 한시배제가 여러 차례 연장돼왔으니 신고 시점 기준으로 재확인).' },
         isNonBusinessLand: { type: 'boolean', description: '비사업용 토지인지 (기본세율+10%p 가산)' },
         isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
         isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
-        isCarryoverBasis: { type: 'boolean', description: '배우자·직계존비속에게 증여받은 자산을 10년 이내 양도하는 이월과세(소득세법 §97-2) 대상인지 — true면 acquisitionPrice/acquisitionDate를 증여자의 원 취득가액·취득일로 넣어야 한다는 안내가 결과에 포함된다' }
+        isCarryoverBasis: { type: 'boolean', description: '배우자·직계존비속에게 증여받은 자산을 10년 이내 양도하는 이월과세(소득세법 §97-2) 대상인지 — true면 acquisitionPrice/acquisitionDate를 증여자의 원 취득가액·취득일로 넣어야 한다는 안내가 결과에 포함된다' },
+        isNewBuildingWithin5Years: { type: 'boolean', description: '건물을 신축(증축)하고 5년 이내에 양도하면서 환산취득가액을 필요경비로 적용했는지 — true면 환산취득가액 중 건물분에 5% 가산세(소득세법 §114의2)가 부과된다.' },
+        convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 환산취득가액 중 건물분 가액(원). 가산세 = 이 금액×5%.' },
+        rentalSpecialType: { type: 'string', enum: ['rental_general', 'rental_long'], description: '등록임대주택 장기보유특별공제 특례([별지 제84호서식] 코드04·05) — rental_general=장기일반민간임대주택(조특법§97의3, 10년이상임대 70%/8년이상 50% 정액), rental_long=장기임대주택(조특법§97의4, 일반 장특공제율에 임대기간별 2~10%p 추가). 지정하면 위 일반/1세대1주택 장특공제율을 대체하고, 다주택중과도 배제된다. 등록임대주택 요건(국민주택규모·임대료5%상한준수 등) 자체는 검증하지 않는다.' },
+        rentalYears: { type: 'number', description: 'rentalSpecialType 지정 시 임대기간(년).' },
+        pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의13 연금계좌세액공제. MIN(납입액, 양도차익, 1억원)×10%를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
+        isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
+        compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y'], description: '공익사업용 토지 등 수용감면(조특법§77) — cash=현금보상(10%), bond=채권보상 만기특약 없음(15%), bond_3y=3년만기특약(30%), bond_5y=5년만기특약(40%). 산출세액에서 이 비율만큼 감면한다. 감면종합한도(연간·5년 합산, 조특법§133)는 다른 감면과 합산 확인이 필요하므로 이 도구가 추적하지 않는다. 해당 없으면 생략.' },
+        downContractPriceDifference: { type: 'number', description: '다운계약서(업계약서) 등 거짓 계약으로 비과세·감면을 적용받은 경우(소득세법§91②), 계약서상 거래가액과 실지거래가액의 차액(원). 1세대1주택 비과세라면 MIN(비과세 미적용시 산출세액, 이 차액)을, 8년자경농지·수용감면 등을 받았다면 MIN(감면세액, 이 차액)을 배제·추징한다. 정상신고 사안이면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' }
       },
       required: ['transferPrice', 'acquisitionPrice', 'acquisitionDate', 'transferDate']
     }
@@ -579,6 +592,31 @@ const DRIVE_TOOLS = [
         loanMonths: { type: 'integer', description: '대출기간(개월). 1년 이상 계속되는 대출은 매년 다시 계산해야 하며, 1년 미만이면 월할계산에 쓰인다. 생략하면 12(1년)로 계산한다.' }
       },
       required: ['loanPrincipal']
+    }
+  },
+  {
+    name: 'calculate_stock_transfer_tax',
+    description: '주식등 양도소득세를 계산한다(소득세법 §94·§104①11,12,13, [별지 제62호서식] 등 기준) — 부동산 양도세(calculate_transfer_tax)와는 완전히 별도 세목으로, 장기보유특별공제가 없고 대주주/소액주주·국내/국외·중소기업 여부에 따라 세율이 다르다. 국내주식(대주주 1년미만30%, 대주주 3억이하20%·초과25%, 소액주주 중소기업10%/그외20%), 국외주식(중소기업10%/그외20%), 파생상품(10%), 기타자산(특정주식·부동산과다보유법인, 누진세율 6~45%)로 구분한다. 기본공제(연250만원)는 국내·국외주식 손익통산 후 1회만 적용된다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        assetCategory: { type: 'string', enum: ['domestic_stock', 'foreign_stock', 'derivative', 'other_asset'], description: 'domestic_stock=국내 상장·비상장주식등, foreign_stock=국외주식등(5년 이상 계속 거주자만 과세대상), derivative=파생상품등, other_asset=특정주식·부동산과다보유법인 주식등(기타자산 취급, 소득세법 §94①4).' },
+        transferPrice: { type: 'number', description: '양도가액(원). 상장주식은 원칙적으로 실제 거래가액.' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        transferExpenses: { type: 'number', description: '양도비용(원, 증권거래세·양도소득세 신고서 작성비용 등). 없으면 생략(0).' },
+        isDaejuju: { type: 'boolean', description: 'assetCategory가 domestic_stock일 때만 — 대주주(코스피 지분1%또는시가총액50억, 코스닥2%또는50억, 코넥스4%또는50억, 비상장4%또는10억, K-OTC벤처기업4%또는40억 — 기준은 신고 시점 기준으로 재확인)에 해당하는지. false면 소액주주로 처리한다.' },
+        isSmallMediumCompany: { type: 'boolean', description: '발행법인이 중소기업(조특법§5① 요건)인지. 국내주식(소액주주)·국외주식 세율 판정에 쓰인다.' },
+        holdingMonths: { type: 'integer', description: 'assetCategory가 domestic_stock이고 isDaejuju가 true일 때만 — 보유기간(개월). 12개월 미만이면 30% 단일세율이 적용된다.' },
+        priorNetGainOrLoss: { type: 'number', description: '같은 과세기간 중 다른 국내·국외주식 양도에서 발생한 순손익(원, 이익은 양수/손실은 음수) — 2020.1.1. 이후 양도분부터 국내·국외주식 손익통산이 허용되므로 이 값과 합산해서 과세표준을 계산한다. 없으면 생략.' },
+        basicDeductionAlreadyUsed: { type: 'number', description: '같은 과세기간에 이미 다른 주식 양도에서 사용한 기본공제액(원) — 기본공제(연 250만원)는 국내·국외주식 합산 1회만 적용되므로 중복 적용을 막기 위해 넣는다. 없으면 생략(0).' },
+        foreignTaxPaidAmount: { type: 'number', description: '국외주식등 양도소득에 대해 외국에서 이미 납부한 세액(원, 외국납부세액공제). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' }
+      },
+      required: ['assetCategory', 'transferPrice']
     }
   },
   {
@@ -2363,6 +2401,28 @@ function longTermHoldingDeductionRate1House_(ownYears, liveYears) {
   return ownRate + liveRate;
 }
 
+// 장기임대주택 등 장기보유특별공제 특례 ([별지 제84호서식] 코드04·05, 조특법 §97의3·§97의4)
+// rental_general(장기일반민간임대주택, §97의3): 10년 이상 임대 70%, 8년 이상 임대 50% — 정액(다른 공제율과 합산하지 않음)
+// rental_long(장기임대주택, §97의4): 일반 장기보유특별공제율(연 2%, 최대 30%)에 임대기간별 추가공제(6년↑2%~10년↑10%)를 더함
+function rentalLongTermHoldingDeductionRate_(type, holdingYears, rentalYears) {
+  const ry = Number(rentalYears) || 0;
+  if (type === 'rental_general') {
+    if (ry >= 10) return 0.70;
+    if (ry >= 8) return 0.50;
+    return 0;
+  }
+  if (type === 'rental_long') {
+    let addRate = 0;
+    if (ry >= 10) addRate = 0.10;
+    else if (ry >= 9) addRate = 0.08;
+    else if (ry >= 8) addRate = 0.06;
+    else if (ry >= 7) addRate = 0.04;
+    else if (ry >= 6) addRate = 0.02;
+    return longTermHoldingDeductionRate_(holdingYears) + addRate;
+  }
+  return null;
+}
+
 // 증여재산공제 (상증세법 §53, 10년간 합산 한도액 기준)
 function giftPropertyDeduction_(relation, isMinor) {
   switch (relation) {
@@ -2569,6 +2629,24 @@ function toolCalculateTransferTax(p) {
 
   if (isOneHouse) {
     if (transferPrice <= 1200000000) {
+      // 다운계약서(업계약서) 등 거짓 계약으로 비과세를 적용받은 경우(소득세법 §91②) —
+      // MIN(비과세를 적용받지 않았다면 부과됐을 산출세액, 계약서 거래가액과 실지거래가액의 차액)만큼 비과세를 배제하고 추징한다.
+      const downContractDiff = Number(p.downContractPriceDifference) || 0;
+      if (downContractDiff > 0) {
+        const wouldBeTaxResult = toolCalculateTransferTax(Object.assign({}, p, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
+        const wouldBeTax = (wouldBeTaxResult && typeof wouldBeTaxResult.납부세액_합계 === 'number') ? wouldBeTaxResult.납부세액_합계 : 0;
+        const clawback = Math.min(wouldBeTax, downContractDiff);
+        return {
+          입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
+          비과세여부: false,
+          다운계약서_비과세배제: true,
+          비과세미적용시_산출세액: wouldBeTax,
+          계약서_실거래_차액: downContractDiff,
+          납부세액: clawback,
+          납부세액_합계: clawback,
+          안내: '다운계약서(업계약서) 등 거짓 계약으로 1세대1주택 비과세를 적용받은 것으로 전제했습니다(소득세법 §91②). 비과세를 적용받지 않았다면 부과됐을 세액(지방소득세 포함)과 계약서상 거래가액·실지거래가액 차액 중 작은 금액을 추징세액으로 계산했으며, 별도의 가산세·과태료는 포함하지 않았습니다.'
+        };
+      }
       return {
         입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
         비과세여부: true,
@@ -2583,9 +2661,15 @@ function toolCalculateTransferTax(p) {
     longTermRate = longTermHoldingDeductionRate_(holdingYears);
   }
 
+  // 장기임대주택 등 특례([별지 제84호서식] 코드04·05, 조특법 §97의3·§97의4) — 신청한 경우 위에서 계산한 일반/1세대1주택 공제율을 대체한다.
+  const rentalRate = rentalLongTermHoldingDeductionRate_(p.rentalSpecialType, holdingYears, p.rentalYears);
+  const isRentalSpecial = rentalRate !== null;
+  if (isRentalSpecial) longTermRate = rentalRate;
+
   // 다주택자 중과(소득세법 §104⑦, 조정대상지역 2주택 이상) — 적용되면 장기보유특별공제 자체가 배제된다.
+  // (등록임대주택 장특공제 특례를 적용받는 주택은 다주택 수 계산에서 제외되는 것이 원칙이라 여기서는 중과 대상에서 제외한다.)
   const multiHouseCount = Number(p.multiHouseCount) || 0;
-  const isMultiHouseSurcharge = !isOneHouse && !!p.isAdjustedArea && multiHouseCount >= 2;
+  const isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!p.isAdjustedArea && multiHouseCount >= 2;
   if (isMultiHouseSurcharge) longTermRate = 0;
 
   const longTermDeductionAmount = Math.round(taxableGain * longTermRate);
@@ -2629,14 +2713,54 @@ function toolCalculateTransferTax(p) {
     calculatedTax -= farmlandReduction;
   }
 
+  // 공익사업용 토지 등 수용감면(조특법 §77) — 현금보상 10%, 채권보상 15%(3년만기특약 30%, 5년만기특약 40%).
+  // 감면종합한도(조특법 §133, 연간·5년 합산)는 다른 감면과 합산해서 판단해야 하므로 이 도구가 추적하지 않는다.
+  const COMPENSATION_REDUCTION_RATES_ = { cash: 0.10, bond: 0.15, bond_3y: 0.30, bond_5y: 0.40 };
+  let compensationReduction = 0;
+  if (COMPENSATION_REDUCTION_RATES_[p.compensationType] !== undefined) {
+    compensationReduction = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
+    calculatedTax -= compensationReduction;
+  }
+
+  // 다운계약서(업계약서) 등 거짓 계약으로 위 감면을 적용받은 경우(소득세법 §91②) —
+  // MIN(감면세액 합계, 계약서 거래가액과 실지거래가액의 차액)만큼 감면을 배제하고 추징한다.
+  const downContractDiff = Number(p.downContractPriceDifference) || 0;
+  let downContractClawback = 0;
+  if (downContractDiff > 0 && (farmlandReduction + compensationReduction) > 0) {
+    downContractClawback = Math.min(farmlandReduction + compensationReduction, downContractDiff);
+    calculatedTax += downContractClawback;
+  }
+
+  // 환산취득가액 가산세(소득세법 §114의2) — 건물을 신축(증축)하고 5년 이내에 양도하면서 환산취득가액을 필요경비로 적용한 경우,
+  // 환산취득가액 중 건물분에 5%를 가산세로 부과한다.
+  const convertedBuildingAcquisitionValueForPenalty = Number(p.convertedBuildingAcquisitionValueForPenalty) || 0;
+  const conversionValuePenalty = (p.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
+    ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
+
+  // 연금계좌세액공제(조특법 §99의13, [별지 제63호의32서식]) — 부동산 양도대금을 양도일로부터 6개월 이내
+  // 연금계좌에 납입하면 MIN(연금계좌납입액, 양도차익, 1억원)×10%를 세액공제한다.
+  const pensionContribution = Number(p.pensionAccountContribution) || 0;
+  const pensionCreditBase = Math.min(pensionContribution, Math.max(0, Math.round(gainBeforeDeduction)), 100000000);
+  const pensionAccountCredit = pensionContribution > 0 ? Math.round(pensionCreditBase * 0.1) : 0;
+
+  // 전자신고세액공제(조특법 §104의8①) — 납세자 본인이 직접 전자신고하면 2만원 정액공제(세무대리인 대리신고 시 미적용)
+  const eFilingCredit = p.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+
+  // 지방소득세(개인지방소득세, 지방세법)는 국세 산출세액(가산세 제외)의 10%가 원칙이며, 가산세에는 부가되지 않는다.
   const localIncomeTax = Math.round(calculatedTax * 0.1);
-  const totalTax = calculatedTax + localIncomeTax;
+  const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + conversionValuePenalty
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
 
   return {
     입력값: {
       양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses,
       보유기간_년: holdingYears, 자산종류: assetType === 'house' ? '주택·조합원입주권' : '그 외',
-      '1세대1주택_전제': isOneHouse, 다주택중과_전제: isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland
+      '1세대1주택_전제': isOneHouse, 다주택중과_전제: isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland,
+      신고상태: filingStatus
     },
     양도차익: Math.round(gainBeforeDeduction),
     과세대상양도차익: Math.round(taxableGain),
@@ -2648,13 +2772,22 @@ function toolCalculateTransferTax(p) {
     적용세율_설명: appliedRateNote,
     세율가산_내역: surchargeNotes,
     자경농지감면액: farmlandReduction,
+    수용감면액: compensationReduction,
+    다운계약서_감면배제_추징액: downContractClawback,
+    장기임대주택특례_적용여부: isRentalSpecial,
     산출세액: calculatedTax,
+    연금계좌세액공제: pensionAccountCredit,
+    전자신고세액공제: eFilingCredit,
+    환산취득가액가산세: conversionValuePenalty,
+    무신고가산세: penalties.unreportedPenalty,
+    과소신고가산세: penalties.underreportedPenalty,
+    납부지연가산세: penalties.latePenalty,
     지방소득세: localIncomeTax,
     납부세액_합계: totalTax,
     안내: (p.isCarryoverBasis
       ? '배우자·직계존비속 증여 후 10년 이내 양도(이월과세, 소득세법 §97-2)로 전제했습니다 — acquisitionPrice/acquisitionDate는 증여자의 원 취득가액·취득일이어야 합니다. '
       : '') +
-      '기본공제 250만원은 해당 과세기간 중 다른 양도가 없다고 가정한 값입니다. 다주택자 중과는 조정대상지역 지정 현황·한시 배제 여부가 시행령으로 수시로 바뀌므로 반드시 최신 여부를 확인하고 isAdjustedArea를 넣으세요. 8년자경농지 감면은 5년 합산 2억원 한도를 이 도구가 추적하지 않으니 다른 감면 이력과 합산해서 확인하세요. 부담부증여로 취득한 자산의 양도, 가업상속공제 관련 특례 등은 포함되지 않았습니다.'
+      '기본공제 250만원은 해당 과세기간 중 다른 양도가 없다고 가정한 값입니다. 다주택자 중과는 조정대상지역 지정 현황·한시 배제 여부가 시행령으로 수시로 바뀌므로 반드시 최신 여부를 확인하고 isAdjustedArea를 넣으세요. 8년자경농지 감면은 5년 합산 2억원 한도를 이 도구가 추적하지 않으니 다른 감면 이력과 합산해서 확인하세요. 부담부증여로 취득한 자산의 양도, 가업상속공제 관련 특례 등은 포함되지 않았습니다. 지방소득세(10%)는 가산세를 제외한 산출세액을 기준으로 계산했습니다 — 지방세 자체의 가산세는 별도이니 이 도구가 계산하지 않습니다.'
   };
 }
 
@@ -3309,6 +3442,89 @@ function toolCalculateInterestFreeLoanGiftAmount(p) {
     과세대상여부: true, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
     증여재산가액: deemedGiftAmount,
     안내: '대출기간이 1년을 초과하면 매년(또는 대출조건 변경 시마다) 새로 증여의제이익이 발생하는 것으로 보아 각 연도별로 다시 계산해야 합니다. 적정이자율(현재 연 4.6%)은 상증세법 시행규칙에 따라 수시로 바뀔 수 있으니 대출 시점 기준으로 재확인하세요. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+  };
+}
+
+// 국내주식등 세율(대주주, 2020.1.1. 이후) — 3억 이하 20%, 3억 초과 25%(누진공제 1500만원)
+const DOMESTIC_STOCK_DAEJUJU_BRACKETS = [
+  { max: 300000000, rate: 0.20, deduction: 0 },
+  { max: Infinity, rate: 0.25, deduction: 15000000 }
+];
+
+// 주식등 양도소득세 (소득세법 §94①3,4,11,12,13, §104①11,12,13, [별지 제62호서식] 등 기준) —
+// 부동산 양도세(calculate_transfer_tax)와 완전히 별도 세목. 장기보유특별공제는 적용되지 않는다.
+function toolCalculateStockTransferTax(p) {
+  p = p || {};
+  const assetCategory = p.assetCategory;
+  if (['domestic_stock', 'foreign_stock', 'derivative', 'other_asset'].indexOf(assetCategory) === -1) {
+    return { error: 'assetCategory는 "domestic_stock"(국내주식등), "foreign_stock"(국외주식등), "derivative"(파생상품등), "other_asset"(특정주식·부동산과다보유법인 등 기타자산) 중 하나여야 합니다.' };
+  }
+  const transferPrice = Number(p.transferPrice);
+  if (!transferPrice || transferPrice <= 0) return { error: '양도가액(transferPrice)이 필요합니다.' };
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const transferExpenses = Number(p.transferExpenses) || 0;
+
+  const gain = transferPrice - acquisitionPrice - transferExpenses;
+  // 국내·국외주식 손익통산(2020.1.1. 이후 양도분부터, 파생상품·기타자산은 통산대상 아님) — 다른 국내외 주식양도의 순손익을 더한다.
+  const priorNetGainOrLoss = (assetCategory === 'domestic_stock' || assetCategory === 'foreign_stock') ? (Number(p.priorNetGainOrLoss) || 0) : 0;
+  const combinedGain = gain + priorNetGainOrLoss;
+
+  const basicDeductionAlreadyUsed = Number(p.basicDeductionAlreadyUsed) || 0;
+  const basicDeduction = Math.max(0, Math.min(2500000, Math.max(0, combinedGain)) - basicDeductionAlreadyUsed);
+  const taxBase = Math.max(0, combinedGain - basicDeduction);
+
+  let calculatedTax, rateNote;
+  if (assetCategory === 'domestic_stock') {
+    const isDaejuju = !!p.isDaejuju;
+    const isSmallMediumCompany = !!p.isSmallMediumCompany;
+    const holdingMonths = Number(p.holdingMonths);
+    if (isDaejuju && Number.isFinite(holdingMonths) && holdingMonths < 12) {
+      calculatedTax = Math.round(taxBase * 0.30);
+      rateNote = '대주주, 1년 미만 보유 — 30% 단일세율';
+    } else if (isDaejuju) {
+      calculatedTax = calcProgressiveTax_(taxBase, DOMESTIC_STOCK_DAEJUJU_BRACKETS);
+      rateNote = '대주주, 1년 이상 보유(또는 보유기간 미상) — 3억 이하 20%, 3억 초과분 25%';
+    } else {
+      const rate = isSmallMediumCompany ? 0.10 : 0.20;
+      calculatedTax = Math.round(taxBase * rate);
+      rateNote = '소액주주(대주주 아님), ' + (isSmallMediumCompany ? '중소기업 10%' : '중소기업외 20%');
+    }
+  } else if (assetCategory === 'foreign_stock') {
+    const rate = p.isSmallMediumCompany ? 0.10 : 0.20;
+    calculatedTax = Math.round(taxBase * rate);
+    rateNote = '국외주식등, ' + (p.isSmallMediumCompany ? '중소기업주식등 10%' : '그 밖의 주식등 20%');
+  } else if (assetCategory === 'derivative') {
+    calculatedTax = Math.round(taxBase * 0.10);
+    rateNote = '파생상품등 — 10%(기본세율 20%에 대한 한시적 탄력세율)';
+  } else {
+    calculatedTax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS);
+    rateNote = '기타자산(특정주식·부동산과다보유법인 주식등) — 기본세율(누진 6~45%)';
+  }
+
+  const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, calculatedTax);
+  const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+
+  const localIncomeTax = Math.round(taxAfterCredit * 0.1);
+  const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+
+  return {
+    입력값: { 자산구분: assetCategory, 양도가액: transferPrice, 취득가액: acquisitionPrice, 양도비용: transferExpenses, 신고상태: filingStatus },
+    양도차익: Math.round(gain),
+    손익통산_적용후_소득금액: Math.round(combinedGain),
+    기본공제: basicDeduction,
+    과세표준: taxBase,
+    적용세율_설명: rateNote,
+    산출세액: calculatedTax,
+    외국납부세액공제: foreignTaxCredit,
+    무신고가산세: penalties.unreportedPenalty,
+    과소신고가산세: penalties.underreportedPenalty,
+    납부지연가산세: penalties.latePenalty,
+    지방소득세: localIncomeTax,
+    납부세액_합계: totalTax,
+    안내: '장기보유특별공제는 주식등에는 적용되지 않습니다. 기본공제(연 250만원)는 국내·국외주식 합산 1회이며, 같은 과세기간에 이미 다른 주식양도에서 기본공제를 썼다면 basicDeductionAlreadyUsed에 넣어야 중복 적용을 막을 수 있습니다. 대주주 판정기준(지분율·시가총액)은 이 도구가 검증하지 않으므로 별도로 확인한 뒤 isDaejuju를 넣으세요. 대주주 등이 주식·출자지분을 양도하면서 기장을 누락한 경우의 기장불성실가산세(산출세액×기장누락소득금액/양도소득금액×10%, 산출세액이 없으면 거래금액×7/10000)는 이 도구가 계산하지 않으니 해당 사안이면 별도로 계산해서 더하세요. 예정신고(반기별, 파생상품은 생략)와 확정신고(다음해 5월) 의무는 자산 종류별로 다르니 별도로 확인하세요.'
   };
 }
 
@@ -4158,6 +4374,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
         b.name === 'calculate_interest_free_loan_gift_amount' ||
+        b.name === 'calculate_stock_transfer_tax' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -4302,6 +4519,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_interest_free_loan_gift_amount') {
         const resultObj = toolCalculateInterestFreeLoanGiftAmount(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_stock_transfer_tax') {
+        const resultObj = toolCalculateStockTransferTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
