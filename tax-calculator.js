@@ -141,13 +141,175 @@ function renderValuationAssetList(containerId, assets){
 // ---- 양도소득세 (다건 합산) ----
 let transferAssets = [{}]; // 각 원소는 입력값 객체(비어있는 채로 시작)
 
+// ---- 안분계산 도구(소득세법 시행령 §166④) ----
+let allocationAssets = [{}, {}];
+let allocationShown = false;
+
+const ALLOCATION_METHOD_LABELS = {
+  standard_price: '양도가액 안분 (기준시가·감정가액 비율)',
+  standard_price_vat: '양도가액 안분(부가세 포함, 건물분 VAT 분리)',
+  area: '면적 안분',
+  acq_expense_together: '취득/필요경비 함께 안분(양도시 비율 동일 적용)',
+  acq_expense_separate: '취득/필요경비 각각 안분(취득시 비율 별도 적용)'
+};
+
+function renderAllocationTool(){
+  const box = document.getElementById('taxCalcAllocationTool');
+  if (!box) return;
+  if (!allocationShown){ box.innerHTML = ''; return; }
+  const method = box.dataset.method || 'standard_price';
+  const showAcq = method === 'acq_expense_together' || method === 'acq_expense_separate';
+  const showAcqStd = method === 'acq_expense_separate';
+  const showArea = method === 'area';
+  const showVat = method === 'standard_price_vat';
+
+  const rowsHtml = allocationAssets.map(function(a, idx){
+    return '<div class="taxcalc-grid" data-alloc-idx="' + idx + '" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);">' +
+      '<div class="taxcalc-field"><label>자산명</label><input type="text" data-afield="label" value="' + (a.label || '').replace(/"/g,'&quot;') + '" placeholder="예: 토지 / 건물"></div>' +
+      (showArea
+        ? '<div class="taxcalc-field"><label>면적</label><input type="number" data-afield="area" value="' + (a.area || '') + '" placeholder="㎡"></div>'
+        : '<div class="taxcalc-field"><label>기준시가(양도시)</label><input type="number" data-afield="standardPriceTransfer" value="' + (a.standardPriceTransfer || '') + '" placeholder="원 (감정가액 있으면 감정가액)"></div>') +
+      (showAcqStd ? '<div class="taxcalc-field"><label>기준시가(취득시)</label><input type="number" data-afield="standardPriceAcquisition" value="' + (a.standardPriceAcquisition || '') + '" placeholder="원"></div>' : '') +
+      (showVat ? '<div class="taxcalc-field checkbox"><input type="checkbox" data-afield="isBuilding" id="allocBldg-' + idx + '"' + (a.isBuilding ? ' checked' : '') + '><label for="allocBldg-' + idx + '">건물분(부가세 과세대상)</label></div>' : '') +
+      (allocationAssets.length > 2 ? '<button type="button" class="taxcalc-del-asset" data-action="del-alloc-asset" data-idx="' + idx + '">✕ 삭제</button>' : '') +
+    '</div>';
+  }).join('');
+
+  box.innerHTML =
+    '<div class="taxcalc-asset" style="margin-top:10px;">' +
+      '<div class="taxcalc-asset-head"><b>안분계산(소득세법 시행령 §166④) — 토지·건물 등을 함께 양도했는데 가액 구분이 불분명할 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>안분방식</label><select id="allocMethod">' +
+          Object.keys(ALLOCATION_METHOD_LABELS).map(function(k){ return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + ALLOCATION_METHOD_LABELS[k] + '</option>'; }).join('') +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>총 양도가액</label><input type="number" id="allocTotalTransfer" placeholder="원" value="' + (box.dataset.totalTransfer || '') + '"></div>' +
+        (showAcq ? '<div class="taxcalc-field"><label>총 취득가액</label><input type="number" id="allocTotalAcq" placeholder="원" value="' + (box.dataset.totalAcq || '') + '"></div>' : '') +
+        (showAcq ? '<div class="taxcalc-field"><label>총 필요경비</label><input type="number" id="allocTotalExpense" placeholder="원" value="' + (box.dataset.totalExpense || '') + '"></div>' : '') +
+      '</div>' +
+      '<div id="allocAssetRows">' + rowsHtml + '</div>' +
+      '<button type="button" class="taxcalc-add-asset" data-action="add-alloc-asset" style="margin-top:8px;">+ 자산 추가</button>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-allocation">안분계산하기</button>' +
+      '<div id="taxCalcAllocationResult"></div>' +
+    '</div>';
+
+  box.querySelector('#allocMethod').addEventListener('change', function(e){
+    box.dataset.method = e.target.value;
+    box.dataset.totalTransfer = document.getElementById('allocTotalTransfer').value;
+    renderAllocationTool();
+  });
+  box.querySelector('#allocTotalTransfer').addEventListener('input', function(e){ box.dataset.totalTransfer = e.target.value; });
+  const allocTotalAcqEl = document.getElementById('allocTotalAcq');
+  if (allocTotalAcqEl) allocTotalAcqEl.addEventListener('input', function(e){ box.dataset.totalAcq = e.target.value; });
+  const allocTotalExpenseEl = document.getElementById('allocTotalExpense');
+  if (allocTotalExpenseEl) allocTotalExpenseEl.addEventListener('input', function(e){ box.dataset.totalExpense = e.target.value; });
+  box.querySelectorAll('[data-afield]').forEach(function(el){
+    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', function(){
+      const idx = Number(el.closest('[data-alloc-idx]').dataset.allocIdx);
+      const key = el.dataset.afield;
+      allocationAssets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+  });
+}
+
+function renderAllocationResult(r){
+  const box = document.getElementById('taxCalcAllocationResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result" style="margin-top:10px;">';
+  r.자산별_안분결과.forEach(function(row, idx){
+    html += '<div class="taxcalc-result-row total"><span>' + row.label + '</span><span class="v"></span></div>';
+    html += taxCalcResultRow('안분비율(양도)', (row.안분비율_양도 * 100).toFixed(2) + '%');
+    html += taxCalcResultRow('양도가액 안분액', won(row.양도가액_안분액));
+    if (row.부가세 !== undefined) html += taxCalcResultRow('부가세(10/110)', won(row.부가세));
+    if (row.양도가액_부가세제외 !== undefined) html += taxCalcResultRow('양도가액(부가세 제외)', won(row.양도가액_부가세제외));
+    if (row.안분비율_취득 !== undefined) html += taxCalcResultRow('안분비율(취득)', (row.안분비율_취득 * 100).toFixed(2) + '%');
+    if (row.취득가액_안분액 !== undefined) html += taxCalcResultRow('취득가액 안분액', won(row.취득가액_안분액));
+    if (row.필요경비_안분액 !== undefined) html += taxCalcResultRow('필요경비 안분액', won(row.필요경비_안분액));
+    html += '<button type="button" class="taxcalc-run-btn" data-action="apply-allocation-to-new-asset" data-ridx="' + idx + '">이 결과로 새 거래 추가</button>';
+  });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+  box.dataset.lastResult = JSON.stringify(r);
+}
+
+// ---- 건물기준시가 계산기(층별/부속시설별 상세) ----
+let buildingPriceRows = [{}];
+let buildingPriceShown = false;
+
+function renderBuildingPriceTool(){
+  const box = document.getElementById('taxCalcBuildingPriceTool');
+  if (!box) return;
+  if (!buildingPriceShown){ box.innerHTML = ''; return; }
+  const taxType = box.dataset.taxType || 'transfer';
+
+  const rowsHtml = buildingPriceRows.map(function(r, idx){
+    const structureOptions = BUILDING_STRUCTURE_TABLE.map(function(s){ return '<option value="' + s.name + '"' + (r.structureName === s.name ? ' selected' : '') + '>' + s.name + '</option>'; }).join('');
+    const useOptions = BUILDING_USE_TABLE.filter(function(u){ return u.index !== null; }).map(function(u){ return '<option value="' + u.no + '"' + (String(r.useNo) === String(u.no) ? ' selected' : '') + '>' + u.no + '. ' + u.desc + '</option>'; }).join('');
+    return '<div class="taxcalc-grid" data-bp-idx="' + idx + '" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);">' +
+      '<div class="taxcalc-field"><label>구분</label><input type="text" data-bfield="label" value="' + (r.label || '').replace(/"/g,'&quot;') + '" placeholder="예: 1층 / 지하주차장"></div>' +
+      '<div class="taxcalc-field"><label>구조</label><select data-bfield="structureName"><option value="">선택</option>' + structureOptions + '</select></div>' +
+      '<div class="taxcalc-field"><label>용도</label><select data-bfield="useNo"><option value="">선택</option>' + useOptions + '</select></div>' +
+      '<div class="taxcalc-field"><label>신축(증축)연도</label><input type="number" data-bfield="builtYear" value="' + (r.builtYear || '') + '" placeholder="예: 2010"></div>' +
+      '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-bfield="floorAreaSqm" value="' + (r.floorAreaSqm || '') + '"></div>' +
+      (buildingPriceRows.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-building-row" data-idx="' + idx + '">✕ 삭제</button>' : '') +
+    '</div>';
+  }).join('');
+
+  box.innerHTML =
+    '<div class="taxcalc-asset" style="margin-top:10px;">' +
+      '<div class="taxcalc-asset-head"><b>건물기준시가 계산기(2026.1.1. 시행 국세청 고시) — 층·부속시설마다 구조·용도·신축연도가 다르면 행을 나눠 입력</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="bpTaxType">' +
+          '<option value="transfer"' + (taxType === 'transfer' ? ' selected' : '') + '>양도소득세(조정률 미적용)</option>' +
+          '<option value="inheritance_gift"' + (taxType === 'inheritance_gift' ? ' selected' : '') + '>상속세·증여세</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>부속토지 개별공시지가(㎡당)</label><input type="number" id="bpLandPrice" value="' + (box.dataset.landPrice || '') + '" placeholder="원"></div>' +
+      '</div>' +
+      '<div id="bpRows">' + rowsHtml + '</div>' +
+      '<button type="button" class="taxcalc-add-asset" data-action="add-building-row" style="margin-top:8px;">+ 층/부속시설 추가</button>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-building-price">건물기준시가 계산하기</button>' +
+      '<div id="taxCalcBuildingPriceResult"></div>' +
+    '</div>';
+
+  box.querySelector('#bpTaxType').addEventListener('change', function(e){ box.dataset.taxType = e.target.value; renderBuildingPriceTool(); });
+  box.querySelector('#bpLandPrice').addEventListener('input', function(e){ box.dataset.landPrice = e.target.value; });
+  box.querySelectorAll('[data-bfield]').forEach(function(el){
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function(){
+      const idx = Number(el.closest('[data-bp-idx]').dataset.bpIdx);
+      buildingPriceRows[idx][el.dataset.bfield] = el.value;
+    });
+  });
+}
+
+function renderBuildingPriceResult(r){
+  const box = document.getElementById('taxCalcBuildingPriceResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result" style="margin-top:10px;">';
+  r.행별_결과.forEach(function(row){
+    html += '<div class="taxcalc-result-row total"><span>' + row.구분 + '</span><span class="v"></span></div>';
+    html += taxCalcResultRow('㎡당 금액', won(row['㎡당_금액']));
+    html += taxCalcResultRow('면적', row['건물면적_㎡'] + '㎡');
+    html += taxCalcResultRow('기준시가', won(row.건물기준시가));
+  });
+  html += taxCalcResultRow('건물기준시가 합계', won(r.건물기준시가_합계), { total: true });
+  html += '<button type="button" class="taxcalc-run-btn" data-action="apply-building-price-to-new-asset">이 합계로 새 거래(취득가액) 추가</button>';
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+  box.dataset.lastTotal = r.건물기준시가_합계;
+}
+
 function renderTransferPane(){
   const cardsHtml = transferAssets.map(function(_, idx){
     return '' +
       '<div class="taxcalc-asset" data-idx="' + idx + '">' +
         '<div class="taxcalc-asset-head"><b>거래 ' + (idx+1) + '</b>' +
-          (transferAssets.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-asset" data-idx="' + idx + '">✕ 삭제</button>' : '') +
+          '<span>' +
+            '<button type="button" class="taxcalc-calcbasis-btn" data-action="show-calc-basis" data-idx="' + idx + '">🧮 계산근거</button>' +
+            (transferAssets.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-asset" data-idx="' + idx + '">✕ 삭제</button>' : '') +
+          '</span>' +
         '</div>' +
+        '<div class="taxcalc-calcbasis" id="calcBasis-' + idx + '" style="display:none;"></div>' +
         '<div class="taxcalc-grid">' +
           '<div class="taxcalc-field"><label>자산종류</label><select data-field="assetType"><option value="other">그 외 부동산</option><option value="house">주택·조합원입주권</option></select></div>' +
           '<div class="taxcalc-field"><label>양도가액</label><input type="number" data-field="transferPrice" placeholder="원"></div>' +
@@ -189,6 +351,10 @@ function renderTransferPane(){
     '<div class="taxcalc-hint">여러 건을 추가하면 2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 자동으로 합산해서 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용합니다(확정신고 합산 개념). 단기양도·미등기양도는 건별로 따로 계산해서 더합니다. 다주택 중과는 조정대상지역 지정·한시배제 여부를 신고 시점 기준으로 직접 확인한 뒤 체크하세요.</div>' +
     '<div id="taxCalcTransferCards">' + cardsHtml + '</div>' +
     '<button type="button" class="taxcalc-add-asset" data-action="add-asset">+ 거래 추가</button>' +
+    '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-allocation-tool" style="margin-bottom:10px;">🧮 안분계산 도구(토지·건물 등 일괄양도시)</button>' +
+    '<div id="taxCalcAllocationTool"></div>' +
+    '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-building-price-tool" style="margin-bottom:10px;">🏢 건물기준시가 계산기(층별 상세)</button>' +
+    '<div id="taxCalcBuildingPriceTool"></div>' +
     '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세(확정신고 전체 기준)</b></div>' +
     '<div class="taxcalc-grid">' +
       '<div class="taxcalc-field"><label>신고 상태</label><select id="trFilingStatus">' +
@@ -230,6 +396,9 @@ function renderTransferPane(){
       '<button type="button" class="taxcalc-run-btn" data-action="run-stock-transfer">세액 계산하기</button>' +
       '<div id="taxCalcStockTransferResult"></div>' +
     '</div>';
+
+  renderAllocationTool();
+  renderBuildingPriceTool();
 
   // 저장해뒀던 입력값 다시 채워넣기(카드 추가/삭제로 다시 그릴 때 기존 입력 유지)
   transferAssets.forEach(function(vals, idx){
@@ -292,6 +461,60 @@ function collectTransferInput(vals){
   };
 }
 
+// 거래 1건의 계산근거(산출과정)를 [별지 84호서식] "양도소득계산명세" 스타일로 단계별 수식+실제금액 텍스트로 만든다.
+// calculateTransferTaxSingleJS 결과 하나만 보고 만들므로, 다건 합산의 "합산과세표준→산출세액" 단계는 별도로 renderTransferResult에서 덧붙인다.
+function buildTransferCalcBasisLines(r){
+  const lines = [];
+  if (r.error) { lines.push('오류: ' + r.error); return lines; }
+  if (r.미등기양도 || (r.입력값 && r.입력값.미등기양도)) {
+    lines.push('미등기양도자산 — 장기보유특별공제·기본공제 배제');
+    lines.push('양도차익 = 양도가액 - 취득가액 - 필요경비 = ' + won(r.입력값.양도가액) + ' - ' + won(r.입력값.취득가액) + ' - ' + won(r.입력값.필요경비) + ' = ' + won(r.양도차익));
+    lines.push('산출세액 = 양도차익 × 70% = ' + won(r.산출세액));
+    lines.push('지방소득세(10%) = ' + won(r.지방소득세));
+    lines.push('납부세액 합계 = ' + won(r.납부세액_합계));
+    return lines;
+  }
+  if (r.다운계약서_비과세배제) {
+    lines.push('1세대1주택 비과세 대상이나, 다운계약서(업계약서) 등 거짓 계약으로 비과세를 적용받은 것으로 전제(소득세법§91②)');
+    lines.push('비과세 미적용시 산출세액(지방소득세 포함) = ' + won(r.비과세미적용시_산출세액));
+    lines.push('계약서·실거래 차액 = ' + won(r.계약서_실거래_차액));
+    lines.push('추징세액 = MIN(비과세 미적용시 세액, 계약서·실거래 차액) = ' + won(r.납부세액_합계));
+    return lines;
+  }
+  if (r.비과세여부) {
+    lines.push('1세대1주택 비과세 요건 충족 전제 — 양도가액 ' + won(r.입력값.양도가액) + '이 12억원 이하이므로 전액 비과세');
+    lines.push('납부세액 = 0원');
+    return lines;
+  }
+  const iv = r.입력값 || {};
+  lines.push('양도가액 = ' + won(iv.양도가액));
+  lines.push('취득가액 = ' + won(iv.취득가액));
+  lines.push('필요경비 = ' + won(iv.필요경비));
+  lines.push('양도차익 = 양도가액 - 취득가액 - 필요경비 = ' + won(iv.양도가액) + ' - ' + won(iv.취득가액) + ' - ' + won(iv.필요경비) + ' = ' + won(r.양도차익));
+  if (r.과세대상양도차익 !== undefined && r.과세대상양도차익 !== r.양도차익) {
+    lines.push('과세대상양도차익(1세대1주택 12억 초과분 안분) = 양도차익 × (양도가액-12억)/양도가액 = ' + won(r.과세대상양도차익));
+  }
+  const gainForRate = r.과세대상양도차익 !== undefined ? r.과세대상양도차익 : r.양도차익;
+  lines.push('장기보유특별공제액 = 과세대상양도차익 × 장기보유특별공제율(' + (r.장기보유특별공제율 * 100).toFixed(1) + '%, 보유기간 ' + iv.보유기간_년 + '년' + (r.장기임대주택특례_적용여부 ? ', 등록임대주택 특례' : '') + ') = ' + won(gainForRate) + ' × ' + r.장기보유특별공제율 + ' = ' + won(r.장기보유특별공제액));
+  lines.push('양도소득금액 = 과세대상양도차익 - 장기보유특별공제액 = ' + won(gainForRate) + ' - ' + won(r.장기보유특별공제액) + ' = ' + won(r.양도소득금액));
+  lines.push('기본공제 = ' + won(r.기본공제));
+  lines.push('과세표준 = 양도소득금액 - 기본공제 = ' + won(r.양도소득금액) + ' - ' + won(r.기본공제) + ' = ' + won(r.과세표준));
+  lines.push('산출세액(' + r.적용세율_설명 + ') = ' + won(r.산출세액));
+  (r.세율가산_내역 || []).forEach(function(n){ lines.push('· ' + n); });
+  if (r.자경농지감면액) lines.push('8년자경농지 감면(조특법§69) = -' + won(r.자경농지감면액));
+  if (r.수용감면액) lines.push('공익사업용토지 수용감면(조특법§77) = -' + won(r.수용감면액));
+  if (r.다운계약서_감면배제_추징액) lines.push('다운계약서 감면배제 추징(소득세법§91②) = +' + won(r.다운계약서_감면배제_추징액));
+  if (r.연금계좌세액공제) lines.push('연금계좌세액공제(조특법§99의13) = -' + won(r.연금계좌세액공제));
+  if (r.전자신고세액공제) lines.push('전자신고세액공제 = -' + won(r.전자신고세액공제));
+  if (r.환산취득가액가산세) lines.push('환산취득가액가산세(소득세법§114의2) = +' + won(r.환산취득가액가산세));
+  if (r.무신고가산세) lines.push('무신고가산세 = +' + won(r.무신고가산세));
+  if (r.과소신고가산세) lines.push('과소신고가산세 = +' + won(r.과소신고가산세));
+  if (r.납부지연가산세) lines.push('납부지연가산세 = +' + won(r.납부지연가산세));
+  lines.push('지방소득세(산출세액의 10%) = ' + won(r.지방소득세));
+  lines.push('납부세액 합계 = ' + won(r.납부세액_합계));
+  return lines;
+}
+
 function renderTransferResult(r){
   const box = document.getElementById('taxCalcTransferResult');
   if (r.error){
@@ -319,6 +542,26 @@ function renderTransferResult(r){
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
+  html += '<button type="button" class="taxcalc-calcbasis-btn" data-action="show-agg-calc-basis" style="margin-top:8px;">🧮 합산 산출과정 보기</button>';
+  html += '<div class="taxcalc-calcbasis" id="calcBasisAgg" style="display:none;">' +
+    '<div class="taxcalc-calcbasis-title">합산(장기) 그룹 산출과정</div>' +
+    '<div class="taxcalc-calcbasis-line">합산소득금액 = Σ(2년 이상 보유·특례 없는 거래의 양도소득금액) = ' + won(r.합산소득금액) + '</div>' +
+    '<div class="taxcalc-calcbasis-line">합산과세표준 = 합산소득금액 - 기본공제 = ' + won(r.합산소득금액) + ' - ' + won(r.기본공제) + ' = ' + won(r.합산과세표준) + '</div>' +
+    '<div class="taxcalc-calcbasis-line">합산기본세액(누진세율) = ' + won(r.합산기본세액) + '</div>' +
+    (r.합산가산액 ? '<div class="taxcalc-calcbasis-line">다주택중과·비사업용토지 가산 = +' + won(r.합산가산액) + '</div>' : '') +
+    (r.합산자경감면액 ? '<div class="taxcalc-calcbasis-line">8년자경농지 감면 = -' + won(r.합산자경감면액) + '</div>' : '') +
+    (r.합산수용감면액 ? '<div class="taxcalc-calcbasis-line">공익사업용토지 수용감면 = -' + won(r.합산수용감면액) + '</div>' : '') +
+    (r.다운계약서_감면배제_추징액 ? '<div class="taxcalc-calcbasis-line">다운계약서 감면배제 추징 = +' + won(r.다운계약서_감면배제_추징액) + '</div>' : '') +
+    '<div class="taxcalc-calcbasis-line">합산(장기) 그룹 산출세액 = ' + won(r.합산그룹_산출세액) + '</div>' +
+    (r.단기거래_산출세액_합계 ? '<div class="taxcalc-calcbasis-line">+ 단기양도 산출세액 합계(건별 계산) = ' + won(r.단기거래_산출세액_합계) + '</div>' : '') +
+    (r.미등기거래_산출세액_합계 ? '<div class="taxcalc-calcbasis-line">+ 미등기양도 산출세액 합계(건별 계산) = ' + won(r.미등기거래_산출세액_합계) + '</div>' : '') +
+    (r.비과세거래_다운계약서_추징액 ? '<div class="taxcalc-calcbasis-line">+ 다운계약서 비과세배제 추징액(별건) = ' + won(r.비과세거래_다운계약서_추징액) + '</div>' : '') +
+    (r.연금계좌세액공제_합계 ? '<div class="taxcalc-calcbasis-line">- 연금계좌세액공제 = ' + won(r.연금계좌세액공제_합계) + '</div>' : '') +
+    (r.전자신고세액공제 ? '<div class="taxcalc-calcbasis-line">- 전자신고세액공제 = ' + won(r.전자신고세액공제) + '</div>' : '') +
+    '<div class="taxcalc-calcbasis-line">지방소득세(10%) = ' + won(r.지방소득세) + '</div>' +
+    '<div class="taxcalc-calcbasis-line">납부세액 합계 = ' + won(r.납부세액_합계) + '</div>' +
+    '<div class="taxcalc-calcbasis-line" style="margin-top:6px;color:var(--sub);">각 거래별 세부 산출과정은 위 거래 카드의 🧮 계산근거 버튼을 눌러 확인하세요.</div>' +
+  '</div>';
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '<div class="taxcalc-result-note">이 결과는 참고용 개산이며, 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
@@ -963,6 +1206,98 @@ taxCalcView.addEventListener('click', function(e){
     const total = assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0);
     if (target === 'giftValuationList') document.getElementById('giftAmount').value = total;
     else document.getElementById('ihEstate').value = total;
+  } else if (action === 'show-calc-basis'){
+    const idx = Number(btn.dataset.idx);
+    const box = document.getElementById('calcBasis-' + idx);
+    if (box.style.display !== 'none' && box.innerHTML) {
+      box.style.display = 'none';
+    } else {
+      const single = calculateTransferTaxSingleJS(collectTransferInput(transferAssets[idx]));
+      const lines = buildTransferCalcBasisLines(single);
+      box.innerHTML = '<div class="taxcalc-calcbasis-title">계산근거(이 거래 단독 기준 — 다른 거래와의 합산 전)</div>' +
+        lines.map(function(l){ return '<div class="taxcalc-calcbasis-line">' + l + '</div>'; }).join('');
+      box.style.display = 'block';
+    }
+  } else if (action === 'show-agg-calc-basis'){
+    const box = document.getElementById('calcBasisAgg');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  } else if (action === 'toggle-allocation-tool'){
+    allocationShown = !allocationShown;
+    renderAllocationTool();
+  } else if (action === 'add-alloc-asset'){
+    allocationAssets.push({});
+    renderAllocationTool();
+  } else if (action === 'del-alloc-asset'){
+    allocationAssets.splice(Number(btn.dataset.idx), 1);
+    renderAllocationTool();
+  } else if (action === 'run-allocation'){
+    const toolBox = document.getElementById('taxCalcAllocationTool');
+    const method = document.getElementById('allocMethod').value;
+    toolBox.dataset.method = method;
+    toolBox.dataset.totalTransfer = document.getElementById('allocTotalTransfer').value;
+    const input = {
+      method: method,
+      totalTransferPrice: Number(document.getElementById('allocTotalTransfer').value) || 0,
+      assets: allocationAssets.map(function(a){
+        return {
+          label: a.label, area: Number(a.area) || 0,
+          standardPriceTransfer: Number(a.standardPriceTransfer) || 0,
+          standardPriceAcquisition: Number(a.standardPriceAcquisition) || 0,
+          isBuilding: !!a.isBuilding
+        };
+      })
+    };
+    if (method === 'acq_expense_together' || method === 'acq_expense_separate') {
+      toolBox.dataset.totalAcq = document.getElementById('allocTotalAcq').value;
+      toolBox.dataset.totalExpense = document.getElementById('allocTotalExpense').value;
+      input.totalAcquisitionPrice = Number(document.getElementById('allocTotalAcq').value) || 0;
+      input.totalNecessaryExpenses = Number(document.getElementById('allocTotalExpense').value) || 0;
+    }
+    const result = calculateProportionalAllocationJS(input);
+    renderAllocationResult(result);
+  } else if (action === 'apply-allocation-to-new-asset'){
+    const resultBox = document.getElementById('taxCalcAllocationResult');
+    const lastResult = JSON.parse(resultBox.dataset.lastResult || '{}');
+    const row = lastResult.자산별_안분결과 && lastResult.자산별_안분결과[Number(btn.dataset.ridx)];
+    if (!row) return;
+    const newAsset = {
+      transferPrice: row.양도가액_부가세제외 !== undefined ? row.양도가액_부가세제외 : row.양도가액_안분액
+    };
+    if (row.취득가액_안분액 !== undefined) newAsset.acquisitionPrice = row.취득가액_안분액;
+    if (row.필요경비_안분액 !== undefined) newAsset.necessaryExpenses = row.필요경비_안분액;
+    transferAssets.push(newAsset);
+    allocationShown = true;
+    renderTransferPane();
+  } else if (action === 'toggle-building-price-tool'){
+    buildingPriceShown = !buildingPriceShown;
+    renderBuildingPriceTool();
+  } else if (action === 'add-building-row'){
+    buildingPriceRows.push({});
+    renderBuildingPriceTool();
+  } else if (action === 'del-building-row'){
+    buildingPriceRows.splice(Number(btn.dataset.idx), 1);
+    renderBuildingPriceTool();
+  } else if (action === 'run-building-price'){
+    const toolBox = document.getElementById('taxCalcBuildingPriceTool');
+    const taxType = document.getElementById('bpTaxType').value;
+    toolBox.dataset.taxType = taxType;
+    toolBox.dataset.landPrice = document.getElementById('bpLandPrice').value;
+    const rows = buildingPriceRows.map(function(r){
+      return {
+        label: r.label, structureName: r.structureName,
+        useNo: Number(r.useNo) || 0, builtYear: Number(r.builtYear) || 0,
+        floorAreaSqm: Number(r.floorAreaSqm) || 0
+      };
+    });
+    const result = calculateBuildingStandardPriceMultiJS(rows, Number(document.getElementById('bpLandPrice').value) || 0, taxType);
+    renderBuildingPriceResult(result);
+  } else if (action === 'apply-building-price-to-new-asset'){
+    const resultBox = document.getElementById('taxCalcBuildingPriceResult');
+    const total = Number(resultBox.dataset.lastTotal) || 0;
+    if (!total) return;
+    transferAssets.push({ acquisitionPrice: total });
+    buildingPriceShown = true;
+    renderTransferPane();
   } else if (action === 'run-transfer'){
     const inputs = transferAssets.map(collectTransferInput);
     const filingParams = {

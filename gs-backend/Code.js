@@ -278,6 +278,34 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_building_standard_price_multi',
+    description: '하나의 건물이 층마다(또는 본채와 주차장·지하실·옥탑·대피소 등 부속시설이) 구조·용도·신축(증축)연도가 다른 경우, 각 층/부속시설을 행으로 나눠 개별 계산한 뒤 합산한 건물 기준시가를 구한다. 단일 구조·단일 용도 건물이면 calculate_building_standard_price를 바로 쓰는 게 더 간단하다. structureName·useNo는 반드시 get_building_price_index_tables로 확인한 정확한 값을 써야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        rows: {
+          type: 'array',
+          description: '층 또는 부속시설별 행. 부속 주차장·기계실·보일러실·대피소 등은 용도번호 57(주차장) 등 실제에 맞는 용도로 별도 행을 추가한다.',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', description: '행 구분(예: "1층", "2층", "지하주차장")' },
+              structureName: { type: 'string', description: 'get_building_price_index_tables에서 확인한 정확한 구조명' },
+              useNo: { type: 'integer', description: 'get_building_price_index_tables에서 확인한 정확한 용도번호 (1~61)' },
+              builtYear: { type: 'integer', description: '이 행(층/부속시설)의 신축 또는 증축연도' },
+              floorAreaSqm: { type: 'number', description: '이 행의 면적(㎡)' },
+              adjustmentNos: { type: 'array', items: { type: 'integer' }, description: 'taxType이 inheritance_gift일 때만, 이 행에 적용할 조정률 번호들' }
+            },
+            required: ['structureName', 'useNo', 'builtYear', 'floorAreaSqm']
+          }
+        },
+        officialLandPricePerSqm: { type: 'number', description: '건물 부속토지의 ㎡당 개별공시지가(원) — 건물 전체에 공통 적용.' },
+        taxType: { type: 'string', enum: ['transfer', 'inheritance_gift'], description: 'transfer=양도소득세(조정률 미적용), inheritance_gift=상속·증여세(조정률 적용 가능)' }
+      },
+      required: ['rows', 'officialLandPricePerSqm', 'taxType']
+    }
+  },
+  {
     name: 'calculate_transfer_tax',
     description: '양도소득세를 정확히 계산한다(기본세율 누진구조, 단기양도세율, 장기보유특별공제 — 일반 및 1세대1주택 특례, 1세대1주택 12억 비과세, 다주택자 중과, 비사업용토지 가산, 미등기양도 70%, 8년자경농지 감면, 필요경비 개산공제, 환산취득가액 가산세, 무신고·과소신고·납부지연가산세, 지방소득세 포함). 가업상속공제 관련 특례·수용/환지 등 조특법상 개별 감면은 포함되지 않는다. 주식등 양도는 이 도구가 아니라 calculate_stock_transfer_tax를 써야 한다.',
     input_schema: {
@@ -2335,6 +2363,27 @@ function toolCalculateBuildingStandardPrice(structureName, useNo, officialLandPr
   };
 }
 
+// 건물기준시가 — 층별/부속시설별 상세 계산. 하나의 건물이라도 층(또는 부속시설)마다 구조·용도·신축(증축)연도가
+// 다를 수 있으므로, 각 행을 toolCalculateBuildingStandardPrice로 개별 계산한 뒤 합산한다.
+// rows: [{ label, structureName, useNo, builtYear, floorAreaSqm, adjustmentNos }, ...] (officialLandPricePerSqm·taxType은 건물 전체 공통)
+function toolCalculateBuildingStandardPriceMulti(rows, officialLandPricePerSqm, taxType) {
+  if (!Array.isArray(rows) || rows.length === 0) return { error: '층 또는 부속시설을 1개 이상 입력해야 합니다.' };
+  const rowResults = [];
+  let totalPrice = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || {};
+    const r = toolCalculateBuildingStandardPrice(row.structureName, row.useNo, officialLandPricePerSqm, row.builtYear, row.floorAreaSqm, taxType, row.adjustmentNos);
+    if (r.error) return { error: (i + 1) + '번째 행(' + (row.label || '') + '): ' + r.error };
+    totalPrice += r.건물기준시가;
+    rowResults.push(Object.assign({ 순번: i + 1, 구분: row.label || ('행' + (i + 1)) }, r));
+  }
+  return {
+    행별_결과: rowResults,
+    건물기준시가_합계: totalPrice,
+    안내: '각 층(또는 부속시설)을 개별 계산해 합산한 값입니다. 부속토지 공시지가는 건물 전체에 공통으로 적용했습니다. 부속 주차장·기계실·보일러실·대피소 등은 용도번호를 그에 맞는 용도(예: 57.주차장)로 선택해 별도 행으로 추가하세요. 2026.1.1. 시행 국세청 고시 기준이며 매년 1월 갱신되므로 최신 고시 여부를 반드시 확인하세요.'
+  };
+}
+
 // ============================================================
 // 양도소득세 · 증여세 · 상속세 세액계산
 // 세율·공제 구간은 이 코드 작성 시점 기준 현행법이며, 매년 개정될 수 있으므로
@@ -4364,6 +4413,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'verify_business_registration' ||
         b.name === 'get_building_price_index_tables' ||
         b.name === 'calculate_building_standard_price' ||
+        b.name === 'calculate_building_standard_price_multi' ||
         b.name === 'calculate_transfer_tax' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
@@ -4469,6 +4519,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       if (block.name === 'calculate_building_standard_price') {
         const input = block.input || {};
         const resultObj = toolCalculateBuildingStandardPrice(input.structureName, input.useNo, input.officialLandPricePerSqm, input.builtYear, input.floorAreaSqm, input.taxType, input.adjustmentNos);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_building_standard_price_multi') {
+        const input = block.input || {};
+        const resultObj = toolCalculateBuildingStandardPriceMulti(input.rows, input.officialLandPricePerSqm, input.taxType);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

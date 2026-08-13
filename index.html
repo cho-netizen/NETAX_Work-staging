@@ -829,6 +829,17 @@
   .taxcalc-field.checkbox input{ width:15px; height:15px; accent-color:var(--gold); }
   .taxcalc-del-asset{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:12.5px; }
   .taxcalc-del-asset:hover{ color:#a83232; }
+  .taxcalc-asset-head span{ display:flex; gap:10px; align-items:center; }
+  .taxcalc-calcbasis-btn{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:12.5px; }
+  .taxcalc-calcbasis-btn:hover{ color:var(--navy); }
+  body.dark-mode .taxcalc-calcbasis-btn:hover{ color:var(--gold-light); }
+  .taxcalc-calcbasis{
+    margin:-2px 0 10px; padding:10px 12px; border-radius:8px; background:#f3f4f6;
+    font-size:12px; line-height:1.7; font-variant-numeric:tabular-nums;
+  }
+  body.dark-mode .taxcalc-calcbasis{ background:#1a1d26; }
+  .taxcalc-calcbasis-title{ font-weight:700; color:var(--sub); margin-bottom:4px; }
+  .taxcalc-calcbasis-line{ color:var(--ink); word-break:break-all; }
   .taxcalc-add-asset{
     width:100%; padding:10px; border:1px dashed var(--line); border-radius:8px; background:none;
     color:var(--sub); font-family:inherit; font-size:12.5px; cursor:pointer; margin-bottom:14px;

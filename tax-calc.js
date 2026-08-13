@@ -605,6 +605,259 @@
     };
   };
 
+  // 토지·건물 등 일괄양도시 안분계산 (소득세법 시행령 §166④) — 토지와 건물 등을 함께 양도(취득)하면서
+  // 각각의 가액이 구분되지 않은 경우, 감정가액이 있으면 감정가액 비율로, 없으면 기준시가 비율로 안분한다.
+  // method: 'standard_price'(기준시가·감정가액 비율 안분), 'standard_price_vat'(위와 동일하되 건물분에서 부가세를 분리),
+  //         'area'(면적 비율 안분), 'acq_expense_together'(취득가액·필요경비도 양도가액과 같은 비율로 함께 안분),
+  //         'acq_expense_separate'(취득가액은 취득시점 기준시가 비율로, 양도가액·필요경비는 양도시점 기준시가 비율로 각각 안분)
+  window.calculateProportionalAllocationJS = function (input) {
+    input = input || {};
+    const assets = Array.isArray(input.assets) ? input.assets : [];
+    if (assets.length < 2) return { error: '안분계산은 2개 이상의 자산을 입력해야 합니다.' };
+    const totalTransferPrice = Number(input.totalTransferPrice) || 0;
+    if (totalTransferPrice <= 0) return { error: '총 양도가액이 필요합니다.' };
+    const totalAcquisitionPrice = Number(input.totalAcquisitionPrice) || 0;
+    const totalNecessaryExpenses = Number(input.totalNecessaryExpenses) || 0;
+    const method = input.method || 'standard_price';
+
+    function weightOf(a, useAcquisition) {
+      if (method === 'area') return Number(a.area) || 0;
+      const w = useAcquisition ? Number(a.standardPriceAcquisition) || 0 : Number(a.standardPriceTransfer) || 0;
+      return w;
+    }
+
+    const transferWeights = assets.map(function (a) { return weightOf(a, false); });
+    const transferWeightSum = transferWeights.reduce(function (s, w) { return s + w; }, 0);
+    if (transferWeightSum <= 0) return { error: (method === 'area' ? '면적' : '양도시점 기준시가(또는 감정가액)') + '을 자산마다 입력해야 합니다.' };
+
+    const acqWeights = assets.map(function (a) { return weightOf(a, true); });
+    const acqWeightSum = acqWeights.reduce(function (s, w) { return s + w; }, 0);
+
+    const results = assets.map(function (a, i) {
+      const transferRatio = transferWeights[i] / transferWeightSum;
+      let allocatedTransferPrice = Math.round(totalTransferPrice * transferRatio);
+
+      let allocatedAcquisitionPrice = 0, allocatedNecessaryExpenses = 0, acqRatio = transferRatio;
+      if (method === 'acq_expense_together') {
+        allocatedAcquisitionPrice = Math.round(totalAcquisitionPrice * transferRatio);
+        allocatedNecessaryExpenses = Math.round(totalNecessaryExpenses * transferRatio);
+      } else if (method === 'acq_expense_separate') {
+        if (acqWeightSum <= 0) return { error: (i + 1) + '번째 자산: 취득시점 기준시가가 필요합니다(취득/필요경비 각각 안분).' };
+        acqRatio = acqWeights[i] / acqWeightSum;
+        allocatedAcquisitionPrice = Math.round(totalAcquisitionPrice * acqRatio);
+        allocatedNecessaryExpenses = Math.round(totalNecessaryExpenses * transferRatio);
+      }
+
+      let vatAmount = 0, transferPriceExVat = allocatedTransferPrice;
+      if (method === 'standard_price_vat' && a.isBuilding) {
+        vatAmount = Math.round(allocatedTransferPrice * 10 / 110);
+        transferPriceExVat = allocatedTransferPrice - vatAmount;
+      }
+
+      return {
+        label: a.label || ('자산' + (i + 1)),
+        안분비율_양도: transferRatio,
+        안분비율_취득: method === 'acq_expense_separate' ? acqRatio : undefined,
+        양도가액_안분액: allocatedTransferPrice,
+        부가세: vatAmount || undefined,
+        양도가액_부가세제외: method === 'standard_price_vat' ? transferPriceExVat : undefined,
+        취득가액_안분액: (method === 'acq_expense_together' || method === 'acq_expense_separate') ? allocatedAcquisitionPrice : undefined,
+        필요경비_안분액: (method === 'acq_expense_together' || method === 'acq_expense_separate') ? allocatedNecessaryExpenses : undefined
+      };
+    });
+    const errorOne = results.find(function (r) { return r && r.error; });
+    if (errorOne) return { error: errorOne.error };
+
+    return {
+      방식: method,
+      총양도가액: totalTransferPrice,
+      자산별_안분결과: results,
+      안내: '소득세법 시행령 §166④에 따라, 토지와 건물 등을 함께 양도(취득)했는데 각각의 가액 구분이 불분명한 경우 감정가액이 있으면 감정가액 비율로, 없으면 기준시가 비율로 안분합니다(면적 비율 안분은 그 비율을 면적으로 대체한 실무상 방식이며, 계약서·감정가액 등으로 실제 구분이 가능하면 안분계산 자체가 필요 없으니 우선 그 가액을 그대로 쓰세요). "취득/필요경비 함께 안분"은 양도시점 비율을 취득가액·필요경비에도 동일하게 적용한 것이고, "각각 안분"은 취득가액에 취득시점 기준시가 비율을 별도로 적용한 것이니 사안에 맞는 방식을 선택하세요.'
+    };
+  };
+
+  // ============================================================
+  // 건물 기준시가 (2026.1.1. 시행 국세청 고시 제2025-39호) — gs-backend/Code.js의
+  // toolCalculateBuildingStandardPrice와 동일한 표·계산식. 매년 1월 새 고시로 갱신되므로
+  // 실제 신고 전에는 반드시 홈택스 공식 계산기로 재검증할 것.
+  // ============================================================
+  const BUILDING_BASE_PRICE_2026 = 860000;
+
+  const BUILDING_STRUCTURE_TABLE = [
+    { name: '통나무조', index: 135, group: 'I' }, { name: '목구조', index: 115, group: 'I' },
+    { name: '철골(철골철근)콘크리트조', index: 110, group: 'I' }, { name: '철근콘크리트조', index: 100, group: 'I' },
+    { name: '석조', index: 100, group: 'I' }, { name: '프리캐스트 콘크리트조', index: 100, group: 'I' },
+    { name: '라멘조', index: 100, group: 'I' }, { name: '목조', index: 100, group: 'II' },
+    { name: 'ALC조', index: 100, group: 'II' }, { name: '스틸하우스조', index: 100, group: 'II' },
+    { name: '연와조', index: 95, group: 'II' }, { name: '철골조', index: 95, group: 'II' },
+    { name: '보강콘크리트조', index: 95, group: 'II' }, { name: '보강블록조', index: 95, group: 'II' },
+    { name: '시멘트벽돌조', index: 90, group: 'II' }, { name: '와이어패널조', index: 90, group: 'II' },
+    { name: '황토조', index: 90, group: 'III' }, { name: '시멘트블록조', index: 90, group: 'III' },
+    { name: '철골조 중 조립식패널(EPS패널)', index: 85, group: 'II' }, { name: '조립식패널조', index: 80, group: 'III' },
+    { name: '경량철골조', index: 79, group: 'III' }, { name: '석회 및 흙벽돌조', index: 60, group: 'III' },
+    { name: '돌담 및 토담조', index: 60, group: 'III' }, { name: '철파이프조', index: 59, group: 'IV' },
+    { name: '컨테이너건물', index: 59, group: 'IV' }
+  ];
+
+  const BUILDING_USE_TABLE = [
+    { no: 1, desc: '아파트', index: 110 }, { no: 2, desc: '단독주택(노인복지주택 제외)', index: 100 },
+    { no: 3, desc: '관광호텔(5성급·4성급)', index: 140 }, { no: 4, desc: '호텔(일반숙박시설)', index: 130 },
+    { no: 5, desc: '관광호텔(3성급이하)·생활숙박시설·외국인관광 도시민박·한옥체험시설', index: 120 },
+    { no: 6, desc: '여관(모텔 포함)', index: 112 }, { no: 7, desc: '다중생활시설', index: 105 }, { no: 8, desc: '여인숙', index: 100 },
+    { no: 9, desc: '백화점', index: 135 }, { no: 10, desc: '대형점·쇼핑센터·복합쇼핑몰', index: 125 },
+    { no: 11, desc: '일반상점(바닥 1,000~3,000㎡)', index: 95 }, { no: 12, desc: '도매시장·전통시장·경매장', index: 85 },
+    { no: 13, desc: '여객자동차터미널·철도·공항·항만시설', index: 120 }, { no: 14, desc: '무도장', index: 140 },
+    { no: 15, desc: '유흥주점·카지노영업소', index: 130 }, { no: 16, desc: '테마파크업 시설', index: 120 },
+    { no: 17, desc: '단란주점', index: 115 }, { no: 18, desc: '무도학원', index: 90 },
+    { no: 19, desc: '집회장(경마·경륜·경정 장외발매소 등)', index: 130 }, { no: 20, desc: '예식장·공연장·집회장(공회당 등)', index: 115 },
+    { no: 21, desc: '동물원·식물원·수족관·전시장', index: 110 }, { no: 22, desc: '관람장(경마장·경륜장·체육관 등)', index: 105 },
+    { no: 23, desc: '종교시설(교회·성당·사찰 등)', index: 100 }, { no: 24, desc: '골프장·스키장·수영장·볼링장 등', index: 125 },
+    { no: 25, desc: '기타 체육시설', index: 105 }, { no: 26, desc: '종합병원', index: 125 },
+    { no: 27, desc: '일반병원·치과병원·한방병원·정신병원·요양병원', index: 110 }, { no: 28, desc: '오피스텔(주거용·사무용)', index: 135 },
+    { no: 29, desc: '사무소·금융업소·출판사 등', index: 115 }, { no: 30, desc: '방송국·통신용시설', index: 110 },
+    { no: 31, desc: '야외음악당·휴게소·공원유원지 부수시설', index: 110 }, { no: 32, desc: '학원·교습소', index: 107 },
+    { no: 33, desc: '학교·교육원·연구소·도서관', index: 102 }, { no: 34, desc: '아동관련시설·노인복지시설(양로원 제외)', index: 109 },
+    { no: 35, desc: '고아원·노인주거복지시설(양로원 등)·경로당', index: 85 }, { no: 36, desc: '청소년수련관·유스호스텔 등', index: 110 },
+    { no: 37, desc: '목욕장(3,000㎡이상)', index: 130 }, { no: 38, desc: '목욕장(1,000~3,000㎡)', index: 115 },
+    { no: 39, desc: '목욕장(1,000㎡미만)', index: 110 }, { no: 40, desc: '풍속영업시설(단란주점 150㎡미만 등)', index: 105 },
+    { no: 41, desc: '제1종·제2종 근린생활시설(일반)', index: 95 }, { no: 42, desc: '화장시설·봉안당', index: 130 },
+    { no: 43, desc: '동물화장시설·동물건조장', index: 105 }, { no: 44, desc: '장례식장', index: 115 },
+    { no: 45, desc: '동물 전용 장례식장', index: 105 }, { no: 46, desc: '지식산업센터(아파트형공장)', index: 115 },
+    { no: 47, desc: '냉동공장·반도체 및 평면디스플레이 공장', index: 100 }, { no: 48, desc: '기타 제조·가공·수리 공장', index: 78 },
+    { no: 49, desc: '원자력 발전시설', index: 300 }, { no: 50, desc: '발전소', index: 90 },
+    { no: 51, desc: '냉동창고·냉장창고', index: 105 }, { no: 52, desc: '냉동·냉장창고외 창고·물류터미널', index: 75 },
+    { no: 53, desc: '주유소·가스충전소·위험물저장시설', index: 90 }, { no: 54, desc: '하수처리시설·고물상·폐기물시설', index: 80 },
+    { no: 55, desc: '자동차매매장·운전학원·정비학원', index: 75 }, { no: 56, desc: '세차장·폐차장·정비공장·차고', index: 67 },
+    { no: 57, desc: '주차장(자주식, 주택 차고 제외)', index: 60 }, { no: 58, desc: '가축용운동시설·동물검역소 등', index: 70 },
+    { no: 59, desc: '축사·가축시설·도축장·작물재배사', index: 55 }, { no: 60, desc: '화초·분재 온실 등 식물관련시설', index: 50 },
+    { no: 61, desc: '기계식주차전용빌딩(별도계산식 — 6,000,000원×잔가율(30년)×주차대수)', index: null }
+  ];
+
+  const BUILDING_ADJUSTMENT_TABLE = [
+    { no: 1, desc: '지붕: 슬래브·기와·아스팔트슁글 등 (구조지수 100미만일 때만)', index: 100 },
+    { no: 2, desc: '지붕: 패널·유리·슬레이트', index: 80 }, { no: 3, desc: '지붕: 함석·자연석·천막·초가 등', index: 60 },
+    { no: 4, desc: '최고층수 5층 이하', index: 90 }, { no: 5, desc: '최고층수 6~10층', index: 100 },
+    { no: 6, desc: '최고층수 11~15층', index: 110 }, { no: 7, desc: '최고층수 16~20층', index: 120 }, { no: 8, desc: '최고층수 21층 이상', index: 130 },
+    { no: 9, desc: '연면적 1천㎡미만', index: 90 }, { no: 10, desc: '연면적 1천~5천㎡', index: 100 },
+    { no: 11, desc: '연면적 5천~1만㎡', index: 110 }, { no: 12, desc: '연면적 1만~5만㎡', index: 120 }, { no: 13, desc: '연면적 5만㎡이상', index: 130 },
+    { no: 14, desc: '지능형건축물 인증 3·4등급', index: 110 }, { no: 15, desc: '지능형건축물 인증 1·2등급', index: 120 },
+    { no: 16, desc: '단독주택 연면적 264~331㎡', index: 120 }, { no: 17, desc: '단독주택 연면적 331㎡이상', index: 140 },
+    { no: 18, desc: '공동주택 전유면적 149~215㎡', index: 120 }, { no: 19, desc: '공동주택 전유면적 215㎡이상', index: 140 },
+    { no: 20, desc: '상가 1층', index: 120 }, { no: 21, desc: '상가 2층', index: 105 },
+    { no: 22, desc: '최고층수 5층이하 건물의 지하1층', index: 80 }, { no: 23, desc: '최고층수 5층이하 건물의 지하2층이상', index: 70 },
+    { no: 24, desc: '부속 주차장·기계실·보일러실·대피소 등', index: 60 }, { no: 25, desc: '주택간이부속건물(창고·화장실 등)', index: 60 },
+    { no: 26, desc: '1회 개축(개축부분에 한함)', index: 110 }, { no: 27, desc: '2회 이상 개축(개축부분에 한함)', index: 120 },
+    { no: 28, desc: '무벽건물 무벽면적비율 1/4~2/4', index: 80 }, { no: 29, desc: '무벽건물 무벽면적비율 2/4~3/4', index: 70 }, { no: 30, desc: '무벽건물 무벽면적비율 3/4이상', index: 60 },
+    { no: 31, desc: '구조안전진단 B급(보조부재 경미결함)', index: 90 }, { no: 32, desc: '구조안전진단 C급(보조부재 손상)', index: 80 },
+    { no: 33, desc: '구조안전진단 D급(주요부재 손상)', index: 60 }, { no: 34, desc: '구조안전진단 E급(주요부재 심각한 결함)', index: 30 },
+    { no: 35, desc: '법령상 철거대상(사용 중)', index: 30 }, { no: 36, desc: '법령상 철거대상(미사용)', index: 0 }
+  ];
+
+  const BUILDING_DEPRECIATION_TABLE = {
+    I:  { 2026:1.000,2025:0.982,2024:0.964,2023:0.946,2022:0.928,2021:0.910,2020:0.892,2019:0.874,2018:0.856,2017:0.838,2016:0.820,2015:0.802,2014:0.784,2013:0.766,2012:0.748,2011:0.730,2010:0.712,2009:0.694,2008:0.676,2007:0.658,2006:0.640,2005:0.622,2004:0.604,2003:0.586,2002:0.568,2001:0.550,2000:0.532,1999:0.514,1998:0.496,1997:0.478,1996:0.460,1995:0.442,1994:0.424,1993:0.406,1992:0.388,1991:0.370,1990:0.352,1989:0.334,1988:0.316,1987:0.298,1986:0.280,1985:0.262,1984:0.244,1983:0.226,1982:0.208,1981:0.190,1980:0.172,1979:0.154,1978:0.136,1977:0.118 },
+    II: { 2026:1.0000,2025:0.9775,2024:0.9550,2023:0.9325,2022:0.9100,2021:0.8875,2020:0.8650,2019:0.8425,2018:0.8200,2017:0.7975,2016:0.7750,2015:0.7525,2014:0.7300,2013:0.7075,2012:0.6850,2011:0.6625,2010:0.6400,2009:0.6175,2008:0.5950,2007:0.5725,2006:0.5500,2005:0.5275,2004:0.5050,2003:0.4825,2002:0.4600,2001:0.4375,2000:0.4150,1999:0.3925,1998:0.3700,1997:0.3475,1996:0.3250,1995:0.3025,1994:0.2800,1993:0.2575,1992:0.2350,1991:0.2125,1990:0.1900,1989:0.1675,1988:0.1450,1987:0.1225,1986:0.1000 },
+    III:{ 2026:1.000,2025:0.970,2024:0.940,2023:0.910,2022:0.880,2021:0.850,2020:0.820,2019:0.790,2018:0.760,2017:0.730,2016:0.700,2015:0.670,2014:0.640,2013:0.610,2012:0.580,2011:0.550,2010:0.520,2009:0.490,2008:0.460,2007:0.430,2006:0.400,2005:0.370,2004:0.340,2003:0.310,2002:0.280,2001:0.250,2000:0.220,1999:0.190,1998:0.160,1997:0.130,1996:0.100 },
+    IV: { 2026:1.000,2025:0.955,2024:0.910,2023:0.865,2022:0.820,2021:0.775,2020:0.730,2019:0.685,2018:0.640,2017:0.595,2016:0.550,2015:0.505,2014:0.460,2013:0.415,2012:0.370,2011:0.325,2010:0.280,2009:0.235,2008:0.190,2007:0.145,2006:0.100 }
+  };
+  const BUILDING_DEPRECIATION_MIN_YEAR = { I: 1976, II: 1986, III: 1996, IV: 2006 };
+
+  const BUILDING_LOCATION_TABLE = [
+    { max: 20000, index: 78 }, { max: 30000, index: 83 }, { max: 50000, index: 85 }, { max: 70000, index: 86 },
+    { max: 100000, index: 87 }, { max: 130000, index: 88 }, { max: 150000, index: 89 }, { max: 180000, index: 90 },
+    { max: 200000, index: 91 }, { max: 300000, index: 92 }, { max: 350000, index: 93 }, { max: 500000, index: 94 },
+    { max: 650000, index: 97 }, { max: 800000, index: 100 }, { max: 1000000, index: 102 }, { max: 1200000, index: 104 },
+    { max: 1600000, index: 106 }, { max: 2000000, index: 118 }, { max: 2500000, index: 114 }, { max: 3000000, index: 116 },
+    { max: 3500000, index: 118 }, { max: 4000000, index: 120 }, { max: 4500000, index: 122 }, { max: 5000000, index: 124 },
+    { max: 5500000, index: 126 }, { max: 6000000, index: 128 }, { max: 7000000, index: 130 }, { max: 8000000, index: 132 },
+    { max: 9000000, index: 134 }, { max: 10000000, index: 137 }, { max: 15000000, index: 140 }, { max: 20000000, index: 143 },
+    { max: 25000000, index: 146 }, { max: 30000000, index: 149 }, { max: 35000000, index: 152 }, { max: 40000000, index: 155 },
+    { max: 45000000, index: 158 }, { max: 50000000, index: 161 }, { max: 55000000, index: 164 }, { max: 60000000, index: 167 },
+    { max: 65000000, index: 170 }, { max: 70000000, index: 173 }, { max: 75000000, index: 176 }, { max: 80000000, index: 179 },
+    { max: Infinity, index: 182 }
+  ];
+
+  window.BUILDING_STRUCTURE_TABLE = BUILDING_STRUCTURE_TABLE;
+  window.BUILDING_USE_TABLE = BUILDING_USE_TABLE;
+  window.BUILDING_ADJUSTMENT_TABLE = BUILDING_ADJUSTMENT_TABLE;
+
+  function lookupBuildingLocationIndex(pricePerSqm) {
+    for (let i = 0; i < BUILDING_LOCATION_TABLE.length; i++) {
+      if (pricePerSqm < BUILDING_LOCATION_TABLE[i].max) return BUILDING_LOCATION_TABLE[i].index;
+    }
+    return BUILDING_LOCATION_TABLE[BUILDING_LOCATION_TABLE.length - 1].index;
+  }
+
+  function lookupBuildingDepreciationRate(group, builtYear) {
+    const table = BUILDING_DEPRECIATION_TABLE[group];
+    if (!table) return null;
+    if (builtYear >= 2026) return table[2026];
+    if (table[builtYear] !== undefined) return table[builtYear];
+    if (builtYear < BUILDING_DEPRECIATION_MIN_YEAR[group]) return table[BUILDING_DEPRECIATION_MIN_YEAR[group]];
+    return null;
+  }
+
+  window.calculateBuildingStandardPriceJS = function (structureName, useNo, officialLandPricePerSqm, builtYear, floorAreaSqm, taxType, adjustmentNos) {
+    const structure = BUILDING_STRUCTURE_TABLE.find(function (s) { return s.name === structureName; });
+    if (!structure) return { error: '구조명을 찾을 수 없습니다: ' + structureName };
+    const use = BUILDING_USE_TABLE.find(function (u) { return u.no === useNo; });
+    if (!use) return { error: '용도번호를 찾을 수 없습니다: ' + useNo };
+    if (use.index === null) return { error: '용도번호 61(기계식주차전용빌딩)은 별도 계산식이 필요합니다: 기준시가 = 6,000,000원 × 경과연수별잔가율(내용연수 30년) × 주차대수. 이 도구로는 계산할 수 없습니다.' };
+    if (!officialLandPricePerSqm || officialLandPricePerSqm <= 0) return { error: '건물 부속토지의 ㎡당 개별공시지가가 필요합니다.' };
+    if (!builtYear) return { error: '신축연도가 필요합니다.' };
+    if (!floorAreaSqm || floorAreaSqm <= 0) return { error: '건물 면적(㎡)이 필요합니다.' };
+    if (taxType !== 'transfer' && taxType !== 'inheritance_gift') return { error: 'taxType은 transfer 또는 inheritance_gift여야 합니다.' };
+
+    const locationIndex = lookupBuildingLocationIndex(officialLandPricePerSqm);
+    const depreciationRate = lookupBuildingDepreciationRate(structure.group, builtYear);
+    if (depreciationRate === null) return { error: '해당 신축연도의 경과연수별잔가율을 찾을 수 없습니다.' };
+
+    let adjustmentMultiplier = 1;
+    const appliedAdjustments = [];
+    if (taxType === 'inheritance_gift' && Array.isArray(adjustmentNos)) {
+      for (let i = 0; i < adjustmentNos.length; i++) {
+        const adj = BUILDING_ADJUSTMENT_TABLE.find(function (a) { return a.no === adjustmentNos[i]; });
+        if (!adj) return { error: '조정률 번호를 찾을 수 없습니다: ' + adjustmentNos[i] };
+        adjustmentMultiplier *= (adj.index / 100);
+        appliedAdjustments.push({ 번호: adj.no, 내용: adj.desc, 지수: adj.index });
+      }
+    }
+
+    let pricePerSqm = BUILDING_BASE_PRICE_2026 * (structure.index / 100) * (use.index / 100) * (locationIndex / 100) * depreciationRate * adjustmentMultiplier;
+    pricePerSqm = Math.floor(pricePerSqm / 1000) * 1000;
+    const totalPrice = Math.floor(pricePerSqm * floorAreaSqm);
+
+    return {
+      입력값: {
+        구조: structure.name, 구조지수: structure.index, 경과연수그룹: structure.group,
+        용도번호: use.no, 용도: use.desc, 용도지수: use.index,
+        '공시지가_㎡당': officialLandPricePerSqm, 위치지수: locationIndex,
+        신축연도: builtYear, 경과연수별잔가율: depreciationRate,
+        세목: taxType === 'transfer' ? '양도소득세(조정률 미적용)' : '상속세·증여세',
+        적용된_조정률: appliedAdjustments
+      },
+      '㎡당_금액': pricePerSqm, '건물면적_㎡': floorAreaSqm, 건물기준시가: totalPrice,
+      안내: '이 값은 건물가격만 포함하며, 부속토지가격은 별도입니다. 2026.1.1. 시행 국세청 고시 기준이며 매년 1월 갱신되므로 신고 시점의 최신 고시 여부를 반드시 확인하세요.'
+    };
+  };
+
+  // 층별/부속시설별 상세 계산 — 각 행을 위 함수로 개별 계산해 합산한다.
+  window.calculateBuildingStandardPriceMultiJS = function (rows, officialLandPricePerSqm, taxType) {
+    if (!Array.isArray(rows) || rows.length === 0) return { error: '층 또는 부속시설을 1개 이상 입력해야 합니다.' };
+    const rowResults = [];
+    let totalPrice = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] || {};
+      const r = window.calculateBuildingStandardPriceJS(row.structureName, row.useNo, officialLandPricePerSqm, row.builtYear, row.floorAreaSqm, taxType, row.adjustmentNos);
+      if (r.error) return { error: (i + 1) + '번째 행(' + (row.label || '') + '): ' + r.error };
+      totalPrice += r.건물기준시가;
+      rowResults.push(Object.assign({ 순번: i + 1, 구분: row.label || ('행' + (i + 1)) }, r));
+    }
+    return {
+      행별_결과: rowResults, 건물기준시가_합계: totalPrice,
+      안내: '각 층(또는 부속시설)을 개별 계산해 합산한 값입니다. 부속토지 공시지가는 건물 전체에 공통으로 적용했습니다. 부속 주차장·기계실·보일러실·대피소 등은 용도를 그에 맞게(예: 57.주차장) 선택해 별도 행으로 추가하세요.'
+    };
+  };
+
   // 혼인·출산 증여재산공제 (상증세법 §53의2, 2024.1.1. 이후) — 혼인·출산 합쳐 평생통산 1억원 한도.
   function marriageOrBirthGiftDeduction(eligibleGiftAmount, priorUsedAmount) {
     const remaining = Math.max(0, 100000000 - (Number(priorUsedAmount) || 0));
