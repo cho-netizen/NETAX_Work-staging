@@ -535,7 +535,7 @@ const DRIVE_TOOLS = [
         taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속세, gift=증여세.' },
         totalTaxAmount: { type: 'number', description: '연부연납 전 총 납부세액(원). 2천만원 이하면 연부연납 자체가 불가능하다.' },
         initialPaymentAmount: { type: 'number', description: '신고·납부기한까지 먼저 납부하는 금액(원, 최초납부세액). 생략하면 0(전액을 연부연납대상금액으로 처리).' },
-        installmentPeriodYears: { type: 'integer', description: '연부연납기간(년). 한도: 상속세 일반재산 10년/가업상속재산 20년(또는 10년거치+10년), 증여세 일반재산 5년/조특법§30의6 특례재산 15년(한도 준수 여부는 검증하지 않음).' },
+        installmentPeriodYears: { type: 'integer', description: '연부연납기간(년). 한도: 상속세 일반재산 10년, 가업상속재산은 가업상속재산 비율 50% 미만이면 10년(3년 거치 가능)·50% 이상이면 20년(5년 거치 가능), 증여세 일반재산 5년, 조특법§30의6 특례재산 15년(한도 준수 여부는 검증하지 않으며, 거치기간이 있는 경우 이 도구의 균등분할 모델과는 상환구조가 다르다).' },
         annualInterestRatePercent: { type: 'number', description: '연부연납 가산금 연이자율(%, 예: 3.5). 국세기본법 시행령§43의3②에 따른 현재 이자율을 반드시 확인해서 넣어야 한다.' }
       },
       required: ['taxType', 'totalTaxAmount', 'installmentPeriodYears', 'annualInterestRatePercent']
@@ -553,6 +553,32 @@ const DRIVE_TOOLS = [
         days: { type: 'integer', description: 'daysOnOrAfter20220214의 별칭 — 전체 기간이 2022.2.14. 이후라서 굳이 나눌 필요가 없을 때 이 값 하나만 넣으면 된다.' }
       },
       required: ['clawedBackTaxAmount']
+    }
+  },
+  {
+    name: 'calculate_low_price_transfer_gift_amount',
+    description: '저가양수·고가양도에 따른 이익의 증여의제(상증세법 §35)의 증여재산가액을 계산한다. 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로 거래하면, 그 차액에서 min(시가×30%, 3억원)을 뺀 금액이 증여재산가액이 된다. 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        fairMarketValue: { type: 'number', description: '거래재산의 시가(원) — calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
+        transferPrice: { type: 'number', description: '실제 거래한 대가(원) — 매매대금 등.' }
+      },
+      required: ['fairMarketValue', 'transferPrice']
+    }
+  },
+  {
+    name: 'calculate_interest_free_loan_gift_amount',
+    description: '금전 무상대출 등에 따른 이익의 증여의제(상증세법 §41의4)의 증여재산가액을 계산한다. 특수관계인 간 금전을 무상 또는 적정이자율(현재 연 4.6%)보다 낮은 이자로 빌려주면 그 차액이 증여재산가액이 되며, 연간 계산액이 1천만원 미만이면 과세하지 않는다. 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        loanPrincipal: { type: 'number', description: '대여원금(원).' },
+        actualInterestPaid: { type: 'number', description: '실제 지급(약정)한 이자 총액(원) — 무이자면 생략(0).' },
+        appropriateInterestRatePercent: { type: 'number', description: '적정이자율(%, 연). 상증세법 시행규칙에 따른 현재 이자율은 연 4.6%이나 수시로 바뀔 수 있으니 대출 시점 기준으로 확인해서 넣는다. 생략하면 4.6을 기본값으로 쓴다.' },
+        loanMonths: { type: 'integer', description: '대출기간(개월). 1년 이상 계속되는 대출은 매년 다시 계산해야 하며, 1년 미만이면 월할계산에 쓰인다. 생략하면 12(1년)로 계산한다.' }
+      },
+      required: ['loanPrincipal']
     }
   },
   {
@@ -3197,7 +3223,7 @@ function toolCalculateInstallmentPaymentSchedule(p) {
     각회분_1천만원미만_경고: belowMinimumWarning,
     안내: '각 회분의 납부예정 세액(가산금 제외한 원금)은 1천만원을 초과해야 합니다 — 미만이면 연부연납기간을 줄이세요. ' +
       (belowMinimumWarning ? '⚠ 현재 입력으로는 회당 원금이 1천만원 미만입니다. ' : '') +
-      '연부연납기간 한도: 상속세는 일반재산 10년, 가업상속공제(§18의2)를 받았거나 요건충족 중소·중견기업 상속재산은 20년(또는 허가 후 10년 거치+10년), 증여세는 일반재산 5년, 조특법§30의6 특례를 적용받은 증여재산은 15년입니다(한도 준수 여부는 이 도구가 검증하지 않음). ' +
+      '연부연납기간 한도: 상속세 일반재산은 10년(거치기간 없음), 가업상속재산은 상속재산 중 가업상속재산 비율이 50% 미만이면 10년(3년까지 거치 가능)·50% 이상이면 20년(5년까지 거치 가능), 증여세는 일반재산 5년(거치기간 없음)·조특법§30의6 특례를 적용받은 증여재산은 15년입니다(거치기간 동안은 이자상당액만 내고 원금 상환은 미루는 방식이라 이 도구의 균등분할 모델과 다르며, 거치기간을 쓸 경우 홈택스 모의계산으로 별도 재계산하세요. 기간 한도 준수 여부는 이 도구가 검증하지 않음). ' +
       '가산금 계산은 잔여 미납액에 연이자율을 적용하는 근사 모델입니다 — 정확한 이자율(국세기본법 시행령§43의3②, 수시 변경)과 실제 납부예정일을 반영해 홈택스 모의계산으로 재검증하세요. 가업상속재산에 해당하는 부분과 그 외 부분의 연부연납기간이 다른 경우(예: 상속세) 각 부분을 별도로 이 도구를 호출해 계산한 뒤 합산하세요.'
   };
 }
@@ -3223,6 +3249,66 @@ function toolCalculateClawbackInterest(p) {
     이자상당액_합계: totalInterest,
     납부할세액: totalPayable,
     안내: '일수는 당초 감면·특례 적용받은 증여세(또는 상속세)의 과세표준 신고기한 다음 날부터 추징사유가 발생한 날까지의 기간입니다. 이자율은 2022.2.14. 전후로 10만분의25→10만분의22로 바뀌었으므로, 그 날짜를 걸치는 기간이면 daysBefore20220214·daysOnOrAfter20220214를 나눠서 넣으세요(하나만 있으면 나머지는 0으로 생략 가능). 이 이자율도 향후 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
+  };
+}
+
+// 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로
+// 거래하면 그 차액에서 일정 기준액을 뺀 금액을 증여받은(또는 증여한) 것으로 본다. 이 결과의 증여재산가액을 그대로
+// calculate_gift_tax의 giftAmount로 넣으면 정상적으로 증여재산공제·누진세율·신고세액공제가 적용된다(§35 자체는 별도 세율이 없음).
+function toolCalculateLowPriceTransferGiftAmount(p) {
+  p = p || {};
+  const fairMarketValue = Number(p.fairMarketValue);
+  const transferPrice = Number(p.transferPrice);
+  if (!fairMarketValue || fairMarketValue <= 0) return { error: '시가(fairMarketValue)가 필요합니다.' };
+  if (!(transferPrice >= 0)) return { error: '실제 거래한 대가(transferPrice)가 필요합니다.' };
+
+  const diff = Math.abs(fairMarketValue - transferPrice);
+  const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
+  const meetsGate = diff > threshold;
+  const direction = transferPrice < fairMarketValue ? '저가양수(매수인이 이익을 얻음)' : (transferPrice > fairMarketValue ? '고가양도(매도인이 이익을 얻음)' : '차액없음');
+
+  if (!meetsGate) {
+    return {
+      과세대상여부: false, 거래유형: direction,
+      시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
+      안내: '특수관계인 간 거래 기준으로, 차액(' + diff + '원)이 차감기준액(min(시가×30%, 3억원) = ' + threshold + '원)을 초과하지 않아 과세대상이 아닙니다. 비특수관계인 간 거래는 기준·계산식이 다르고(거래관행상 정당한 사유 유무 판단 필요) 이 도구는 특수관계인 간 거래를 전제로 계산합니다.'
+    };
+  }
+
+  const deemedGiftAmount = diff - threshold;
+  return {
+    과세대상여부: true, 거래유형: direction,
+    시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
+    안내: '이익을 얻은 쪽(저가양수면 매수인, 고가양도면 매도인)이 수증자입니다. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요. 특수관계인 간 거래를 전제로 계산했으며, 비특수관계인 간 거래는 "거래의 관행상 정당한 사유" 판단과 다른 기준금액(시가의 30%만 사용, 3억 상한 없음)이 적용될 수 있어 별도로 확인해야 합니다. 시가는 반드시 상증세법상 평가방법(감정가액·매매사례가액·보충적평가 등)에 따라 확정해야 합니다.'
+  };
+}
+
+// 금전 무상대출 등에 따른 이익의 증여의제 (상증세법 §41의4) — 특수관계인에게(또는으로부터) 금전을 무상 또는 적정이자율보다
+// 낮은 이자로 빌려주면(빌리면) 그 차액을 증여받은 것으로 본다. 연간 계산액이 1천만원 미만이면 과세하지 않는다.
+function toolCalculateInterestFreeLoanGiftAmount(p) {
+  p = p || {};
+  const loanPrincipal = Number(p.loanPrincipal);
+  if (!loanPrincipal || loanPrincipal <= 0) return { error: '대여원금(loanPrincipal)이 필요합니다.' };
+  const appropriateInterestRatePercent = (p.appropriateInterestRatePercent != null) ? Number(p.appropriateInterestRatePercent) : 4.6;
+  const actualInterestPaid = Number(p.actualInterestPaid) || 0;
+  const loanMonths = (p.loanMonths != null) ? Math.max(0, Number(p.loanMonths)) : 12;
+
+  const appropriateInterestAmount = Math.round(loanPrincipal * appropriateInterestRatePercent / 100 * loanMonths / 12);
+  const deemedGiftAmount = Math.max(0, appropriateInterestAmount - actualInterestPaid);
+  const meetsGate = deemedGiftAmount >= 10000000;
+
+  if (!meetsGate) {
+    return {
+      과세대상여부: false, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
+      증여재산가액: 0,
+      안내: '계산된 이익(' + deemedGiftAmount + '원)이 1천만원(연간 기준) 미만이어서 과세대상이 아닙니다. 대출기간이 1년 미만이면 loanMonths로 월수를 넣어 일할(월할) 계산하세요.'
+    };
+  }
+
+  return {
+    과세대상여부: true, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
+    증여재산가액: deemedGiftAmount,
+    안내: '대출기간이 1년을 초과하면 매년(또는 대출조건 변경 시마다) 새로 증여의제이익이 발생하는 것으로 보아 각 연도별로 다시 계산해야 합니다. 적정이자율(현재 연 4.6%)은 상증세법 시행규칙에 따라 수시로 바뀔 수 있으니 대출 시점 기준으로 재확인하세요. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
   };
 }
 
@@ -4070,6 +4156,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
+        b.name === 'calculate_low_price_transfer_gift_amount' ||
+        b.name === 'calculate_interest_free_loan_gift_amount' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -4204,6 +4292,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_clawback_interest') {
         const resultObj = toolCalculateClawbackInterest(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_low_price_transfer_gift_amount') {
+        const resultObj = toolCalculateLowPriceTransferGiftAmount(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_interest_free_loan_gift_amount') {
+        const resultObj = toolCalculateInterestFreeLoanGiftAmount(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

@@ -929,6 +929,63 @@
     };
   };
 
+  // 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — Code.js toolCalculateLowPriceTransferGiftAmount와 동일 로직.
+  window.calculateLowPriceTransferGiftAmountJS = function (p) {
+    p = p || {};
+    const fairMarketValue = Number(p.fairMarketValue);
+    const transferPrice = Number(p.transferPrice);
+    if (!fairMarketValue || fairMarketValue <= 0) return { error: '시가가 필요합니다.' };
+    if (!(transferPrice >= 0)) return { error: '실제 거래한 대가가 필요합니다.' };
+
+    const diff = Math.abs(fairMarketValue - transferPrice);
+    const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
+    const meetsGate = diff > threshold;
+    const direction = transferPrice < fairMarketValue ? '저가양수(매수인이 이익을 얻음)' : (transferPrice > fairMarketValue ? '고가양도(매도인이 이익을 얻음)' : '차액없음');
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false, 거래유형: direction,
+        시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
+        안내: '특수관계인 간 거래 기준으로, 차액이 차감기준액(min(시가×30%, 3억원))을 초과하지 않아 과세대상이 아닙니다. 비특수관계인 간 거래는 기준·계산식이 다릅니다.'
+      };
+    }
+
+    const deemedGiftAmount = diff - threshold;
+    return {
+      과세대상여부: true, 거래유형: direction,
+      시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
+      안내: '이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요. 특수관계인 간 거래를 전제로 계산했습니다.'
+    };
+  };
+
+  // 금전 무상대출 등에 따른 이익의 증여의제 (상증세법 §41의4) — Code.js toolCalculateInterestFreeLoanGiftAmount와 동일 로직.
+  window.calculateInterestFreeLoanGiftAmountJS = function (p) {
+    p = p || {};
+    const loanPrincipal = Number(p.loanPrincipal);
+    if (!loanPrincipal || loanPrincipal <= 0) return { error: '대여원금이 필요합니다.' };
+    const appropriateInterestRatePercent = (p.appropriateInterestRatePercent != null) ? Number(p.appropriateInterestRatePercent) : 4.6;
+    const actualInterestPaid = Number(p.actualInterestPaid) || 0;
+    const loanMonths = (p.loanMonths != null) ? Math.max(0, Number(p.loanMonths)) : 12;
+
+    const appropriateInterestAmount = Math.round(loanPrincipal * appropriateInterestRatePercent / 100 * loanMonths / 12);
+    const deemedGiftAmount = Math.max(0, appropriateInterestAmount - actualInterestPaid);
+    const meetsGate = deemedGiftAmount >= 10000000;
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
+        증여재산가액: 0,
+        안내: '계산된 이익이 1천만원(연간 기준) 미만이어서 과세대상이 아닙니다.'
+      };
+    }
+
+    return {
+      과세대상여부: true, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
+      증여재산가액: deemedGiftAmount,
+      안내: '대출기간이 1년을 초과하면 매년 다시 계산해야 합니다. 이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+    };
+  };
+
   // ============================================================
   // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
   // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.

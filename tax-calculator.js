@@ -41,11 +41,12 @@ const VALUATION_METHOD_LABELS = {
 };
 
 function computeValuationAssetValue(a){
+  let value;
   switch (a.method){
-    case 'land': return calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100);
-    case 'house': return calculateHouseValueJS(a.housePrice, a.houseShare || 100);
-    case 'listedStock': return calculateListedStockValueJS(a.listedPrice, a.listedShares);
-    case 'rental': return calculateRentalConversionValueJS(a.rentalAnnualRent, a.rentalDeposit);
+    case 'land': value = calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100); break;
+    case 'house': value = calculateHouseValueJS(a.housePrice, a.houseShare || 100); break;
+    case 'listedStock': value = calculateListedStockValueJS(a.listedPrice, a.listedShares); break;
+    case 'rental': value = calculateRentalConversionValueJS(a.rentalAnnualRent, a.rentalDeposit); break;
     case 'unlistedStock': {
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
@@ -53,10 +54,14 @@ function computeValuationAssetValue(a){
         netAssetValue: a.uNetAsset, isRealEstateHeavy: a.uRealEstateHeavy, isMajorShareholder: a.uMajorShareholder,
         isSmallBusiness: a.uIsSmallBusiness, isMediumBusinessUnder500B: a.uIsMediumUnder500B
       });
-      return r.error ? 0 : r.평가총액;
+      value = r.error ? 0 : r.평가총액;
+      break;
     }
-    default: return Number(a.directValue) || 0;
+    default: value = Number(a.directValue) || 0;
   }
+  // 저당권·질권 등이 설정된 재산의 평가(상증세법 §66) — 시가·보충적평가액과 그 재산이 담보하는 채권액(또는 등기된 전세금) 중 큰 금액으로 평가.
+  const securedDebtAmount = Number(a.securedDebtAmount) || 0;
+  return Math.max(value, securedDebtAmount);
 }
 
 function valuationAssetMethodFieldsHtml(m, a){
@@ -99,6 +104,7 @@ function renderValuationAssetRow(a, idx){
         '<div class="taxcalc-field"><label>평가방법</label><select data-field="method">' +
           Object.keys(VALUATION_METHOD_LABELS).map(function (k) { return '<option value="' + k + '"' + (method === k ? ' selected' : '') + '>' + VALUATION_METHOD_LABELS[k] + '</option>'; }).join('') +
         '</select></div>' +
+        '<div class="taxcalc-field"><label>담보채권액(저당권·질권 등, §66)</label><input type="number" data-field="securedDebtAmount" placeholder="원 (있으면 시가/보충적평가액과 비교해 큰 금액 적용)" value="' + (a.securedDebtAmount || '') + '"></div>' +
       '</div>' +
       '<div class="taxcalc-grid" style="margin-top:6px;">' + valuationAssetMethodFieldsHtml(method, a) + '</div>' +
       '<div class="taxcalc-result-row"><span>평가액</span><span class="v">' + won(value) + '</span></div>' +
@@ -427,6 +433,26 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-clawback-interest">이자상당액 계산하기</button>' +
       '<div id="taxCalcClawbackResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>저가양수·고가양도에 따른 이익의 증여의제(§35) — 특수관계인 간 시가보다 낮게(높게) 거래했을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>시가</label><input type="number" id="lpFairValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>실제 거래대가</label><input type="number" id="lpTransferPrice" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-low-price-transfer">증여재산가액 계산하기</button>' +
+      '<div id="taxCalcLowPriceResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>금전 무상대출 등에 따른 이익의 증여의제(§41의4) — 특수관계인 간 무이자·저리로 돈을 빌려줬을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>대여원금</label><input type="number" id="loanPrincipal" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>실제 지급(약정)이자</label><input type="number" id="loanActualInterest" placeholder="원 (무이자면 0)"></div>' +
+        '<div class="taxcalc-field"><label>적정이자율</label><input type="number" step="0.1" id="loanRate" placeholder="% (기본 4.6, 시점에 따라 확인 필요)"></div>' +
+        '<div class="taxcalc-field"><label>대출기간</label><input type="number" id="loanMonths" placeholder="개월 (기본 12)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-interest-free-loan">증여재산가액 계산하기</button>' +
+      '<div id="taxCalcLoanResult"></div>' +
     '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
 }
@@ -555,7 +581,7 @@ function renderInstallmentResult(r, boxId){
   html += taxCalcResultRow('가산금 합계', won(r.가산금_합계));
   html += taxCalcResultRow('총 납부액(최초납부 포함)', won(r.총납부액_최초포함), { total: true });
   if (r.각회분_1천만원미만_경고) html += '<div class="taxcalc-result-note">⚠ 회당 원금이 1천만원 미만입니다 — 연부연납기간을 줄이거나 신청 요건을 재확인하세요.</div>';
-  html += '<div class="taxcalc-result-note">가산금은 잔여 미납액에 연이자율을 적용하는 근사 모델입니다. 연부연납기간 한도(증여세 일반5년/특례15년, 상속세 일반10년/가업상속20년)와 정확한 이자율은 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '<div class="taxcalc-result-note">가산금은 잔여 미납액에 연이자율을 적용하는 근사 모델로, 거치기간(가업상속재산 비율 50%이상시 5년까지, 미만시 3년까지)은 반영하지 않습니다. 연부연납기간 한도(증여세 일반5년/특례15년, 상속세 일반10년/가업상속 50%미만10년·50%이상20년)와 정확한 이자율·거치기간 적용은 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -570,6 +596,31 @@ function renderClawbackResult(r){
   html += taxCalcResultRow('이자상당액 합계', won(r.이자상당액_합계));
   html += taxCalcResultRow('납부할 세액', won(r.납부할세액), { total: true });
   html += '<div class="taxcalc-result-note">일수는 당초 감면·특례 적용받은 신고기한 다음 날부터 추징사유가 발생한 날까지의 기간입니다. 이자율은 향후 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderLowPriceResult(r){
+  const box = document.getElementById('taxCalcLowPriceResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('거래유형', r.거래유형);
+  html += taxCalcResultRow('시가와 대가의 차액', won(r.시가와대가의차액));
+  html += taxCalcResultRow('차감기준액', won(r.차감기준액));
+  html += taxCalcResultRow('증여재산가액', won(r.증여재산가액), { total: true });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderLoanGiftResult(r){
+  const box = document.getElementById('taxCalcLoanResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적정이자상당액', won(r.적정이자상당액));
+  if (r.실제지급이자) html += taxCalcResultRow('실제 지급이자', '-' + won(r.실제지급이자));
+  html += taxCalcResultRow('증여재산가액', won(r.증여재산가액), { total: true });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -933,6 +984,20 @@ taxCalcView.addEventListener('click', function(e){
       daysOnOrAfter20220214: Number(document.getElementById('ckDaysAfter').value) || 0
     };
     renderClawbackResult(calculateClawbackInterestJS(input));
+  } else if (action === 'run-low-price-transfer'){
+    const input = {
+      fairMarketValue: Number(document.getElementById('lpFairValue').value) || 0,
+      transferPrice: Number(document.getElementById('lpTransferPrice').value) || 0
+    };
+    renderLowPriceResult(calculateLowPriceTransferGiftAmountJS(input));
+  } else if (action === 'run-interest-free-loan'){
+    const input = {
+      loanPrincipal: Number(document.getElementById('loanPrincipal').value) || 0,
+      actualInterestPaid: Number(document.getElementById('loanActualInterest').value) || 0,
+      appropriateInterestRatePercent: document.getElementById('loanRate').value === '' ? null : Number(document.getElementById('loanRate').value),
+      loanMonths: document.getElementById('loanMonths').value === '' ? null : Number(document.getElementById('loanMonths').value)
+    };
+    renderLoanGiftResult(calculateInterestFreeLoanGiftAmountJS(input));
   } else if (action === 'run-installment-inheritance'){
     const input = {
       taxType: document.getElementById('ipIhTaxType').value,
