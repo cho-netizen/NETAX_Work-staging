@@ -580,7 +580,10 @@
       };
     });
     const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);
-    const effectiveEstateAmount = taxableEstateAmount + disposalPresumptionTotal;
+    const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
+    const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
+    const publicTrustAmount = Number(p.publicTrustAmount) || 0;
+    const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal;
 
     const childCount = Number(p.childCount) || 0;
     const minorHeirRemainingYears = Number(p.minorHeirRemainingYears) || 0;
@@ -647,12 +650,20 @@
     const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
     const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
 
+    const totalGrossEstateValue = Number(p.totalGrossEstateValue) || 0;
+    let businessInheritanceDeferralEligibleAmount = null;
+    if (businessInheritanceDetail && totalGrossEstateValue > 0) {
+      businessInheritanceDeferralEligibleAmount = Math.round(taxAfterReportCredit * businessInheritanceDetail.targetAmount / totalGrossEstateValue);
+    }
+
     const finalTax = Math.max(0, taxAfterReportCredit + interestAmount + forProfitPayableByHeirs
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
       - culturalPropertyDeferredTaxAmount - businessInheritanceDeferredTaxAmount);
 
     return {
-      상속세과세가액_입력값: taxableEstateAmount, 상속개시전처분재산_추정내역: disposalPresumptionDetail,
+      상속세과세가액_입력값: taxableEstateAmount,
+      비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount,
+      상속개시전처분재산_추정내역: disposalPresumptionDetail,
       상속개시전처분재산_추정합계: disposalPresumptionTotal, 상속세과세가액_적용값: effectiveEstateAmount,
       인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
@@ -677,6 +688,7 @@
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
       문화재등징수유예세액: culturalPropertyDeferredTaxAmount, 가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
+      가업상속납부유예_가능세액: businessInheritanceDeferralEligibleAmount,
       납부세액: finalTax
     };
   };

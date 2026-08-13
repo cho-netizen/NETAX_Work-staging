@@ -357,7 +357,10 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다. 상속개시전 처분재산 추정액(disposalPresumptionItems)은 여기 포함하지 말 것 — 자동으로 더해진다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
+        taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다(조특법§30의5·6 특례증여재산은 증여시기와 무관하게 항상 가산해야 함에 유의). 비과세재산가액·과세가액불산입재산가액은 여기 포함하지 말 것(nonTaxableAmount 등으로 별도 입력하면 자동으로 차감된다). 상속개시전 처분재산 추정액(disposalPresumptionItems)도 여기 포함하지 말 것 — 자동으로 더해진다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
+        nonTaxableAmount: { type: 'number', description: '비과세되는 상속재산가액(원, §12) — 국가·지방자치단체·공공단체 유증재산, 문화재보호구역 토지, 금양임야·묘토인 농지(한도 2억원), 족보·제구(한도 1천만원), 정당 유증재산, 사내근로복지기금 등 유증재산, 이재구호금품 등. 없으면 생략.' },
+        publicInterestOrgAmount: { type: 'number', description: '상속세 과세표준 신고기한 이내에 공익법인등에 출연한 재산가액(원, §16 — 과세가액 불산입). 없으면 생략.' },
+        publicTrustAmount: { type: 'number', description: '상속세 과세표준 신고기한 이내에 공익신탁을 통해 공익법인등에 출연한 재산가액(원, §17 — 과세가액 불산입). 없으면 생략.' },
         disposalPresumptionItems: {
           type: 'array',
           description: '상속개시전 처분재산 등 산입액(§15, [별지 제9호서식] 부표4) — 상속개시 전 1년 이내 재산종류별 2억원 이상(2년 이내 5억원 이상) 처분·인출하거나 채무를 부담했는데 용도가 불분명하면 추정상속재산으로 자동 가산된다. 해당사항 없으면 생략.',
@@ -422,7 +425,8 @@ const DRIVE_TOOLS = [
         forProfitExemptedTaxAmount: { type: 'number', description: '영리법인이 유증받아 면제된 상속세액(원). (면제세액 - 유증재산가액×10%)×상속인 지분비율만큼을 상속인이 납부해야 한다. 없으면 생략.' },
         forProfitHeirShareRatio: { type: 'number', description: '영리법인 최대주주 등에 해당하는 상속인·직계비속의 지분 상당 비율(0~1). 없으면 생략(0).' },
         culturalPropertyDeferredTaxAmount: { type: 'number', description: '문화재자료·박물관자료등 징수유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
-        businessInheritanceDeferredTaxAmount: { type: 'number', description: '가업상속 상속세 납부유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
+        businessInheritanceDeferredTaxAmount: { type: 'number', description: '가업상속 상속세 납부유예세액(원, §72의2, [별지 제12호의2서식]) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 정확한 금액을 모르면 totalGrossEstateValue와 businessInheritanceIndividualNetAssetValue/businessInheritanceStockValue 등을 넣어 이 도구가 계산한 가업상속납부유예_가능세액(참고용)을 확인한 뒤 그 금액을 여기 넣어라. 없으면 생략.' },
+        totalGrossEstateValue: { type: 'number', description: '가업상속납부유예 가능세액 계산용 — 총 상속재산가액(원, 상속으로 얻은 자산에 §13에 따라 가산하는 증여재산 포함, 공과금·채무 차감 전 총액). 가업상속공제용 상세 자산내역과 함께 주면 §72의2에 따른 납부유예 가능세액(참고용, 자동 적용되지는 않음)을 계산해준다.' },
         reporterName: { type: 'string', description: '신고인(상속인) 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
         reporterRegNo: { type: 'string', description: '신고인 주민등록번호. 위와 같은 방식으로 확인.' },
         reporterRelationToDeceased: { type: 'string', description: '신고인의 피상속인과의 관계(예: 자녀, 배우자). 위와 같은 방식으로 확인.' },
@@ -2771,7 +2775,12 @@ function toolCalculateInheritanceTax(p) {
     };
   });
   const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);
-  const effectiveEstateAmount = taxableEstateAmount + disposalPresumptionTotal;
+  // 비과세되는 상속재산(§12 — 국가등 유증재산, 금양임야·묘토, 족보·제구 등)·과세가액 불산입재산(§16 — 공익법인 출연재산, 공익신탁재산)은
+  // taxableEstateAmount에 아직 반영되지 않은 금액을 여기서 입력받아 차감한다.
+  const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
+  const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
+  const publicTrustAmount = Number(p.publicTrustAmount) || 0;
+  const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal;
 
   const hasSpouse = !!p.hasSpouse;
   const childCount = Number(p.childCount) || 0;
@@ -2862,6 +2871,14 @@ function toolCalculateInheritanceTax(p) {
   const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
   const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
 
+  // 가업상속 납부유예(§72의2, [별지 제12호의2서식]) — 가업상속공제와 별개로 선택 가능한 제도로, 납부유예 가능세액을 참고용으로 계산한다.
+  // 실제로 유예받으려면 그 금액을 businessInheritanceDeferredTaxAmount에 별도로 입력해야 최종세액에서 차감된다(이 도구가 자동으로 적용하지 않음).
+  const totalGrossEstateValue = Number(p.totalGrossEstateValue) || 0;
+  let businessInheritanceDeferralEligibleAmount = null;
+  if (businessInheritanceDetail_ && totalGrossEstateValue > 0) {
+    businessInheritanceDeferralEligibleAmount = Math.round(taxAfterReportCredit * businessInheritanceDetail_.targetAmount / totalGrossEstateValue);
+  }
+
   const finalTax = Math.max(0, taxAfterReportCredit + interestAmount + forProfitPayableByHeirs
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
     - culturalPropertyDeferredTaxAmount - businessInheritanceDeferredTaxAmount);
@@ -2872,6 +2889,7 @@ function toolCalculateInheritanceTax(p) {
       신고인: { 성명: p.reporterName || '', 주민등록번호: p.reporterRegNo || '', 피상속인과의관계: p.reporterRelationToDeceased || '' },
       피상속인: { 성명: p.deceasedName || '', 주민등록번호: p.deceasedRegNo || '', 상속개시일: p.dateOfDeath || '' }
     },
+    비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount,
     상속개시전처분재산_추정내역: disposalPresumptionDetail,
     상속개시전처분재산_추정합계: disposalPresumptionTotal,
     상속세과세가액_적용값: effectiveEstateAmount,
@@ -2913,8 +2931,12 @@ function toolCalculateInheritanceTax(p) {
     납부지연가산세: penalties.latePenalty,
     문화재등징수유예세액: culturalPropertyDeferredTaxAmount,
     가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
+    가업상속납부유예_가능세액: businessInheritanceDeferralEligibleAmount,
     납부세액: finalTax,
-    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제·특례증여세액공제는 자격요건 판정과 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.'
+    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제·특례증여세액공제는 자격요건 판정과 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.' +
+      (businessInheritanceDeferralEligibleAmount != null
+        ? ' 가업상속납부유예_가능세액은 §72의2에 따라 유예 신청 가능한 최대 금액(참고용)이며, 가업상속공제와는 별개로 선택 가능한 제도입니다 — 실제로 유예받으려면 이 금액(또는 그 이하)을 businessInheritanceDeferredTaxAmount에 넣어야 최종 납부세액에서 차감됩니다.'
+        : '')
   };
 }
 
