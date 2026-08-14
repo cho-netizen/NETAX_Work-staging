@@ -1612,14 +1612,61 @@ function updateTaxCalcPaneVisibility(){
 }
 
 function closeTaxCalcView(){
+  if (isCalcStandaloneMode){ window.close(); return; }
   hideAllPanelViews();
   explorerView.style.display = 'flex';
   explorerPanelHead.style.display = 'flex';
   navigateTo(explorerPath);
 }
 
-document.getElementById('btnOpenTaxCalc').addEventListener('click', openTaxCalcView);
+// ============================================================
+// 세액계산기 새 창(고객모드) — 세액계산은 넥스의 부속 서브화면이 아니라 그 자체로 독립된 도구라,
+// 채팅·탐색기 안에 딸린 화면이 아니라 자기 창을 갖는다. 같은 index.html을 재사용하되
+// ?calcMode=1로 열리면 그 창 안에서는 계산기만 전체화면으로 뜨고 나머지 내부 도구는 다 숨긴다.
+// ============================================================
+let isCalcStandaloneMode = false;
+
+document.getElementById('btnOpenTaxCalc').addEventListener('click', function(){
+  const url = new URL(location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('calcMode', '1');
+  if (explorerPath[0]) url.searchParams.set('customer', explorerPath[0]);
+  if (explorerPath[1]) url.searchParams.set('case', explorerPath[1]);
+  window.open(url.toString(), '_blank');
+});
 document.getElementById('btnTaxCalcBack').addEventListener('click', closeTaxCalcView);
+
+window.addEventListener('load', function(){
+  const params = new URLSearchParams(location.search);
+  if (params.get('calcMode') !== '1') return;
+  isCalcStandaloneMode = true;
+  document.body.classList.add('calc-standalone-mode');
+
+  function boot(){
+    const customer = params.get('customer');
+    const caseName = params.get('case');
+    const path = [];
+    if (customer) path.push(customer);
+    if (caseName) path.push(caseName);
+    const afterPath = function(){
+      // 채팅 패널을 감추고 탐색작업창(계산기가 그 안의 뷰)을 100%로 — localStorage에는 남기지 않는다
+      // (이 새 창만의 표시 방식일 뿐, 사용자의 평소 작업창 배치 설정을 덮어쓰면 안 되므로).
+      applyWorkspaceMode('max');
+      openTaxCalcView();
+      const filenameEl = document.querySelector('#taxCalcView .editor-filename');
+      if (filenameEl && path.length) filenameEl.textContent = '세액계산기 · ' + path.join(' / ');
+    };
+    if (path.length) navigateTo(path).then(afterPath).catch(afterPath);
+    else afterPath();
+  }
+
+  if (window.__nxCustomersLoaded && typeof window.__nxCustomersLoaded.then === 'function'){
+    window.__nxCustomersLoaded.then(boot).catch(boot);
+  } else {
+    boot();
+  }
+});
 
 document.querySelectorAll('.taxcalc-tab').forEach(function(tab){
   tab.addEventListener('click', function(){
