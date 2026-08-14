@@ -432,6 +432,8 @@ const DRIVE_TOOLS = [
         cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
         appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원). 500만원 한도로 공제.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 상속재산가액(원, 재해손실공제 §23). 없으면 생략.' },
+        funeralCostAmount: { type: 'number', description: '장례비용 실제 지출액(원, §14①3호). 없거나 증빙이 없으면 생략(자동으로 500만원 공제). 있으면 500만~1000만원 범위에서 실제 금액이 공제된다.' },
+        funeralNicheCostAmount: { type: 'number', description: '봉안시설·자연장지 사용금액(원). 위 장례비용공제와 별도로 500만원 한도까지 추가 공제. 없으면 생략.' },
         businessInheritanceDeduction: { type: 'number', description: '가업상속공제 최종 공제액(§18의2, 원) — 아래 상세 자산내역([별지 제1호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다. 상세 내역을 모르거나 이미 계산이 끝난 경우에만 최종 공제액을 직접 입력한다. 자격요건(가업 종사기간·최대주주 여부·중소/중견기업 여부 등) 판정은 이 도구가 하지 않는다.' },
         businessOwnershipYears: { type: 'number', description: '가업상속공제용 — 피상속인의 가업영위기간(년). 10년 미만이면 공제 불가, 10~20년 300억/20~30년 400억/30년이상 600억원 한도가 자동 적용된다.' },
         businessInheritanceIndividualNetAssetValue: { type: 'number', description: '가업상속공제용 — 소득세법을 적용받는 가업(개인사업)인 경우, 가업에 직접 사용되는 토지(비사업용 토지 제외)·건축물·기계장치 등 사업용자산가액에서 담보채무액을 뺀 순액의 합계([별지 제1호서식 부표1] ①계). 법인세법 적용가업이면 생략.' },
@@ -3049,8 +3051,15 @@ function toolCalculateInheritanceTax(p) {
   const farmingInheritanceDetail_ = farmingInheritanceDeductionDetailed_(p);
   const farmingInheritanceDeduction = farmingInheritanceDetail_ ? farmingInheritanceDetail_.deductionAmount : (Number(p.farmingInheritanceDeduction) || 0);
 
+  // 장례비용공제(§14①3호) — 실제 지출액 증빙이 없으면 500만원, 있으면 500만~1000만원 범위에서 인정.
+  // 봉안시설·자연장지 사용금액은 별도로 500만원 한도까지 추가 공제.
+  const funeralCostInput = Number(p.funeralCostAmount) || 0;
+  const funeralGeneralDeduction = funeralCostInput > 0 ? Math.min(Math.max(funeralCostInput, 5000000), 10000000) : 5000000;
+  const funeralNicheDeduction = Math.min(Number(p.funeralNicheCostAmount) || 0, 5000000);
+  const funeralDeduction = funeralGeneralDeduction + funeralNicheDeduction;
+
   let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
-    + businessInheritanceDeduction + farmingInheritanceDeduction;
+    + funeralDeduction + businessInheritanceDeduction + farmingInheritanceDeduction;
 
   // 상속공제 종합한도액 (상증세법 §24) — 공제 총액은 무제한이 아니라
   // "상속세과세가액 - 상속인 아닌 자 유증재산가액 - 상속인의 사전증여재산 과세표준상당액 - 상속포기로 다음 순위가 받은 재산가액" 한도 내에서만 인정된다.
@@ -3133,6 +3142,9 @@ function toolCalculateInheritanceTax(p) {
     동거주택상속공제: cohabitingHouseDeduction,
     감정평가수수료공제: appraisalFeeDeduction,
     재해손실공제: disasterLossDeduction,
+    장례비용공제: funeralDeduction,
+    장례비용공제_일반분: funeralGeneralDeduction,
+    장례비용공제_봉안시설분: funeralNicheDeduction,
     가업상속공제: businessInheritanceDeduction,
     가업상속공제_계산내역: businessInheritanceDetail_ ? {
       대상금액: businessInheritanceDetail_.targetAmount, 한도액: businessInheritanceDetail_.limitAmount,

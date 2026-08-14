@@ -986,13 +986,19 @@
     const cohabitingHouseDeduction = p.hasCohabitingHouseDeduction ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
     const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+    // 장례비용공제(§14①3호) — 실제 지출액 증빙이 없으면 500만원, 있으면 500만~1000만원 범위에서 인정.
+    // 봉안시설·자연장지 사용금액은 별도로 500만원 한도까지 추가 공제.
+    const funeralCostInput = Number(p.funeralCostAmount) || 0;
+    const funeralGeneralDeduction = funeralCostInput > 0 ? Math.min(Math.max(funeralCostInput, 5000000), 10000000) : 5000000;
+    const funeralNicheDeduction = Math.min(Number(p.funeralNicheCostAmount) || 0, 5000000);
+    const funeralDeduction = funeralGeneralDeduction + funeralNicheDeduction;
     const businessInheritanceDetail = businessInheritanceDeductionDetailed(p);
     const businessInheritanceDeduction = businessInheritanceDetail ? businessInheritanceDetail.deductionAmount : (Number(p.businessInheritanceDeduction) || 0);
     const farmingInheritanceDetail = farmingInheritanceDeductionDetailed(p);
     const farmingInheritanceDeduction = farmingInheritanceDetail ? farmingInheritanceDetail.deductionAmount : (Number(p.farmingInheritanceDeduction) || 0);
 
     let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
-      + businessInheritanceDeduction + farmingInheritanceDeduction;
+      + funeralDeduction + businessInheritanceDeduction + farmingInheritanceDeduction;
 
     const overallDeductionLimit = Math.max(0, effectiveEstateAmount
       - (Number(p.nonHeirBequestAmount) || 0)
@@ -1052,6 +1058,7 @@
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
       감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
+      장례비용공제: funeralDeduction, 장례비용공제_일반분: funeralGeneralDeduction, 장례비용공제_봉안시설분: funeralNicheDeduction,
       가업상속공제: businessInheritanceDeduction,
       가업상속공제_계산내역: businessInheritanceDetail ? {
         대상금액: businessInheritanceDetail.targetAmount, 한도액: businessInheritanceDetail.limitAmount,
