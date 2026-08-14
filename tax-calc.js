@@ -71,12 +71,25 @@
   }
 
   // 상속개시전 처분재산 등 산입액 (상증세법 §15, [별지 제9호서식] 부표4) — gs-backend와 동일 로직.
-  function presumedInheritedFromDisposal(disposalAmount, explainedAmount, meetsThreshold) {
-    if (!meetsThreshold) return 0;
-    const disposal = Number(disposalAmount) || 0;
-    const unexplained = Math.max(0, disposal - (Number(explainedAmount) || 0));
-    const deduction = Math.min(disposal * 0.2, 200000000);
-    return Math.max(0, unexplained - deduction);
+  // 상속개시전 처분재산 등 산입액(상증세법§15, 시행령§11) — 1년 이내 2억원 이상 또는 2년 이내
+  // 5억원 이상 처분·인출(재산종류별)한 경우로서 용도가 불분명하면 미소명금액을 상속받은 것으로
+  // 추정한다. 단, 미소명금액이 MIN(순인출액×20%, 2억원)에 "미달"하면 전액 소명된 것으로 보아
+  // 산입하지 않는다 — 이 20%/2억원은 미소명금액에서 빼는 공제가 아니라 산입 여부를 가르는
+  // 문턱(threshold)이며, 문턱을 넘으면 미소명금액 "전액"이 산입된다.
+  // 1년 기준과 2년 기준은 서로 다른 별도의 요건이므로 각각 독립적으로 계산한 뒤 더 큰 금액을
+  // 채택한다(둘을 더하지 않음 — 2년 누계에는 1년분이 이미 포함되어 있으므로 중복산입 방지).
+  function computeDisposalBasisPresumed_(amount, selfDeposit, explained, thresholdAmount) {
+    const net = Math.max(0, (Number(amount) || 0) - (Number(selfDeposit) || 0));
+    if (net < thresholdAmount) return 0;
+    const unexplained = Math.max(0, net - (Number(explained) || 0));
+    const cutoff = Math.min(net * 0.2, 200000000);
+    return unexplained >= cutoff ? unexplained : 0;
+  }
+  function presumedInheritedFromDisposal(item) {
+    item = item || {};
+    const oneYear = computeDisposalBasisPresumed_(item.oneYearAmount, item.oneYearSelfDeposit, item.oneYearExplained, 200000000);
+    const twoYear = computeDisposalBasisPresumed_(item.twoYearAmount, item.twoYearSelfDeposit, item.twoYearExplained, 500000000);
+    return Math.max(oneYear, twoYear);
   }
 
   // 금융재산 상속공제 (상증세법 §22) — 순금융재산 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)
@@ -957,9 +970,9 @@
     const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
     const disposalPresumptionDetail = disposalItems.map(function (item) {
       return {
-        구분: item.category || '', '처분·차입금액': Number(item.disposalAmount) || 0, 소명금액: Number(item.explainedAmount) || 0,
-        금액기준충족: !!item.meetsThreshold,
-        추정상속재산가액: presumedInheritedFromDisposal(item.disposalAmount, item.explainedAmount, item.meetsThreshold)
+        구분: item.category || '',
+        '1년이내_인출액': Number(item.oneYearAmount) || 0, '2년이내_인출액': Number(item.twoYearAmount) || 0,
+        추정상속재산가액: presumedInheritedFromDisposal(item)
       };
     });
     const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);

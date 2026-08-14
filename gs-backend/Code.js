@@ -404,16 +404,19 @@ const DRIVE_TOOLS = [
         publicTrustAmount: { type: 'number', description: '상속세 과세표준 신고기한 이내에 공익신탁을 통해 공익법인등에 출연한 재산가액(원, §17 — 과세가액 불산입). 없으면 생략.' },
         disposalPresumptionItems: {
           type: 'array',
-          description: '상속개시전 처분재산 등 산입액(§15, [별지 제9호서식] 부표4) — 상속개시 전 1년 이내 재산종류별 2억원 이상(2년 이내 5억원 이상) 처분·인출하거나 채무를 부담했는데 용도가 불분명하면 추정상속재산으로 자동 가산된다. 해당사항 없으면 생략.',
+          description: '상속개시전 처분재산 등 산입액(§15, 시행령§11, [별지 제9호서식] 부표4) — 재산종류별로 1년 이내·2년 이내 요건을 각각 별도로 계산해 이 도구가 자동으로 더 큰 금액을 채택한다(1년/2년 데이터를 각각 총인출액·내돈입금액(재입금 등)·소명액으로 나눠 넣으면, 순인출액=총인출-내돈입금액, 미소명액=순인출액-소명액을 구한 뒤, 미소명액이 MIN(순인출액×20%, 2억원) 이상일 때만 그 미소명액 전액을 산입한다). 해당사항 없으면 생략.',
           items: {
             type: 'object',
             properties: {
               category: { type: 'string', description: '재산종류 (예: "현금·예금·유가증권", "부동산", "기타재산", "부담채무I", "부담채무II")' },
-              disposalAmount: { type: 'number', description: '처분(인출)금액 또는 차입금액 합계(원)' },
-              explainedAmount: { type: 'number', description: '용도가 객관적으로 소명된 금액 합계(원)' },
-              meetsThreshold: { type: 'boolean', description: '1년 이내 2억원 이상 또는 2년 이내 5억원 이상 기준을 충족하는지 — 충족하지 않으면 이 규정 자체가 적용되지 않는다' }
+              oneYearAmount: { type: 'number', description: '상속개시 전 1년 이내 총인출(처분·차입)액 합계(원)' },
+              oneYearSelfDeposit: { type: 'number', description: '위 1년 이내 인출액 중 본인계좌 재입금 등 실질적으로 인출이 아닌 금액(원, 없으면 0)' },
+              oneYearExplained: { type: 'number', description: '1년 이내 순인출액 중 용도가 객관적으로 소명된 금액(원, 없으면 0)' },
+              twoYearAmount: { type: 'number', description: '상속개시 전 2년 이내(1년 이내 포함 누계) 총인출(처분·차입)액 합계(원)' },
+              twoYearSelfDeposit: { type: 'number', description: '위 2년 이내 인출액 중 본인계좌 재입금 등 실질적으로 인출이 아닌 금액(원, 없으면 0)' },
+              twoYearExplained: { type: 'number', description: '2년 이내 순인출액 중 용도가 객관적으로 소명된 금액(원, 없으면 0)' }
             },
-            required: ['disposalAmount', 'meetsThreshold']
+            required: ['category']
           }
         },
         hasSpouse: { type: 'boolean', description: '배우자가 상속인에 포함되는지' },
@@ -2535,16 +2538,25 @@ function shortTermReinheritanceCredit_(priorInheritanceTaxPortion, yearsSincePri
   return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES_[y - 1]);
 }
 
-// 상속개시전 처분재산 등 산입액 (상증세법 §15, [별지 제9호서식] 부표4) — 재산종류별로 상속개시 전
-// 1년 이내 2억원 이상(2년 이내 5억원 이상) 처분·인출하거나 채무를 부담했는데 그 용도가 객관적으로
-// 명백하지 않으면, (미소명금액 - MIN(처분·차입금액×20%, 2억원))을 상속받은 것으로 추정해 과세가액에 가산한다.
-// meetsThreshold(위 금액기준 충족 여부)가 아니면 이 규정 자체가 적용되지 않아 0을 반환한다.
-function presumedInheritedFromDisposal_(disposalAmount, explainedAmount, meetsThreshold) {
-  if (!meetsThreshold) return 0;
-  const disposal = Number(disposalAmount) || 0;
-  const unexplained = Math.max(0, disposal - (Number(explainedAmount) || 0));
-  const deduction = Math.min(disposal * 0.2, 200000000);
-  return Math.max(0, unexplained - deduction);
+// 상속개시전 처분재산 등 산입액 (상증세법 §15, 시행령§11, [별지 제9호서식] 부표4) — 재산종류별로
+// 1년 이내 2억원 이상 또는 2년 이내 5억원 이상 처분·인출(순인출=총인출-내돈입금액 기준)했는데
+// 그 용도가 불분명하면 미소명금액(=순인출액-소명액)을 상속받은 것으로 추정한다. 단, 미소명금액이
+// MIN(순인출액×20%, 2억원)에 "미달"하면 전액 소명된 것으로 보아 산입하지 않는다 — 이 20%/2억원은
+// 미소명금액에서 빼는 공제가 아니라 산입 여부를 가르는 문턱이며, 문턱을 넘으면 미소명금액 전액이
+// 산입된다. 1년 기준·2년 기준은 서로 다른 별도 요건이므로 각각 독립적으로 계산해 더 큰 금액을
+// 채택한다(2년 누계에는 1년분이 이미 포함되어 있으므로 중복산입 방지).
+function computeDisposalBasisPresumed_(amount, selfDeposit, explained, thresholdAmount) {
+  const net = Math.max(0, (Number(amount) || 0) - (Number(selfDeposit) || 0));
+  if (net < thresholdAmount) return 0;
+  const unexplained = Math.max(0, net - (Number(explained) || 0));
+  const cutoff = Math.min(net * 0.2, 200000000);
+  return unexplained >= cutoff ? unexplained : 0;
+}
+function presumedInheritedFromDisposal_(item) {
+  item = item || {};
+  const oneYear = computeDisposalBasisPresumed_(item.oneYearAmount, item.oneYearSelfDeposit, item.oneYearExplained, 200000000);
+  const twoYear = computeDisposalBasisPresumed_(item.twoYearAmount, item.twoYearSelfDeposit, item.twoYearExplained, 500000000);
+  return Math.max(oneYear, twoYear);
 }
 
 // 상속공제 — 기초공제(2억)+인적공제 합계와 일괄공제(5억) 중 큰 금액 선택 (상증세법 §21)
@@ -3003,9 +3015,9 @@ function toolCalculateInheritanceTax(p) {
   const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
   const disposalPresumptionDetail = disposalItems.map(function (item) {
     return {
-      구분: item.category || '', 처분·차입금액: Number(item.disposalAmount) || 0, 소명금액: Number(item.explainedAmount) || 0,
-      금액기준충족: !!item.meetsThreshold,
-      추정상속재산가액: presumedInheritedFromDisposal_(item.disposalAmount, item.explainedAmount, item.meetsThreshold)
+      구분: item.category || '',
+      '1년이내_인출액': Number(item.oneYearAmount) || 0, '2년이내_인출액': Number(item.twoYearAmount) || 0,
+      추정상속재산가액: presumedInheritedFromDisposal_(item)
     };
   });
   const disposalPresumptionTotal = disposalPresumptionDetail.reduce(function (s, d) { return s + d.추정상속재산가액; }, 0);
