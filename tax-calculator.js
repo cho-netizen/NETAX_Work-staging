@@ -12,6 +12,9 @@ const taxCalcView = document.getElementById('taxCalcView');
 const taxCalcTransferPane = document.getElementById('taxCalcTransferPane');
 const taxCalcGiftPane = document.getElementById('taxCalcGiftPane');
 const taxCalcInheritancePane = document.getElementById('taxCalcInheritancePane');
+const taxCalcSimpleTransferPane = document.getElementById('taxCalcSimpleTransferPane');
+const taxCalcSimpleGiftPane = document.getElementById('taxCalcSimpleGiftPane');
+const taxCalcSimpleInheritancePane = document.getElementById('taxCalcSimpleInheritancePane');
 
 function won(n){
   return Number.isFinite(n) ? Math.round(n).toLocaleString('ko-KR') + '원' : '-';
@@ -21,6 +24,190 @@ function taxCalcResultRow(label, value, opts){
   opts = opts || {};
   const cls = 'taxcalc-result-row' + (opts.total ? ' total' : '');
   return '<div class="' + cls + '"><span>' + label + '</span><span class="v">' + value + '</span></div>';
+}
+
+// ============================================================
+// 증빙에서 AI 자동입력 — 기존 채팅(chat.js sendChatMessage)과 동일한 GAS_URL 대화 엔드포인트를
+// 화면(말풍선) 없이 단발성으로 호출한다. 백엔드는 이미 list_drive_folder/read_drive_file 도구를
+// 갖고 있으므로, context.currentPath(현재 탐색기 폴더)를 넘기고 "이 파일을 읽고 JSON만 답하라"고
+// 지시하면 대화 turn을 새로 만들지 않고도 값을 뽑아올 수 있다.
+// ============================================================
+async function runFolderAiExtraction(instructionText){
+  const payload = Object.assign({
+    messages: [{ role: 'user', content: instructionText }],
+    context: { currentPath: explorerPath }
+  }, (typeof buildAiSettingsPayload === 'function') ? buildAiSettingsPayload(false) : {});
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.reply || '';
+}
+
+// AI 답변 중 ```json 코드블록(없으면 첫 { ... } 블록)을 찾아 파싱한다. 못 찾으면 null.
+function extractJsonFromReply(text){
+  if (!text) return null;
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : (text.match(/\{[\s\S]*\}/) || [null])[0];
+  if (!candidate) return null;
+  try { return JSON.parse(candidate); } catch (e) { return null; }
+}
+
+// 증빙파일 선택 모달 — 현재 탐색기 폴더(explorerPath)의 파일 목록을 보여주고, 고르면 onPick(fileName)을 호출한다.
+function openEvidencePicker(onPick){
+  const overlay = document.getElementById('taxCalcEvidenceOverlay');
+  const listBox = document.getElementById('taxCalcEvidenceList');
+  const folderLabel = document.getElementById('taxCalcEvidenceFolderLabel');
+  folderLabel.textContent = explorerPath.length ? '📁 ' + explorerPath.join(' / ') + ' 폴더의 파일' : '⚠️ 먼저 탐색기에서 고객/사건 폴더를 여세요.';
+  listBox.innerHTML = '<div class="taxcalc-evidence-empty">불러오는 중…</div>';
+  overlay.style.display = 'flex';
+
+  if (!explorerPath.length){
+    listBox.innerHTML = '<div class="taxcalc-evidence-empty">사건 폴더가 선택되지 않았습니다.</div>';
+  } else {
+    listFolder(explorerPath).then(function(data){
+      const files = (data.files || []).filter(function(f){ return !/\.gdoc$|\.gsheet$/i.test(f.name); });
+      if (!files.length){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">이 폴더에 파일이 없습니다. 스캔해서 추가하세요.</div>'; return; }
+      listBox.innerHTML = files.map(function(f){
+        return '<div class="taxcalc-evidence-item"><span class="name">' + f.name.replace(/</g,'&lt;') + '</span>' +
+          '<button type="button" data-pick-file="' + f.name.replace(/"/g,'&quot;') + '">이 파일로 채우기</button></div>';
+      }).join('');
+      listBox.querySelectorAll('[data-pick-file]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          overlay.style.display = 'none';
+          onPick(btn.dataset.pickFile);
+        });
+      });
+    }).catch(function(err){
+      listBox.innerHTML = '<div class="taxcalc-evidence-empty">폴더 목록을 가져오지 못했습니다: ' + (err && err.message || err) + '</div>';
+    });
+  }
+
+  document.getElementById('btnCloseTaxCalcEvidence').onclick = function(){ overlay.style.display = 'none'; };
+  document.getElementById('btnTaxCalcEvidenceScan').onclick = function(){
+    overlay.style.display = 'none';
+    openScanModal();
+  };
+}
+
+// 거래(자산) 하나의 AI 자동입력 상태(_aiStatus: 'loading'|'done'|'error'|undefined)를 배지로 렌더링.
+function renderAiStatusHtml(vals){
+  const st = vals && vals._aiStatus;
+  if (st === 'loading') return '<span class="taxcalc-badge info">🤖 증빙 읽는 중…</span>';
+  if (st === 'error') return '<span class="taxcalc-badge danger">자동입력 실패</span><div class="taxcalc-ai-fields">' + (vals._aiError || '') + '</div>';
+  if (st === 'done') return '<span class="taxcalc-badge warning">AI 자동입력됨 · 확인 필요</span>' +
+    (vals._aiFilledFields && vals._aiFilledFields.length ? '<div class="taxcalc-ai-fields">채운 항목: ' + vals._aiFilledFields.join(', ') + (vals._aiFileName ? ' (출처: ' + vals._aiFileName + ')' : '') + '</div>' : '');
+  return '';
+}
+
+// 양도소득세 거래 1건을 증빙 파일 하나로 채운다(파일럿 — 다른 세목은 추후 확장).
+const TRANSFER_AI_FIELD_LABELS = {
+  transferPrice: '양도가액', acquisitionPrice: '취득가액', necessaryExpenses: '필요경비',
+  acquisitionDate: '취득일', transferDate: '양도일', assetType: '자산종류'
+};
+async function runAiAutoFillTransfer(fileName, idx){
+  const vals = transferAssets[idx];
+  vals._aiStatus = 'loading';
+  document.getElementById('aiStatus-' + idx).innerHTML = renderAiStatusHtml(vals);
+
+  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 그 안에서 양도소득세 계산에 필요한 값을 찾아서, ' +
+    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
+    '```json\n{"transferPrice": 숫자 또는 null, "acquisitionPrice": 숫자 또는 null, "necessaryExpenses": 숫자 또는 null, ' +
+    '"acquisitionDate": "YYYY-MM-DD 또는 null", "transferDate": "YYYY-MM-DD 또는 null", "assetType": "house 또는 other 또는 null"}\n```\n' +
+    '(transferPrice=양도가액, acquisitionPrice=취득가액, necessaryExpenses=취득세·중개보수 등 필요경비, assetType은 주택·조합원입주권이면 house, 그 외 부동산이면 other)';
+
+  try {
+    const reply = await runFolderAiExtraction(instruction);
+    const json = extractJsonFromReply(reply);
+    if (!json) throw new Error('AI 응답에서 값을 찾지 못했습니다. 응답: ' + reply.slice(0, 200));
+    const filled = [];
+    ['transferPrice','acquisitionPrice','necessaryExpenses','acquisitionDate','transferDate','assetType'].forEach(function(key){
+      if (json[key] !== null && json[key] !== undefined && json[key] !== '') {
+        vals[key] = json[key];
+        filled.push(TRANSFER_AI_FIELD_LABELS[key]);
+      }
+    });
+    if (!filled.length) throw new Error('문서에서 값을 찾지 못했습니다(전부 null) — 직접 입력하세요.');
+    vals._aiStatus = 'done';
+    vals._aiFilledFields = filled;
+    vals._aiFileName = fileName;
+  } catch (err) {
+    vals._aiStatus = 'error';
+    vals._aiError = err && err.message ? err.message : String(err);
+  }
+  renderTransferPane();
+}
+
+// 증여세·상속세 화면은 "거래 카드 배열"이 아니라 단일 폼이라, 화면 전체를 다시 그리지 않고
+// 해당 필드 DOM만 직접 채운 뒤 상태배지만 갱신한다(재렌더링하면 사용자가 이미 입력한 다른 값이 날아간다).
+async function runAiAutoFillForm(fileName, statusElId, instruction, fieldMap, fieldLabels){
+  const statusEl = document.getElementById(statusElId);
+  const state = { _aiStatus: 'loading' };
+  statusEl.innerHTML = renderAiStatusHtml(state);
+  try {
+    const reply = await runFolderAiExtraction(instruction);
+    const json = extractJsonFromReply(reply);
+    if (!json) throw new Error('AI 응답에서 값을 찾지 못했습니다. 응답: ' + reply.slice(0, 200));
+    const filled = [];
+    Object.keys(fieldMap).forEach(function(key){
+      if (json[key] !== null && json[key] !== undefined && json[key] !== '') {
+        const spec = fieldMap[key];
+        const el = document.getElementById(spec.id);
+        if (!el) return;
+        if (spec.type === 'checkbox') el.checked = !!json[key];
+        else el.value = json[key];
+        filled.push(fieldLabels[key] || key);
+      }
+    });
+    if (!filled.length) throw new Error('문서에서 값을 찾지 못했습니다(전부 null) — 직접 입력하세요.');
+    state._aiStatus = 'done'; state._aiFilledFields = filled; state._aiFileName = fileName;
+  } catch (err) {
+    state._aiStatus = 'error'; state._aiError = err && err.message ? err.message : String(err);
+  }
+  statusEl.innerHTML = renderAiStatusHtml(state);
+}
+
+const GIFT_AI_FIELD_MAP = {
+  giftAmount: { id: 'giftAmount', type: 'number' }, relation: { id: 'giftRelation', type: 'text' },
+  giftDate: { id: 'giftDate', type: 'date' }, debtAssumedAmount: { id: 'giftDebtAssumed', type: 'number' },
+  doneeName: { id: 'giftDoneeName', type: 'text' }, doneeRegNo: { id: 'giftDoneeRegNo', type: 'text' }, doneeAddress: { id: 'giftDoneeAddress', type: 'text' },
+  donorName: { id: 'giftDonorName', type: 'text' }, donorRegNo: { id: 'giftDonorRegNo', type: 'text' }, donorAddress: { id: 'giftDonorAddress', type: 'text' }
+};
+const GIFT_AI_FIELD_LABELS = {
+  giftAmount: '증여재산가액', relation: '관계', giftDate: '증여일자', debtAssumedAmount: '인수채무액',
+  doneeName: '수증자 성명', doneeRegNo: '수증자 주민등록번호', doneeAddress: '수증자 주소',
+  donorName: '증여자 성명', donorRegNo: '증여자 주민등록번호', donorAddress: '증여자 주소'
+};
+function runAiAutoFillGift(fileName){
+  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 증여세 신고에 필요한 값을 찾아서, ' +
+    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
+    '```json\n{"giftAmount": 숫자 또는 null, "relation": "배우자 또는 직계존속 또는 직계비속 또는 기타친족 또는 기타 또는 null(수증자 기준 증여자와의 관계)", ' +
+    '"giftDate": "YYYY-MM-DD 또는 null", "debtAssumedAmount": 숫자 또는 null(부담부증여로 수증자가 인수한 채무, 없으면 0), ' +
+    '"doneeName": "문자열 또는 null", "doneeRegNo": "문자열 또는 null", "doneeAddress": "문자열 또는 null", ' +
+    '"donorName": "문자열 또는 null", "donorRegNo": "문자열 또는 null", "donorAddress": "문자열 또는 null"}\n```';
+  return runAiAutoFillForm(fileName, 'aiStatus-gift', instruction, GIFT_AI_FIELD_MAP, GIFT_AI_FIELD_LABELS);
+}
+
+const INHERITANCE_AI_FIELD_MAP = {
+  childCount: { id: 'ihChildCount', type: 'number' }, hasSpouse: { id: 'ihHasSpouse', type: 'checkbox' },
+  reporterName: { id: 'ihReporterName', type: 'text' }, reporterRegNo: { id: 'ihReporterRegNo', type: 'text' }, reporterRelation: { id: 'ihReporterRelation', type: 'text' },
+  deceasedName: { id: 'ihDeceasedName', type: 'text' }, deceasedRegNo: { id: 'ihDeceasedRegNo', type: 'text' }, deathDate: { id: 'ihDeathDate', type: 'date' }
+};
+const INHERITANCE_AI_FIELD_LABELS = {
+  childCount: '자녀 수', hasSpouse: '배우자 유무', reporterName: '신고인 성명', reporterRegNo: '신고인 주민등록번호',
+  reporterRelation: '신고인과 피상속인 관계', deceasedName: '피상속인 성명', deceasedRegNo: '피상속인 주민등록번호', deathDate: '상속개시일'
+};
+function runAiAutoFillInheritance(fileName){
+  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 상속세 신고에 필요한 값을 찾아서, ' +
+    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘. ' +
+    '상속세과세가액(전체 세액계산 결과)은 이 도구가 별도로 계산하는 값이라 여기서 채우지 않는다 — 요청하지 말 것.\n' +
+    '```json\n{"childCount": 숫자 또는 null(피상속인의 자녀 수), "hasSpouse": true/false/null(배우자가 상속인에 포함되는지), ' +
+    '"reporterName": "문자열 또는 null(신고인=상속인 대표)", "reporterRegNo": "문자열 또는 null", "reporterRelation": "문자열 또는 null(예: 자녀, 배우자)", ' +
+    '"deceasedName": "문자열 또는 null(피상속인)", "deceasedRegNo": "문자열 또는 null", "deathDate": "YYYY-MM-DD 또는 null(상속개시일=사망일)"}\n```';
+  return runAiAutoFillForm(fileName, 'aiStatus-inheritance', instruction, INHERITANCE_AI_FIELD_MAP, INHERITANCE_AI_FIELD_LABELS);
 }
 
 // ---- 상속증여재산 평가(자산 목록) — 증여세·상속세 화면 공통 ----
@@ -307,16 +494,108 @@ function renderBuildingPriceResult(r){
   box.dataset.lastTotal = r.건물기준시가_합계;
 }
 
+// ============================================================
+// 간편계산 — 정밀계산과 같은 tax-calc.js 계산 함수를 그대로 쓰되, 증빙·AI 없이 최소 입력만 받아
+// 바로 결과를 보여준다. 정밀계산의 "빼기" 버전이라, 필드 이름도 정밀계산 쪽과 최대한 맞춰서
+// "정밀계산에서 자세히 보기" 전환 시 그대로 옮겨 쓸 수 있게 한다.
+// ============================================================
+let taxCalcTier = 'simple';
+let simpleTransferInput = {};
+let simpleGiftInput = {};
+let simpleInheritanceInput = {};
+
+function renderSimpleTransferPane(){
+  const box = document.getElementById('taxCalcSimpleTransferPane');
+  const v = simpleTransferInput;
+  box.innerHTML =
+    '<div class="taxcalc-hint">양도가액·취득가액·날짜만 넣으면 대략적인 양도소득세를 바로 계산합니다. 가산세·감면·다주택중과 같은 세부 옵션이 필요하면 정밀계산을 이용하세요.</div>' +
+    '<div class="taxcalc-simple-card">' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>자산종류</label><select id="simTrAssetType"><option value="other">그 외 부동산</option><option value="house">주택·조합원입주권</option></select></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="simTrTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="simTrAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="simTrExpenses" placeholder="원 (선택)"></div>' +
+        '<div class="taxcalc-field"><label>취득일</label><input type="date" id="simTrAcqDate"></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="simTrTrDate"></div>' +
+      '</div>' +
+      '<div class="taxcalc-field checkbox" style="margin-top:8px;"><input type="checkbox" id="simTrOneHouse"><label for="simTrOneHouse">1세대1주택 비과세 대상인 것 같다</label></div>' +
+      '<button type="button" class="taxcalc-run-btn" style="margin-top:14px;" data-action="run-simple-transfer">계산하기</button>' +
+    '</div>' +
+    '<div id="taxCalcSimpleTransferResult"></div>';
+  ['simTrAssetType','simTrTransferPrice','simTrAcquisitionPrice','simTrExpenses','simTrAcqDate','simTrTrDate'].forEach(function(id){
+    if (v[id] !== undefined) document.getElementById(id).value = v[id];
+  });
+  document.getElementById('simTrOneHouse').checked = !!v.simTrOneHouse;
+}
+
+function renderSimpleGiftPane(){
+  const box = document.getElementById('taxCalcSimpleGiftPane');
+  const v = simpleGiftInput;
+  box.innerHTML =
+    '<div class="taxcalc-hint">증여재산가액과 관계만 넣으면 대략적인 증여세를 바로 계산합니다. 부담부증여·각종 공제·감면이 필요하면 정밀계산을 이용하세요.</div>' +
+    '<div class="taxcalc-simple-card">' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>증여재산가액</label><input type="number" id="simGiAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="simGiRelation">' +
+          '<option value="배우자">배우자</option><option value="직계존속" selected>직계존속(부모 등→자녀)</option>' +
+          '<option value="직계비속">직계비속(자녀→부모)</option><option value="기타친족">기타친족</option><option value="기타">기타</option>' +
+        '</select></div>' +
+      '</div>' +
+      '<div class="taxcalc-field checkbox" style="margin-top:8px;"><input type="checkbox" id="simGiMinor"><label for="simGiMinor">수증자가 미성년자</label></div>' +
+      '<button type="button" class="taxcalc-run-btn" style="margin-top:14px;" data-action="run-simple-gift">계산하기</button>' +
+    '</div>' +
+    '<div id="taxCalcSimpleGiftResult"></div>';
+  if (v.simGiAmount !== undefined) document.getElementById('simGiAmount').value = v.simGiAmount;
+  if (v.simGiRelation !== undefined) document.getElementById('simGiRelation').value = v.simGiRelation;
+  document.getElementById('simGiMinor').checked = !!v.simGiMinor;
+}
+
+function renderSimpleInheritancePane(){
+  const box = document.getElementById('taxCalcSimpleInheritancePane');
+  const v = simpleInheritanceInput;
+  box.innerHTML =
+    '<div class="taxcalc-hint">상속세과세가액(공과금·장례비용·채무를 이미 뺀 금액)과 가족구성만 넣으면 대략적인 상속세를 바로 계산합니다. 가업상속·동거주택 등 각종 공제가 필요하면 정밀계산을 이용하세요.</div>' +
+    '<div class="taxcalc-simple-card">' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>상속세과세가액</label><input type="number" id="simIhEstate" placeholder="원 (공과금·장례비·채무 차감 후)"></div>' +
+        '<div class="taxcalc-field"><label>자녀 수</label><input type="number" id="simIhChildCount" placeholder="명"></div>' +
+      '</div>' +
+      '<div class="taxcalc-field checkbox" style="margin-top:8px;"><input type="checkbox" id="simIhHasSpouse"><label for="simIhHasSpouse">배우자가 상속인에 포함</label></div>' +
+      '<button type="button" class="taxcalc-run-btn" style="margin-top:14px;" data-action="run-simple-inheritance">계산하기</button>' +
+    '</div>' +
+    '<div id="taxCalcSimpleInheritanceResult"></div>';
+  if (v.simIhEstate !== undefined) document.getElementById('simIhEstate').value = v.simIhEstate;
+  if (v.simIhChildCount !== undefined) document.getElementById('simIhChildCount').value = v.simIhChildCount;
+  document.getElementById('simIhHasSpouse').checked = !!v.simIhHasSpouse;
+}
+
+function renderSimpleResult(boxId, r, figureLabel, switchAction){
+  const box = document.getElementById(boxId);
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  const total = r.납부세액_합계 !== undefined ? r.납부세액_합계 : r.납부세액;
+  box.innerHTML =
+    '<div class="taxcalc-simple-result">' +
+      '<div class="figure-label">' + figureLabel + '</div>' +
+      '<div class="figure">' + won(total) + '</div>' +
+      '<div class="taxcalc-simple-switch">' +
+        '<span>실제 신고 전엔 반드시 정밀계산·홈택스 모의계산으로 재확인하세요.</span>' +
+        '<button type="button" class="taxcalc-calcbasis-btn" data-action="' + switchAction + '">정밀계산에서 자세히 보기 →</button>' +
+      '</div>' +
+    '</div>';
+}
+
 function renderTransferPane(){
   const cardsHtml = transferAssets.map(function(_, idx){
     return '' +
       '<div class="taxcalc-asset" data-idx="' + idx + '">' +
         '<div class="taxcalc-asset-head"><b>거래 ' + (idx+1) + '</b>' +
           '<span>' +
+            '<button type="button" class="taxcalc-ai-btn" data-action="open-evidence-transfer" data-idx="' + idx + '">🤖 증빙에서 자동 입력</button>' +
             '<button type="button" class="taxcalc-calcbasis-btn" data-action="show-calc-basis" data-idx="' + idx + '">🧮 계산근거</button>' +
             (transferAssets.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-asset" data-idx="' + idx + '">✕ 삭제</button>' : '') +
           '</span>' +
         '</div>' +
+        '<div class="taxcalc-ai-status" id="aiStatus-' + idx + '">' + renderAiStatusHtml(transferAssets[idx]) + '</div>' +
         '<div class="taxcalc-calcbasis" id="calcBasis-' + idx + '" style="display:none;"></div>' +
         '<div class="taxcalc-grid">' +
           '<div class="taxcalc-field"><label>자산종류</label><select data-field="assetType"><option value="other">그 외 부동산</option><option value="house">주택·조합원입주권</option></select></div>' +
@@ -604,7 +883,10 @@ function renderGiftPane(){
     '<div class="taxcalc-asset-head"><b>[부표1] 증여재산 및 평가명세 — 자산을 추가하면 아래 증여재산가액에 반영할 수 있습니다</b></div>' +
     '<div id="giftValuationList"></div>' +
     '<div class="taxcalc-asset">' +
-      '<div class="taxcalc-asset-head"><b>증여재산 · 관계</b></div>' +
+      '<div class="taxcalc-asset-head"><b>증여재산 · 관계</b>' +
+        '<span><button type="button" class="taxcalc-ai-btn" data-action="open-evidence-gift">🤖 증빙에서 자동 입력</button></span>' +
+      '</div>' +
+      '<div class="taxcalc-ai-status" id="aiStatus-gift"></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>증여재산가액</label><input type="number" id="giftAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="giftRelation">' +
@@ -1026,7 +1308,10 @@ function renderInheritancePane(){
       }).join('') +
     '</div>' +
     '<div class="taxcalc-asset">' +
-      '<div class="taxcalc-asset-head"><b>과세가액 · 인적공제</b></div>' +
+      '<div class="taxcalc-asset-head"><b>과세가액 · 인적공제</b>' +
+        '<span><button type="button" class="taxcalc-ai-btn" data-action="open-evidence-inheritance">🤖 증빙에서 자동 입력</button></span>' +
+      '</div>' +
+      '<div class="taxcalc-ai-status" id="aiStatus-inheritance"></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>상속세과세가액</label><input type="number" id="ihEstate" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>비과세재산가액(§12)</label><input type="number" id="ihNonTaxable" placeholder="원 (국가등 유증·금양임야 등, 없으면 비움)"></div>' +
@@ -1309,6 +1594,21 @@ function openTaxCalcView(){
   renderTransferPane();
   renderGiftPane();
   renderInheritancePane();
+  renderSimpleTransferPane();
+  renderSimpleGiftPane();
+  renderSimpleInheritancePane();
+}
+
+// 현재 (탭, 계층) 조합에 맞는 화면만 보이게 한다. 탭·계층 버튼 둘 다 이 함수를 거친다.
+function updateTaxCalcPaneVisibility(){
+  const which = document.querySelector('.taxcalc-tab.active').dataset.tab;
+  const showSimple = taxCalcTier === 'simple';
+  taxCalcSimpleTransferPane.style.display = (showSimple && which === 'transfer') ? 'block' : 'none';
+  taxCalcSimpleGiftPane.style.display = (showSimple && which === 'gift') ? 'block' : 'none';
+  taxCalcSimpleInheritancePane.style.display = (showSimple && which === 'inheritance') ? 'block' : 'none';
+  taxCalcTransferPane.style.display = (!showSimple && which === 'transfer') ? 'block' : 'none';
+  taxCalcGiftPane.style.display = (!showSimple && which === 'gift') ? 'block' : 'none';
+  taxCalcInheritancePane.style.display = (!showSimple && which === 'inheritance') ? 'block' : 'none';
 }
 
 function closeTaxCalcView(){
@@ -1325,10 +1625,16 @@ document.querySelectorAll('.taxcalc-tab').forEach(function(tab){
   tab.addEventListener('click', function(){
     document.querySelectorAll('.taxcalc-tab').forEach(function(t){ t.classList.remove('active'); });
     tab.classList.add('active');
-    const which = tab.dataset.tab;
-    taxCalcTransferPane.style.display = which === 'transfer' ? 'block' : 'none';
-    taxCalcGiftPane.style.display = which === 'gift' ? 'block' : 'none';
-    taxCalcInheritancePane.style.display = which === 'inheritance' ? 'block' : 'none';
+    updateTaxCalcPaneVisibility();
+  });
+});
+
+document.querySelectorAll('#taxCalcTierTabs [data-tier]').forEach(function(tab){
+  tab.addEventListener('click', function(){
+    document.querySelectorAll('#taxCalcTierTabs [data-tier]').forEach(function(t){ t.classList.remove('tier-on'); });
+    tab.classList.add('tier-on');
+    taxCalcTier = tab.dataset.tier;
+    updateTaxCalcPaneVisibility();
   });
 });
 
@@ -1361,6 +1667,13 @@ taxCalcView.addEventListener('click', function(e){
     const total = assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0);
     if (target === 'giftValuationList') document.getElementById('giftAmount').value = total;
     else document.getElementById('ihEstate').value = total;
+  } else if (action === 'open-evidence-transfer'){
+    const idx = Number(btn.dataset.idx);
+    openEvidencePicker(function(fileName){ runAiAutoFillTransfer(fileName, idx); });
+  } else if (action === 'open-evidence-gift'){
+    openEvidencePicker(function(fileName){ runAiAutoFillGift(fileName); });
+  } else if (action === 'open-evidence-inheritance'){
+    openEvidencePicker(function(fileName){ runAiAutoFillInheritance(fileName); });
   } else if (action === 'show-calc-basis'){
     const idx = Number(btn.dataset.idx);
     const box = document.getElementById('calcBasis-' + idx);
@@ -1453,6 +1766,75 @@ taxCalcView.addEventListener('click', function(e){
     transferAssets.push({ acquisitionPrice: total });
     buildingPriceShown = true;
     renderTransferPane();
+  } else if (action === 'run-simple-transfer'){
+    simpleTransferInput = {
+      simTrAssetType: document.getElementById('simTrAssetType').value,
+      simTrTransferPrice: document.getElementById('simTrTransferPrice').value,
+      simTrAcquisitionPrice: document.getElementById('simTrAcquisitionPrice').value,
+      simTrExpenses: document.getElementById('simTrExpenses').value,
+      simTrAcqDate: document.getElementById('simTrAcqDate').value,
+      simTrTrDate: document.getElementById('simTrTrDate').value,
+      simTrOneHouse: document.getElementById('simTrOneHouse').checked
+    };
+    const r = calculateTransferTaxSingleJS({
+      assetType: simpleTransferInput.simTrAssetType,
+      transferPrice: Number(simpleTransferInput.simTrTransferPrice) || 0,
+      acquisitionPrice: Number(simpleTransferInput.simTrAcquisitionPrice) || 0,
+      necessaryExpenses: Number(simpleTransferInput.simTrExpenses) || 0,
+      acquisitionDate: simpleTransferInput.simTrAcqDate,
+      transferDate: simpleTransferInput.simTrTrDate,
+      isOneHouseOneFamily: simpleTransferInput.simTrOneHouse
+    });
+    renderSimpleResult('taxCalcSimpleTransferResult', r, '예상 납부세액(지방소득세 포함)', 'switch-precise-transfer');
+  } else if (action === 'switch-precise-transfer'){
+    transferAssets[0] = {
+      assetType: simpleTransferInput.simTrAssetType, transferPrice: simpleTransferInput.simTrTransferPrice,
+      acquisitionPrice: simpleTransferInput.simTrAcquisitionPrice, necessaryExpenses: simpleTransferInput.simTrExpenses,
+      acquisitionDate: simpleTransferInput.simTrAcqDate, transferDate: simpleTransferInput.simTrTrDate,
+      isOneHouseOneFamily: simpleTransferInput.simTrOneHouse
+    };
+    renderTransferPane();
+    taxCalcTier = 'precise';
+    document.querySelectorAll('#taxCalcTierTabs [data-tier]').forEach(function(t){ t.classList.toggle('tier-on', t.dataset.tier === 'precise'); });
+    updateTaxCalcPaneVisibility();
+  } else if (action === 'run-simple-gift'){
+    simpleGiftInput = {
+      simGiAmount: document.getElementById('simGiAmount').value,
+      simGiRelation: document.getElementById('simGiRelation').value,
+      simGiMinor: document.getElementById('simGiMinor').checked
+    };
+    const r = calculateGiftTaxJS({
+      giftAmount: Number(simpleGiftInput.simGiAmount) || 0, relation: simpleGiftInput.simGiRelation, isMinor: simpleGiftInput.simGiMinor
+    });
+    renderSimpleResult('taxCalcSimpleGiftResult', r, '예상 납부세액', 'switch-precise-gift');
+  } else if (action === 'switch-precise-gift'){
+    renderGiftPane();
+    document.getElementById('giftAmount').value = simpleGiftInput.simGiAmount || '';
+    document.getElementById('giftRelation').value = simpleGiftInput.simGiRelation || '직계존속';
+    document.getElementById('giftIsMinor').checked = !!simpleGiftInput.simGiMinor;
+    taxCalcTier = 'precise';
+    document.querySelectorAll('#taxCalcTierTabs [data-tier]').forEach(function(t){ t.classList.toggle('tier-on', t.dataset.tier === 'precise'); });
+    updateTaxCalcPaneVisibility();
+  } else if (action === 'run-simple-inheritance'){
+    simpleInheritanceInput = {
+      simIhEstate: document.getElementById('simIhEstate').value,
+      simIhChildCount: document.getElementById('simIhChildCount').value,
+      simIhHasSpouse: document.getElementById('simIhHasSpouse').checked
+    };
+    const r = calculateInheritanceTaxJS({
+      taxableEstateAmount: Number(simpleInheritanceInput.simIhEstate) || 0,
+      childCount: Number(simpleInheritanceInput.simIhChildCount) || 0,
+      hasSpouse: simpleInheritanceInput.simIhHasSpouse
+    });
+    renderSimpleResult('taxCalcSimpleInheritanceResult', r, '예상 납부세액', 'switch-precise-inheritance');
+  } else if (action === 'switch-precise-inheritance'){
+    renderInheritancePane();
+    document.getElementById('ihEstate').value = simpleInheritanceInput.simIhEstate || '';
+    document.getElementById('ihChildCount').value = simpleInheritanceInput.simIhChildCount || '';
+    document.getElementById('ihHasSpouse').checked = !!simpleInheritanceInput.simIhHasSpouse;
+    taxCalcTier = 'precise';
+    document.querySelectorAll('#taxCalcTierTabs [data-tier]').forEach(function(t){ t.classList.toggle('tier-on', t.dataset.tier === 'precise'); });
+    updateTaxCalcPaneVisibility();
   } else if (action === 'run-transfer'){
     const inputs = transferAssets.map(collectTransferInput);
     const filingParams = {

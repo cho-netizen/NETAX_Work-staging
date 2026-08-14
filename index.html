@@ -805,64 +805,152 @@
   .calc-del:hover{ color:#a83232; }
 
   /* ===== 정밀 세액계산기 (항목별 입력폼, 수식 문자열 없음) ===== */
-  .taxcalc-tabs{ display:flex; gap:0; border-bottom:1px solid var(--line); padding:0 14px; flex-shrink:0; }
+  :root{
+    --taxcalc-border:#a9b0bd; --taxcalc-border-strong:#8b93a3; --taxcalc-hint:#4b5563; --taxcalc-faint:#7a8496;
+    --taxcalc-chip-bg:#eef0f4; --taxcalc-chip-bg-hover:#e2e5eb; --taxcalc-result-bg:#f3f5f8;
+    --taxcalc-basis-bg:#eceef2; --taxcalc-gold-deep:#93712a;
+    --taxcalc-success:#1f7a4d; --taxcalc-success-bg:#e4f3ea;
+    --taxcalc-warning:#b45309; --taxcalc-warning-bg:#fbeedf;
+    --taxcalc-danger:#b3261e;  --taxcalc-danger-bg:#fbe7e5;
+    --taxcalc-info:#2b5c8a;    --taxcalc-info-bg:#e7eef6;
+    --taxcalc-radius-s:4px; --taxcalc-radius-m:8px; --taxcalc-radius-l:14px;
+  }
+  body.dark-mode{
+    --taxcalc-border:#4c5468; --taxcalc-border-strong:#636c82; --taxcalc-hint:#c3c9d3; --taxcalc-faint:#7d869a;
+    --taxcalc-chip-bg:#2a2f3d; --taxcalc-chip-bg-hover:#333a4a; --taxcalc-result-bg:#232735;
+    --taxcalc-basis-bg:#1f2330; --taxcalc-gold-deep:#c8a244;
+    --taxcalc-success:#49b37e; --taxcalc-success-bg:#173226;
+    --taxcalc-warning:#e0a050; --taxcalc-warning-bg:#3a2a15;
+    --taxcalc-danger:#e8746b;  --taxcalc-danger-bg:#3b1e1d;
+    --taxcalc-info:#7da9d6;    --taxcalc-info-bg:#1b2c3e;
+  }
+  .taxcalc-tabs{ display:flex; gap:0; border-bottom:1px solid var(--taxcalc-border); padding:0 14px; flex-shrink:0; }
   .taxcalc-tab{
     background:none; border:none; border-bottom:2px solid transparent; padding:10px 14px;
-    font-family:inherit; font-size:13px; font-weight:700; color:var(--sub); cursor:pointer;
+    font-family:inherit; font-size:13px; font-weight:700; color:var(--ink); opacity:0.7; cursor:pointer;
   }
-  .taxcalc-tab.active{ color:var(--navy); border-bottom-color:var(--gold); }
+  .taxcalc-tab.active{ color:var(--navy); opacity:1; border-bottom-color:var(--gold); }
   body.dark-mode .taxcalc-tab.active{ color:var(--gold-light); }
   .taxcalc-body{ flex:1; overflow-y:auto; padding:14px; }
-  .taxcalc-hint{ font-size:11.5px; color:var(--sub); margin-bottom:12px; line-height:1.5; }
-  .taxcalc-asset{ border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; background:var(--panel); }
+  .taxcalc-hint{ font-size:12px; color:var(--taxcalc-hint); margin-bottom:12px; line-height:1.55; }
+  .taxcalc-asset{ border:1px solid var(--taxcalc-border); border-radius:10px; padding:12px; margin-bottom:12px; background:var(--panel); }
   .taxcalc-asset-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-  .taxcalc-asset-head b{ font-size:12.5px; color:var(--sub); }
+  .taxcalc-asset-head b{ font-size:13px; font-weight:800; color:var(--ink); }
   .taxcalc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:8px 10px; }
   .taxcalc-field{ display:flex; flex-direction:column; gap:3px; }
-  .taxcalc-field label{ font-size:11.5px; color:var(--sub); }
+  .taxcalc-field label{ font-size:12px; font-weight:600; color:var(--ink); }
   .taxcalc-field input, .taxcalc-field select{
-    border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-family:inherit;
+    border:1px solid var(--taxcalc-border); border-radius:6px; padding:6px 8px; font-family:inherit;
     font-size:13px; box-sizing:border-box; background:var(--panel); color:var(--ink);
   }
+  .taxcalc-field input::placeholder{ color:var(--taxcalc-hint); opacity:0.85; }
+  .taxcalc-field input:focus, .taxcalc-field select:focus{ outline:none; border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
   .taxcalc-field.checkbox{ flex-direction:row; align-items:center; gap:6px; }
-  .taxcalc-field.checkbox label{ font-size:12.5px; color:var(--ink); }
+  .taxcalc-field.checkbox label{ font-size:12.5px; font-weight:600; color:var(--ink); }
   .taxcalc-field.checkbox input{ width:15px; height:15px; accent-color:var(--gold); }
-  .taxcalc-del-asset{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:12.5px; }
-  .taxcalc-del-asset:hover{ color:#a83232; }
-  .taxcalc-asset-head span{ display:flex; gap:10px; align-items:center; }
-  .taxcalc-calcbasis-btn{ background:none; border:none; color:var(--sub); cursor:pointer; font-size:12.5px; }
-  .taxcalc-calcbasis-btn:hover{ color:var(--navy); }
+  .taxcalc-del-asset{
+    background:var(--taxcalc-chip-bg); border:1px solid var(--taxcalc-border); border-radius:6px;
+    color:var(--ink); cursor:pointer; font-size:12px; padding:4px 8px;
+  }
+  .taxcalc-del-asset:hover{ color:#fff; background:#a83232; border-color:#a83232; }
+  .taxcalc-asset-head span{ display:flex; gap:8px; align-items:center; }
+  .taxcalc-calcbasis-btn{
+    background:var(--taxcalc-chip-bg); border:1px solid var(--taxcalc-border); border-radius:6px;
+    color:var(--ink); cursor:pointer; font-size:12px; font-weight:600; padding:4px 8px;
+  }
+  .taxcalc-calcbasis-btn:hover{ background:var(--taxcalc-chip-bg-hover); border-color:var(--gold); color:var(--navy); }
   body.dark-mode .taxcalc-calcbasis-btn:hover{ color:var(--gold-light); }
   .taxcalc-calcbasis{
-    margin:-2px 0 10px; padding:10px 12px; border-radius:8px; background:#f3f4f6;
-    font-size:12px; line-height:1.7; font-variant-numeric:tabular-nums;
+    margin:-2px 0 10px; padding:10px 12px; border-radius:8px; background:var(--taxcalc-basis-bg);
+    border:1px solid var(--taxcalc-border); font-size:12.5px; line-height:1.7; font-variant-numeric:tabular-nums;
   }
-  body.dark-mode .taxcalc-calcbasis{ background:#1a1d26; }
-  .taxcalc-calcbasis-title{ font-weight:700; color:var(--sub); margin-bottom:4px; }
+  .taxcalc-calcbasis-title{ font-weight:800; color:var(--ink); margin-bottom:4px; }
   .taxcalc-calcbasis-line{ color:var(--ink); word-break:break-all; }
   .taxcalc-add-asset{
-    width:100%; padding:10px; border:1px dashed var(--line); border-radius:8px; background:none;
-    color:var(--sub); font-family:inherit; font-size:12.5px; cursor:pointer; margin-bottom:14px;
+    width:100%; padding:10px; border:1px dashed var(--taxcalc-border-strong); border-radius:8px; background:var(--taxcalc-chip-bg);
+    color:var(--ink); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:14px;
   }
-  .taxcalc-add-asset:hover{ border-color:var(--gold); color:var(--navy); }
+  .taxcalc-add-asset:hover{ border-color:var(--gold); background:var(--taxcalc-chip-bg-hover); color:var(--navy); }
   body.dark-mode .taxcalc-add-asset:hover{ color:var(--gold-light); }
   .taxcalc-run-btn{
     width:100%; padding:11px; border:none; border-radius:8px; background:var(--navy); color:#fff;
     font-family:inherit; font-size:13.5px; font-weight:700; cursor:pointer; margin-bottom:14px;
   }
   .taxcalc-run-btn:hover{ background:var(--navy-deep); }
-  .taxcalc-result{ border:1px solid var(--line); border-radius:10px; padding:14px; background:#f9fafb; }
-  body.dark-mode .taxcalc-result{ background:#20242f; }
+  body.dark-mode .taxcalc-run-btn{ background:var(--gold); color:var(--navy-deep); }
+  body.dark-mode .taxcalc-run-btn:hover{ background:var(--gold-light); }
+  .taxcalc-result{ border:1px solid var(--taxcalc-border); border-radius:10px; padding:14px; background:var(--taxcalc-result-bg); }
   .taxcalc-result-row{
-    display:flex; justify-content:space-between; padding:5px 0; font-size:13px;
-    border-bottom:1px solid rgba(0,0,0,0.06);
+    display:flex; justify-content:space-between; gap:10px; padding:6px 0; font-size:13px; color:var(--ink);
+    border-bottom:1px solid var(--taxcalc-border);
   }
-  body.dark-mode .taxcalc-result-row{ border-bottom-color:rgba(255,255,255,0.06); }
+  .taxcalc-result-row span:first-child{ color:var(--ink); }
   .taxcalc-result-row.total{ font-weight:800; font-size:15px; color:var(--navy); border-bottom:none; padding-top:10px; }
   body.dark-mode .taxcalc-result-row.total{ color:var(--gold-light); }
-  .taxcalc-result-row .v{ font-variant-numeric:tabular-nums; }
-  .taxcalc-result-note{ font-size:11.5px; color:var(--sub); margin-top:10px; line-height:1.5; }
-  .taxcalc-error{ color:#a83232; font-size:13px; font-weight:600; padding:10px; }
+  .taxcalc-result-row .v{ font-variant-numeric:tabular-nums; font-weight:700; }
+  .taxcalc-result-note{ font-size:12px; color:var(--taxcalc-hint); margin-top:10px; line-height:1.55; }
+  .taxcalc-error{ color:#d64545; font-size:13px; font-weight:700; padding:10px; }
+  body.dark-mode .taxcalc-error{ color:#ff8080; }
+
+  /* 상태 배지 */
+  .taxcalc-badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 8px; border-radius:99px; }
+  .taxcalc-badge::before{ content:""; width:6px; height:6px; border-radius:50%; background:currentColor; flex:none; }
+  .taxcalc-badge.success{ background:var(--taxcalc-success-bg); color:var(--taxcalc-success); }
+  .taxcalc-badge.warning{ background:var(--taxcalc-warning-bg); color:var(--taxcalc-warning); }
+  .taxcalc-badge.danger{ background:var(--taxcalc-danger-bg); color:var(--taxcalc-danger); }
+  .taxcalc-badge.info{ background:var(--taxcalc-info-bg); color:var(--taxcalc-info); }
+
+  /* 증빙에서 AI 자동입력 — 버튼 · 상태배너 · 파일선택 모달 */
+  .taxcalc-ai-btn{
+    background:var(--taxcalc-info-bg); border:1px solid var(--taxcalc-info); border-radius:6px;
+    color:var(--taxcalc-info); cursor:pointer; font-size:12px; font-weight:700; padding:4px 8px;
+  }
+  .taxcalc-ai-btn:hover{ background:var(--taxcalc-info); color:#fff; }
+  .taxcalc-ai-btn[disabled]{ opacity:0.5; cursor:not-allowed; }
+  .taxcalc-ai-status{ margin-bottom:8px; }
+  .taxcalc-ai-status .taxcalc-badge{ margin-right:6px; }
+  .taxcalc-ai-fields{ font-size:11.5px; color:var(--taxcalc-hint); margin-top:4px; }
+
+  .taxcalc-evidence-list{ display:flex; flex-direction:column; gap:6px; margin:10px 0; max-height:280px; overflow-y:auto; }
+  .taxcalc-evidence-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px;
+    border:1px solid var(--taxcalc-border); border-radius:var(--taxcalc-radius-s); background:var(--panel);
+  }
+  .taxcalc-evidence-item .name{ font-size:12.5px; color:var(--ink); word-break:break-all; }
+  .taxcalc-evidence-item button{
+    flex:none; background:var(--navy); color:#fff; border:none; border-radius:6px; font-family:inherit;
+    font-size:11.5px; font-weight:700; padding:5px 10px; cursor:pointer;
+  }
+  body.dark-mode .taxcalc-evidence-item button{ background:var(--gold); color:var(--navy-deep); }
+  .taxcalc-evidence-empty{ font-size:12.5px; color:var(--taxcalc-hint); padding:14px 4px; text-align:center; }
+  .taxcalc-evidence-scan-btn{
+    width:100%; padding:9px; border:1px dashed var(--taxcalc-border-strong); border-radius:var(--taxcalc-radius-s);
+    background:var(--taxcalc-chip-bg); color:var(--ink); font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
+  }
+  .taxcalc-evidence-scan-btn:hover{ border-color:var(--gold); }
+
+  /* 간편계산 / 정밀계산 전환 탭 */
+  .taxcalc-tier-tabs{ display:inline-flex; border:1px solid var(--taxcalc-border-strong); border-radius:99px; padding:3px; gap:2px; background:var(--panel); }
+  .taxcalc-tier-tabs button{
+    font-family:inherit; font-size:12px; font-weight:700; padding:6px 14px; border-radius:99px; border:none;
+    background:none; color:var(--ink); opacity:0.65; cursor:pointer;
+  }
+  .taxcalc-tier-tabs button.tier-on{ background:var(--navy); color:#fff; opacity:1; }
+  body.dark-mode .taxcalc-tier-tabs button.tier-on{ background:var(--gold); color:var(--navy-deep); }
+
+  /* 간편계산 화면 */
+  .taxcalc-simple-card{ border:1px solid var(--taxcalc-border); border-radius:var(--taxcalc-radius-l); background:var(--panel); padding:18px; max-width:480px; }
+  .taxcalc-simple-result{
+    border:1px solid var(--taxcalc-border-strong); border-radius:var(--taxcalc-radius-l); background:var(--taxcalc-result-bg);
+    padding:20px; margin-top:16px; max-width:480px; text-align:center;
+  }
+  .taxcalc-simple-result .figure{ font-size:30px; font-weight:800; color:var(--navy); font-variant-numeric:tabular-nums; letter-spacing:-0.3px; }
+  body.dark-mode .taxcalc-simple-result .figure{ color:var(--gold-light); }
+  .taxcalc-simple-result .figure-label{ font-size:12px; color:var(--taxcalc-hint); margin-bottom:4px; }
+  .taxcalc-simple-switch{
+    margin-top:14px; padding-top:14px; border-top:1px solid var(--taxcalc-border); font-size:12px; color:var(--taxcalc-hint);
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
 
   /* ===== 관계도/구조도 캔버스 ===== */
   .diagram-split{ flex:1; display:flex; min-height:0; }
@@ -1555,8 +1643,12 @@ graph TD
       <div id="taxCalcView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnTaxCalcBack" title="닫기">✕</button>
-          <span class="editor-filename">정밀 세액계산기</span>
+          <span class="editor-filename">세액계산기</span>
           <div class="spacer"></div>
+          <div class="taxcalc-tier-tabs" id="taxCalcTierTabs">
+            <button type="button" class="tier-on" data-tier="simple">간편계산</button>
+            <button type="button" data-tier="precise">정밀계산(증빙+AI)</button>
+          </div>
         </div>
         <div class="taxcalc-tabs">
           <button type="button" class="taxcalc-tab active" data-tab="transfer">양도소득세</button>
@@ -1564,9 +1656,27 @@ graph TD
           <button type="button" class="taxcalc-tab" data-tab="inheritance">상속세</button>
         </div>
         <div class="taxcalc-body">
-          <div id="taxCalcTransferPane" class="taxcalc-pane"></div>
+          <div id="taxCalcSimpleTransferPane" class="taxcalc-pane"></div>
+          <div id="taxCalcSimpleGiftPane" class="taxcalc-pane" style="display:none;"></div>
+          <div id="taxCalcSimpleInheritancePane" class="taxcalc-pane" style="display:none;"></div>
+          <div id="taxCalcTransferPane" class="taxcalc-pane" style="display:none;"></div>
           <div id="taxCalcGiftPane" class="taxcalc-pane" style="display:none;"></div>
           <div id="taxCalcInheritancePane" class="taxcalc-pane" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- 증빙에서 AI 자동입력 — 현재 사건 폴더의 파일을 골라 AI가 읽고 계산기 필드를 채운다 -->
+      <div class="modal-overlay" id="taxCalcEvidenceOverlay" style="display:none;">
+        <div class="modal-panel" style="width:min(440px, 92vw);">
+          <div class="modal-head">
+            <span>증빙에서 자동 입력</span>
+            <span class="modal-close" id="btnCloseTaxCalcEvidence" title="닫기">✕</span>
+          </div>
+          <div class="modal-body">
+            <div class="modal-hint" id="taxCalcEvidenceFolderLabel"></div>
+            <div id="taxCalcEvidenceList" class="taxcalc-evidence-list"></div>
+            <button type="button" class="taxcalc-evidence-scan-btn" id="btnTaxCalcEvidenceScan">📷 지금 스캔해서 추가하기</button>
+          </div>
         </div>
       </div>
 
