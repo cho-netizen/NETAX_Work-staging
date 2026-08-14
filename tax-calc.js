@@ -1549,4 +1549,12 @@
   window.calculateRentalConversionValueJS = function (annualRent, deposit) {
     return Math.round((Number(annualRent) || 0) / 0.12 + (Number(deposit) || 0));
   };
+
+  // 영업권 평가 (§64, 시행령 §59②, 시행규칙 §17의3) — 최근 3년간 순손익액의 가중평균(1년전×3+2년전×2+3년전×1)/6의
+  // 50%가 자기자본의 정상수익률(10%)을 초과하는 부분을, 영업권 지속연수 5년에 대한 10% 연금현가계수(3.79079)로 현재가치화한다.
+  window.calculateGoodwillValueJS = function (netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, selfCapital) {
+    const weightedNetProfit = ((Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1) / 6;
+    const excessProfit = Math.max(0, weightedNetProfit * 0.5 - (Number(selfCapital) || 0) * 0.1);
+    return Math.round(excessProfit * 3.79079);
+  };
 })();

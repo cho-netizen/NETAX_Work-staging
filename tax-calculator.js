@@ -589,22 +589,40 @@ let inheritanceValuationAssets = [];
 
 const VALUATION_METHOD_LABELS = {
   direct: '직접입력(시가·감정가액·매매사례가액 등)',
-  land: '토지(개별공시지가 × 면적 × 지분)',
-  house: '단독주택(고시된 개별주택가격 × 지분)',
-  apartment: '공동주택/아파트(고시된 공동주택가격 × 지분)',
-  officetel: '오피스텔·상업용건물(고시된 기준시가 × 지분)',
+  land: '토지(개별공시지가 × 면적)',
+  house: '단독주택(고시된 개별주택가격)',
+  apartment: '공동주택/아파트(고시된 공동주택가격)',
+  officetel: '오피스텔·상업용건물(고시된 기준시가)',
   listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
   unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
-  rental: '임대 중인 부동산(임대료환산가액)'
+  rental: '임대 중인 부동산(임대료환산가액)',
+  goodwill: '영업권(§64, 초과이익의 5년 현재가치)'
 };
-
+// 지분은 평가방법과 무관하게 모든 자산에 공통으로 적용되는 별도 항목이다(예: 확인된 시가가 그 자체로
+// 100% 평가액인 자산도 있고, 매매실례가액 등에 피상속인 지분을 곱해야 하는 자산도 있다 — 그 구분은
+// "평가방법"이 아니라 "이 자산에서 피상속인 지분이 몇 %인가"의 문제이므로, 방법과 상관없이 한 자리에서만 받는다).
+// 주식류(listedStock/unlistedStock)는 보유수량·보유주식수 자체가 이미 지분을 반영하므로 별도로 곱하지 않는다.
+const VALUATION_RATIO_EXEMPT_METHODS = ['listedStock', 'unlistedStock'];
+// 임대료환산가액(상증세법§61⑤)은 개별 임대차(호실별 보증금·월세)를 전부 더한 합계로 계산해야 한다 —
+// 집계된 금액을 손으로 입력받지 말고, 임대차 건을 하나씩 입력받아 시스템이 자동으로 합산한다.
+function computeRentalLeaseTotals_(leases){
+  const list = Array.isArray(leases) ? leases : [];
+  const deposit = list.reduce(function(s, l){ return s + (numVal(l.deposit) || 0); }, 0);
+  const annualRent = list.reduce(function(s, l){ return s + (numVal(l.monthlyRent) || 0) * 12; }, 0);
+  return { deposit: deposit, annualRent: annualRent };
+}
 function computeValuationAssetValue(a){
   let value;
   switch (a.method){
-    case 'land': value = calculateLandValueJS(a.landPrice, a.landArea, a.landShare || 100); break;
-    case 'house': case 'apartment': case 'officetel': value = calculateHouseValueJS(a.housePrice, a.houseShare || 100); break;
+    case 'land': value = calculateLandValueJS(a.landPrice, a.landArea, 100); break;
+    case 'house': case 'apartment': case 'officetel': value = calculateHouseValueJS(a.housePrice, 100); break;
     case 'listedStock': value = calculateListedStockValueJS(a.listedPrice, a.listedShares); break;
-    case 'rental': value = calculateRentalConversionValueJS(a.rentalAnnualRent, a.rentalDeposit); break;
+    case 'rental': {
+      const t = computeRentalLeaseTotals_(a.rentalLeases);
+      value = calculateRentalConversionValueJS(t.annualRent, t.deposit);
+      break;
+    }
+    case 'goodwill': value = calculateGoodwillValueJS(a.gwProfit1, a.gwProfit2, a.gwProfit3, a.gwSelfCapital); break;
     case 'unlistedStock': {
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
@@ -616,6 +634,10 @@ function computeValuationAssetValue(a){
       break;
     }
     default: value = numVal(a.directValue) || 0;
+  }
+  if (VALUATION_RATIO_EXEMPT_METHODS.indexOf(a.method) === -1){
+    const ratio = (a.ownershipRatio === undefined || a.ownershipRatio === '' || a.ownershipRatio === null) ? 100 : numVal(a.ownershipRatio);
+    value = value * (ratio / 100);
   }
   // 저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법 §66, 시행령 §63①1호) —
   // 시가·보충적평가액, 그 재산이 담보하는 채권액(또는 등기된 전세금), 임대보증금 환산가액(임대보증금+연간임대료÷12%)
@@ -629,18 +651,29 @@ function computeValuationAssetValue(a){
 function valuationAssetMethodFieldsHtml(m, a){
   if (m === 'land') return '' +
     '<div class="taxcalc-field"><label>개별공시지가(원/㎡)</label><input type="number" data-field="landPrice" value="' + (a.landPrice || '') + '"></div>' +
-    '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>' +
-    '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="landShare" placeholder="기본 100" value="' + (a.landShare || '') + '"></div>';
+    '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>';
   if (m === 'house' || m === 'apartment' || m === 'officetel') return '' +
-    '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>' +
-    '<div class="taxcalc-field"><label>지분율(%)</label><input type="number" data-field="houseShare" placeholder="기본 100" value="' + (a.houseShare || '') + '"></div>';
+    '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>';
   if (m === 'listedStock') return '' +
     '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
     '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>';
-  if (m === 'rental') return '' +
-    '<div class="taxcalc-field"><label>연간 임대료 합계</label><input type="number" data-field="rentalAnnualRent" value="' + (a.rentalAnnualRent || '') + '"></div>' +
-    '<div class="taxcalc-field"><label>임대보증금</label><input type="number" data-field="rentalDeposit" value="' + (a.rentalDeposit || '') + '"></div>' +
-    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 이 환산가액과 별도로 계산한 기준시가 중 큰 금액을 실제 평가액으로 쓰세요</label></div>';
+  if (m === 'rental'){
+    const leases = (Array.isArray(a.rentalLeases) && a.rentalLeases.length) ? a.rentalLeases : [{}];
+    const totals = computeRentalLeaseTotals_(leases);
+    const leaseRowsHtml = leases.map(function(l, lidx){
+      return '<div class="taxcalc-grid" data-lease-idx="' + lidx + '" style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);">' +
+        '<div class="taxcalc-field"><label>호실/구분</label><input type="text" data-lfield="unitLabel" value="' + (l.unitLabel || '').replace(/"/g,'&quot;') + '" placeholder="예: 101호"></div>' +
+        '<div class="taxcalc-field"><label>임대보증금</label><input type="number" data-lfield="deposit" value="' + (l.deposit || '') + '"></div>' +
+        '<div class="taxcalc-field"><label>월세</label><input type="number" data-lfield="monthlyRent" value="' + (l.monthlyRent || '') + '"></div>' +
+        (leases.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-rental-lease" data-idx="' + lidx + '">✕ 삭제</button>' : '') +
+      '</div>';
+    }).join('');
+    return '<div class="taxcalc-field" style="grid-column:1/-1;"><label>임대차 내역(호실별로 입력하면 자동 합산됩니다)</label></div>' +
+      leaseRowsHtml +
+      '<div class="taxcalc-field" style="grid-column:1/-1;"><button type="button" class="taxcalc-add-asset" data-action="add-rental-lease" style="margin-top:6px;">+ 임대차 추가</button></div>' +
+      '<div class="taxcalc-field"><span class="taxcalc-result-note" data-rental-hint="1" style="margin:0;">보증금 합계 ' + won(totals.deposit) + ' · 연간임대료 합계 ' + won(totals.annualRent) + '</span></div>' +
+      '<div class="taxcalc-field"><label style="color:var(--sub);">※ 이 환산가액과 별도로 계산한 기준시가 중 큰 금액을 실제 평가액으로 쓰세요</label></div>';
+  }
   if (m === 'unlistedStock') return '' +
     '<div class="taxcalc-field"><label>발행주식총수</label><input type="number" data-field="uTotalShares" value="' + (a.uTotalShares || '') + '"></div>' +
     '<div class="taxcalc-field"><label>평가대상 주식수</label><input type="number" data-field="uOwnedShares" value="' + (a.uOwnedShares || '') + '"></div>' +
@@ -652,6 +685,12 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uMajorShareholder" ' + (a.uMajorShareholder ? 'checked' : '') + '><label>최대주주 등 할증(20%)</label></div>' +
     '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uIsSmallBusiness" ' + (a.uIsSmallBusiness ? 'checked' : '') + '><label>중소기업이 발행한 주식(할증 배제)</label></div>' +
     '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="uIsMediumUnder500B" ' + (a.uIsMediumUnder500B ? 'checked' : '') + '><label>중견기업(직전3년 매출평균 5천억 미만)이 발행한 주식(할증 배제)</label></div>';
+  if (m === 'goodwill') return '' +
+    '<div class="taxcalc-field"><label>1년전 순손익액</label><input type="number" data-field="gwProfit1" value="' + (a.gwProfit1 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>2년전 순손익액</label><input type="number" data-field="gwProfit2" value="' + (a.gwProfit2 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>3년전 순손익액</label><input type="number" data-field="gwProfit3" value="' + (a.gwProfit3 || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>자기자본(평가기준일 현재)</label><input type="number" data-field="gwSelfCapital" value="' + (a.gwSelfCapital || '') + '"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 가중평균순손익액×50%가 자기자본×10%를 넘는 초과분만 5년 연금현가(3.79079)로 평가되며, 넘지 않으면 0원입니다</label></div>';
   return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"></div>';
 }
 
@@ -666,15 +705,27 @@ function renderValuationAssetRow(a, idx){
         '<div class="taxcalc-field"><label>평가방법</label><select data-field="method">' +
           Object.keys(VALUATION_METHOD_LABELS).map(function (k) { return '<option value="' + k + '"' + (method === k ? ' selected' : '') + '>' + VALUATION_METHOD_LABELS[k] + '</option>'; }).join('') +
         '</select></div>' +
+        (VALUATION_RATIO_EXEMPT_METHODS.indexOf(method) === -1 ?
+          '<div class="taxcalc-field"><label>피상속인(증여자) 지분율(%)</label><input type="number" data-field="ownershipRatio" placeholder="기본 100" value="' + (a.ownershipRatio || '') + '"></div>' : '') +
         '<div class="taxcalc-field"><label>담보채권액(저당권·질권 등, §66)</label><input type="number" data-field="securedDebtAmount" placeholder="원 (있으면 시가/보충적평가액과 비교해 큰 금액 적용)" value="' + (a.securedDebtAmount || '') + '"></div>' +
         '<div class="taxcalc-field"><label>임대보증금(평가특례, §66)</label><input type="number" data-field="rentalDepositForCap" placeholder="원 (임대차 있으면 입력)" value="' + (a.rentalDepositForCap || '') + '"></div>' +
         '<div class="taxcalc-field"><label>연간임대료(평가특례, §66)</label><input type="number" data-field="rentalAnnualRentForCap" placeholder="원 (임대차 있으면 입력)" value="' + (a.rentalAnnualRentForCap || '') + '"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isBusinessAsset" id="vaBiz-' + idx + '"' + (a.isBusinessAsset ? ' checked' : '') + '><label for="vaBiz-' + idx + '">사업용자산(가업상속공제용, 상속세일 때만 자동집계)</label></div>' +
       '</div>' +
       '<div class="taxcalc-grid" style="margin-top:6px;">' + valuationAssetMethodFieldsHtml(method, a) + '</div>' +
       '<div class="taxcalc-result-row"><span>평가액</span><span class="v">' + won(value) + '</span></div>' +
     '</div>';
 }
 
+// 가업상속공제(§18의2, 개인사업)는 "사업용자산 순액"이 있어야 계산되는데, 이걸 손으로 다시 더해
+// 입력하게 하지 않고 위 상속재산 명세에서 "사업용자산" 체크된 항목들의 평가액을 자동으로 합산한다.
+function recomputeBusinessAssetTotal_(containerId, assets){
+  if (containerId !== 'inheritanceValuationList') return;
+  const el = document.getElementById('ihBusinessIndividualNet');
+  if (!el) return;
+  const total = assets.filter(function(a){ return a.isBusinessAsset; }).reduce(function(s, a){ return s + computeValuationAssetValue(a); }, 0);
+  el.value = String(total);
+}
 function renderValuationAssetList(containerId, assets){
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -697,9 +748,28 @@ function renderValuationAssetList(containerId, assets){
         row.querySelector('.taxcalc-result-row .v').textContent = won(computeValuationAssetValue(assets[idx]));
         const totalEl = container.querySelector('.taxcalc-result-row.total .v');
         if (totalEl) totalEl.textContent = won(assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0));
+        recomputeBusinessAssetTotal_(containerId, assets);
       }
     });
   });
+  container.querySelectorAll('[data-lfield]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      const assetIdx = numVal(el.closest('.taxcalc-asset').dataset.idx);
+      const leaseIdx = numVal(el.closest('[data-lease-idx]').dataset.leaseIdx);
+      const key = el.dataset.lfield;
+      if (!Array.isArray(assets[assetIdx].rentalLeases)) assets[assetIdx].rentalLeases = [{}];
+      assets[assetIdx].rentalLeases[leaseIdx][key] = el.value;
+      const row = el.closest('.taxcalc-asset');
+      row.querySelector('.taxcalc-result-row .v').textContent = won(computeValuationAssetValue(assets[assetIdx]));
+      const totals = computeRentalLeaseTotals_(assets[assetIdx].rentalLeases);
+      const hintEl = row.querySelector('[data-rental-hint]');
+      if (hintEl) hintEl.textContent = '보증금 합계 ' + won(totals.deposit) + ' · 연간임대료 합계 ' + won(totals.annualRent);
+      const totalEl = container.querySelector('.taxcalc-result-row.total .v');
+      if (totalEl) totalEl.textContent = won(assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0));
+      recomputeBusinessAssetTotal_(containerId, assets);
+    });
+  });
+  recomputeBusinessAssetTotal_(containerId, assets);
   enhanceNumberInputs(container);
 }
 
@@ -1707,7 +1777,7 @@ function renderInheritancePane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>최종 공제액(직접 입력, 상세내역 없을 때만)</label><input type="number" id="ihBusinessDeduction" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>가업영위기간</label><input type="number" id="ihBusinessYears" placeholder="년 (10년 미만이면 공제 불가)" maxlength="2"></div>' +
-        '<div class="taxcalc-field"><label>[개인사업] 사업용자산 순액 합계</label><input type="number" id="ihBusinessIndividualNet" placeholder="원 (토지·건축물·기계장치 등-담보채무, 부표1가 ①계)"></div>' +
+        '<div class="taxcalc-field"><label>[개인사업] 사업용자산 순액 합계(자동, 위 상속재산명세의 "사업용자산" 체크분 합계)</label><input type="number" id="ihBusinessIndividualNet" placeholder="원 (담보채무가 있으면 직접 차감해 수정)"></div>' +
         '<div class="taxcalc-field"><label>[법인] 상속개시일 현재 주식등 가액</label><input type="number" id="ihBusinessStockValue" placeholder="원 (가업법인 주식가액)"></div>' +
         '<div class="taxcalc-field"><label>[법인] 총자산가액</label><input type="number" id="ihBusinessTotalAsset" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[법인] 사업무관자산 - §55의2</label><input type="number" id="ihBusinessNonBiz55" placeholder="원"></div>' +
@@ -1829,14 +1899,26 @@ let taxCalcHeirRegistryHasCohabit = false;
 const DISPOSAL_CATEGORY_LABELS = ['현금·예금·유가증권', '부동산', '기타재산', '부담채무Ⅰ(국가·지자체·금융기관)', '부담채무Ⅱ(그 외)'];
 let inheritanceDisposalItems = [{}];
 
-// 처분재산 한 줄의 순인출액(=총인출액-내돈입금액=소명대상금액)과 미소명금액(=소명대상금액-소명금액)을
+// 처분재산 한 줄의 기준충족여부·순인출액(=기준금액-내돈입금액=소명대상금액)·미소명금액(=소명대상금액-소명금액)을
 // 화면에 실시간으로 보여준다(상증세법§15 산식의 중간 단계를 그대로 노출).
+// 1년 이내 2억원, 2년 이내 5억원 기준은 재산종류별로 항상 둘 다 검토 대상이므로(하나만 검토하는 경우는 없음)
+// 체크박스로 사용자가 판단하게 하지 않고, 1년/2년 각각의 합계금액을 입력받아 시스템이 기준 충족 여부를 자동 판정한다.
 function updateDisposalItemComputedHints_(row, item){
-  const net = Math.max(0, numVal(item.totalWithdrawal) - numVal(item.selfDeposit));
+  const oneYear = numVal(item.oneYearAmount);
+  const twoYear = numVal(item.twoYearAmount);
+  const meetsOneYear = oneYear >= 200000000;
+  const meetsTwoYear = twoYear >= 500000000;
+  const base = twoYear > 0 ? twoYear : oneYear;
+  const net = Math.max(0, base - numVal(item.selfDeposit));
   const unexplained = Math.max(0, net - numVal(item.explainedAmount));
+  const thresholdEl = row.querySelector('[data-dcomputed="threshold"]');
   const netEl = row.querySelector('[data-dcomputed="net"]');
   const unexplainedEl = row.querySelector('[data-dcomputed="unexplained"]');
-  if (netEl) netEl.textContent = '소명대상금액(순인출액) = ' + won(net);
+  if (thresholdEl){
+    thresholdEl.textContent = '① 1년기준(2억) ' + (meetsOneYear ? '충족' : '미충족') + ' · ② 2년기준(5억) ' + (meetsTwoYear ? '충족' : '미충족') +
+      (meetsOneYear || meetsTwoYear ? ' → 소명 대상' : '');
+  }
+  if (netEl) netEl.textContent = '소명대상금액(기준금액-내돈입금액) = ' + won(net);
   if (unexplainedEl) unexplainedEl.textContent = '미소명금액 = ' + won(unexplained);
 }
 function renderDisposalItemsList(){
@@ -1848,13 +1930,13 @@ function renderDisposalItemsList(){
     }).join('');
     return '<div class="taxcalc-grid" data-disposal-idx="' + idx + '" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);">' +
       '<div class="taxcalc-field"><label>재산종류</label><select data-dfield="category"><option value="">선택</option>' + categoryOptions + '</select></div>' +
-      '<div class="taxcalc-field"><label>총 처분(인출)·차입금액</label><input type="number" data-dfield="totalWithdrawal" value="' + (item.totalWithdrawal || '') + '"></div>' +
+      '<div class="taxcalc-field"><label>① 상속개시전 1년 이내 처분(인출)·차입금액 합계</label><input type="number" data-dfield="oneYearAmount" value="' + (item.oneYearAmount || '') + '" placeholder="원 (2억원 이상이면 소명 대상)"></div>' +
+      '<div class="taxcalc-field"><label>② 상속개시전 2년 이내 처분(인출)·차입금액 합계</label><input type="number" data-dfield="twoYearAmount" value="' + (item.twoYearAmount || '') + '" placeholder="원 (5억원 이상이면 소명 대상)"></div>' +
+      '<div class="taxcalc-field"><span class="taxcalc-result-note" data-dcomputed="threshold" style="margin:0;"></span></div>' +
       '<div class="taxcalc-field"><label>그중 내돈입금액(본인계좌 재입금 등)</label><input type="number" data-dfield="selfDeposit" value="' + (item.selfDeposit || '') + '" placeholder="원 (없으면 0)"></div>' +
       '<div class="taxcalc-field"><span class="taxcalc-result-note" data-dcomputed="net" style="margin:0;"></span></div>' +
       '<div class="taxcalc-field"><label>소명금액(용도 확인된 금액)</label><input type="number" data-dfield="explainedAmount" value="' + (item.explainedAmount || '') + '"></div>' +
       '<div class="taxcalc-field"><span class="taxcalc-result-note" data-dcomputed="unexplained" style="margin:0;"></span></div>' +
-      '<div class="taxcalc-field checkbox"><input type="checkbox" data-dfield="meetsOneYear" id="dOneYear-' + idx + '"' + (item.meetsOneYear ? ' checked' : '') + '><label for="dOneYear-' + idx + '">① 상속개시전 1년 이내 재산종류별 2억원 이상</label></div>' +
-      '<div class="taxcalc-field checkbox"><input type="checkbox" data-dfield="meetsTwoYear" id="dTwoYear-' + idx + '"' + (item.meetsTwoYear ? ' checked' : '') + '><label for="dTwoYear-' + idx + '">② 상속개시전 2년 이내 재산종류별 5억원 이상</label></div>' +
       (inheritanceDisposalItems.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-disposal-item" data-idx="' + idx + '">✕ 삭제</button>' : '') +
     '</div>';
   }).join('');
@@ -2187,6 +2269,14 @@ taxCalcView.addEventListener('click', function(e){
     const assets = containerId === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
     assets.splice(numVal(btn.dataset.idx), 1);
     renderValuationAssetList(containerId, assets);
+  } else if (action === 'add-rental-lease' || action === 'del-rental-lease'){
+    const containerId = btn.closest('[id="giftValuationList"], [id="inheritanceValuationList"]').id;
+    const assets = containerId === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
+    const assetIdx = numVal(btn.closest('.taxcalc-asset').dataset.idx);
+    if (!Array.isArray(assets[assetIdx].rentalLeases)) assets[assetIdx].rentalLeases = [{}];
+    if (action === 'add-rental-lease') assets[assetIdx].rentalLeases.push({});
+    else assets[assetIdx].rentalLeases.splice(numVal(btn.dataset.idx), 1);
+    renderValuationAssetList(containerId, assets);
   } else if (action === 'apply-valuation-total'){
     const target = btn.dataset.target;
     const assets = target === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
@@ -2462,12 +2552,15 @@ taxCalcView.addEventListener('click', function(e){
     renderInstallmentResult(calculateInstallmentPaymentScheduleJS(input), 'taxCalcInstallmentInheritanceResult');
   } else if (action === 'run-inheritance'){
     const disposalPresumptionItems = inheritanceDisposalItems.map(function(item){
-      const netWithdrawal = Math.max(0, numVal(item.totalWithdrawal) - numVal(item.selfDeposit));
+      const oneYear = numVal(item.oneYearAmount);
+      const twoYear = numVal(item.twoYearAmount);
+      const base = twoYear > 0 ? twoYear : oneYear;
+      const netWithdrawal = Math.max(0, base - numVal(item.selfDeposit));
       return {
         category: item.category || '',
         disposalAmount: netWithdrawal,
         explainedAmount: numVal(item.explainedAmount) || 0,
-        meetsThreshold: !!item.meetsOneYear || !!item.meetsTwoYear
+        meetsThreshold: oneYear >= 200000000 || twoYear >= 500000000
       };
     }).filter(function(item){ return item.disposalAmount > 0; });
     const input = {
