@@ -300,6 +300,12 @@
   // 거래 1건의 "소득금액 단계까지"만 계산한다(기본공제·세율 적용 전) — 다건 합산에서
   // 여러 거래를 먼저 이 단계까지 계산해두고, 합산 가능한 것끼리 묶어 기본공제·누진세를
   // 한 번에 적용하기 위한 building block이다. 단일거래 계산에도 그대로 재사용한다.
+  // 의제취득일(소득세법 시행령§162④) — 1985.1.1. 전에 취득한 자산은 1985.1.1.에 취득한 것으로 보아
+  // 보유기간(장기보유특별공제·단기양도세율 판정)을 계산한다. 취득가액 자체(환산취득가액 등)에는
+  // 영향을 주지 않고, 오직 보유기간 산정에만 적용된다.
+  function deemedAcquisitionDate(dateStr) {
+    return dateStr && dateStr < '1985-01-01' ? '1985-01-01' : dateStr;
+  }
   function transferAssetCore(t) {
     const transferPrice = Number(t.transferPrice);
     let necessaryExpenses = Number(t.necessaryExpenses) || 0;
@@ -308,7 +314,7 @@
     if (!acquisitionPrice || acquisitionPrice < 0) return { error: '취득가액이 필요합니다.' };
     if (!t.acquisitionDate || !t.transferDate) return { error: '취득일과 양도일이 필요합니다.' };
 
-    const holdingYears = fullYearsElapsed(t.acquisitionDate, t.transferDate);
+    const holdingYears = fullYearsElapsed(deemedAcquisitionDate(t.acquisitionDate), t.transferDate);
     if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다.' };
 
     if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && Number(t.acquisitionStandardPriceForExpense) > 0) {

@@ -254,6 +254,14 @@ function recomputeHeirDerivedFields(){
   const otherHeirsCount = childHeirs.length > 0 ? childHeirs.length : heirs.filter(function(h){ return (h.relation || '').indexOf('부모') !== -1; }).length;
   const cohabitAmount = heirs.filter(function(h){ return h.isCohabitHouse; }).reduce(function(s, h){ return s + (numVal(h.cohabitHouseValue) || 0); }, 0);
   const reporter = heirs.find(function(h){ return h.isReporter; });
+  // 장애인공제(§20①4호)는 1인당 기대여명(통계청 생명표)이 필요해 자동계산할 수 없다 — 명부의
+  // "장애인" 체크는 대상자 수만 확인해주고, 실제 잔여연수 합계는 사용자가 직접 확인해 입력해야 한다.
+  const disabledCount = heirs.filter(function(h){ return h.isDisabled; }).length;
+  const disabledHint = document.getElementById('ihDisabledCountHint');
+  if (disabledHint){
+    disabledHint.textContent = disabledCount > 0 ?
+      '체크된 장애인 상속인 ' + disabledCount + '명 — 각자 상속개시일 기준 통계청 기대여명을 확인해 위 칸에 합계로 입력하세요(자동계산 불가)' : '';
+  }
 
   setReadonlyField_('ihChildCount', childCount);
   setReadonlyField_('ihMinorYears', minorYears);
@@ -723,6 +731,7 @@ const VALUATION_METHOD_LABELS = {
   house: '단독주택(고시된 개별주택가격)',
   apartment: '공동주택/아파트(고시된 공동주택가격)',
   officetel: '오피스텔·상업용건물(고시된 기준시가)',
+  building: '일반건물(고시가격 없음 — 구조·용도·신축연도 기준 자동계산)',
   listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
   unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
   rental: '임대 중인 부동산(임대료환산가액)',
@@ -746,6 +755,11 @@ function computeValuationAssetValue(a){
   switch (a.method){
     case 'land': value = calculateLandValueJS(a.landPrice, a.landArea, 100); break;
     case 'house': case 'apartment': case 'officetel': value = calculateHouseValueJS(a.housePrice, 100); break;
+    case 'building': {
+      const r = calculateBuildingStandardPriceJS(a.buildingStructure, numVal(a.buildingUse), a.landPriceForBuilding, numVal(a.builtYear), numVal(a.buildingArea), 'inheritance_gift', []);
+      value = (r && !r.error) ? r.건물기준시가 : 0;
+      break;
+    }
     case 'listedStock': value = calculateListedStockValueJS(a.listedPrice, a.listedShares); break;
     case 'rental': {
       const t = computeRentalLeaseTotals_(a.rentalLeases);
@@ -785,6 +799,15 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>';
   if (m === 'house' || m === 'apartment' || m === 'officetel') return '' +
     '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>';
+  if (m === 'building'){
+    const structureOptions = (window.BUILDING_STRUCTURE_TABLE || []).map(function(s){ return '<option value="' + s.name + '"' + (a.buildingStructure === s.name ? ' selected' : '') + '>' + s.name + '</option>'; }).join('');
+    const useOptions = (window.BUILDING_USE_TABLE || []).filter(function(u){ return u.index !== null; }).map(function(u){ return '<option value="' + u.no + '"' + (String(a.buildingUse) === String(u.no) ? ' selected' : '') + '>' + u.no + '. ' + u.desc + '</option>'; }).join('');
+    return '<div class="taxcalc-field"><label>구조</label><select data-field="buildingStructure"><option value="">선택</option>' + structureOptions + '</select></div>' +
+      '<div class="taxcalc-field"><label>용도</label><select data-field="buildingUse"><option value="">선택</option>' + useOptions + '</select></div>' +
+      '<div class="taxcalc-field"><label>신축(증축)연도</label><input type="number" data-field="builtYear" value="' + (a.builtYear || '') + '" maxlength="4"></div>' +
+      '<div class="taxcalc-field"><label>건물면적(㎡)</label><input type="number" data-field="buildingArea" value="' + (a.buildingArea || '') + '"></div>' +
+      '<div class="taxcalc-field"><label>부속토지 개별공시지가(원/㎡)</label><input type="number" data-field="landPriceForBuilding" value="' + (a.landPriceForBuilding || '') + '"></div>';
+  }
   if (m === 'listedStock') return '' +
     '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
     '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>';
@@ -819,14 +842,14 @@ function renderRentalLeasesSectionHtml_(a){
   const leaseRowsHtml = leases.map(function(l, lidx){
     return '<div class="taxcalc-grid" data-lease-idx="' + lidx + '" style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);">' +
       '<div class="taxcalc-field"><label>호실/구분</label><input type="text" data-lfield="unitLabel" value="' + (l.unitLabel || '').replace(/"/g,'&quot;') + '" placeholder="예: 101호"></div>' +
-      '<div class="taxcalc-field"><label>임차인 성명·상호</label><input type="text" data-lfield="tenantName" value="' + (l.tenantName || '').replace(/"/g,'&quot;') + '" placeholder="예: 홍길동 또는 OO상회"></div>' +
-      '<div class="taxcalc-field"><label>임차인 사업자(주민)번호</label><input type="text" data-lfield="tenantBizNo" value="' + (l.tenantBizNo || '').replace(/"/g,'&quot;') + '" placeholder="사업자 123-45-67890 / 개인 000000-0000000"></div>' +
+      '<div class="taxcalc-field"><label>성명</label><input type="text" data-lfield="tenantName" value="' + (l.tenantName || '').replace(/"/g,'&quot;') + '" placeholder="예: 홍길동 또는 OO상회"></div>' +
+      '<div class="taxcalc-field"><label>주민번호</label><input type="text" data-lfield="tenantBizNo" value="' + (l.tenantBizNo || '').replace(/"/g,'&quot;') + '" placeholder="사업자 123-45-67890 / 개인 000000-0000000"></div>' +
       '<div class="taxcalc-field"><label>임대보증금</label><input type="number" data-lfield="deposit" value="' + (l.deposit || '') + '"></div>' +
       '<div class="taxcalc-field"><label>월세</label><input type="number" data-lfield="monthlyRent" value="' + (l.monthlyRent || '') + '"></div>' +
       (leases.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-rental-lease" data-idx="' + lidx + '">✕ 삭제</button>' : '') +
     '</div>';
   }).join('');
-  return '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>임대차 내역(있으면 호실별로 입력 — §66 평가특례·§61⑤ 임대료환산가액에 공통 자동반영, 보증금은 상속세과세가액 반영 시 채무로도 자동집계됩니다)</b></div>' +
+  return '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>임대차 내역</b></div>' +
     leaseRowsHtml +
     '<button type="button" class="taxcalc-add-asset" data-action="add-rental-lease" style="margin-top:6px;">+ 임대차 추가</button>' +
     '<div class="taxcalc-result-note" data-rental-hint="1">보증금 합계 ' + won(totals.deposit) + ' · 연간임대료 합계 ' + won(totals.annualRent) + '</div>';
@@ -866,7 +889,7 @@ function renderValuationAssetRow(a, idx, isInheritance){
           Object.keys(VALUATION_METHOD_LABELS).map(function (k) { return '<option value="' + k + '"' + (method === k ? ' selected' : '') + '>' + VALUATION_METHOD_LABELS[k] + '</option>'; }).join('') +
         '</select></div>' +
         (VALUATION_RATIO_EXEMPT_METHODS.indexOf(method) === -1 ?
-          '<div class="taxcalc-field"><label>피상속인(증여자) 지분(분수, 예: 1/2 · 기본 1/1)</label><input type="text" data-field="ownershipRatio" placeholder="1/1" value="' + (a.ownershipRatio || '').replace(/"/g, '&quot;') + '"></div>' : '') +
+          '<div class="taxcalc-field"><label>피상속인(증여자) 지분</label><input type="text" data-field="ownershipRatio" placeholder="1/1" value="' + (a.ownershipRatio || '').replace(/"/g, '&quot;') + '"></div>' : '') +
         '<div class="taxcalc-field"><label>담보채권액(저당권·질권 등, §66)</label><input type="number" data-field="securedDebtAmount" placeholder="원 (있으면 시가/보충적평가액과 비교해 큰 금액 적용)" value="' + (a.securedDebtAmount || '') + '"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isBusinessAsset" id="vaBiz-' + idx + '"' + (a.isBusinessAsset ? ' checked' : '') + '><label for="vaBiz-' + idx + '">사업용자산(가업상속공제용, 상속세일 때만 자동집계)</label></div>' +
       '</div>' +
@@ -964,7 +987,6 @@ let transferAssets = [{}]; // 각 원소는 입력값 객체(비어있는 채로
 
 // ---- 안분계산 도구(소득세법 시행령 §166④) ----
 let allocationAssets = [{}, {}];
-let allocationShown = false;
 
 const ALLOCATION_METHOD_LABELS = {
   standard_price: '양도가액 안분 (기준시가·감정가액 비율)',
@@ -1016,7 +1038,6 @@ function allocationRowComponentFieldsHtml_(a, showAcqStd){
 function renderAllocationTool(){
   const box = document.getElementById('taxCalcAllocationTool');
   if (!box) return;
-  if (!allocationShown){ box.innerHTML = ''; return; }
   const method = box.dataset.method || 'standard_price';
   const showAcq = method === 'acq_expense_together' || method === 'acq_expense_separate';
   const showAcqStd = method === 'acq_expense_separate';
@@ -1044,7 +1065,7 @@ function renderAllocationTool(){
 
   box.innerHTML =
     '<div class="taxcalc-asset" style="margin-top:10px;">' +
-      '<div class="taxcalc-asset-head"><b>안분계산(소득세법 시행령 §166④) — 토지·건물 등을 함께 양도했는데 가액 구분이 불분명할 때</b></div>' +
+      '<div class="taxcalc-asset-head"><b>토지·건물 등을 함께 양도했다면(안분계산, 소득세법 시행령§166④) — 계산하면 거래 목록에 자동으로 추가됩니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>안분방식</label><select id="allocMethod">' +
           Object.keys(ALLOCATION_METHOD_LABELS).map(function(k){ return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + ALLOCATION_METHOD_LABELS[k] + '</option>'; }).join('') +
@@ -1099,9 +1120,8 @@ function renderAllocationResult(r){
     if (row.안분비율_취득 !== undefined) html += taxCalcResultRow('안분비율(취득)', (row.안분비율_취득 * 100).toFixed(2) + '%');
     if (row.취득가액_안분액 !== undefined) html += taxCalcResultRow('취득가액 안분액', won(row.취득가액_안분액));
     if (row.필요경비_안분액 !== undefined) html += taxCalcResultRow('필요경비 안분액', won(row.필요경비_안분액));
-    html += '<button type="button" class="taxcalc-run-btn" data-action="apply-allocation-to-new-asset" data-ridx="' + idx + '">이 결과로 새 거래 추가</button>';
   });
-  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '<div class="taxcalc-result-note">위 자산별 결과가 이미 아래 거래 목록에 자동으로 추가되었습니다. ' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
   box.dataset.lastResult = JSON.stringify(r);
@@ -1109,12 +1129,10 @@ function renderAllocationResult(r){
 
 // ---- 건물기준시가 계산기(층별/부속시설별 상세) ----
 let buildingPriceRows = [{}];
-let buildingPriceShown = false;
 
 function renderBuildingPriceTool(){
   const box = document.getElementById('taxCalcBuildingPriceTool');
   if (!box) return;
-  if (!buildingPriceShown){ box.innerHTML = ''; return; }
   const taxType = box.dataset.taxType || 'transfer';
 
   const rowsHtml = buildingPriceRows.map(function(r, idx){
@@ -1132,7 +1150,7 @@ function renderBuildingPriceTool(){
 
   box.innerHTML =
     '<div class="taxcalc-asset" style="margin-top:10px;">' +
-      '<div class="taxcalc-asset-head"><b>건물기준시가 계산기(2026.1.1. 시행 국세청 고시) — 층·부속시설마다 구조·용도·신축연도가 다르면 행을 나눠 입력</b></div>' +
+      '<div class="taxcalc-asset-head"><b>건물 취득가액을 모르면(건물기준시가 자동계산, 2026.1.1. 시행 국세청 고시) — 층·부속시설마다 구조·용도·신축연도가 다르면 행을 나눠 입력. 계산하면 거래 목록에 자동으로 추가됩니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>세목</label><select id="bpTaxType">' +
           '<option value="transfer"' + (taxType === 'transfer' ? ' selected' : '') + '>양도소득세(조정률 미적용)</option>' +
@@ -1168,8 +1186,8 @@ function renderBuildingPriceResult(r){
     html += taxCalcResultRow('기준시가', won(row.건물기준시가));
   });
   html += taxCalcResultRow('건물기준시가 합계', won(r.건물기준시가_합계), { total: true });
-  html += '<button type="button" class="taxcalc-run-btn" data-action="apply-building-price-to-new-asset">이 합계로 새 거래(취득가액) 추가</button>';
-  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  const taxType = document.getElementById('taxCalcBuildingPriceTool').dataset.taxType || 'transfer';
+  html += '<div class="taxcalc-result-note">' + (taxType === 'transfer' ? '위 합계가 이미 아래 거래 목록에 취득가액으로 자동 추가되었습니다. ' : '상속세·증여세는 위 재산평가 자산목록의 "일반건물" 항목에 직접 입력하세요. ') + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
   box.dataset.lastTotal = r.건물기준시가_합계;
@@ -1192,13 +1210,24 @@ function computeCostItemsTotal_(items){
 function renderCostItemsSectionHtml_(a, listKey, title, placeholderExample){
   const items = (Array.isArray(a[listKey]) && a[listKey].length) ? a[listKey] : [{}];
   const rowsHtml = items.map(function(it, iidx){
+    const isInformal = it.receiptType === 'informal' || it.receiptType === 'other';
     return '<div class="taxcalc-grid" data-cost-idx="' + iidx + '" style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);">' +
       '<div class="taxcalc-field"><label>항목</label><input type="text" data-costfield="label" value="' + (it.label || '').replace(/"/g, '&quot;') + '" placeholder="' + placeholderExample + '"></div>' +
+      '<div class="taxcalc-field"><label>지급처</label><input type="text" data-costfield="payee" value="' + (it.payee || '').replace(/"/g, '&quot;') + '" placeholder="예: OO공인중개사"></div>' +
+      '<div class="taxcalc-field"><label>증빙종류</label><select data-costfield="receiptType">' +
+        '<option value="taxinvoice"' + (it.receiptType === 'taxinvoice' ? ' selected' : '') + '>세금계산서</option>' +
+        '<option value="invoice"' + (it.receiptType === 'invoice' ? ' selected' : '') + '>계산서</option>' +
+        '<option value="card"' + (it.receiptType === 'card' ? ' selected' : '') + '>신용카드매출전표</option>' +
+        '<option value="cashreceipt"' + (it.receiptType === 'cashreceipt' ? ' selected' : '') + '>현금영수증</option>' +
+        '<option value="informal"' + (it.receiptType === 'informal' ? ' selected' : '') + '>간이영수증(정규증빙 아님)</option>' +
+        '<option value="other"' + (it.receiptType === 'other' ? ' selected' : '') + '>기타/증빙없음</option>' +
+      '</select></div>' +
       '<div class="taxcalc-field"><label>금액</label><input type="number" data-costfield="amount" value="' + (it.amount || '') + '"></div>' +
+      (isInformal ? '<div class="taxcalc-field"><span class="taxcalc-result-note">⚠ 정규증빙(세금계산서·계산서·신용카드매출전표·현금영수증)이 아니면 일정 시점 이후 지출분은 필요경비로 인정되지 않을 수 있습니다 — 정확한 기준일을 확인하세요</span></div>' : '') +
       (items.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-cost-item" data-cost-list="' + listKey + '" data-idx="' + iidx + '">✕ 삭제</button>' : '') +
     '</div>';
   }).join('');
-  return '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>' + title + '(항목별 입력 후 자동합산)</b></div>' +
+  return '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>' + title + '</b></div>' +
     '<div data-cost-list="' + listKey + '">' + rowsHtml + '</div>' +
     '<button type="button" class="taxcalc-add-asset" data-action="add-cost-item" data-cost-list="' + listKey + '" style="margin-top:6px;">+ 항목 추가</button>' +
     '<div class="taxcalc-result-note" data-cost-total="' + listKey + '">합계 ' + won(computeCostItemsTotal_(items)) + '</div>';
@@ -1222,13 +1251,56 @@ function renderTransferPane(){
           assetDetailFieldsHtml_(transferAssets[idx]) +
           '<div class="taxcalc-field"><label>양수인 성명</label><input type="text" data-field="buyerName" data-nameonly="1" value="' + (transferAssets[idx].buyerName || '').replace(/"/g, '&quot;') + '"></div>' +
           '<div class="taxcalc-field"><label>양수인 주민등록번호</label><input type="text" data-field="buyerRegNo" data-regno="1" placeholder="000000-0000000" value="' + (transferAssets[idx].buyerRegNo || '').replace(/"/g, '&quot;') + '"></div>' +
+          '<div class="taxcalc-field"><label>양수인과의 관계(부당행위계산부인·증여의제 판정용)</label><select data-field="buyerRelation">' +
+            '<option value="none">특수관계 없음(제3자)</option>' +
+            '<option value="spouse">배우자</option>' +
+            '<option value="lineal">직계존비속</option>' +
+            '<option value="sibling">형제자매</option>' +
+            '<option value="relative">기타 친족(6촌 이내 혈족·4촌 이내 인척 등)</option>' +
+            '<option value="economic">사용인 등 경제적 연관관계</option>' +
+            '<option value="control">법인 등 경영지배관계</option>' +
+          '</select><span class="taxcalc-result-note" style="margin:2px 0 0;">특수관계인과 시가보다 현저히 낮거나 높게 거래했다면 소득세법§101(부당행위계산부인)·상증세법§35(저가양수·고가양도 증여의제, 증여세 탭)를 확인하세요</span></div>' +
+          (transferAssets[idx].buyerRelation && transferAssets[idx].buyerRelation !== 'none' ?
+            '<div class="taxcalc-field"><label>시가(알고 있으면 입력, §35 증여의제 판정용)</label><input type="number" data-field="fairMarketValueForGiftCheck" placeholder="원" value="' + (transferAssets[idx].fairMarketValueForGiftCheck || '') + '"></div>' +
+            '<div class="taxcalc-field"><button type="button" class="taxcalc-run-btn" data-action="send-transfer-to-gift-deemed" data-idx="' + idx + '">차액을 증여세 §35 계산기로 보내기</button></div>' : '') +
           '<div class="taxcalc-field"><label>양도일</label><input type="date" data-field="transferDate" min="1900-01-01" max="2099-12-31"></div>' +
           '<div class="taxcalc-field"><label>양도가액</label><input type="number" data-field="transferPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>취득일</label><input type="date" data-field="acquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
-          '<div class="taxcalc-field"><label>취득가액</label><input type="number" data-field="acquisitionPrice" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>취득가액</label><input type="number" data-field="acquisitionPrice" placeholder="원 (환산취득가액을 쓰면 자동계산되어 무시됩니다)"></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useConvertedAcquisitionPrice" id="convAcq-' + idx + '"><label for="convAcq-' + idx + '">취득당시 실지거래가액을 확인할 수 없어 환산취득가액 사용</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useEstimatedNecessaryExpense" id="estExp-' + idx + '"><label for="estExp-' + idx + '">취득가액은 알지만 필요경비 지출증빙이 없어 개산공제(3%)만 사용(위 비용 내역을 입력하지 않았을 때만 적용)</label></div>' +
+          '<div class="taxcalc-field"><label>취득당시 기준시가</label><input type="number" data-field="acquisitionStandardPriceForExpense" placeholder="원 (환산취득가액·개산공제 계산용)"></div>' +
+          '<div class="taxcalc-field"><label>양도당시 기준시가</label><input type="number" data-field="transferStandardPriceForConversion" placeholder="원 (환산취득가액 비율 계산용)"></div>' +
+          (transferAssets[idx].acquisitionDate && transferAssets[idx].acquisitionDate < '1990-08-31' ?
+            '<div class="taxcalc-field"><span class="taxcalc-result-note">⚠ 1990.8.31. 이전 취득분은 개별공시지가가 없어 국세청 고시 배율표에 따른 별도 환산방법이 적용될 수 있습니다 — 이 계산기는 그 배율표를 반영하지 않으니 취득당시 기준시가를 직접 확인해서 입력하세요.</span></div>' : '') +
         '</div>' +
         renderCostItemsSectionHtml_(transferAssets[idx], 'transferExpenseItems', '양도비용 내역', '예: 중개보수') +
         renderCostItemsSectionHtml_(transferAssets[idx], 'acquisitionExpenseItems', '취득비용 내역', '예: 취득세') +
+        '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>관리처분인가 이후 조합원입주권·신축주택으로 양도했다면(재건축·재개발 특례)</b></div>' +
+        '<div class="taxcalc-grid">' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isReconstructionRights" id="rr-' + idx + '"><label for="rr-' + idx + '">해당(위 취득일은 종전 부동산 취득일 그대로 유지)</label></div>' +
+          '<div class="taxcalc-field"><label>관리처분계획인가일</label><input type="date" data-field="managementDispositionDate" min="1900-01-01" max="2099-12-31"></div>' +
+          '<div class="taxcalc-field"><label>종전자산 취득가액</label><input type="number" data-field="originalAssetAcquisitionPrice" placeholder="원 (환지·재건축 전 원 취득가액)"></div>' +
+          '<div class="taxcalc-field"><label>권리가액(종전자산평가액)</label><input type="number" data-field="rightsValue" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>청산금 납부액(분담금, 없으면 0)</label><input type="number" data-field="settlementPaid" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>청산금 환급액(받은 돈, 없으면 0)</label><input type="number" data-field="settlementReceived" placeholder="원"></div>' +
+          (transferAssets[idx].isReconstructionRights ?
+            '<div class="taxcalc-field"><span class="taxcalc-result-note">취득가액 = 권리가액 + 청산금납부액으로 자동 대체됩니다. 청산금 환급액이 있으면 그 부분은 관리처분인가일에 별도로 양도한 것으로 과세되니(소득세법 기본통칙 참조) 아래 버튼으로 별도 거래를 추가하세요.</span></div>' +
+            '<div class="taxcalc-field"><button type="button" class="taxcalc-run-btn" data-action="send-settlement-to-new-transfer" data-idx="' + idx + '" data-kind="reconstruction">청산금 환급분을 별도 거래로 추가</button></div>' : '') +
+        '</div>' +
+        '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>도시개발사업 등 환지처분으로 취득한 토지를 양도했다면(환지 특례)</b></div>' +
+        '<div class="taxcalc-grid">' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLandReplotment" id="lr-' + idx + '"><label for="lr-' + idx + '">해당(위 취득일은 환지 전 종전토지 취득일 그대로 유지)</label></div>' +
+          '<div class="taxcalc-field"><label>환지처분(확정)공고일</label><input type="date" data-field="replotmentDisposalDate" min="1900-01-01" max="2099-12-31"></div>' +
+          '<div class="taxcalc-field"><label>종전토지 취득가액</label><input type="number" data-field="originalAssetAcquisitionPrice" placeholder="원 (환지 전 원 취득가액, 위 재건축 항목과 공용)"></div>' +
+          '<div class="taxcalc-field"><label>권리(예정)면적(㎡)</label><input type="number" data-field="rightsAreaSqm" placeholder="환지예정지 지정 당시"></div>' +
+          '<div class="taxcalc-field"><label>확정면적(㎡)</label><input type="number" data-field="finalAreaSqm" placeholder="환지처분 후 최종"></div>' +
+          '<div class="taxcalc-field"><label>환지청산금 납부액(확정면적&gt;권리면적, 없으면 0)</label><input type="number" data-field="replotmentSettlementPaid" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>환지청산금 환급액(확정면적&lt;권리면적, 없으면 0)</label><input type="number" data-field="replotmentSettlementReceived" placeholder="원"></div>' +
+          (transferAssets[idx].isLandReplotment ?
+            '<div class="taxcalc-field"><span class="taxcalc-result-note">취득가액 = 종전토지 취득가액 + 환지청산금납부액으로 자동 대체됩니다(취득일은 환지 전 취득일 그대로 승계). 청산금 환급액이 있으면 그 부분(면적 감소분)은 환지처분공고일에 별도로 양도한 것으로 과세되니 아래 버튼으로 별도 거래를 추가하세요.</span></div>' +
+            '<div class="taxcalc-field"><button type="button" class="taxcalc-run-btn" data-action="send-settlement-to-new-transfer" data-idx="' + idx + '" data-kind="replotment">환지청산금 환급분을 별도 거래로 추가</button></div>' : '') +
+        '</div>' +
         '<div class="taxcalc-grid" style="margin-top:8px;">' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isOneHouseOneFamily" id="oneHouse-' + idx + '"><label for="oneHouse-' + idx + '">1세대1주택 비과세 전제</label></div>' +
           '<div class="taxcalc-field" data-show-if="isOneHouseOneFamily" style="display:none;"><label>거주연수</label><input type="number" data-field="residenceYears" placeholder="년" maxlength="2"></div>' +
@@ -1268,9 +1340,7 @@ function renderTransferPane(){
     '</div>' +
     '<div id="taxCalcTransferCards">' + cardsHtml + '</div>' +
     '<button type="button" class="taxcalc-add-asset" data-action="add-asset">+ 거래 추가</button>' +
-    '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-allocation-tool" style="margin-bottom:10px;">🧮 안분계산 도구(토지·건물 등 일괄양도시)</button>' +
     '<div id="taxCalcAllocationTool"></div>' +
-    '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-building-price-tool" style="margin-bottom:10px;">🏢 건물기준시가 계산기(층별 상세)</button>' +
     '<div id="taxCalcBuildingPriceTool"></div>' +
     '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>신고 상태 · 가산세(확정신고 전체 기준)</b></div>' +
     '<div class="taxcalc-grid">' +
@@ -1347,15 +1417,18 @@ function renderTransferPane(){
         const key = el.dataset.field;
         transferAssets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
         if (key === 'assetKind') renderTransferPane(); // 지목(토지)↔층수·용도(건물)로 입력요소 자체가 바뀌므로 다시 그림
+        if (key === 'buyerRelation') renderTransferPane(); // 특수관계 여부에 따라 시가 입력란·§35 연결버튼 표시가 바뀌므로 다시 그림
+        if (key === 'isReconstructionRights' || key === 'isLandReplotment') renderTransferPane(); // 청산금 안내·버튼 표시 여부가 바뀌므로 다시 그림
       });
     });
     card.querySelectorAll('[data-costfield]').forEach(function(el){
-      el.addEventListener('input', function(){
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function(){
         const listKey = el.closest('[data-cost-list]').dataset.costList;
         const itemIdx = numVal(el.closest('[data-cost-idx]').dataset.costIdx);
         const key = el.dataset.costfield;
         if (!Array.isArray(transferAssets[idx][listKey])) transferAssets[idx][listKey] = [{}];
         transferAssets[idx][listKey][itemIdx][key] = el.value;
+        if (key === 'receiptType') { renderTransferPane(); return; } // 증빙없음 경고 표시 여부가 바뀌므로 다시 그림
         const totalEl = card.querySelector('[data-cost-total="' + listKey + '"]');
         if (totalEl) totalEl.textContent = '합계 ' + won(computeCostItemsTotal_(transferAssets[idx][listKey]));
       });
@@ -1384,13 +1457,47 @@ function updateOneHouseVisibility(card){
 
 
 function collectTransferInput(vals){
+  const transferPrice = numVal(vals.transferPrice) || 0;
+  let acquisitionPrice = numVal(vals.acquisitionPrice) || 0;
+  let necessaryExpenses = computeCostItemsTotal_(vals.acquisitionExpenseItems) + computeCostItemsTotal_(vals.transferExpenseItems);
+  // 환산취득가액(소득세법 시행령§176의2) — 취득당시 실지거래가액을 확인할 수 없을 때, 양도가액에
+  // (취득당시기준시가÷양도당시기준시가) 비율을 곱해 취득가액을 추정하고, 취득당시기준시가의 3%를
+  // 필요경비 개산공제로 추가 인정한다. 취득가액 직접입력을 대체한다(직접입력값보다 우선 적용).
+  if (vals.useConvertedAcquisitionPrice){
+    const acqStd = numVal(vals.acquisitionStandardPriceForExpense) || 0;
+    const trStd = numVal(vals.transferStandardPriceForConversion) || 0;
+    if (acqStd > 0 && trStd > 0){
+      acquisitionPrice = Math.round(transferPrice * acqStd / trStd);
+      necessaryExpenses += Math.round(acqStd * 0.03);
+    }
+  }
+  // 관리처분인가 이후 조합원입주권·신축주택 양도 — 취득가액은 권리가액(종전자산평가액)에 청산금
+  // 납부액(추가분담금)을 더한 금액으로 대체된다(청산금 환급분은 별도 거래로 관리처분인가일에 과세).
+  // 취득일은 위 acquisitionDate(종전 부동산 취득일)를 그대로 쓴다(보유기간 통산).
+  if (vals.isReconstructionRights){
+    const rightsValue = numVal(vals.rightsValue) || 0;
+    const settlementPaid = numVal(vals.settlementPaid) || 0;
+    if (rightsValue > 0 || settlementPaid > 0) acquisitionPrice = rightsValue + settlementPaid;
+  }
+  // 환지처분 — 취득가액은 환지 전 종전토지 취득가액에 환지청산금 납부액(면적 증가분 추가취득)을
+  // 더한 금액으로 대체된다(청산금 환급분은 별도 거래로 환지처분공고일에 과세). 취득일은 환지 전
+  // 종전토지 취득일을 그대로 승계한다(취득시기 의제 없음).
+  if (vals.isLandReplotment){
+    const origPrice = numVal(vals.originalAssetAcquisitionPrice) || 0;
+    const replotPaid = numVal(vals.replotmentSettlementPaid) || 0;
+    if (origPrice > 0 || replotPaid > 0) acquisitionPrice = origPrice + replotPaid;
+  }
   return {
     assetType: vals.assetType || 'other',
     buyerName: vals.buyerName || '',
     buyerRegNo: vals.buyerRegNo || '',
-    transferPrice: numVal(vals.transferPrice) || 0,
-    acquisitionPrice: numVal(vals.acquisitionPrice) || 0,
-    necessaryExpenses: computeCostItemsTotal_(vals.acquisitionExpenseItems) + computeCostItemsTotal_(vals.transferExpenseItems),
+    buyerRelation: vals.buyerRelation || 'none',
+    fairMarketValueForGiftCheck: numVal(vals.fairMarketValueForGiftCheck) || 0,
+    useEstimatedNecessaryExpense: !!vals.useEstimatedNecessaryExpense,
+    acquisitionStandardPriceForExpense: numVal(vals.acquisitionStandardPriceForExpense) || 0,
+    transferPrice: transferPrice,
+    acquisitionPrice: acquisitionPrice,
+    necessaryExpenses: necessaryExpenses,
     acquisitionDate: vals.acquisitionDate || '',
     transferDate: vals.transferDate || '',
     isOneHouseOneFamily: !!vals.isOneHouseOneFamily,
@@ -1552,7 +1659,7 @@ function renderGiftPane(){
   taxCalcGiftPane.innerHTML =
     '<div class="taxcalc-hint">국세청 [별지 제10호서식] 증여세과세표준신고 및 자진납부계산서 항목을 기준으로 계산합니다. 10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산이 있으면 합산액과 기납부세액을 함께 넣으세요.</div>' +
     '<div class="taxcalc-asset">' +
-      '<div class="taxcalc-asset-head"><b>수증자·증여자 정보 및 관계 — 사건 폴더에 가족관계증명서·신분증 사본이 있으면 증빙에서 자동 입력으로 채워보세요</b>' +
+      '<div class="taxcalc-asset-head"><b>수증자·증여자 정보 및 관계</b>' +
         '<span><button type="button" class="taxcalc-ai-btn" data-action="open-evidence-gift">📄 증빙에서 자동 입력</button></span>' +
       '</div>' +
       '<div class="taxcalc-ai-status" id="aiStatus-gift"></div>' +
@@ -1565,7 +1672,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여자 주민등록번호</label><input type="text" id="giftDonorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
         '<div class="taxcalc-field"><label>증여자 주소</label><input type="text" id="giftDonorAddress"></div>' +
         '<div class="taxcalc-field"><label>증여일자</label><input type="date" id="giftDate" min="1900-01-01" max="2099-12-31"><span class="taxcalc-result-note" id="giftDateDeadlineHint" style="margin:2px 0 0;"></span></div>' +
-        '<div class="taxcalc-field"><label>관계(수증자 기준) — 세대생략 여부는 이 선택으로 자동 판정됩니다</label><select id="giftRelation">' +
+        '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="giftRelation">' +
           '<option value="배우자">배우자</option>' +
           '<option value="직계존속" data-genskip="0" selected>부모 등(직계존속, 1촌)→자녀</option>' +
           '<option value="직계존속" data-genskip="1">조부모 등(직계존속, 2촌 이상 — 세대생략)→손자녀</option>' +
@@ -1585,6 +1692,13 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>10년내 동일인 기증여합산액</label><input type="number" id="giftPriorAmount" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>위 기증여분 기납부세액</label><input type="number" id="giftPriorPaidTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkipOver2B"><label for="giftGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>인수채무액에 상당하는 부분은 증여자에게 양도로 과세됩니다(소득세법§88①) — 증여자의 원 취득정보를 입력하면 양도세 탭 거래로 자동 계산해 보냅니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>증여자 취득일</label><input type="date" id="giftDonorAcqDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>증여자 취득가액(전체 재산 기준)</label><input type="number" id="giftDonorAcqPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>증여자 필요경비(전체 재산 기준)</label><input type="number" id="giftDonorAcqExpense" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><button type="button" class="taxcalc-run-btn" data-action="send-debt-to-transfer">인수채무분을 양도세 거래로 보내기</button></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>㉙㉚ 혼인·출산 증여재산공제 (혼인+출산 평생통산 1억원 한도, 위 증여일자를 기준으로 자동 판정)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -2057,7 +2171,7 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>자녀 수(자동, 1인당 5천만원)</label><input type="number" id="ihChildCount" placeholder="0" readonly></div>' +
         '<div class="taxcalc-field"><label>미성년 상속인 19세까지 잔여연수 합(자동, 1년당 1천만원)</label><input type="number" id="ihMinorYears" placeholder="0" readonly></div>' +
         '<div class="taxcalc-field"><label>65세 이상 상속인 수(자동, 1인당 5천만원)</label><input type="number" id="ihElderlyCount" placeholder="0" readonly></div>' +
-        '<div class="taxcalc-field"><label>장애인 상속인 기대여명 잔여연수 합</label><input type="number" id="ihDisabledYears" placeholder="년 (1년당 1천만원)" maxlength="3"></div>' +
+        '<div class="taxcalc-field"><label>장애인 상속인 기대여명 잔여연수 합</label><input type="number" id="ihDisabledYears" placeholder="년 (1년당 1천만원)" maxlength="3"><span class="taxcalc-result-note" id="ihDisabledCountHint" style="margin:2px 0 0;"></span></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>배우자상속공제 (부표3의2 한도액 계산)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -2689,9 +2803,6 @@ taxCalcView.addEventListener('click', function(e){
   } else if (action === 'show-agg-calc-basis'){
     const box = document.getElementById('calcBasisAgg');
     box.style.display = box.style.display === 'none' ? 'block' : 'none';
-  } else if (action === 'toggle-allocation-tool'){
-    allocationShown = !allocationShown;
-    renderAllocationTool();
   } else if (action === 'add-alloc-asset'){
     allocationAssets.push({});
     renderAllocationTool();
@@ -2722,23 +2833,20 @@ taxCalcView.addEventListener('click', function(e){
       input.totalNecessaryExpenses = numVal(document.getElementById('allocTotalExpense').value) || 0;
     }
     const result = calculateProportionalAllocationJS(input);
+    // 계산 즉시 자산별 결과를 거래 목록에 자동으로 추가한다 — "적용" 버튼을 따로 눌러 복사해오지
+    // 않아도 되게, 안분계산과 거래 추가를 한 동작으로 합친다.
+    if (result && Array.isArray(result.자산별_안분결과)){
+      result.자산별_안분결과.forEach(function(row){
+        const newAsset = {
+          transferPrice: row.양도가액_부가세제외 !== undefined ? row.양도가액_부가세제외 : row.양도가액_안분액
+        };
+        if (row.취득가액_안분액 !== undefined) newAsset.acquisitionPrice = row.취득가액_안분액;
+        if (row.필요경비_안분액 !== undefined) newAsset.acquisitionExpenseItems = [{ label: '안분계산 반영', amount: row.필요경비_안분액 }];
+        transferAssets.push(newAsset);
+      });
+      renderTransferPane();
+    }
     renderAllocationResult(result);
-  } else if (action === 'apply-allocation-to-new-asset'){
-    const resultBox = document.getElementById('taxCalcAllocationResult');
-    const lastResult = JSON.parse(resultBox.dataset.lastResult || '{}');
-    const row = lastResult.자산별_안분결과 && lastResult.자산별_안분결과[numVal(btn.dataset.ridx)];
-    if (!row) return;
-    const newAsset = {
-      transferPrice: row.양도가액_부가세제외 !== undefined ? row.양도가액_부가세제외 : row.양도가액_안분액
-    };
-    if (row.취득가액_안분액 !== undefined) newAsset.acquisitionPrice = row.취득가액_안분액;
-    if (row.필요경비_안분액 !== undefined) newAsset.acquisitionExpenseItems = [{ label: '안분계산 반영', amount: row.필요경비_안분액 }];
-    transferAssets.push(newAsset);
-    allocationShown = true;
-    renderTransferPane();
-  } else if (action === 'toggle-building-price-tool'){
-    buildingPriceShown = !buildingPriceShown;
-    renderBuildingPriceTool();
   } else if (action === 'add-building-row'){
     buildingPriceRows.push({});
     renderBuildingPriceTool();
@@ -2758,14 +2866,13 @@ taxCalcView.addEventListener('click', function(e){
       };
     });
     const result = calculateBuildingStandardPriceMultiJS(rows, numVal(document.getElementById('bpLandPrice').value) || 0, taxType);
+    // 계산 즉시 합계를 거래 목록에 자동으로 추가한다(양도세 탭 기준일 때만 — 상속세·증여세용으로
+    // 계산했다면 재산평가 자산목록에 직접 입력해야 하므로 여기서 자동으로 거래를 만들지 않는다).
+    if (result && !result.error && taxType === 'transfer' && result.건물기준시가_합계 > 0){
+      transferAssets.push({ acquisitionPrice: result.건물기준시가_합계 });
+      renderTransferPane();
+    }
     renderBuildingPriceResult(result);
-  } else if (action === 'apply-building-price-to-new-asset'){
-    const resultBox = document.getElementById('taxCalcBuildingPriceResult');
-    const total = numVal(resultBox.dataset.lastTotal) || 0;
-    if (!total) return;
-    transferAssets.push({ acquisitionPrice: total });
-    buildingPriceShown = true;
-    renderTransferPane();
   } else if (action === 'apply-clawback-to-gift' || action === 'apply-clawback-to-inheritance'){
     const resultBox = document.getElementById('taxCalcClawbackResult');
     const total = numVal(resultBox.dataset.lastInterestTotal) || 0;
@@ -2804,6 +2911,75 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('stUnpaidDays').value) || 0
     };
     renderStockTransferResult(calculateStockTransferTaxJS(input));
+  } else if (action === 'send-debt-to-transfer'){
+    // 부담부증여의 인수채무액 상당분은 증여자가 그 지분만큼 대가(채무인수)를 받고 양도한 것으로
+    // 과세된다(소득세법§88①). 양도가액=인수채무액, 취득가액·필요경비는 증여자의 전체 재산 기준
+    // 취득정보에 (인수채무액÷증여재산가액) 비율을 곱해 안분한다.
+    const giftAmount = numVal(document.getElementById('giftAmount').value) || 0;
+    const debtAmount = numVal(document.getElementById('giftDebtAssumed').value) || 0;
+    if (!giftAmount || !debtAmount) return;
+    const ratio = Math.min(1, debtAmount / giftAmount);
+    const donorAcqPrice = numVal(document.getElementById('giftDonorAcqPrice').value) || 0;
+    const donorAcqExpense = numVal(document.getElementById('giftDonorAcqExpense').value) || 0;
+    const donorAcqDate = document.getElementById('giftDonorAcqDate').value;
+    const giftDate = document.getElementById('giftDate').value;
+    const newAsset = {
+      transferPrice: debtAmount,
+      acquisitionPrice: Math.round(donorAcqPrice * ratio),
+      acquisitionDate: donorAcqDate,
+      transferDate: giftDate,
+      buyerName: document.getElementById('giftDoneeName').value,
+      buyerRegNo: document.getElementById('giftDoneeRegNo').value,
+      buyerRelation: 'lineal'
+    };
+    if (donorAcqExpense > 0) newAsset.acquisitionExpenseItems = [{ label: '부담부증여 안분(증여자 필요경비)', amount: Math.round(donorAcqExpense * ratio) }];
+    transferAssets.push(newAsset);
+    renderTransferPane();
+    const btns2 = Array.from(document.querySelectorAll('.taxcalc-tab'));
+    const transferTab = btns2.find(function(b){ return b.textContent.trim() === '양도소득세'; });
+    if (transferTab) transferTab.click();
+  } else if (action === 'send-transfer-to-gift-deemed'){
+    // 특수관계인과 시가보다 낮게(높게) 거래한 경우, 그 차액을 상증세법§35 저가양수·고가양도
+    // 증여의제 계산기로 넘긴다 — 실제거래대가·시가만 옮기고, 세액계산은 그 계산기에서 그대로 진행.
+    const idx = numVal(btn.dataset.idx);
+    const vals = transferAssets[idx];
+    const fairValue = numVal(vals.fairMarketValueForGiftCheck) || 0;
+    const transferPrice = numVal(vals.transferPrice) || 0;
+    if (!fairValue || !transferPrice) return;
+    const btns3 = Array.from(document.querySelectorAll('.taxcalc-tab'));
+    const giftTab = btns3.find(function(b){ return b.textContent.trim() === '증여세'; });
+    if (giftTab) giftTab.click();
+    const fairValueEl = document.getElementById('lpFairValue');
+    const transferPriceEl = document.getElementById('lpTransferPrice');
+    if (fairValueEl){ fairValueEl.value = String(fairValue); fairValueEl.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (transferPriceEl){ transferPriceEl.value = String(transferPrice); transferPriceEl.dispatchEvent(new Event('input', { bubbles: true })); }
+  } else if (action === 'send-settlement-to-new-transfer'){
+    // 청산금 환급액(재건축·환지 공통)은 관리처분인가일(또는 환지처분공고일)에 종전자산 중 그 만큼을
+    // 먼저 양도한 것으로 과세된다 — 종전 취득가액을 (환급액÷권리가액 또는 면적) 비율로 안분한다.
+    const idx = numVal(btn.dataset.idx);
+    const kind = btn.dataset.kind;
+    const vals = transferAssets[idx];
+    const origPrice = numVal(vals.originalAssetAcquisitionPrice) || 0;
+    const newAsset = { acquisitionDate: vals.acquisitionDate || '' };
+    if (kind === 'reconstruction'){
+      const received = numVal(vals.settlementReceived) || 0;
+      const rightsValue = numVal(vals.rightsValue) || 0;
+      if (!received || !rightsValue) return;
+      newAsset.transferPrice = received;
+      newAsset.transferDate = vals.managementDispositionDate || '';
+      newAsset.acquisitionPrice = Math.round(origPrice * Math.min(1, received / rightsValue));
+    } else {
+      const received = numVal(vals.replotmentSettlementReceived) || 0;
+      const rightsArea = numVal(vals.rightsAreaSqm) || 0;
+      const finalArea = numVal(vals.finalAreaSqm) || 0;
+      if (!received || !rightsArea) return;
+      const reducedRatio = Math.min(1, Math.max(0, (rightsArea - finalArea)) / rightsArea);
+      newAsset.transferPrice = received;
+      newAsset.transferDate = vals.replotmentDisposalDate || '';
+      newAsset.acquisitionPrice = Math.round(origPrice * reducedRatio);
+    }
+    transferAssets.push(newAsset);
+    renderTransferPane();
   } else if (action === 'run-gift'){
     const input = {
       giftAmount: numVal(document.getElementById('giftAmount').value) || 0,

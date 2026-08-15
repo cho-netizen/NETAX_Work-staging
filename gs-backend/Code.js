@@ -2465,6 +2465,11 @@ function fullYearsElapsed_(startDateStr, endDateStr) {
   if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) years--;
   return years;
 }
+// 의제취득일(소득세법 시행령§162④) — 1985.1.1. 전에 취득한 자산은 1985.1.1.에 취득한 것으로 보아
+// 보유기간(장기보유특별공제·단기양도세율 판정)을 계산한다. 취득가액 산정에는 영향을 주지 않는다.
+function deemedAcquisitionDate_(dateStr) {
+  return dateStr && dateStr < '1985-01-01' ? '1985-01-01' : dateStr;
+}
 
 // 장기보유특별공제율 — 일반 자산 (소득세법 §95, 3년 이상 보유 시 연 2%, 최대 30%)
 function longTermHoldingDeductionRate_(years) {
@@ -2680,7 +2685,7 @@ function toolCalculateTransferTax(p) {
   if (!acquisitionPrice || acquisitionPrice < 0) return { error: '취득가액(acquisitionPrice)이 필요합니다.' };
   if (!p.acquisitionDate || !p.transferDate) return { error: '취득일(acquisitionDate)과 양도일(transferDate)이 YYYY-MM-DD 형식으로 필요합니다.' };
 
-  const holdingYears = fullYearsElapsed_(p.acquisitionDate, p.transferDate);
+  const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(p.acquisitionDate), p.transferDate);
   if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다. 날짜를 확인하세요.' };
 
   // 실제 취득가액을 확인할 수 없을 때(매매계약서 분실 등)의 필요경비 개산공제:
