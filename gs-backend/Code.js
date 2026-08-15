@@ -3488,7 +3488,9 @@ function toolCalculateInstallmentPaymentSchedule(p) {
   const schedule = [];
   for (let i = 1; i <= count; i++) {
     const principal = (i === count) ? remaining : basePrincipal;
-    const interest = Math.round(remaining * annualInterestRatePercent / 100);
+    // 1회차(신고시 최초 납부분)는 아직 유예받은 기간이 없으므로 가산금이 붙지 않는다. 2회차부터는
+    // 그 이전 잔액에 대해 1년치 가산금이 붙는다(직전 회차 납부 후 남은 잔액 기준).
+    const interest = (i === 1) ? 0 : Math.round(remaining * annualInterestRatePercent / 100);
     schedule.push({ 회차: i, 원금: principal, 가산금: interest, 납부예정세액: principal + interest });
     remaining -= principal;
   }

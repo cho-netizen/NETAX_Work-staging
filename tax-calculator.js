@@ -779,18 +779,22 @@ function computeValuationAssetValue(a){
     }
     default: value = numVal(a.directValue) || 0;
   }
-  if (VALUATION_RATIO_EXEMPT_METHODS.indexOf(a.method) === -1){
-    const parsed = parseShareFraction_(a.ownershipRatio);
-    const ratio = parsed === null ? 1 : parsed;
-    value = value * ratio;
-  }
   // 저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법 §66, 시행령 §63①1호) —
   // 시가·보충적평가액, 그 재산이 담보하는 채권액(또는 등기된 전세금), 임대보증금 환산가액(임대보증금+연간임대료÷12%)
-  // 중 가장 큰 금액으로 평가한다. 세 가지는 서로 다른 근거이므로 해당되는 값만 입력하면 자동으로 셋 중 최댓값을 쓴다.
+  // 중 가장 큰 금액으로 평가한다. 담보채권액·임대보증금은 등기부·임대차계약상 재산 "전체" 기준으로
+  // 입력받으므로, 지분을 곱하기 전(전체 재산 기준 금액끼리) 먼저 비교해야 한다 — 지분을 먼저 곱해버리면
+  // 전체 기준인 담보채권액·임대보증금과 단위가 안 맞아 지분이 작을수록 담보채권액이 부당하게 이겨버린다.
+  // 지분은 셋 중 최댓값을 정한 "다음"에 그 결과 전체에 한 번만 곱한다.
   const securedDebtAmount = numVal(a.securedDebtAmount) || 0;
   const leaseTotals = computeRentalLeaseTotals_(a.rentalLeases);
   const rentalCapValue = (leaseTotals.deposit > 0 || leaseTotals.annualRent > 0) ? calculateRentalConversionValueJS(leaseTotals.annualRent, leaseTotals.deposit) : 0;
-  return Math.max(value, securedDebtAmount, rentalCapValue);
+  let finalValue = Math.max(value, securedDebtAmount, rentalCapValue);
+  if (VALUATION_RATIO_EXEMPT_METHODS.indexOf(a.method) === -1){
+    const parsed = parseShareFraction_(a.ownershipRatio);
+    const ratio = parsed === null ? 1 : parsed;
+    finalValue = finalValue * ratio;
+  }
+  return finalValue;
 }
 
 function valuationAssetMethodFieldsHtml(m, a){
