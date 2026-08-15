@@ -398,6 +398,30 @@ function formatRegNoValue_(raw){
   const digits = String(raw == null ? '' : raw).replace(/\D/g, '').slice(0, 13);
   return digits.length <= 6 ? digits : digits.slice(0, 6) + '-' + digits.slice(6);
 }
+// 주민등록번호 "형식" 검증(체크섬) — 실제로 그 번호를 쓰는 사람이 존재하는지(실명확인)는 행정안전부
+// 본인인증기관과의 유료 계약이 있어야 확인 가능해 여기서는 할 수 없다. 대신 누구나 계산으로 확인 가능한
+// 구조적 오류(자릿수·생년월일·성별코드·체크섬 불일치 = 십중팔구 오타)는 100% 걸러낼 수 있어 그것만 본다.
+function validateResidentRegistrationNumber_(raw){
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return { valid: null };
+  if (digits.length !== 13) return { valid: false, reason: '13자리 숫자가 아닙니다(현재 ' + digits.length + '자리)' };
+  const genderCode = digits.charAt(6);
+  const centuryMap = { '1':1900,'2':1900,'3':2000,'4':2000,'5':1900,'6':1900,'7':2000,'8':2000,'9':1800,'0':1800 };
+  if (!(genderCode in centuryMap)) return { valid: false, reason: '성별·출생세기 코드(7번째 자리 "' + genderCode + '")가 올바르지 않습니다' };
+  const year = centuryMap[genderCode] + Number(digits.slice(0, 2));
+  const month = Number(digits.slice(2, 4));
+  const day = Number(digits.slice(4, 6));
+  const dt = new Date(year, month - 1, day);
+  if (month < 1 || month > 12 || day < 1 || dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) {
+    return { valid: false, reason: '생년월일(앞 6자리)이 실제 존재하는 날짜와 맞지 않습니다' };
+  }
+  const weights = [2,3,4,5,6,7,8,9,2,3,4,5];
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(digits.charAt(i)) * weights[i];
+  const check = (11 - (sum % 11)) % 10;
+  if (check !== Number(digits.charAt(12))) return { valid: false, reason: '검증번호(마지막 자리)가 맞지 않습니다 — 오타 가능성이 높습니다' };
+  return { valid: true };
+}
 function enhanceRegNoInputs(container){
   if (!container) return;
   container.querySelectorAll('[data-regno]').forEach(function(el){
@@ -411,6 +435,17 @@ function enhanceRegNoInputs(container){
       el.value = formatted;
       const pos = Math.max(0, formatted.length - caretFromEnd);
       try { el.setSelectionRange(pos, pos); } catch (e) { /* 일부 브라우저 미지원이면 무시 */ }
+      el.style.borderColor = '';
+    });
+    el.addEventListener('blur', function(){
+      const check = validateResidentRegistrationNumber_(el.value);
+      if (check.valid === false){
+        el.style.borderColor = '#e53935';
+        const proceed = confirm('주민등록번호 형식 오류: ' + check.reason + '\n\n그래도 이 값을 그대로 입력하시겠습니까?\n(취소를 누르면 이 칸을 비웁니다)');
+        if (!proceed){ el.value = ''; el.style.borderColor = ''; }
+      } else {
+        el.style.borderColor = '';
+      }
     });
   });
 }
@@ -523,7 +558,9 @@ function assetDetailFieldsHtml_(a){
       '<option value="building"' + (kind === 'building' ? ' selected' : '') + '>건물(구분소유 건물·아파트 등 대지권 포함분도 건물면적만 입력)</option>' +
       '<option value="other"' + (kind === 'other' ? ' selected' : '') + '>기타</option>' +
     '</select></div>' +
-    '<div class="taxcalc-field"><label>소재지</label><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search" style="margin-top:4px;">🔍 주소 검색</button></div>' +
+    '<div class="taxcalc-field"><label>소재지</label><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search" style="margin-top:4px;">🔍 주소 검색</button>' +
+      (a.assetZipNo ? '<span class="taxcalc-result-note" style="margin:2px 0 0;">우편번호 ' + a.assetZipNo + '</span>' : '') +
+    '</div>' +
     '<div class="taxcalc-field"><label>동</label><select data-field="assetDong"><option value="">직접입력/해당없음</option>' +
       dongOptions.map(function(d){ return '<option value="' + d + '"' + (a.assetDong === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') +
     '</select></div>' +
@@ -660,6 +697,63 @@ function openAddressSearchModal_(onPick){
   overlay.querySelector('#btnAddrSearchRun').onclick = runSearch;
   overlay.querySelector('#addrSearchKeyword').addEventListener('keydown', function(e){ if (e.key === 'Enter') runSearch(); });
   overlay.querySelector('#addrSearchKeyword').focus();
+}
+
+// 매매사례가액(아파트 실거래가) 참고조회 모달 — 계약년월(YYYYMM)로 그 지역 아파트 실거래 목록을
+// 받아와 사용자가 유사한 거래를 골라 평가액에 채울 수 있게 한다. 시가로 그대로 쓸지는 면적·층·거래
+// 시점의 유사성을 사용자가 직접 판단해야 하므로 자동으로 채우지 않고 "골라서 채우기"로만 동작한다.
+function openRealPriceModal_(lawdCd, onPick){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  const now = new Date();
+  const defaultYm = String(now.getFullYear()) + ('0' + (now.getMonth() + 1)).slice(-2);
+  overlay.innerHTML =
+    '<div class="modal-panel" style="width:min(560px, 94vw);">' +
+      '<div class="modal-head"><span>아파트 실거래가 조회(참고)</span><span class="modal-close" id="btnCloseRealPrice">✕</span></div>' +
+      '<div class="modal-body">' +
+        '<div class="taxcalc-grid" style="margin-bottom:8px;">' +
+          '<div class="taxcalc-field"><label>계약년월</label><input type="text" id="realPriceYm" value="' + defaultYm + '" placeholder="YYYYMM" maxlength="6"></div>' +
+          '<button type="button" class="taxcalc-run-btn" id="btnRealPriceRun">조회</button>' +
+        '</div>' +
+        '<div class="taxcalc-result-note">국토교통부 실거래가 공개시스템 자료입니다 — 같은 면적·층·거래시점인지 직접 확인하고 고르세요.</div>' +
+        '<div id="realPriceList" class="taxcalc-evidence-list"></div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.querySelector('#btnCloseRealPrice').onclick = close;
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+  function runSearch(){
+    const dealYm = overlay.querySelector('#realPriceYm').value.trim();
+    const listBox = overlay.querySelector('#realPriceList');
+    listBox.innerHTML = '<div class="taxcalc-evidence-empty">조회 중…</div>';
+    fetch(GAS_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'lookupRealPrice', lawdCd: lawdCd, dealYm: dealYm })
+    }).then(function(res){ return res.json(); }).then(function(data){
+      if (data.error){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">' + data.error.replace(/</g,'&lt;') + '</div>'; return; }
+      const items = data.items || [];
+      if (!items.length){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">해당 월 거래 내역이 없습니다.</div>'; return; }
+      listBox.innerHTML = items.map(function(it, idx){
+        return '<div class="taxcalc-evidence-item"><span class="name">' + (it.aptNm || '').replace(/</g,'&lt;') + ' ' + (it.dong || '') + ' ' + (it.jibun || '') +
+          ' · ' + it.area + '㎡ · ' + it.floor + '층 · ' + it.dealDate + ' · ' + won(it.dealAmount) + '</span>' +
+          '<button type="button" data-real-idx="' + idx + '">선택</button></div>';
+      }).join('');
+      listBox.querySelectorAll('[data-real-idx]').forEach(function(b){
+        b.addEventListener('click', function(){
+          const picked = items[numVal(b.dataset.realIdx)];
+          close();
+          onPick(picked);
+        });
+      });
+    }).catch(function(err){
+      listBox.innerHTML = '<div class="taxcalc-evidence-empty">조회 실패: ' + (err && err.message || err) + '</div>';
+    });
+  }
+  overlay.querySelector('#btnRealPriceRun').onclick = runSearch;
+  overlay.querySelector('#realPriceYm').addEventListener('keydown', function(e){ if (e.key === 'Enter') runSearch(); });
+  runSearch();
 }
 
 // 거래(자산) 하나의 AI 자동입력 상태(_aiStatus: 'loading'|'done'|'error'|undefined)를 배지로 렌더링.
@@ -813,6 +907,15 @@ function computeRentalLeaseTotals_(leases){
   const annualRent = list.reduce(function(s, l){ return s + (numVal(l.monthlyRent) || 0) * 12; }, 0);
   return { deposit: deposit, annualRent: annualRent };
 }
+// 개별공시지가·공동주택가격 자동조회에 쓸 19자리 PNU(고유번호) = 법정동코드10 + 산여부1(1=일반,2=산)
+// + 지번본번4 + 지번부번4. 원자재(admCd·mtYn·지번)는 주소검색이 돌려준 값을 자산에 저장해둔 것을 쓴다.
+function buildPnu_(a){
+  if (!a || !a.assetAdmCd || !a.assetLnbrMnnm) return '';
+  const san = a.assetMtYn === '1' ? '2' : '1';
+  const mnnm = ('0000' + a.assetLnbrMnnm).slice(-4);
+  const slno = ('0000' + (a.assetLnbrSlno || '0')).slice(-4);
+  return a.assetAdmCd + san + mnnm + slno;
+}
 function computeValuationAssetValue(a){
   let value;
   switch (a.method){
@@ -862,10 +965,12 @@ function computeValuationAssetValue(a){
 
 function valuationAssetMethodFieldsHtml(m, a){
   if (m === 'land') return '' +
-    '<div class="taxcalc-field"><label>개별공시지가(원/㎡)</label><input type="number" data-field="landPrice" value="' + (a.landPrice || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>개별공시지가(원/㎡)</label><input type="number" data-field="landPrice" value="' + (a.landPrice || '') + '"><button type="button" class="taxcalc-ai-btn" data-action="lookup-official-price" data-price-kind="land" style="margin-top:4px;">🔍 공시지가 자동조회</button></div>' +
     '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="landArea" value="' + (a.landArea || '') + '"></div>';
   if (m === 'house' || m === 'apartment' || m === 'officetel') return '' +
-    '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '"></div>';
+    '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '">' +
+    (m === 'apartment' ? '<button type="button" class="taxcalc-ai-btn" data-action="lookup-official-price" data-price-kind="apartment" style="margin-top:4px;">🔍 공동주택가격 자동조회</button>' : '') +
+    '</div>';
   if (m === 'building'){
     const structureOptions = (window.BUILDING_STRUCTURE_TABLE || []).map(function(s){ return '<option value="' + s.name + '"' + (a.buildingStructure === s.name ? ' selected' : '') + '>' + s.name + '</option>'; }).join('');
     const useOptions = (window.BUILDING_USE_TABLE || []).filter(function(u){ return u.index !== null; }).map(function(u){ return '<option value="' + u.no + '"' + (String(a.buildingUse) === String(u.no) ? ' selected' : '') + '>' + u.no + '. ' + u.desc + '</option>'; }).join('');
@@ -898,7 +1003,7 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>3년전 순손익액</label><input type="number" data-field="gwProfit3" value="' + (a.gwProfit3 || '') + '"></div>' +
     '<div class="taxcalc-field"><label>자기자본(평가기준일 현재)</label><input type="number" data-field="gwSelfCapital" value="' + (a.gwSelfCapital || '') + '"></div>' +
     '<div class="taxcalc-field"><label style="color:var(--sub);">※ 가중평균순손익액×50%가 자기자본×10%를 넘는 초과분만 5년 연금현가(3.79079)로 평가되며, 넘지 않으면 0원입니다</label></div>';
-  return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"></div>';
+  return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"><button type="button" class="taxcalc-ai-btn" data-action="lookup-real-price" style="margin-top:4px;">🔍 아파트 실거래가 조회(참고)</button></div>';
 }
 
 // 임대차 내역은 자산의 평가방법과 무관하게(§66 평가특례의 담보·임대보증금 캡 비교, §61⑤ 임대료환산가액
@@ -910,7 +1015,7 @@ function renderRentalLeasesSectionHtml_(a){
     return '<div class="taxcalc-grid" data-lease-idx="' + lidx + '" style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);">' +
       '<div class="taxcalc-field"><label>호실/구분</label><input type="text" data-lfield="unitLabel" value="' + (l.unitLabel || '').replace(/"/g,'&quot;') + '" placeholder="예: 101호"></div>' +
       '<div class="taxcalc-field"><label>성명</label><input type="text" data-lfield="tenantName" value="' + (l.tenantName || '').replace(/"/g,'&quot;') + '" placeholder="예: 홍길동 또는 OO상회"></div>' +
-      '<div class="taxcalc-field"><label>주민번호</label><input type="text" data-lfield="tenantBizNo" value="' + (l.tenantBizNo || '').replace(/"/g,'&quot;') + '" placeholder="사업자 123-45-67890 / 개인 000000-0000000"></div>' +
+      '<div class="taxcalc-field"><label>주민번호</label><input type="text" data-lfield="tenantBizNo" value="' + (l.tenantBizNo || '').replace(/"/g,'&quot;') + '" placeholder="사업자 123-45-67890 / 개인 000000-0000000"><button type="button" class="taxcalc-ai-btn" data-action="check-bizno" style="margin-top:4px;">🔍 확인</button><span class="taxcalc-result-note" data-bizno-result style="margin:2px 0 0;"></span></div>' +
       '<div class="taxcalc-field"><label>임대보증금</label><input type="number" data-lfield="deposit" value="' + (l.deposit || '') + '"></div>' +
       '<div class="taxcalc-field"><label>월세</label><input type="number" data-lfield="monthlyRent" value="' + (l.monthlyRent || '') + '"></div>' +
       (leases.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-rental-lease" data-idx="' + lidx + '">✕ 삭제</button>' : '') +
@@ -1403,6 +1508,10 @@ function renderTransferPane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>양도인 성명</label><input type="text" id="trTransferorName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>양도인 주민등록번호</label><input type="text" id="trTransferorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
+        '<div class="taxcalc-field"><label>양도인 주소(납세지)</label><input type="text" id="trTransferorAddress">' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="trTransferorAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="trTransferorAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
     '<div id="taxCalcTransferCards">' + cardsHtml + '</div>' +
@@ -1733,11 +1842,16 @@ function renderGiftPane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>수증자 성명</label><input type="text" id="giftDoneeName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>수증자 주민등록번호</label><input type="text" id="giftDoneeRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
-        '<div class="taxcalc-field"><label>수증자 주소</label><input type="text" id="giftDoneeAddress"></div>' +
+        '<div class="taxcalc-field"><label>수증자 주소(납세지)</label><input type="text" id="giftDoneeAddress">' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDoneeAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="giftDoneeAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
+        '</div>' +
         '<div class="taxcalc-field"><span class="taxcalc-result-note" id="giftMinorHint" style="margin:0;">수증자 미성년 여부는 위 주민등록번호로 자동 판정됩니다</span></div>' +
         '<div class="taxcalc-field"><label>증여자 성명</label><input type="text" id="giftDonorName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>증여자 주민등록번호</label><input type="text" id="giftDonorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
-        '<div class="taxcalc-field"><label>증여자 주소</label><input type="text" id="giftDonorAddress"></div>' +
+        '<div class="taxcalc-field"><label>증여자 주소</label><input type="text" id="giftDonorAddress">' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDonorAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+        '</div>' +
         '<div class="taxcalc-field"><label>증여일자</label><input type="date" id="giftDate" min="1900-01-01" max="2099-12-31"><span class="taxcalc-result-note" id="giftDateDeadlineHint" style="margin:2px 0 0;"></span></div>' +
         '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="giftRelation">' +
           '<option value="배우자">배우자</option>' +
@@ -2220,6 +2334,10 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>피상속인 성명</label><input type="text" id="ihDeceasedName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>피상속인 주민등록번호</label><input type="text" id="ihDeceasedRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
         '<div class="taxcalc-field"><label>상속개시일</label><input type="date" id="ihDeathDate" min="1900-01-01" max="2099-12-31"><span class="taxcalc-result-note" id="ihDeathDateDeadlineHint" style="margin:2px 0 0;"></span></div>' +
+        '<div class="taxcalc-field"><label>피상속인 주소(사망 당시 주소지=납세지)</label><input type="text" id="ihDeceasedAddress">' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="ihDeceasedAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+          '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="ihDeceasedAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
     '<div class="taxcalc-asset-head"><b>상속인 명부 — 여기 입력한 관계·생년월일·상속재산가액으로 아래 인적공제·배우자공제·동거주택공제·세대생략비율·신고인 정보가 전부 자동으로 채워집니다</b></div>' +
@@ -2474,7 +2592,7 @@ function renderFuneralItemsList(){
   const rowsHtml = inheritanceFuneralItems.map(function(item, idx){
     return '<div class="taxcalc-grid" data-funeral-idx="' + idx + '" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);">' +
       '<div class="taxcalc-field"><label>지급처</label><input type="text" data-ffield="payee" value="' + (item.payee || '').replace(/"/g, '&quot;') + '" placeholder="예: OO장례식장"></div>' +
-      '<div class="taxcalc-field"><label>지급처 사업자번호</label><input type="text" data-ffield="bizNo" value="' + (item.bizNo || '').replace(/"/g, '&quot;') + '" placeholder="123-45-67890"></div>' +
+      '<div class="taxcalc-field"><label>지급처 사업자번호</label><input type="text" data-ffield="bizNo" value="' + (item.bizNo || '').replace(/"/g, '&quot;') + '" placeholder="123-45-67890"><button type="button" class="taxcalc-ai-btn" data-action="check-bizno" style="margin-top:4px;">🔍 확인</button><span class="taxcalc-result-note" data-bizno-result style="margin:2px 0 0;"></span></div>' +
       '<div class="taxcalc-field"><label>구분</label><select data-ffield="category"><option value="general"' + (item.category !== 'niche' ? ' selected' : '') + '>일반 장례비용</option><option value="niche"' + (item.category === 'niche' ? ' selected' : '') + '>봉안시설·자연장지 비용</option></select></div>' +
       '<div class="taxcalc-field"><label>금액</label><input type="number" data-ffield="amount" value="' + (item.amount || '') + '"></div>' +
       (inheritanceFuneralItems.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-funeral-item" data-idx="' + idx + '">✕ 삭제</button>' : '') +
@@ -2864,6 +2982,88 @@ taxCalcView.addEventListener('click', function(e){
       assets[idx].assetLocation = picked.roadAddr || picked.jibunAddr || '';
       assets[idx].assetDongList = picked.dongList || [];
       assets[idx].assetDong = '';
+      assets[idx].assetZipNo = picked.zipNo || '';
+      // 개별공시지가·공동주택가격 자동조회용 PNU 원자재를 함께 저장해둔다(화면엔 안 보이지만
+      // "🔍 공시가격 자동조회" 버튼을 누를 때 조립해서 쓴다).
+      assets[idx].assetAdmCd = picked.admCd || '';
+      assets[idx].assetMtYn = picked.mtYn || '0';
+      assets[idx].assetLnbrMnnm = picked.lnbrMnnm || '';
+      assets[idx].assetLnbrSlno = picked.lnbrSlno || '';
+      if (giftListEl) renderValuationAssetList('giftValuationList', giftValuationAssets);
+      else if (ihListEl) renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
+      else renderTransferPane();
+    });
+  } else if (action === 'open-address-search-simple'){
+    // 자산목록이 아니라 단일 텍스트 입력칸(양도인/피상속인 주소 등)에 바로 채우는 단순 버전.
+    const targetId = btn.dataset.targetInput;
+    openAddressSearchModal_(function(picked){
+      const el = targetId ? document.getElementById(targetId) : null;
+      if (el) el.value = picked.roadAddr || picked.jibunAddr || '';
+    });
+  } else if (action === 'open-tax-office-guide'){
+    // 특정 주소를 넣으면 관할세무서를 바로 알려주는 안정적인 공개 API가 확인되지 않아, 국세청 공식
+    // 조회 페이지로 바로 연결 + 주소 클립보드 복사로 구현했다(완전 자동입력은 아니지만 실제로 동작함).
+    const targetId = btn.dataset.addressInput;
+    const el = targetId ? document.getElementById(targetId) : null;
+    const addr = el ? el.value.trim() : '';
+    if (addr && navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(addr).catch(function(){});
+    }
+    window.open('https://www.nts.go.kr/nts/taxSrch/taxSrchPage.do', '_blank');
+    alert('국세청 관할세무서 조회 페이지를 새 창으로 열었습니다.' +
+      (addr ? '\n주소가 클립보드에 복사되었으니 조회 화면 검색창에 붙여넣기(Ctrl+V)만 하면 됩니다:\n' + addr : '\n검색창에 주소를 입력해 조회하세요.'));
+  } else if (action === 'check-bizno'){
+    const field = btn.closest('.taxcalc-field');
+    const input = field ? field.querySelector('input') : null;
+    const resultEl = field ? field.querySelector('[data-bizno-result]') : null;
+    const raw = (input && input.value || '').replace(/\D/g, '');
+    if (raw.length === 13){
+      const check = validateResidentRegistrationNumber_(raw);
+      if (resultEl) resultEl.textContent = check.valid === false ? ('⚠ 개인 주민등록번호 형식 오류: ' + check.reason) : '개인 주민등록번호 형식은 정상입니다(실명 확인은 아님)';
+    } else if (raw.length === 10){
+      if (resultEl) resultEl.textContent = '확인 중…';
+      fetch(GAS_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'checkBusinessNumber', bNo: raw })
+      }).then(function(res){ return res.json(); }).then(function(data){
+        if (!resultEl) return;
+        if (data.error){ resultEl.textContent = '⚠ ' + data.error; return; }
+        resultEl.textContent = (data.status === '계속사업자' ? '✅ ' : '⚠ ') + '사업자상태: ' + (data.status || '확인불가') + (data.closeDate ? ' (폐업일 ' + data.closeDate + ')' : '');
+      }).catch(function(err){ if (resultEl) resultEl.textContent = '확인 실패: ' + (err && err.message || err); });
+    } else {
+      if (resultEl) resultEl.textContent = '10자리(사업자등록번호) 또는 13자리(개인 주민등록번호)를 입력하세요.';
+    }
+  } else if (action === 'lookup-official-price'){
+    const card = btn.closest('.taxcalc-asset');
+    const idx = numVal(card.dataset.idx);
+    const giftListEl = card.closest('#giftValuationList');
+    const ihListEl = card.closest('#inheritanceValuationList');
+    const assets = giftListEl ? giftValuationAssets : (ihListEl ? inheritanceValuationAssets : transferAssets);
+    const a = assets[idx];
+    const pnu = buildPnu_(a);
+    if (!pnu){ alert('먼저 "🔍 주소 검색"으로 소재지(지번)를 선택해야 공시가격을 자동조회할 수 있습니다.'); return; }
+    const priceKind = btn.dataset.priceKind;
+    fetch(GAS_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'lookupOfficialPrice', pnu: pnu, priceKind: priceKind })
+    }).then(function(res){ return res.json(); }).then(function(data){
+      if (data.error){ alert(data.error); return; }
+      if (priceKind === 'apartment') a.housePrice = data.price; else a.landPrice = data.price;
+      if (giftListEl) renderValuationAssetList('giftValuationList', giftValuationAssets);
+      else if (ihListEl) renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
+      else renderTransferPane();
+    }).catch(function(err){ alert('공시가격 조회 실패: ' + (err && err.message || err)); });
+  } else if (action === 'lookup-real-price'){
+    const card = btn.closest('.taxcalc-asset');
+    const idx = numVal(card.dataset.idx);
+    const giftListEl = card.closest('#giftValuationList');
+    const ihListEl = card.closest('#inheritanceValuationList');
+    const assets = giftListEl ? giftValuationAssets : (ihListEl ? inheritanceValuationAssets : transferAssets);
+    const a = assets[idx];
+    const lawdCd = (a.assetAdmCd || '').slice(0, 5);
+    if (!/^\d{5}$/.test(lawdCd)){ alert('먼저 "🔍 주소 검색"으로 소재지를 선택해야 실거래가를 조회할 수 있습니다.'); return; }
+    openRealPriceModal_(lawdCd, function(picked){
+      a.directValue = picked.dealAmount;
       if (giftListEl) renderValuationAssetList('giftValuationList', giftValuationAssets);
       else if (ihListEl) renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
       else renderTransferPane();
