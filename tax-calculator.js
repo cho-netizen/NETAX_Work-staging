@@ -515,13 +515,19 @@ function assetDetailFieldsHtml_(a){
     '<div class="taxcalc-field"><label>지목</label><select data-field="assetSubType"><option value="">선택</option>' +
       ASSET_LAND_CATEGORY_OPTIONS.map(function(c){ return '<option value="' + c + '"' + (a.assetSubType === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
     '</select></div>';
+  const dongOptions = (Array.isArray(a.assetDongList) && a.assetDongList.length) ? a.assetDongList :
+    (a.assetDong ? [a.assetDong] : []);
   return '' +
     '<div class="taxcalc-field"><label>유형</label><select data-field="assetKind">' +
       '<option value="land"' + (kind === 'land' ? ' selected' : '') + '>토지</option>' +
       '<option value="building"' + (kind === 'building' ? ' selected' : '') + '>건물(구분소유 건물·아파트 등 대지권 포함분도 건물면적만 입력)</option>' +
       '<option value="other"' + (kind === 'other' ? ' selected' : '') + '>기타</option>' +
     '</select></div>' +
-    '<div class="taxcalc-field"><label>소재지</label><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"></div>' +
+    '<div class="taxcalc-field"><label>소재지</label><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search" style="margin-top:4px;">🔍 주소 검색</button></div>' +
+    '<div class="taxcalc-field"><label>동</label><select data-field="assetDong"><option value="">직접입력/해당없음</option>' +
+      dongOptions.map(function(d){ return '<option value="' + d + '"' + (a.assetDong === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="taxcalc-field"><label>호</label><input type="text" data-field="assetHo" value="' + (a.assetHo || '').replace(/"/g, '&quot;') + '" placeholder="예: 1502호(공공데이터에 없어 직접 입력)"></div>' +
     subTypeFieldHtml +
     '<div class="taxcalc-field"><label>면적(㎡)</label><input type="number" data-field="assetArea" value="' + (a.assetArea || '') + '"></div>';
 }
@@ -597,6 +603,63 @@ function openEvidencePicker(onPick){
     overlay.style.display = 'none';
     openScanModal();
   };
+}
+
+// 도로명주소 API(juso.go.kr) 검색 모달 — 건물명(아파트명 등)으로 검색하면 도로명·지번주소 후보와,
+// 공동주택이면 동(棟) 목록(detBdNmList)까지 함께 온다. 호수는 공공데이터에 없는 개인정보라 항상
+// 직접 입력해야 한다. API 키가 아직 등록 안 됐으면 GAS 쪽에서 그 안내 문구를 그대로 돌려준다.
+function openAddressSearchModal_(onPick){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  overlay.innerHTML =
+    '<div class="modal-panel" style="width:min(480px, 92vw);">' +
+      '<div class="modal-head"><span>주소 검색</span><span class="modal-close" id="btnCloseAddrSearch">✕</span></div>' +
+      '<div class="modal-body">' +
+        '<div class="taxcalc-grid" style="margin-bottom:8px;">' +
+          '<div class="taxcalc-field" style="flex:1;"><input type="text" id="addrSearchKeyword" placeholder="건물명·도로명·지번 등으로 검색"></div>' +
+          '<button type="button" class="taxcalc-run-btn" id="btnAddrSearchRun">검색</button>' +
+        '</div>' +
+        '<div id="addrSearchList" class="taxcalc-evidence-list"></div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.querySelector('#btnCloseAddrSearch').onclick = close;
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+
+  function runSearch(){
+    const keyword = overlay.querySelector('#addrSearchKeyword').value.trim();
+    const listBox = overlay.querySelector('#addrSearchList');
+    if (!keyword){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">검색어를 입력하세요.</div>'; return; }
+    listBox.innerHTML = '<div class="taxcalc-evidence-empty">검색 중…</div>';
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'searchAddress', keyword: keyword })
+    }).then(function(res){ return res.json(); }).then(function(data){
+      if (data.error){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">' + data.error.replace(/</g,'&lt;') + '</div>'; return; }
+      const juso = data.juso || [];
+      if (!juso.length){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">검색 결과가 없습니다.</div>'; return; }
+      listBox.innerHTML = juso.map(function(j, idx){
+        return '<div class="taxcalc-evidence-item"><span class="name">' + (j.roadAddr || j.jibunAddr || '').replace(/</g,'&lt;') +
+          (j.dongList && j.dongList.length ? ' <span style="color:var(--sub);">(동 ' + j.dongList.length + '개)</span>' : '') + '</span>' +
+          '<button type="button" data-addr-idx="' + idx + '">선택</button></div>';
+      }).join('');
+      listBox.querySelectorAll('[data-addr-idx]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          const picked = juso[numVal(btn.dataset.addrIdx)];
+          close();
+          onPick(picked);
+        });
+      });
+    }).catch(function(err){
+      listBox.innerHTML = '<div class="taxcalc-evidence-empty">검색 실패: ' + (err && err.message || err) + '</div>';
+    });
+  }
+  overlay.querySelector('#btnAddrSearchRun').onclick = runSearch;
+  overlay.querySelector('#addrSearchKeyword').addEventListener('keydown', function(e){ if (e.key === 'Enter') runSearch(); });
+  overlay.querySelector('#addrSearchKeyword').focus();
 }
 
 // 거래(자산) 하나의 AI 자동입력 상태(_aiStatus: 'loading'|'done'|'error'|undefined)를 배지로 렌더링.
@@ -2789,6 +2852,22 @@ taxCalcView.addEventListener('click', function(e){
     const net = Math.max(0, total - computeTotalRentalDepositDebt_(assets));
     if (target === 'giftValuationList') document.getElementById('giftAmount').value = net;
     else document.getElementById('ihEstate').value = net;
+  } else if (action === 'open-address-search'){
+    // 이 버튼이 어느 자산 목록(양도세 거래카드/증여·상속 재산평가 자산행) 안에 있는지 DOM으로
+    // 찾아서, 검색결과를 그 자산의 소재지·동·면적 관련 상태에 바로 채운다.
+    const card = btn.closest('.taxcalc-asset');
+    const idx = numVal(card.dataset.idx);
+    const giftListEl = card.closest('#giftValuationList');
+    const ihListEl = card.closest('#inheritanceValuationList');
+    const assets = giftListEl ? giftValuationAssets : (ihListEl ? inheritanceValuationAssets : transferAssets);
+    openAddressSearchModal_(function(picked){
+      assets[idx].assetLocation = picked.roadAddr || picked.jibunAddr || '';
+      assets[idx].assetDongList = picked.dongList || [];
+      assets[idx].assetDong = '';
+      if (giftListEl) renderValuationAssetList('giftValuationList', giftValuationAssets);
+      else if (ihListEl) renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
+      else renderTransferPane();
+    });
   } else if (action === 'open-evidence-transfer'){
     const idx = numVal(btn.dataset.idx);
     openEvidencePicker(function(fileName){ runAiAutoFillTransfer(fileName, idx); });

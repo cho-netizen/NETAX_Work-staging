@@ -928,6 +928,9 @@ function doPost(e) {
     if (body.action === 'saveCaseFromTemplate') {
       return jsonResponse(handleSaveCaseFromTemplate(body));
     }
+    if (body.action === 'searchAddress') {
+      return jsonResponse(handleSearchAddress(body));
+    }
 
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -4141,6 +4144,40 @@ function handleSaveCaseFromTemplate(body) {
       return { error: '사건 파일 저장 중 오류: ' + err.message };
     }
   });
+}
+
+// 도로명주소 검색(행정안전부 juso.go.kr 도로명주소 API) — 건물명(아파트명 등)으로 검색하면 도로명·지번
+// 주소 후보를 돌려준다. addInfoYn=Y로 상세조회하면 공동주택의 동(棟) 목록(detBdNmList)도 함께 온다
+// (예: "101동,102동,103동") — 호수는 공공데이터로 확인되지 않는 개인정보라 여기서 얻을 수 없으므로
+// 사용자가 직접 입력해야 한다. API 키는 juso.go.kr에서 무료로 발급받아 이 스크립트의
+// "프로젝트 설정 > 스크립트 속성"에 JUSO_API_KEY로 등록하면 바로 작동한다(코드 수정 불필요).
+function handleSearchAddress(body) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('JUSO_API_KEY');
+  if (!apiKey) {
+    return { error: '주소검색 API 키가 아직 등록되지 않았습니다. juso.go.kr(도로명주소 안내시스템)에서 오픈API 승인키를 무료로 발급받은 뒤, 이 Apps Script 프로젝트의 "프로젝트 설정 > 스크립트 속성"에 키 이름 JUSO_API_KEY로 등록하세요. 등록하면 코드 수정 없이 바로 작동합니다.' };
+  }
+  const keyword = String(body.keyword || '').trim();
+  if (!keyword) return { error: '검색어(건물명·도로명·지번 등)가 필요합니다.' };
+  const url = 'https://business.juso.go.kr/addrlink/addrLinkApi.do'
+    + '?confmKey=' + encodeURIComponent(apiKey)
+    + '&currentPage=1&countPerPage=20'
+    + '&keyword=' + encodeURIComponent(keyword)
+    + '&addInfoYn=Y&resultType=json';
+  try {
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const data = JSON.parse(res.getContentText());
+    const common = data.results && data.results.common;
+    if (!common) return { error: '주소 검색 API 응답 형식을 해석할 수 없습니다.' };
+    if (common.errorCode !== '0') return { error: '주소 검색 오류(' + common.errorCode + '): ' + common.errorMessage };
+    const juso = (data.results.juso || []).map(function (j) {
+      // detBdNmList가 동 목록을 담고 있다(예: "101동,102동"). 필드가 비어있으면 단독 건물이라 동 구분이 없는 것.
+      const dongList = j.detBdNmList ? String(j.detBdNmList).split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
+      return { roadAddr: j.roadAddr, jibunAddr: j.jibunAddr, zipNo: j.zipNo, bdNm: j.bdNm, dongList: dongList };
+    });
+    return { juso: juso, totalCount: Number(common.totalCount) || juso.length };
+  } catch (e) {
+    return { error: '주소 검색 API 호출 실패: ' + e.message };
+  }
 }
 
 // 파일이 있으면 내용을 그대로, 없으면 null을 돌려준다(오류로 취급하지 않음 — 아직 안 만든 파일일 수 있어서).
