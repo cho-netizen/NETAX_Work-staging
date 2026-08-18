@@ -70,12 +70,60 @@
     return Math.round((Number(priorInheritanceTaxPortion) || 0) * SHORT_TERM_REINHERITANCE_RATES[y - 1]);
   }
 
+  // 증여세액공제 (상증세법 §28) — 상속인별 정밀 계산.
+  // ①단서: 상속세 과세가액이 5억원 이하이면 공제 자체를 배제한다.
+  // ②본문+단서: 그 증여재산의 수증자가 상속인·수유자이면(사전증여 가산은 통상 이 경우다), 상속인 각자가
+  // 납부할 상속세액에 "그 상속인이 받았거나 받을 상속재산에 대하여 대통령령으로 정하는 바에 따라 계산한
+  // 과세표준(=상속인별 상속세과세표준 상당액, 시행령§3①1호)에 대하여 가산한 증여재산의 과세표준이 차지하는
+  // 비율"을 곱한 금액을 한도로, 각자가 납부할 상속세액에서 공제한다. 시행령§3①1호 산식:
+  //   상속인별 상속세과세표준상당액 = 그 상속인의 가산증여재산 과세표준
+  //     + (전체과세표준－전체가산증여재산과세표준) × [(그 상속인 상속세과세가액상당액－그 상속인 가산증여재산가액)
+  //                                                  ÷ (전체상속세과세가액－전체가산증여재산가액)]
+  // "상속인별 상속세과세가액상당액"과 "그 상속인이 납부할 상속세액"은 이 시행령 조문 자체에는 별도 산식이
+  // 없으나, 상증세법§3조의2②(상속세 납부의무 안분)이 이미 "각자가 받았거나 받을 재산" 비율로 안분하도록
+  // 정하고 있고 이 계산기의 §3조의2② 안분 도구(allocateInheritanceTaxByHeirJS)도 실무관행에 따라 "실제
+  // 상속재산가액 비율"로 그 비율을 조작적으로 정의하고 있으므로, 여기서도 동일한 비율을 그대로 적용해
+  // 두 조문의 해석을 일관되게 유지한다.
+  function priorGiftTaxCreditPrecise(overallCalculatedTax, overallTaxBase, overallTaxableAmount, heirs) {
+    heirs = Array.isArray(heirs) ? heirs : [];
+    if (overallTaxableAmount <= 500000000) {
+      return { totalCredit: 0, excludedBySmallEstate: true, perHeir: [] };
+    }
+    const totalActualValue = heirs.reduce(function (s, h) { return s + (Number(h.actualInheritedValue) || 0); }, 0);
+    const totalPriorGiftAmount = heirs.reduce(function (s, h) { return s + (Number(h.priorGiftAmount) || 0); }, 0);
+    const totalPriorGiftTaxableBase = heirs.reduce(function (s, h) { return s + (Number(h.priorGiftTaxableBase) || 0); }, 0);
+    const 가목 = Math.max(0, overallTaxBase - totalPriorGiftTaxableBase);
+    const 나목 = Math.max(0, overallTaxableAmount - totalPriorGiftAmount);
+    let totalCredit = 0;
+    const perHeir = heirs.map(function (h) {
+      const giftTaxableBase = Number(h.priorGiftTaxableBase) || 0;
+      const giftTaxPaid = Number(h.priorGiftTaxPaid) || 0;
+      const giftAmount = Number(h.priorGiftAmount) || 0;
+      if (giftTaxableBase <= 0 || giftTaxPaid <= 0 || totalActualValue <= 0) {
+        return { 성명: h.name || '', 공제액: 0, 한도: 0, 상속인별과세표준상당액: 0, 안분산출세액: 0 };
+      }
+      const actualValueRatio = (Number(h.actualInheritedValue) || 0) / totalActualValue;
+      const heirTaxableAmountShare = overallTaxableAmount * actualValueRatio; // 상속인별 상속세과세가액상당액
+      const 다목 = heirTaxableAmountShare - giftAmount;
+      const ratio다나 = 나목 > 0 ? (다목 / 나목) : 0;
+      const taxableBaseEquivalent = giftTaxableBase + 가목 * ratio다나; // 상속인별 상속세과세표준상당액
+      const grossTaxShare = overallCalculatedTax * actualValueRatio; // 그 상속인이 납부할 상속세액(§3조의2②)
+      const limit = taxableBaseEquivalent > 0 ? Math.round(grossTaxShare * Math.min(1, giftTaxableBase / taxableBaseEquivalent)) : 0;
+      const credit = Math.min(giftTaxPaid, Math.round(grossTaxShare), limit);
+      totalCredit += credit;
+      return { 성명: h.name || '', 공제액: credit, 한도: limit, 상속인별과세표준상당액: Math.round(taxableBaseEquivalent), 안분산출세액: Math.round(grossTaxShare) };
+    });
+    return { totalCredit: Math.round(totalCredit), excludedBySmallEstate: false, perHeir: perHeir };
+  }
+
   // 상속개시전 처분재산 등 산입액 (상증세법 §15, [별지 제9호서식] 부표4) — gs-backend와 동일 로직.
-  // 상속개시전 처분재산 등 산입액(상증세법§15, 시행령§11) — 1년 이내 2억원 이상 또는 2년 이내
-  // 5억원 이상 처분·인출(재산종류별)한 경우로서 용도가 불분명하면 미소명금액을 상속받은 것으로
-  // 추정한다. 단, 미소명금액이 MIN(순인출액×20%, 2억원)에 "미달"하면 전액 소명된 것으로 보아
-  // 산입하지 않는다 — 이 20%/2억원은 미소명금액에서 빼는 공제가 아니라 산입 여부를 가르는
-  // 문턱(threshold)이며, 문턱을 넘으면 미소명금액 "전액"이 산입된다.
+  // 상속개시전 처분재산 등 산입액(상증세법§15, 시행령§11④) — 1년 이내 2억원 이상 또는 2년 이내
+  // 5억원 이상 처분·인출(재산종류별)한 경우로서 용도가 불분명하면 산입 대상이 된다.
+  // 시행령§11④ 원문: "…입증되지 아니한 금액이 [MIN(순인출액×20%, 2억원)]에 미달하는 경우에는
+  // 용도가 명백하지 아니한 것으로 추정하지 아니하며, 그 금액 이상인 경우에는 [MIN(순인출액×20%,
+  // 2억원)]을 "차감한 금액"을 용도가 명백하지 아니한 것으로 추정한다" — 즉 미달이면 0(추정 안 함),
+  // 이상이면 미소명금액에서 그 문턱금액을 뺀 "차액"만 산입한다(문턱을 넘었다고 미소명금액 전액이
+  // 산입되는 게 아니다 — 이전 버전의 주석·구현이 이 부분을 반대로 잘못 이해하고 있었다).
   // 1년 기준과 2년 기준은 서로 다른 별도의 요건이므로 각각 독립적으로 계산한 뒤 더 큰 금액을
   // 채택한다(둘을 더하지 않음 — 2년 누계에는 1년분이 이미 포함되어 있으므로 중복산입 방지).
   function computeDisposalBasisPresumed_(amount, selfDeposit, explained, thresholdAmount) {
@@ -83,7 +131,7 @@
     if (net < thresholdAmount) return 0;
     const unexplained = Math.max(0, net - (Number(explained) || 0));
     const cutoff = Math.min(net * 0.2, 200000000);
-    return unexplained >= cutoff ? unexplained : 0;
+    return unexplained >= cutoff ? unexplained - cutoff : 0;
   }
   function presumedInheritedFromDisposal(item) {
     item = item || {};
@@ -311,18 +359,27 @@
     let necessaryExpenses = Number(t.necessaryExpenses) || 0;
     const acquisitionPrice = Number(t.acquisitionPrice);
     if (!transferPrice || transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
-    if (!acquisitionPrice || acquisitionPrice < 0) return { error: '취득가액이 필요합니다.' };
+    // 재건축·재개발 특례는 취득가액 대신 종전자산 취득가액(originalAssetAcquisitionPrice)·권리가액(rightsValue)을
+    // 별도로 쓰므로, 이 경우에는 일반 취득가액 필수 검증을 적용하지 않는다(아래 재건축 분기에서 별도 검증).
+    if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액이 필요합니다.' };
     if (!t.acquisitionDate || !t.transferDate) return { error: '취득일과 양도일이 필요합니다.' };
 
     const holdingYears = fullYearsElapsed(deemedAcquisitionDate(t.acquisitionDate), t.transferDate);
     if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다.' };
 
+    // 개산공제율(시행령§163⑥1호·2호) — 원칙 3/100(3%)이나, 미등기양도자산은 3/1000(0.3%)로 10분의 1이다.
     if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && Number(t.acquisitionStandardPriceForExpense) > 0) {
-      necessaryExpenses = Math.round(Number(t.acquisitionStandardPriceForExpense) * 0.03);
+      const estimatedExpenseRate = t.isUnregisteredTransfer ? 0.003 : 0.03;
+      necessaryExpenses = Math.round(Number(t.acquisitionStandardPriceForExpense) * estimatedExpenseRate);
     }
 
-    const assetType = t.assetType === 'house' ? 'house' : 'other';
-    const isOneHouse = !!t.isOneHouseOneFamily;
+    const assetType = t.assetType === 'house' ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
+    const isPresaleRight = assetType === 'presale_right';
+    const isReconstruction = !!t.isReconstructionRights;
+    // §95③(고가조합원입주권·고가신축주택 특례)은 이 재설계에서 다루는 시행령§166①②③과는 별개 조문이라
+    // 아직 원문을 확인하지 못했다 — 재건축·재개발 특례를 적용받는 거래에는 1세대1주택 12억 비과세·표를
+    // 적용하지 않는다(필요하면 별도로 §95③ 원문을 확인해서 추가 반영할 것).
+    const isOneHouse = !isPresaleRight && !isReconstruction && !!t.isOneHouseOneFamily;
     const isUnregistered = !!t.isUnregisteredTransfer;
     const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
 
@@ -336,30 +393,97 @@
 
     let taxableGain = gainBeforeDeduction;
     let ltRate = 0;
-    if (isOneHouse) {
+    let isRentalSpecial = false;
+    let isMultiHouseSurcharge = false;
+    const multiHouseCount = Number(t.multiHouseCount) || 0;
+    let incomeAmount, longTermDeductionAmount, reconstructionDetail = null;
+
+    if (isReconstruction) {
+      // 소득세법시행령§166①②③ — 재개발·재건축 조합원이 기존건물과 그 부수토지를 제공하고 취득한
+      // 조합원입주권(준공 전) 또는 신축주택(준공 후)을 청산금 납부하고 양도하는 경우의 양도차익 계산.
+      const rightsValue = Number(t.rightsValue) || 0;
+      const settlementPaid = Number(t.settlementPaid) || 0;
+      const managementDispositionDate = t.managementDispositionDate;
+      if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액)이 필요합니다.' };
+      if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일이 필요합니다.' };
+
+      // §166③ — 기존건물과 그 부수토지의 취득가액을 확인할 수 없는 경우의 환산:
+      // 평가액 × (취득일 현재 기준시가 ÷ 관리처분계획등인가일 현재 기준시가)
+      let originalAcqPrice = Number(t.originalAssetAcquisitionPrice) || 0;
+      if (t.useConvertedRightsBaseAcquisitionPrice) {
+        const acqStd = Number(t.originalAcquisitionStandardPrice) || 0;
+        const apprStd = Number(t.approvalDateStandardPrice) || 0;
+        if (acqStd > 0 && apprStd > 0) originalAcqPrice = Math.round(rightsValue * acqStd / apprStd);
+      }
+      const originalNecessaryExpenses = Number(t.originalNecessaryExpenses) || 0;
+
+      // 관리처분계획등인가전양도차익 = (평가액-기존건물취득가액)-필요경비(§97①2·3호 또는 §163⑥)
+      const gainBeforeApproval = (rightsValue - originalAcqPrice) - originalNecessaryExpenses;
+      // 관리처분계획등인가후양도차익 = 양도가액-(평가액+납부한청산금)-필요경비(§97①2·3호)
+      const gainAfterApproval = transferPrice - (rightsValue + settlementPaid) - necessaryExpenses;
+
+      const holdingYearsBeforeApproval = fullYearsElapsed(deemedAcquisitionDate(t.acquisitionDate), managementDispositionDate);
+      const holdingYearsSinceApproval = fullYearsElapsed(managementDispositionDate, t.transferDate);
+
+      if (!t.isCompletedNewHousing) {
+        // ①1호 — 조합원입주권 자체를 준공 전 양도. §95②단서 "관리처분계획인가...전 토지분 또는 건물분의
+        // 양도차익으로 한정"에 따라 장기보유특별공제는 인가전양도차익에만 적용되고, 인가후양도차익에는 전혀 적용되지 않는다.
+        taxableGain = gainBeforeApproval + gainAfterApproval;
+        const ltRateBefore = longTermRate(holdingYearsBeforeApproval);
+        longTermDeductionAmount = Math.round(Math.max(0, gainBeforeApproval) * ltRateBefore);
+        incomeAmount = taxableGain - longTermDeductionAmount;
+        reconstructionDetail = { 구분: '조합원입주권(준공전) 양도 — §166①1호', 관리처분계획등인가전양도차익: Math.round(gainBeforeApproval), 관리처분계획등인가후양도차익: Math.round(gainAfterApproval), 인가전_보유기간_년: holdingYearsBeforeApproval, 인가전_장특공제율: ltRateBefore };
+      } else {
+        // ②1호 — 준공된 신축주택을 양도(청산금납부). 인가후양도차익을 "청산금납부분"과 "기존건물분"으로
+        // (청산금납부액:평가액) 비율로 재분배하고, 각각 다른 보유기간(§166⑤2호가·나목)으로 장특공제를 적용한다.
+        const denom = rightsValue + settlementPaid;
+        const settlementPortionGain = denom > 0 ? gainAfterApproval * settlementPaid / denom : 0;
+        const existingPortionGain = (gainAfterApproval - settlementPortionGain) + gainBeforeApproval;
+        taxableGain = settlementPortionGain + existingPortionGain;
+        const ltRateSettlement = longTermRate(holdingYearsSinceApproval);
+        const ltRateExisting = longTermRate(holdingYears);
+        longTermDeductionAmount = Math.round(Math.max(0, settlementPortionGain) * ltRateSettlement) + Math.round(Math.max(0, existingPortionGain) * ltRateExisting);
+        incomeAmount = taxableGain - longTermDeductionAmount;
+        reconstructionDetail = {
+          구분: '신축주택(준공후) 양도 — §166②1호', 청산금납부분양도차익: Math.round(settlementPortionGain), 기존건물분양도차익: Math.round(existingPortionGain),
+          청산금분_보유기간_년: holdingYearsSinceApproval, 청산금분_장특공제율: ltRateSettlement, 기존건물분_보유기간_년: holdingYears, 기존건물분_장특공제율: ltRateExisting
+        };
+      }
+      ltRate = taxableGain !== 0 ? longTermDeductionAmount / taxableGain : 0;
+    } else if (isPresaleRight) {
+      // 소득세법§95②은 장기보유특별공제를 §94①1호 자산(부동산)과 조합원입주권에만 인정하고
+      // 분양권은 열거하지 않으므로, 분양권은 보유기간과 무관하게 장특공제를 전혀 받지 못한다.
+      ltRate = 0;
+    } else if (isOneHouse) {
       taxableGain = gainBeforeDeduction * (transferPrice - 1200000000) / transferPrice;
       ltRate = longTermRate1House(holdingYears, Number(t.residenceYears) || 0);
     } else {
       ltRate = longTermRate(holdingYears);
     }
 
-    const rentalRate = rentalLongTermRate(t.rentalSpecialType, holdingYears, t.rentalYears);
-    const isRentalSpecial = rentalRate !== null;
-    if (isRentalSpecial) ltRate = rentalRate;
+    if (!isReconstruction && !isPresaleRight) {
+      const rentalRate = rentalLongTermRate(t.rentalSpecialType, holdingYears, t.rentalYears);
+      isRentalSpecial = rentalRate !== null;
+      if (isRentalSpecial) ltRate = rentalRate;
 
-    const multiHouseCount = Number(t.multiHouseCount) || 0;
-    const isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2;
-    if (isMultiHouseSurcharge) ltRate = 0;
+      isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2;
+      if (isMultiHouseSurcharge) ltRate = 0;
+    }
 
-    const longTermDeductionAmount = Math.round(taxableGain * ltRate);
-    const incomeAmount = taxableGain - longTermDeductionAmount;
-    const isPoolable = holdingYears >= 2; // 2년 이상 보유 → 기본세율(누진) 대상, 합산 가능
+    if (!isReconstruction) {
+      longTermDeductionAmount = Math.round(taxableGain * ltRate);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+    }
+    // 분양권(§104①1호·2호·3호)은 보유기간과 무관하게 항상 60%(1년미만 70%) 단일세율이고 기본세율
+    // 누진과세 대상이 될 수 없으므로(1호가 별도로 분양권 60%를 정함), 합산(pooling) 대상에서 제외한다.
+    const isPoolable = !isPresaleRight && holdingYears >= 2; // 2년 이상 보유 → 기본세율(누진) 대상, 합산 가능
 
     const convertedBuildingAcquisitionValueForPenalty = Number(t.convertedBuildingAcquisitionValueForPenalty) || 0;
     const conversionValuePenalty = (t.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
       ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
 
     return {
+      reconstructionDetail,
       holdingYears, exempt: false, isUnregistered: false, isPoolable,
       transferPrice, acquisitionPrice, necessaryExpenses, assetType, isOneHouse, isRentalSpecial,
       gainBeforeDeduction, taxableGain, longTermRate: ltRate, longTermDeductionAmount, incomeAmount,
@@ -407,7 +531,12 @@
     const taxBase = Math.max(0, core.incomeAmount - basicDeduction);
     let calculatedTax, appliedRateNote;
     const surchargeNotes = [];
-    if (core.holdingYears < 1) {
+    if (core.assetType === 'presale_right') {
+      // §104①1호·2호·3호 — 분양권은 보유기간 1년 미만 70%, 1년 이상은 무조건 60%(기본세율 누진 적용 없음).
+      const rate = core.holdingYears < 1 ? 0.70 : 0.60;
+      calculatedTax = Math.round(taxBase * rate);
+      appliedRateNote = '분양권 — ' + (core.holdingYears < 1 ? '보유기간 1년 미만 70%' : '60%') + ' 단일세율 적용(장기보유특별공제·기본세율누진 배제)';
+    } else if (core.holdingYears < 1) {
       const rate = core.assetType === 'house' ? 0.70 : 0.50;
       calculatedTax = Math.round(taxBase * rate);
       appliedRateNote = '보유기간 1년 미만 단기세율 ' + (rate * 100) + '% 적용';
@@ -435,7 +564,8 @@
       farmlandReduction = Math.min(calculatedTax, 100000000);
       calculatedTax -= farmlandReduction;
     }
-    const COMPENSATION_REDUCTION_RATES = { cash: 0.10, bond: 0.15, bond_3y: 0.30, bond_5y: 0.40 };
+    // 조특법§77①(2025.3.14 개정) — 현금보상 15%, 채권보상 20%, 3년만기특약 35%, 5년만기특약 45%.
+    const COMPENSATION_REDUCTION_RATES = { cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45 };
     let compensationReduction = 0;
     if (COMPENSATION_REDUCTION_RATES[t.compensationType] !== undefined) {
       compensationReduction = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES[t.compensationType]);
@@ -447,8 +577,10 @@
       downContractClawback = Math.min(farmlandReduction + compensationReduction, downContractDiff2);
       calculatedTax += downContractClawback;
     }
-    const pensionCreditBase = Math.min(core.pensionAccountContribution, Math.max(0, Math.round(core.gainBeforeDeduction)), 100000000);
-    const pensionAccountCredit = core.pensionAccountContribution > 0 ? Math.round(pensionCreditBase * 0.1) : 0;
+    // 조특법§99의14①(2024.12.31 신설) — "연금계좌 납입액의 100분의 10에 상당하는 금액을...공제하며,
+    // 공제세액은 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다.
+    const pensionAccountCreditRaw = core.pensionAccountContribution > 0 ? Math.round(Number(core.pensionAccountContribution) * 0.1) : 0;
+    const pensionAccountCredit = Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax));
     const eFilingCredit = t.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(t.filingStatus) !== -1 ? t.filingStatus : 'ontime';
@@ -458,7 +590,8 @@
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
     return {
       입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
-      양도차익: Math.round(core.gainBeforeDeduction), 과세대상양도차익: Math.round(core.taxableGain),
+      조합원입주권_재건축상세: core.reconstructionDetail,
+      양도차익: Math.round(core.reconstructionDetail ? core.taxableGain : core.gainBeforeDeduction), 과세대상양도차익: Math.round(core.taxableGain),
       장기보유특별공제율: core.longTermRate, 장기보유특별공제액: core.longTermDeductionAmount,
       양도소득금액: Math.round(core.incomeAmount), 기본공제: basicDeduction, 과세표준: taxBase,
       적용세율_설명: appliedRateNote, 세율가산_내역: surchargeNotes, 자경농지감면액: farmlandReduction,
@@ -528,8 +661,8 @@
     });
     poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal);
 
-    // 공익사업용 토지 등 수용감면(조특법§77, 안분) — 소득금액 비중으로 배분한 세액에 보상유형별 비율을 곱한다.
-    const COMPENSATION_REDUCTION_RATES_M = { cash: 0.10, bond: 0.15, bond_3y: 0.30, bond_5y: 0.40 };
+    // 공익사업용 토지 등 수용감면(조특법§77①, 2025.3.14 개정, 안분) — 소득금액 비중으로 배분한 세액에 보상유형별 비율을 곱한다.
+    const COMPENSATION_REDUCTION_RATES_M = { cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45 };
     let compensationReductionTotal = 0;
     pooled.forEach(function (c) {
       const rate = COMPENSATION_REDUCTION_RATES_M[c.raw.compensationType];
@@ -574,7 +707,8 @@
       const bd = (!usedBasicOnShort) ? 2500000 : 0;
       if (bd) usedBasicOnShort = true;
       const base = Math.max(0, c.incomeAmount - bd);
-      const rate = c.assetType === 'house' ? (c.holdingYears < 1 ? 0.70 : 0.60) : (c.holdingYears < 1 ? 0.50 : 0.40);
+      const rate = (c.assetType === 'house' || c.assetType === 'presale_right')
+        ? (c.holdingYears < 1 ? 0.70 : 0.60) : (c.holdingYears < 1 ? 0.50 : 0.40);
       const tax = Math.round(base * rate);
       assetNotes.push({ idx: c.idx, 구분: '단기양도(개별)', 소득금액: Math.round(c.incomeAmount), 기본공제적용: bd > 0, 세율: rate, 세액: tax });
       return tax;
@@ -590,15 +724,18 @@
 
     const conversionValuePenaltyTotal = active.reduce(function (s, c) { return s + (c.conversionValuePenalty || 0); }, 0);
 
-    const pensionAccountCreditTotal = active.reduce(function (s, c) {
-      const base = Math.min(c.pensionAccountContribution, Math.max(0, Math.round(c.gainBeforeDeduction)), 100000000);
-      return s + (c.pensionAccountContribution > 0 ? Math.round(base * 0.1) : 0);
+    // 조특법§99의14① — "연금계좌 납입액의 100분의 10에 상당하는 금액을...공제하며, 공제세액은
+    // 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다 — 납입액×10%를 먼저 구하고,
+    // 그 합계를 (풀 전체) 산출세액으로 한 번만 캡한다(개별 거래별 산출세액이 따로 없는 합산 구조이므로).
+    const pensionAccountCreditRaw = active.reduce(function (s, c) {
+      return s + (c.pensionAccountContribution > 0 ? Math.round(Number(c.pensionAccountContribution) * 0.1) : 0);
     }, 0);
 
     // exemptClawbackTotal(다운계약서 비과세배제 추징액)은 calculateTransferTaxSingleJS의 완전 계산 결과(지방소득세 포함)를
     // 상한으로 삼아 MIN한 값이라 이미 지방소득세가 녹아 있으므로, 아래 totalCalculatedTax에는 포함하지 않고
     // (그러면 다시 10% 지방소득세가 얹혀 이중계산된다) 최종 합계에만 그대로 더한다.
     const totalCalculatedTax = poolTaxWithSurcharge + shortTaxTotal + unregisteredTaxTotal;
+    const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
     const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
     const penalties = giftFilingPenalties(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty));
@@ -910,22 +1047,39 @@
     const isGenerationSkip = !!p.isGenerationSkip;
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-    const debtAssumedAmount = Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
+    // §47③ — 배우자간 또는 직계존비속간 부담부증여는 수증자가 채무를 인수했더라도 "인수되지
+    // 않은 것"으로 추정한다(그래서 원칙적으로 채무 공제를 못 받는다). 국가·지자체 채무 등
+    // 객관적으로 인수 사실이 인정되는 채무만 예외적으로 공제 가능(isDebtObjectivelyProven).
+    const isCloseRelationBurdenGift = (p.relation === '배우자' || p.relation === '직계존속' || p.relation === '직계비속');
+    const debtDeductionDenied = isCloseRelationBurdenGift && !p.isDebtObjectivelyProven;
+    const debtAssumedAmount = debtDeductionDenied ? 0 : Math.min(Number(p.debtAssumedAmount) || 0, giftAmount);
     const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
     const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
     const publicTrustAmount = Number(p.publicTrustAmount) || 0;
     const disabledTrustAmount = Number(p.disabledTrustAmount) || 0;
     const netGiftAmount = Math.max(0, giftAmount - debtAssumedAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount - disabledTrustAmount);
 
-    const relationDeduction = giftPropertyDeduction(p.relation, !!p.isMinor);
-    const marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
-      ? marriageOrBirthGiftDeduction(netGiftAmount, p.priorMarriageOrBirthDeductionUsed) : 0;
-    const aggregationExclusionDeduction = p.isExcludedFromAggregation ? 30000000 : 0;
     const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
-    const disasterLossDeduction = Number(p.disasterLossAmount) || 0;
-    const totalDeduction = relationDeduction + marriageBirthDeduction + aggregationExclusionDeduction + appraisalFeeDeduction + disasterLossDeduction;
 
-    const taxBase = Math.max(0, netGiftAmount + priorGiftAmount - totalDeduction);
+    // §55①3호 — 명의신탁재산 증여의제(1호)·일감몰아주기등 이익의 증여의제(2호)를 제외한
+    // "합산배제증여재산"은 §53(관계별공제)·§53의2(혼인출산공제)·§54(재해손실공제)를 적용하지 않고
+    // "증여재산가액 - 3천만원"만 과세표준으로 한다(감정평가수수료는 모든 호에 공통 적용). 4호(일반증여)와는
+    // 완전히 별개 산식이므로 10년내 동일인 증여 합산(priorGiftAmount)도 적용하지 않는다(§47②단서).
+    let relationDeduction = 0, marriageBirthDeduction = 0, disasterLossDeduction = 0, aggregationExclusionDeduction = 0, taxBase;
+    if (p.isExcludedFromAggregation) {
+      aggregationExclusionDeduction = 30000000;
+      taxBase = Math.max(0, netGiftAmount - aggregationExclusionDeduction - appraisalFeeDeduction);
+    } else {
+      // §53 본문 — "그 증여세 과세가액에서 공제받을 금액과 수증자가 증여받기 전 10년 이내에 공제받은
+      // 금액을 합한 금액이 [한도]를 초과하면 초과분은 공제하지 아니한다" — 관계별 한도는 "이번 한 번"이
+      // 아니라 "10년 합산" 기준이므로, 그 기간 중 이미 쓴 공제액을 이번 한도에서 미리 차감해야 한다.
+      relationDeduction = Math.max(0, giftPropertyDeduction(p.relation, !!p.isMinor) - (Number(p.priorRelationDeductionUsed) || 0));
+      marriageBirthDeduction = (p.isMarriageGift || p.isBirthGift)
+        ? marriageOrBirthGiftDeduction(netGiftAmount, p.priorMarriageOrBirthDeductionUsed) : 0;
+      disasterLossDeduction = Number(p.disasterLossAmount) || 0;
+      const totalDeduction = relationDeduction + marriageBirthDeduction + appraisalFeeDeduction + disasterLossDeduction;
+      taxBase = Math.max(0, netGiftAmount + priorGiftAmount - totalDeduction);
+    }
     const taxBeforePremium = progressiveTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const premiumRate = isGenerationSkip ? (p.generationSkipOver2Billion ? 0.4 : 0.3) : 0;
     const premiumAmount = Math.round(taxBeforePremium * premiumRate);
@@ -951,6 +1105,8 @@
 
     return {
       증여재산가액: giftAmount, 인수채무액: debtAssumedAmount,
+      채무공제_배제여부: debtDeductionDenied,
+      채무공제_배제사유: debtDeductionDenied ? '§47③ 배우자·직계존비속간 부담부증여는 채무 인수를 객관적으로 입증(국가·지자체 채무 등)하지 못하면 인수되지 않은 것으로 추정 — 채무액이 공제에서 제외됨' : '',
       비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount, 장애인신탁재산가액: disabledTrustAmount,
       순수증여재산가액: netGiftAmount,
       증여재산공제: relationDeduction, 혼인출산증여재산공제: marriageBirthDeduction,
@@ -1019,9 +1175,14 @@
     let totalDeduction = basicOrLumpSum + spouseDeduction + financialDeduction + cohabitingHouseDeduction + appraisalFeeDeduction + disasterLossDeduction
       + funeralDeduction + businessInheritanceDeduction + farmingInheritanceDeduction;
 
+    // 사전증여재산 상속인별 상세(§28②·시행령§3①1호 정밀계산 및 §24 종합한도 분모에 공통 사용) — 상속인
+    // 명부에 상속인별로 입력된 사전증여 내역을 그대로 쓴다. 배우자분만이 아니라 전체 합계를 쓴다(§24).
+    const priorGiftHeirs = Array.isArray(p.priorGiftHeirs) ? p.priorGiftHeirs : [];
+    const priorGiftTaxableBaseTotal = priorGiftHeirs.reduce(function (s, h) { return s + (Number(h.priorGiftTaxableBase) || 0); }, 0);
+
     const overallDeductionLimit = Math.max(0, effectiveEstateAmount
       - (Number(p.nonHeirBequestAmount) || 0)
-      - (Number(p.priorGiftTaxableBaseForOverallLimit) || 0)
+      - priorGiftTaxableBaseTotal
       - (Number(p.disclaimedShareRedistributedAmount) || 0));
     const overallLimitApplied = totalDeduction > overallDeductionLimit;
     if (overallLimitApplied) totalDeduction = overallDeductionLimit;
@@ -1034,7 +1195,10 @@
     const generationSkipPremium = Math.round(calculatedTax * generationSkipHeirRatio * generationSkipPremiumRate);
     calculatedTax += generationSkipPremium;
 
-    const priorGiftTaxCredit = Math.min(Number(p.priorGiftTaxPaid) || 0, calculatedTax);
+    // §28 증여세액공제 — 상속인별 정밀 계산(위 priorGiftTaxCreditPrecise 참고).
+    const priorGiftCreditResult = priorGiftTaxCreditPrecise(calculatedTax, taxBase, effectiveEstateAmount, priorGiftHeirs);
+    const priorGiftTaxCredit = priorGiftCreditResult.totalCredit;
+    const giftCreditExcludedBySmallEstate = priorGiftCreditResult.excludedBySmallEstate;
     const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
     const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
     const shortTermCredit = Math.min(
@@ -1092,7 +1256,8 @@
       } : null,
       상속공제_합계: totalDeduction, 상속공제종합한도_적용여부: overallLimitApplied, 과세표준: taxBase,
       산출세액: calculatedTax, 세대생략가산액: generationSkipPremium,
-      기납부증여세액공제: priorGiftTaxCredit, 특례증여세액공제: specialGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit, 그밖의공제: otherCreditsAmount,
+      기납부증여세액공제: priorGiftTaxCredit, 증여세액공제_5억이하배제: giftCreditExcludedBySmallEstate, 증여세액공제_상속인별내역: priorGiftCreditResult.perHeir,
+      특례증여세액공제: specialGiftTaxCredit, 외국납부세액공제: foreignTaxCredit, 단기재상속세액공제: shortTermCredit, 그밖의공제: otherCreditsAmount,
       신고세액공제: reportCredit, 이자상당액: interestAmount, 영리법인면제분납부세액: forProfitPayableByHeirs,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,

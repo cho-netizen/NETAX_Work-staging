@@ -780,10 +780,10 @@ async function runAiAutoFillTransfer(fileName, idx){
   const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 그 안에서 양도소득세 계산에 필요한 값을 찾아서, ' +
     '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
     '```json\n{"transferPrice": 숫자 또는 null, "acquisitionPrice": 숫자 또는 null, "acquisitionExpenses": 숫자 또는 null, "transferExpensesOnly": 숫자 또는 null, ' +
-    '"acquisitionDate": "YYYY-MM-DD 또는 null", "transferDate": "YYYY-MM-DD 또는 null", "assetType": "house 또는 other 또는 null", ' +
+    '"acquisitionDate": "YYYY-MM-DD 또는 null", "transferDate": "YYYY-MM-DD 또는 null", "assetType": "house 또는 presale_right 또는 other 또는 null", ' +
     '"assetKind": "land 또는 building 또는 other 또는 null", "assetLocation": "문자열 또는 null(소재지·지번)", ' +
     '"assetSubType": "문자열 또는 null(토지면 지목, 건물이면 층수·용도)", "assetArea": "숫자 또는 null(면적, ㎡)"}\n```\n' +
-    '(transferPrice=양도가액, acquisitionPrice=취득가액, acquisitionExpenses=취득세·법무사비 등 취득 관련 비용, transferExpensesOnly=중개보수·양도세 신고수수료 등 양도비용, assetType은 주택·조합원입주권이면 house, 그 외 부동산이면 other, assetKind는 토지만이면 land·구분소유 건물 포함 건물이면 building)';
+    '(transferPrice=양도가액, acquisitionPrice=취득가액, acquisitionExpenses=취득세·법무사비 등 취득 관련 비용, transferExpensesOnly=중개보수·양도세 신고수수료 등 양도비용, assetType은 주택·조합원입주권이면 house, 분양권(아파트 등 공급계약상 지위)이면 presale_right, 그 외 부동산이면 other, assetKind는 토지만이면 land·구분소유 건물 포함 건물이면 building)';
 
   try {
     const reply = await runFolderAiExtraction(instruction);
@@ -1420,7 +1420,7 @@ function renderTransferPane(){
         '<div class="taxcalc-ai-status" id="aiStatus-' + idx + '">' + renderAiStatusHtml(transferAssets[idx]) + '</div>' +
         '<div class="taxcalc-calcbasis" id="calcBasis-' + idx + '" style="display:none;"></div>' +
         '<div class="taxcalc-grid">' +
-          '<div class="taxcalc-field"><label>자산종류</label><select data-field="assetType"><option value="other">그 외 부동산</option><option value="house">주택·조합원입주권</option></select></div>' +
+          '<div class="taxcalc-field"><label>자산종류</label><select data-field="assetType"><option value="other">그 외 부동산</option><option value="house">주택·조합원입주권</option><option value="presale_right">분양권(§104①1호·2호·3호 — 1년미만 70%/1년이상 60% 단일세율, 장기보유특별공제·기본세율누진 배제)</option></select></div>' +
           assetDetailFieldsHtml_(transferAssets[idx]) +
           '<div class="taxcalc-field"><label>양수인 성명</label><input type="text" data-field="buyerName" data-nameonly="1" value="' + (transferAssets[idx].buyerName || '').replace(/"/g, '&quot;') + '"></div>' +
           '<div class="taxcalc-field"><label>양수인 주민등록번호</label><input type="text" data-field="buyerRegNo" data-regno="1" placeholder="000000-0000000" value="' + (transferAssets[idx].buyerRegNo || '').replace(/"/g, '&quot;') + '"></div>' +
@@ -1439,9 +1439,9 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>양도일</label><input type="date" data-field="transferDate" min="1900-01-01" max="2099-12-31"></div>' +
           '<div class="taxcalc-field"><label>양도가액</label><input type="number" data-field="transferPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>취득일</label><input type="date" data-field="acquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
-          '<div class="taxcalc-field"><label>취득가액</label><input type="number" data-field="acquisitionPrice" placeholder="원 (환산취득가액을 쓰면 자동계산되어 무시됩니다)"></div>' +
+          '<div class="taxcalc-field"><label>취득가액</label><input type="number" data-field="acquisitionPrice" placeholder="원 (환산취득가액을 쓰거나 재건축·재개발 특례에 해당하면 무시됩니다)"></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useConvertedAcquisitionPrice" id="convAcq-' + idx + '"><label for="convAcq-' + idx + '">취득당시 실지거래가액을 확인할 수 없어 환산취득가액 사용</label></div>' +
-          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useEstimatedNecessaryExpense" id="estExp-' + idx + '"><label for="estExp-' + idx + '">취득가액은 알지만 필요경비 지출증빙이 없어 개산공제(3%)만 사용(위 비용 내역을 입력하지 않았을 때만 적용)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useEstimatedNecessaryExpense" id="estExp-' + idx + '"><label for="estExp-' + idx + '">취득가액은 알지만 필요경비 지출증빙이 없어 개산공제(3%, 미등기양도자산은 0.3%)만 사용(위 비용 내역을 입력하지 않았을 때만 적용)</label></div>' +
           '<div class="taxcalc-field"><label>취득당시 기준시가</label><input type="number" data-field="acquisitionStandardPriceForExpense" placeholder="원 (환산취득가액·개산공제 계산용)"></div>' +
           '<div class="taxcalc-field"><label>양도당시 기준시가</label><input type="number" data-field="transferStandardPriceForConversion" placeholder="원 (환산취득가액 비율 계산용)"></div>' +
           (transferAssets[idx].acquisitionDate && transferAssets[idx].acquisitionDate < '1990-08-31' ?
@@ -1449,16 +1449,23 @@ function renderTransferPane(){
         '</div>' +
         renderCostItemsSectionHtml_(transferAssets[idx], 'transferExpenseItems', '양도비용 내역', '예: 중개보수') +
         renderCostItemsSectionHtml_(transferAssets[idx], 'acquisitionExpenseItems', '취득비용 내역', '예: 취득세') +
-        '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>관리처분인가 이후 조합원입주권·신축주택으로 양도했다면(재건축·재개발 특례)</b></div>' +
+        '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>관리처분인가 이후 조합원입주권·신축주택으로 양도했다면(재건축·재개발 특례, 소득세법시행령§166①②③)</b></div>' +
         '<div class="taxcalc-grid">' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isReconstructionRights" id="rr-' + idx + '"><label for="rr-' + idx + '">해당(위 취득일은 종전 부동산 취득일 그대로 유지)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isCompletedNewHousing" id="rrCompleted-' + idx + '"><label for="rrCompleted-' + idx + '">준공된 신축주택을 양도(체크 안하면 준공 전 조합원입주권 자체 양도로 계산)</label></div>' +
           '<div class="taxcalc-field"><label>관리처분계획인가일</label><input type="date" data-field="managementDispositionDate" min="1900-01-01" max="2099-12-31"></div>' +
-          '<div class="taxcalc-field"><label>종전자산 취득가액</label><input type="number" data-field="originalAssetAcquisitionPrice" placeholder="원 (환지·재건축 전 원 취득가액)"></div>' +
           '<div class="taxcalc-field"><label>권리가액(종전자산평가액)</label><input type="number" data-field="rightsValue" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>청산금 납부액(분담금, 없으면 0)</label><input type="number" data-field="settlementPaid" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>청산금 환급액(받은 돈, 없으면 0)</label><input type="number" data-field="settlementReceived" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>종전자산(기존건물) 취득가액</label><input type="number" data-field="originalAssetAcquisitionPrice" placeholder="원 (환지·재건축 전 원 취득가액, 환지 항목과 공용)"></div>' +
+          '<div class="taxcalc-field"><label>기존건물분 필요경비</label><input type="number" data-field="originalNecessaryExpenses" placeholder="원 (기존건물 취득세 등 §97①2·3호 또는 §163⑥)"></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useConvertedRightsBaseAcquisitionPrice" id="rrConv-' + idx + '"><label for="rrConv-' + idx + '">종전자산 취득가액을 확인할 수 없어 환산가액 사용(§166③)</label></div>' +
+          (transferAssets[idx].useConvertedRightsBaseAcquisitionPrice ?
+            '<div class="taxcalc-field"><label>기존건물 취득당시 기준시가</label><input type="number" data-field="originalAcquisitionStandardPrice" placeholder="원"></div>' +
+            '<div class="taxcalc-field"><label>관리처분계획인가일 현재 기존건물 기준시가</label><input type="number" data-field="approvalDateStandardPrice" placeholder="원"></div>' +
+            '<div class="taxcalc-field"><span class="taxcalc-result-note">종전자산 취득가액 = 권리가액 × (취득당시기준시가 ÷ 인가일현재기준시가)로 자동 환산됩니다.</span></div>' : '') +
           (transferAssets[idx].isReconstructionRights ?
-            '<div class="taxcalc-field"><span class="taxcalc-result-note">취득가액 = 권리가액 + 청산금납부액으로 자동 대체됩니다. 청산금 환급액이 있으면 그 부분은 관리처분인가일에 별도로 양도한 것으로 과세되니(소득세법 기본통칙 참조) 아래 버튼으로 별도 거래를 추가하세요.</span></div>' +
+            '<div class="taxcalc-field"><span class="taxcalc-result-note">양도차익은 관리처분계획등인가전·인가후로 나눠 각각 다른 장기보유특별공제를 적용합니다(시행령§166①②③). 청산금 환급액이 있으면 그 부분은 관리처분인가일에 별도로 양도한 것으로 과세되니(소득세법 기본통칙 참조) 아래 버튼으로 별도 거래를 추가하세요.</span></div>' +
             '<div class="taxcalc-field"><button type="button" class="taxcalc-run-btn" data-action="send-settlement-to-new-transfer" data-idx="' + idx + '" data-kind="reconstruction">청산금 환급분을 별도 거래로 추가</button></div>' : '') +
         '</div>' +
         '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>도시개발사업 등 환지처분으로 취득한 토지를 양도했다면(환지 특례)</b></div>' +
@@ -1490,13 +1497,13 @@ function renderTransferPane(){
             '<option value="rental_long">장기임대주택(조특법§97의4, 일반공제+임대기간별 추가공제)</option>' +
           '</select></div>' +
           '<div class="taxcalc-field"><label>임대기간</label><input type="number" data-field="rentalYears" placeholder="년 (위 특례 선택 시)" maxlength="2"></div>' +
-          '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의13, 양도대금 중 6개월 내 납입액)"></div>' +
+          '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의14, 양도대금 중 6개월 내 납입액 — 기초연금수급자·1주택 또는 무주택 세대구성원만 해당)"></div>' +
           '<div class="taxcalc-field"><label>공익사업용토지 수용감면</label><select data-field="compensationType">' +
             '<option value="">해당없음</option>' +
-            '<option value="cash">현금보상(조특법§77, 10%)</option>' +
-            '<option value="bond">채권보상 - 만기특약 없음(15%)</option>' +
-            '<option value="bond_3y">채권보상 - 3년만기특약(30%)</option>' +
-            '<option value="bond_5y">채권보상 - 5년만기특약(40%)</option>' +
+            '<option value="cash">현금보상(조특법§77①, 15%)</option>' +
+            '<option value="bond">채권보상 - 만기특약 없음(20%)</option>' +
+            '<option value="bond_3y">채권보상 - 3년만기특약(35%)</option>' +
+            '<option value="bond_5y">채권보상 - 5년만기특약(45%)</option>' +
           '</select></div>' +
           '<div class="taxcalc-field"><label>다운계약서 등 계약서·실거래 차액</label><input type="number" data-field="downContractPriceDifference" placeholder="원 (소득세법§91② 비과세·감면 배제 추징용, 해당 시만)"></div>' +
         '</div>' +
@@ -1595,7 +1602,7 @@ function renderTransferPane(){
         transferAssets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
         if (key === 'assetKind') renderTransferPane(); // 지목(토지)↔층수·용도(건물)로 입력요소 자체가 바뀌므로 다시 그림
         if (key === 'buyerRelation') renderTransferPane(); // 특수관계 여부에 따라 시가 입력란·§35 연결버튼 표시가 바뀌므로 다시 그림
-        if (key === 'isReconstructionRights' || key === 'isLandReplotment') renderTransferPane(); // 청산금 안내·버튼 표시 여부가 바뀌므로 다시 그림
+        if (key === 'isReconstructionRights' || key === 'isLandReplotment' || key === 'useConvertedRightsBaseAcquisitionPrice') renderTransferPane(); // 청산금 안내·버튼·환산가액 입력란 표시 여부가 바뀌므로 다시 그림
       });
     });
     card.querySelectorAll('[data-costfield]').forEach(function(el){
@@ -1648,13 +1655,13 @@ function collectTransferInput(vals){
       necessaryExpenses += Math.round(acqStd * 0.03);
     }
   }
-  // 관리처분인가 이후 조합원입주권·신축주택 양도 — 취득가액은 권리가액(종전자산평가액)에 청산금
-  // 납부액(추가분담금)을 더한 금액으로 대체된다(청산금 환급분은 별도 거래로 관리처분인가일에 과세).
-  // 취득일은 위 acquisitionDate(종전 부동산 취득일)를 그대로 쓴다(보유기간 통산).
+  // 관리처분인가 이후 조합원입주권·신축주택 양도(소득세법시행령§166①②③) — 취득가액을 단순 대체하는
+  // 대신, tax-calc.js의 transferAssetCore가 관리처분계획등인가전·인가후 양도차익을 나눠 각각 다른
+  // 장기보유특별공제를 적용하도록 원시 데이터(권리가액·청산금·기존건물 관련 필드)를 그대로 넘긴다.
+  // 이때 필요경비는 최종양도분(transferExpenseItems)만 쓰고, 기존건물분은 별도 입력칸을 쓴다
+  // (아래 originalNecessaryExpenses) — 취득비용 내역(acquisitionExpenseItems)은 무시한다.
   if (vals.isReconstructionRights){
-    const rightsValue = numVal(vals.rightsValue) || 0;
-    const settlementPaid = numVal(vals.settlementPaid) || 0;
-    if (rightsValue > 0 || settlementPaid > 0) acquisitionPrice = rightsValue + settlementPaid;
+    necessaryExpenses = computeCostItemsTotal_(vals.transferExpenseItems);
   }
   // 환지처분 — 취득가액은 환지 전 종전토지 취득가액에 환지청산금 납부액(면적 증가분 추가취득)을
   // 더한 금액으로 대체된다(청산금 환급분은 별도 거래로 환지처분공고일에 과세). 취득일은 환지 전
@@ -1690,7 +1697,17 @@ function collectTransferInput(vals){
     rentalYears: numVal(vals.rentalYears) || 0,
     pensionAccountContribution: numVal(vals.pensionAccountContribution) || 0,
     compensationType: vals.compensationType || '',
-    downContractPriceDifference: numVal(vals.downContractPriceDifference) || 0
+    downContractPriceDifference: numVal(vals.downContractPriceDifference) || 0,
+    isReconstructionRights: !!vals.isReconstructionRights,
+    isCompletedNewHousing: !!vals.isCompletedNewHousing,
+    managementDispositionDate: vals.managementDispositionDate || '',
+    rightsValue: numVal(vals.rightsValue) || 0,
+    settlementPaid: numVal(vals.settlementPaid) || 0,
+    originalAssetAcquisitionPrice: numVal(vals.originalAssetAcquisitionPrice) || 0,
+    originalNecessaryExpenses: numVal(vals.originalNecessaryExpenses) || 0,
+    useConvertedRightsBaseAcquisitionPrice: !!vals.useConvertedRightsBaseAcquisitionPrice,
+    originalAcquisitionStandardPrice: numVal(vals.originalAcquisitionStandardPrice) || 0,
+    approvalDateStandardPrice: numVal(vals.approvalDateStandardPrice) || 0
   };
 }
 
@@ -1737,7 +1754,7 @@ function buildTransferCalcBasisLines(r){
   if (r.자경농지감면액) lines.push('8년자경농지 감면(조특법§69) = -' + won(r.자경농지감면액));
   if (r.수용감면액) lines.push('공익사업용토지 수용감면(조특법§77) = -' + won(r.수용감면액));
   if (r.다운계약서_감면배제_추징액) lines.push('다운계약서 감면배제 추징(소득세법§91②) = +' + won(r.다운계약서_감면배제_추징액));
-  if (r.연금계좌세액공제) lines.push('연금계좌세액공제(조특법§99의13) = -' + won(r.연금계좌세액공제));
+  if (r.연금계좌세액공제) lines.push('연금계좌세액공제(조특법§99의14) = -' + won(r.연금계좌세액공제));
   if (r.전자신고세액공제) lines.push('전자신고세액공제 = -' + won(r.전자신고세액공제));
   if (r.환산취득가액가산세) lines.push('환산취득가액가산세(소득세법§114의2) = +' + won(r.환산취득가액가산세));
   if (r.무신고가산세) lines.push('무신고가산세 = +' + won(r.무신고가산세));
@@ -1776,7 +1793,7 @@ function renderTransferResult(r){
   html += taxCalcResultRow('합산(장기) 그룹 산출세액', won(r.합산그룹_산출세액));
   if (r.단기거래_산출세액_합계) html += taxCalcResultRow('단기양도 산출세액 합계', won(r.단기거래_산출세액_합계));
   if (r.미등기거래_산출세액_합계) html += taxCalcResultRow('미등기양도 산출세액 합계', won(r.미등기거래_산출세액_합계));
-  if (r.연금계좌세액공제_합계) html += taxCalcResultRow('연금계좌세액공제(조특법§99의13)', '-' + won(r.연금계좌세액공제_합계));
+  if (r.연금계좌세액공제_합계) html += taxCalcResultRow('연금계좌세액공제(조특법§99의14)', '-' + won(r.연금계좌세액공제_합계));
   if (r.전자신고세액공제) html += taxCalcResultRow('전자신고세액공제', '-' + won(r.전자신고세액공제));
   if (r.환산취득가액가산세_합계) html += taxCalcResultRow('환산취득가액 가산세', '+' + won(r.환산취득가액가산세_합계));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
@@ -1871,8 +1888,10 @@ function renderGiftPane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>증여재산가액</label><input type="number" id="giftAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>인수채무액(부담부증여, 없으면 0)</label><input type="number" id="giftDebtAssumed" placeholder="원"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftDebtObjProven"><label for="giftDebtObjProven">배우자·직계존비속간 증여일 때만 — 위 채무가 국가·지자체 채무 등 객관적으로 인수 사실이 인정됨(§47③ 단서, 체크 안하면 배우자·직계존비속간 채무는 공제 안 됨)</label></div>' +
         '<div class="taxcalc-field"><label>10년내 동일인 기증여합산액</label><input type="number" id="giftPriorAmount" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>위 기증여분 기납부세액</label><input type="number" id="giftPriorPaidTax" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>위 기증여분에서 이미 받은 증여재산공제(§53)</label><input type="number" id="giftPriorRelationDeductionUsed" placeholder="원 (없으면 비움 — 관계별 공제도 10년 합산 한도)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkipOver2B"><label for="giftGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>인수채무액에 상당하는 부분은 증여자에게 양도로 과세됩니다(소득세법§88①) — 증여자의 원 취득정보를 입력하면 양도세 탭 거래로 자동 계산해 보냅니다</b></div>' +
@@ -2176,6 +2195,7 @@ function renderGiftResult(r){
   if (r.가업승계납부유예세액) html += taxCalcResultRow('가업승계 납부유예세액', '-' + won(r.가업승계납부유예세액));
   if (r.영농자녀증여농지세액감면) html += taxCalcResultRow('영농자녀 증여농지 세액감면', '-' + won(r.영농자녀증여농지세액감면));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  if (r.채무공제_배제여부) html += '<div class="taxcalc-result-note">⚠ ' + r.채무공제_배제사유 + '</div>';
   if (r.인수채무액) html += '<div class="taxcalc-result-note">인수채무액 ' + won(r.인수채무액) + '에 상당하는 부분은 증여자에게 별도로 양도소득세가 과세됩니다 — 양도소득세 탭에서 함께 계산하세요.</div>';
   html += '<div class="taxcalc-result-note">납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있습니다. 창업자금·가업승계 증여세 과세특례(조특법§30의5·6)를 적용받는 경우 이 계산이 아니라 아래 별도의 특례세율 증여세 계산기를 쓰세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '<button type="button" class="taxcalc-calcbasis-btn" data-action="toggle-gift-calc-basis" style="margin-top:8px;">🧮 계산근거 접기/펴기</button>';
@@ -2406,7 +2426,7 @@ function renderInheritancePane(){
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>상속공제 종합한도(§24) · 세대생략가산액(§27)</b></div>' +
       '<div class="taxcalc-grid">' +
-        '<div class="taxcalc-field"><label>사전증여재산 전체 증여세 과세표준 합계</label><input type="number" id="ihPriorGiftBaseTotal" placeholder="원 (종합한도 계산용, 없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><span class="taxcalc-result-note" style="margin:0;">사전증여재산 과세표준 합계는 위 상속인 명부의 "10년 이내 사전증여" 입력에서 자동 집계됩니다</span></div>' +
         '<div class="taxcalc-field"><label>상속포기로 다음순위가 받은 재산가액</label><input type="number" id="ihDisclaimedRedistributed" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>세대생략 상속인이 받는 재산가액(자동, 명부에서 "세대생략" 체크된 행 합계)</label><input type="number" id="ihGenSkipAmount" placeholder="0" readonly></div>' +
         '<div class="taxcalc-field"><label>세대생략 상속인이 받는 재산 비율(자동계산: 위 금액÷총상속재산가액)</label><input type="number" step="0.0001" id="ihGenSkipRatio" placeholder="0" readonly><span class="taxcalc-result-note" id="ihGenSkipRatioHint" style="margin:2px 0 0;"></span></div>' +
@@ -2414,7 +2434,7 @@ function renderInheritancePane(){
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>세액공제</b></div>' +
       '<div class="taxcalc-grid">' +
-        '<div class="taxcalc-field"><label>기납부증여세액(10년내 사전증여분)</label><input type="number" id="ihPriorGiftTax" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><span class="taxcalc-result-note" style="margin:0;">기납부증여세액공제(§28)는 위 상속인 명부의 "10년 이내 사전증여" 입력에서 상속인별로 자동 계산됩니다(과세가액 5억원 이하면 배제)</span></div>' +
         '<div class="taxcalc-field"><label>외국납부세액</label><input type="number" id="ihForeignTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>전 상속세액 중 재상속분(단기재상속공제)</label><input type="number" id="ihPriorInheritanceTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>전 상속개시일로부터 경과연수</label><input type="number" id="ihYearsSincePrior" placeholder="1~10년 (재상속인 경우만)" maxlength="2"></div>' +
@@ -2519,15 +2539,16 @@ function computeFuneralTotals_(items){
 }
 
 // 처분재산 한 줄을 1년기준·2년기준 각각 별도로 계산해 화면에 실시간으로 보여준다(상증세법§15,
-// 시행령§11 산식의 중간 단계를 그대로 노출) — 순인출액=총인출-내돈입금액, 미소명액=순인출액-소명액,
-// 문턱=MIN(순인출액×20%, 2억원)이며 미소명액이 문턱 "미만"이면 0(전액 소명 간주), 문턱 이상이면
-// 미소명액 전액이 산입된다(문턱을 빼는 게 아님). 최종 산입액은 1년/2년 중 큰 금액.
+// 시행령§11④ 산식의 중간 단계를 그대로 노출) — 순인출액=총인출-내돈입금액, 미소명액=순인출액-소명액,
+// 문턱=MIN(순인출액×20%, 2억원). 시행령§11④ 원문: 미소명액이 문턱 "미만"이면 추정하지 않음(0),
+// 문턱 "이상"이면 문턱금액을 "차감한 금액"을 추정한다 — 즉 문턱을 넘어도 미소명액 전액이 아니라
+// 그 차액만 산입된다. 최종 산입액은 1년/2년 중 큰 금액.
 function computeDisposalBasisPresumed_(amount, selfDeposit, explained, thresholdAmount){
   const net = Math.max(0, numVal(amount) - numVal(selfDeposit));
   if (net < thresholdAmount) return { net: net, unexplained: 0, cutoff: 0, presumed: 0, meets: false };
   const unexplained = Math.max(0, net - numVal(explained));
   const cutoff = Math.min(net * 0.2, 200000000);
-  return { net: net, unexplained: unexplained, cutoff: cutoff, presumed: (unexplained >= cutoff ? unexplained : 0), meets: true };
+  return { net: net, unexplained: unexplained, cutoff: cutoff, presumed: (unexplained >= cutoff ? unexplained - cutoff : 0), meets: true };
 }
 function computeDisposalItemPresumedAmount_(item){
   const oneYear = computeDisposalBasisPresumed_(item.oneYearAmount, item.oneYearSelfDeposit, item.oneYearExplained, 200000000);
@@ -2645,7 +2666,13 @@ function buildInheritanceCalcBasisLines(r){
   lines.push('산출세액(누진세율) = ' + won(r.산출세액 - (r.세대생략가산액 || 0)));
   if (r.세대생략가산액) lines.push('세대생략가산액(§27) = +' + won(r.세대생략가산액));
   lines.push('산출세액 합계 = ' + won(r.산출세액));
-  if (r.기납부증여세액공제) lines.push('기납부증여세액공제(§28) = -' + won(r.기납부증여세액공제));
+  if (r.증여세액공제_5억이하배제) lines.push('기납부증여세액공제(§28①단서) = 0 (상속세 과세가액 5억원 이하로 공제 배제)');
+  else if (r.기납부증여세액공제) {
+    lines.push('기납부증여세액공제(§28, 상속인별 정밀계산 합계) = -' + won(r.기납부증여세액공제));
+    (r.증여세액공제_상속인별내역 || []).forEach(function(h){
+      if (h.공제액 > 0) lines.push('  · ' + (h.성명 || '상속인') + ' = -' + won(h.공제액) + ' (한도 ' + won(h.한도) + ')');
+    });
+  }
   if (r.특례증여세액공제) lines.push('특례증여세액공제(조특법§30의5·6) = -' + won(r.특례증여세액공제));
   if (r.외국납부세액공제) lines.push('외국납부세액공제(§29) = -' + won(r.외국납부세액공제));
   if (r.단기재상속세액공제) lines.push('단기재상속세액공제(§30) = -' + won(r.단기재상속세액공제));
@@ -2695,7 +2722,8 @@ function renderInheritanceResult(r){
   html += taxCalcResultRow('상속공제 합계', won(r.상속공제_합계) + (r.상속공제종합한도_적용여부 ? ' (종합한도 적용됨)' : ''));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
   html += taxCalcResultRow('산출세액', won(r.산출세액) + (r.세대생략가산액 ? ' (세대생략가산액 ' + won(r.세대생략가산액) + ' 포함)' : ''));
-  if (r.기납부증여세액공제) html += taxCalcResultRow('기납부증여세액공제', '-' + won(r.기납부증여세액공제));
+  if (r.증여세액공제_5억이하배제) html += taxCalcResultRow('기납부증여세액공제', '0 (§28①단서: 상속세 과세가액 5억원 이하)');
+  else if (r.기납부증여세액공제) html += taxCalcResultRow('기납부증여세액공제', '-' + won(r.기납부증여세액공제));
   if (r.특례증여세액공제) html += taxCalcResultRow('특례증여세액공제', '-' + won(r.특례증여세액공제));
   if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
   if (r.단기재상속세액공제) html += taxCalcResultRow('단기재상속세액공제', '-' + won(r.단기재상속세액공제));
@@ -2746,6 +2774,10 @@ function renderHeirRegistry(){
       '<div class="taxcalc-field checkbox"><input type="checkbox" data-hfield="isCohabitHouse" id="hCohabit-' + idx + '"' + (h.isCohabitHouse ? ' checked' : '') + '><label for="hCohabit-' + idx + '">동거주택 상속(10년이상 동거·무주택 등)</label></div>' +
       '<div class="taxcalc-field" data-show-if-heir="isCohabitHouse" style="' + (h.isCohabitHouse ? '' : 'display:none;') + '"><label>동거주택가액</label><input type="number" data-hfield="cohabitHouseValue" value="' + (h.cohabitHouseValue || '') + '"></div>' +
       '<div class="taxcalc-field"><span class="taxcalc-result-note" data-heir-computed="actual" style="margin:0;">실제상속재산가액(자동) = ' + won(computeHeirActualValue_(idx)) + ' — 아래 재산평가 자산목록의 "상속인별 배분"에서 정해집니다</span></div>' +
+      '<div class="taxcalc-field checkbox"><input type="checkbox" data-hfield="hasPriorGift" id="hPriorGift-' + idx + '"' + (h.hasPriorGift ? ' checked' : '') + '><label for="hPriorGift-' + idx + '">10년 이내 이 상속인에게 사전증여 있음(§13 가산대상)</label></div>' +
+      '<div class="taxcalc-field" data-show-if-heir="hasPriorGift" style="' + (h.hasPriorGift ? '' : 'display:none;') + '"><label>사전증여재산가액(증여 당시 원본가액)</label><input type="number" data-hfield="priorGiftAmount" value="' + (h.priorGiftAmount || '') + '"></div>' +
+      '<div class="taxcalc-field" data-show-if-heir="hasPriorGift" style="' + (h.hasPriorGift ? '' : 'display:none;') + '"><label>위 증여재산의 증여세 과세표준</label><input type="number" data-hfield="priorGiftTaxableBase" value="' + (h.priorGiftTaxableBase || '') + '"></div>' +
+      '<div class="taxcalc-field" data-show-if-heir="hasPriorGift" style="' + (h.hasPriorGift ? '' : 'display:none;') + '"><label>위 증여 당시 납부한 증여세산출세액</label><input type="number" data-hfield="priorGiftTaxPaid" value="' + (h.priorGiftTaxPaid || '') + '"></div>' +
       (inheritanceHeirs.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-heir-row" data-idx="' + idx + '">✕ 삭제</button>' : '') +
     '</div>';
   }).join('');
@@ -2759,9 +2791,10 @@ function renderHeirRegistry(){
       const idx = numVal(row.dataset.heirIdx);
       const key = el.dataset.hfield;
       inheritanceHeirs[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
-      if (key === 'isCohabitHouse'){
-        const field = row.querySelector('[data-show-if-heir="isCohabitHouse"]');
-        if (field) field.style.display = el.checked ? 'flex' : 'none';
+      if (key === 'isCohabitHouse' || key === 'hasPriorGift'){
+        row.querySelectorAll('[data-show-if-heir="' + key + '"]').forEach(function(field){
+          field.style.display = el.checked ? 'flex' : 'none';
+        });
       }
       recomputeHeirDerivedFields();
       updateHeirActualValueHints();
@@ -3202,6 +3235,10 @@ taxCalcView.addEventListener('click', function(e){
     const giftAmount = numVal(document.getElementById('giftAmount').value) || 0;
     const debtAmount = numVal(document.getElementById('giftDebtAssumed').value) || 0;
     if (!giftAmount || !debtAmount) return;
+    const closeRelation = ['배우자', '직계존속', '직계비속'].indexOf(document.getElementById('giftRelation').value) !== -1;
+    if (closeRelation && !document.getElementById('giftDebtObjProven').checked) {
+      if (!confirm('배우자·직계존비속간 부담부증여는 채무 인수가 객관적으로 입증되지 않으면(§47③) 애초에 채무 인수 자체가 없는 것으로 추정되어, 인수채무액에 대한 양도세도 발생하지 않습니다.\n\n그래도 양도세 탭으로 보내시겠습니까?')) return;
+    }
     const ratio = Math.min(1, debtAmount / giftAmount);
     const donorAcqPrice = numVal(document.getElementById('giftDonorAcqPrice').value) || 0;
     const donorAcqExpense = numVal(document.getElementById('giftDonorAcqExpense').value) || 0;
@@ -3270,8 +3307,10 @@ taxCalcView.addEventListener('click', function(e){
       relation: document.getElementById('giftRelation').value,
       isMinor: taxCalcGiftDoneeIsMinor(),
       debtAssumedAmount: numVal(document.getElementById('giftDebtAssumed').value) || 0,
+      isDebtObjectivelyProven: !!document.getElementById('giftDebtObjProven').checked,
       priorGiftAmount: numVal(document.getElementById('giftPriorAmount').value) || 0,
       priorPaidTax: numVal(document.getElementById('giftPriorPaidTax').value) || 0,
+      priorRelationDeductionUsed: numVal(document.getElementById('giftPriorRelationDeductionUsed').value) || 0,
       isGenerationSkip: (function(){
         const sel = document.getElementById('giftRelation');
         const opt = sel && sel.selectedOptions ? sel.selectedOptions[0] : null;
@@ -3457,11 +3496,18 @@ taxCalcView.addEventListener('click', function(e){
       farmingNonBizAsset61: numVal(document.getElementById('ihFarmingNonBiz61').value) || 0,
       farmingExcessCash: numVal(document.getElementById('ihFarmingExcessCash').value) || 0,
       farmingNonBizStock: numVal(document.getElementById('ihFarmingNonBizStock').value) || 0,
-      priorGiftTaxableBaseForOverallLimit: numVal(document.getElementById('ihPriorGiftBaseTotal').value) || 0,
+      priorGiftHeirs: inheritanceHeirs.map(function(h, idx){
+        return {
+          name: h.name || '',
+          actualInheritedValue: computeHeirActualValue_(idx),
+          priorGiftAmount: h.hasPriorGift ? (numVal(h.priorGiftAmount) || 0) : 0,
+          priorGiftTaxableBase: h.hasPriorGift ? (numVal(h.priorGiftTaxableBase) || 0) : 0,
+          priorGiftTaxPaid: h.hasPriorGift ? (numVal(h.priorGiftTaxPaid) || 0) : 0
+        };
+      }),
       disclaimedShareRedistributedAmount: numVal(document.getElementById('ihDisclaimedRedistributed').value) || 0,
       generationSkipHeirRatio: numVal(document.getElementById('ihGenSkipRatio').value) || 0,
       generationSkipOver2Billion: document.getElementById('ihGenSkipOver2B').checked,
-      priorGiftTaxPaid: numVal(document.getElementById('ihPriorGiftTax').value) || 0,
       foreignTaxPaidAmount: numVal(document.getElementById('ihForeignTax').value) || 0,
       priorInheritanceTaxPortion: numVal(document.getElementById('ihPriorInheritanceTax').value) || 0,
       yearsSincePriorInheritance: numVal(document.getElementById('ihYearsSincePrior').value) || 0,
