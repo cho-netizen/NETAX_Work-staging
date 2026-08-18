@@ -4199,83 +4199,102 @@ function handleSearchAddress(body) {
 // 법정동코드 앞 5자리(LAWD_CD)와 계약년월(YYYYMM)로 조회한다. LAWD_CD는 주소검색이 돌려준
 // admCd(10자리)의 앞 5자리를 그대로 쓰면 된다. 결과는 "참고용 실거래 목록"일 뿐 — 실제 시가로
 // 쓸지는 사용자가 매매사례의 유사성(면적·층·거래시점)을 보고 직접 판단해서 골라야 한다.
+// 이 계정은 이미 실거래가 조회용 MOLIT_API_KEY를 갖고 있고(toolLookupRealEstatePrice가 씀),
+// 같은 API를 다시 직접 호출하는 대신 그 함수를 그대로 재사용해서 응답만 화면이 기대하는 모양으로 바꾼다.
 function handleLookupRealPrice(body) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('DATA_GO_KR_API_KEY');
-  if (!apiKey) {
-    return { error: '실거래가 조회 API 키가 아직 등록되지 않았습니다. data.go.kr(공공데이터포털)에서 "국토교통부_아파트매매 실거래 상세 자료" API를 활용신청(자동승인)한 뒤 발급받은 일반 인증키(Encoding)를, 이 Apps Script 프로젝트의 "프로젝트 설정 > 스크립트 속성"에 키 이름 DATA_GO_KR_API_KEY로 등록하세요. 같은 계정으로 개별공시지가·공동주택가격·사업자번호 API도 함께 신청했다면 키 값은 동일하게 재사용됩니다.' };
-  }
   const lawdCd = String(body.lawdCd || '').trim();
   const dealYm = String(body.dealYm || '').trim();
   if (!/^\d{5}$/.test(lawdCd)) return { error: '지역코드(법정동코드 앞 5자리)가 필요합니다. 먼저 주소 검색으로 소재지를 선택하세요.' };
   if (!/^\d{6}$/.test(dealYm)) return { error: '계약년월(YYYYMM, 6자리)이 필요합니다.' };
-  const url = 'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev'
-    + '?serviceKey=' + encodeURIComponent(apiKey)
-    + '&LAWD_CD=' + lawdCd + '&DEAL_YMD=' + dealYm + '&pageNo=1&numOfRows=300';
+  const result = toolLookupRealEstatePrice('apt_detail', lawdCd, dealYm);
+  if (result.error) return result;
+  const list = (Array.isArray(result.items) ? result.items : []).map(function (it) {
+    const amountRaw = String(it.dealAmount || '').replace(/,/g, '').trim();
+    return {
+      aptNm: it.aptNm || '', dong: it.umdNm || '', jibun: it.jibun || '',
+      area: Number(it.excluUseAr) || 0, floor: it.floor || '', buildYear: it.buildYear || '',
+      dealDate: (it.dealYear || '') + '-' + ('0' + (it.dealMonth || '')).slice(-2) + '-' + ('0' + (it.dealDay || '')).slice(-2),
+      dealAmount: (Number(amountRaw) || 0) * 10000
+    };
+  });
+  return { items: list };
+}
+
+// 개별공시지가·공동주택가격·개별주택가격 자동조회(브이월드/공간정보 오픈플랫폼, vworld.kr — data.go.kr과는
+// 별도 계정·별도 키). 19자리 PNU(법정동코드10 + 산여부1[1=일반,2=산] + 지번본번4 + 지번부번4)로 조회한다.
+// PNU는 화면에서 admCd·mtYn·lnbrMnnm·lnbrSlno로 조립한다.
+// 요청주소는 실제 호출로 확인했다 — 문서에 적힌 req/data가 아니라 ned/data였고(예:
+// https://api.vworld.kr/ned/data/getIndvdLandPriceAttr), domain 파라미터는 "옵션"이라고 적혀있지만
+// 서버-서버 호출(Apps Script)에서는 없으면 INCORRECT_KEY로 거부되어 사실상 필수였다. 3개 오퍼레이션명
+// (getIndvdLandPriceAttr/getApartHousingPriceAttr/getIndvdHousingPriceAttr) 모두 실제 값으로 확인됨.
+// ⚠ 공동주택가격·개별주택가격은 "PNU(지번) 하나"에 그 필지 위 건물의 세대 수만큼(예: 반포자이 한 필지에
+// 3,410건) 여러 행이 함께 돌아온다 — 동·호수를 지정하지 않고 아무 행이나 골라 쓰면 완전히 다른 세대의
+// 가격이 조용히 섞여 들어갈 수 있다. 그래서 이 두 종류는 동·호수가 정확히 일치하는 행만 골라 쓰고,
+// 못 찾으면 절대 추측하지 않고 에러만 반환한다.
+const OFFICIAL_PRICE_OPERATIONS_ = {
+  land: 'getIndvdLandPriceAttr',
+  apartment: 'getApartHousingPriceAttr',
+  house: 'getIndvdHousingPriceAttr'
+};
+// <fields><field>...</field><field>...</field></fields> 형태의 XML을, field 하나당 하나의
+// {태그명: 텍스트} 객체로 변환해 배열로 돌려준다(행끼리 섞이지 않게 — 동·호수로 정확한 행을 골라야 해서).
+function xmlFieldsToRows_(fieldsElement) {
+  if (!fieldsElement) return [];
+  return fieldsElement.getChildren('field').map(function (fieldEl) {
+    const row = {};
+    fieldEl.getChildren().forEach(function (child) { row[child.getName()] = (child.getText() || '').trim(); });
+    return row;
+  });
+}
+function handleLookupOfficialPrice(body) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('VWORLD_API_KEY');
+  if (!apiKey) {
+    return { error: '공시가격 조회 API 키가 아직 등록되지 않았습니다. vworld.kr(브이월드/공간정보 오픈플랫폼)에서 인증키를 신청(활용API: 2D데이터 API)한 뒤 발급받은 키를 스크립트 속성에 VWORLD_API_KEY로 등록하세요. data.go.kr 인증키(MOLIT_API_KEY)와는 다른 별도 키입니다.' };
+  }
+  const pnu = String(body.pnu || '').trim();
+  if (!/^\d{19}$/.test(pnu)) return { error: 'PNU(19자리 고유번호)가 필요합니다. 먼저 주소 검색으로 소재지(지번)를 선택하세요.' };
+  const kind = body.priceKind === 'apartment' ? 'apartment' : body.priceKind === 'house' ? 'house' : 'land';
+  const kindLabel = kind === 'apartment' ? '공동주택가격' : kind === 'house' ? '개별주택가격' : '개별공시지가';
+  const stdrYear = String(body.stdrYear || new Date().getFullYear());
+  const needsUnit = kind === 'apartment' || kind === 'house';
+  const dong = String(body.dong || '').replace(/동\s*$/, '').trim();
+  const ho = String(body.ho || '').replace(/호\s*$/, '').trim();
+  if (needsUnit && !ho) {
+    return { error: kindLabel + '는 한 지번(필지) 안에 여러 세대가 함께 있어 동·호수를 알아야 정확한 세대를 찾을 수 있습니다. 자산행의 "동"·"호" 칸을 채운 뒤 다시 시도하세요.' };
+  }
+  const url = 'https://api.vworld.kr/ned/data/' + OFFICIAL_PRICE_OPERATIONS_[kind]
+    + '?key=' + encodeURIComponent(apiKey)
+    + '&domain=script.google.com'
+    + '&pnu=' + pnu + '&stdrYear=' + stdrYear + '&format=xml&numOfRows=' + (needsUnit ? 1000 : 1) + '&pageNo=1';
   try {
     const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     const doc = XmlService.parse(res.getContentText());
     const root = doc.getRootElement();
-    const header = root.getChild('header');
-    const resultCode = header ? header.getChildText('resultCode') : null;
-    if (resultCode && resultCode !== '00') {
-      return { error: '실거래가 조회 오류(' + resultCode + '): ' + (header.getChildText('resultMsg') || '') };
+    const errCode = root.getChildText('resultCode') || root.getChildText('code');
+    if (errCode) {
+      return { error: kindLabel + ' 조회 오류(' + errCode + '): ' + (root.getChildText('resultMsg') || root.getChildText('message') || '') };
     }
-    const bodyEl = root.getChild('body');
-    const itemsEl = bodyEl ? bodyEl.getChild('items') : null;
-    const items = itemsEl ? itemsEl.getChildren('item') : [];
-    const list = items.map(function (item) {
-      function txt(tag) { return (item.getChildText(tag) || '').trim(); }
-      const amountRaw = txt('dealAmount').replace(/,/g, '');
-      return {
-        aptNm: txt('aptNm'), dong: txt('umdNm'), jibun: txt('jibun'),
-        area: Number(txt('excluUseAr')) || 0, floor: txt('floor'), buildYear: txt('buildYear'),
-        dealDate: txt('dealYear') + '-' + ('0' + txt('dealMonth')).slice(-2) + '-' + ('0' + txt('dealDay')).slice(-2),
-        dealAmount: (Number(amountRaw) || 0) * 10000
-      };
-    });
-    return { items: list };
-  } catch (e) {
-    return { error: '실거래가 조회 API 호출/응답 해석 실패: ' + e.message + ' (API 응답 형식이 안내와 다를 수 있습니다 — data.go.kr에서 최신 명세를 확인해주세요.)' };
-  }
-}
-
-// 개별공시지가·공동주택가격 자동조회(국토교통부 국가공간정보포털 계열 공공데이터포털 API) — 19자리
-// PNU(고유번호: 법정동코드10 + 산여부1[1=일반,2=산] + 지번본번4 + 지번부번4)로 조회한다. PNU는 화면에서
-// admCd·mtYn·lnbrMnnm·lnbrSlno로 조립한다.
-// ⚠ 이 API는 서비스명·파라미터명이 국토부 NSDI 계열의 공통 URL 패턴(apis.data.go.kr/1611000/nsdi/...)을
-// 따른다고 알려져 있으나, 활용신청 후 공공데이터포털이 발급하는 상세 명세(Swagger)로 재확인이 필요할 수
-// 있다. 그래서 응답 형식이 기대와 다르면 절대 추측한 숫자를 반환하지 않고 명확한 에러만 반환한다
-// (잘못된 공시가격이 세액 계산에 조용히 섞여 들어가는 것을 막기 위함 — 틀린 답보다 빈칸이 낫다).
-function handleLookupOfficialPrice(body) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('DATA_GO_KR_API_KEY');
-  if (!apiKey) {
-    return { error: '공시가격 조회 API 키가 아직 등록되지 않았습니다. data.go.kr(공공데이터포털)에서 "국토교통부_개별공시지가정보" 또는 "국토교통부_공동주택가격정보서비스" API를 활용신청한 뒤 발급받은 일반 인증키를 스크립트 속성에 DATA_GO_KR_API_KEY로 등록하세요(실거래가·사업자번호 API와 같은 계정이면 키 값은 동일합니다).' };
-  }
-  const pnu = String(body.pnu || '').trim();
-  if (!/^\d{19}$/.test(pnu)) return { error: 'PNU(19자리 고유번호)가 필요합니다. 먼저 주소 검색으로 소재지(지번)를 선택하세요.' };
-  const kind = body.priceKind === 'apartment' ? 'apartment' : 'land';
-  const stdrYear = String(body.stdrYear || new Date().getFullYear());
-  const serviceName = kind === 'apartment' ? 'AptPriceInfoService' : 'IndvdLandPriceService';
-  const operation = kind === 'apartment' ? 'getAptPriceAttr' : 'getIndvdLandPriceAttr';
-  const url = 'https://apis.data.go.kr/1611000/nsdi/' + serviceName + '/attr/' + operation
-    + '?serviceKey=' + encodeURIComponent(apiKey)
-    + '&pnu=' + pnu + '&stdrYear=' + stdrYear + '&format=json&numOfRows=10&pageNo=1';
-  try {
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    const data = JSON.parse(res.getContentText());
-    const fields = data && data.field;
-    if (!Array.isArray(fields) || !fields.length) {
-      return { error: '해당 필지의 ' + (kind === 'apartment' ? '공동주택가격' : '개별공시지가') + ' 자료를 찾지 못했습니다(기준연도 미고시이거나 API 응답 형식을 해석하지 못했습니다). 국토교통부 부동산공시가격 알리미(realtyprice.kr)에서 직접 확인해 입력해주세요.' };
+    const rows = xmlFieldsToRows_(root.getChild('fields'));
+    let row = rows[0];
+    if (needsUnit) {
+      row = rows.filter(function (r) {
+        return (!dong || (r.dongNm || '') === dong) && (r.hoNm || '') === ho;
+      })[0];
+      if (!row) {
+        return { error: '입력한 동(' + (dong || '-') + ')·호(' + ho + ')와 일치하는 ' + kindLabel + ' 자료를 찾지 못했습니다(같은 필지 내 세대가 많아 최대 1000건까지만 조회했습니다 — 동·호수 표기를 다시 확인해주세요). 국토교통부 부동산공시가격 알리미(realtyprice.kr)에서 직접 확인해 입력해주세요.' };
+      }
     }
-    const first = fields[0];
-    const priceRaw = kind === 'apartment' ? first.pblntfPc : first.pblntfPclnd;
-    const price = Number(priceRaw);
+    if (!row) {
+      return { error: '해당 필지의 ' + kindLabel + ' 자료를 찾지 못했습니다(기준연도 미고시일 수 있습니다). 국토교통부 부동산공시가격 알리미(realtyprice.kr)에서 직접 확인해 입력해주세요.' };
+    }
+    const priceKey = Object.keys(row).filter(function (k) { return /^pblntfPc/i.test(k); })[0];
+    const price = priceKey ? Number(row[priceKey]) : 0;
     if (!price) {
-      return { error: '조회는 되었으나 가격 필드를 해석하지 못했습니다(응답 일부: ' + JSON.stringify(first).slice(0, 200) + '). 알리미 사이트에서 직접 확인해주세요.' };
+      return { error: '조회는 됐으나 가격 필드를 해석하지 못했습니다. 알리미 사이트에서 직접 확인해주세요.' };
     }
-    return { price: price, stdrYear: first.stdrYear || stdrYear };
+    return { price: price, stdrYear: row.stdrYear || stdrYear };
   } catch (e) {
-    return { error: '공시가격 조회 API 호출/응답 해석 실패: ' + e.message + ' (실제 서비스명·파라미터가 안내와 다를 수 있습니다 — data.go.kr 활용신청 상세 명세를 확인해주세요. 그때까지는 알리미 사이트에서 직접 확인해 입력해주세요.)' };
+    return { error: kindLabel + ' 조회 API 호출/응답 해석 실패: ' + e.message };
   }
 }
 
@@ -4285,50 +4304,34 @@ function handleLookupOfficialPrice(body) {
 // ※ 반대 방향(상호명으로 사업자번호를 검색)은 국세청이 공개 제공하지 않는다 — 상호는 유일하지 않고
 // 사업자번호는 개인식별정보에 준해 검색 디렉토리가 없다. 사업자등록증 사본을 첨부해 AI로 자동추출하는
 // 기존 기능(증빙→자동입력)이 이 방향의 사실상 대안이다.
+// 이 계정은 이미 NTS_API_KEY로 사업자상태조회·진위확인을 하는 함수(toolLookupBusinessStatus·
+// toolVerifyBusinessRegistration)를 갖고 있다 — 같은 odcloud 엔드포인트를 또 직접 호출하지 않고
+// 그 함수를 재사용해서 응답만 화면이 기대하는 모양으로 바꾼다.
 function handleCheckBusinessNumber(body) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('DATA_GO_KR_API_KEY');
-  if (!apiKey) {
-    return { error: '사업자번호 확인 API 키가 아직 등록되지 않았습니다. data.go.kr(공공데이터포털)에서 "국세청_사업자등록정보 진위확인 및 상태조회 서비스"를 활용신청한 뒤 발급받은 인증키를 스크립트 속성에 DATA_GO_KR_API_KEY로 등록하세요(다른 국토부 API와 같은 계정이면 키 값은 동일합니다).' };
-  }
   const bNo = String(body.bNo || '').replace(/\D/g, '');
   if (bNo.length !== 10) return { error: '사업자등록번호(10자리 숫자)가 필요합니다.' };
   const repName = String(body.repName || '').trim();
   const startDt = String(body.startDt || '').replace(/\D/g, '');
-  try {
-    const statusRes = UrlFetchApp.fetch(
-      'https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=' + encodeURIComponent(apiKey),
-      { method: 'post', contentType: 'application/json', muteHttpExceptions: true, payload: JSON.stringify({ b_no: [bNo] }) }
-    );
-    const statusData = JSON.parse(statusRes.getContentText());
-    const statusItem = statusData && statusData.data && statusData.data[0];
-    if (!statusItem) return { error: '사업자번호 상태조회 응답 형식을 해석할 수 없습니다.' };
-    if (statusItem.b_stt_cd === undefined && statusItem.tax_type_cd === '01') {
-      return { error: '등록되지 않은 사업자번호입니다.' };
+  const statusData = toolLookupBusinessStatus([bNo]);
+  if (statusData.error) return statusData;
+  const statusItem = statusData && statusData.data && statusData.data[0];
+  if (!statusItem) return { error: '사업자번호 상태조회 응답 형식을 해석할 수 없습니다.' };
+  const result = {
+    bNo: bNo,
+    status: statusItem.b_stt || (statusItem.tax_type === '국세청에 등록되지 않은 사업자등록번호입니다.' ? '미등록' : ''),
+    statusCode: statusItem.b_stt_cd || '',
+    taxType: statusItem.tax_type || '',
+    closeDate: statusItem.end_dt || ''
+  };
+  if (repName && startDt.length === 8) {
+    const validateData = toolVerifyBusinessRegistration([{ b_no: bNo, start_dt: startDt, p_nm: repName }]);
+    const vItem = validateData && validateData.data && validateData.data[0];
+    if (vItem) {
+      result.validCode = vItem.valid;
+      result.validMessage = vItem.valid_msg || (vItem.valid === '01' ? '일치' : '불일치');
     }
-    const result = {
-      bNo: bNo,
-      status: statusItem.b_stt || (statusItem.tax_type === '국세청에 등록되지 않은 사업자등록번호입니다.' ? '미등록' : ''),
-      statusCode: statusItem.b_stt_cd || '',
-      taxType: statusItem.tax_type || '',
-      closeDate: statusItem.end_dt || ''
-    };
-    if (repName && startDt.length === 8) {
-      const validateRes = UrlFetchApp.fetch(
-        'https://api.odcloud.kr/api/nts-businessman/v1/validate?serviceKey=' + encodeURIComponent(apiKey),
-        { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-          payload: JSON.stringify({ businesses: [{ b_no: bNo, start_dt: startDt, p_nm: repName }] }) }
-      );
-      const validateData = JSON.parse(validateRes.getContentText());
-      const vItem = validateData && validateData.data && validateData.data[0];
-      if (vItem) {
-        result.validCode = vItem.valid;
-        result.validMessage = vItem.valid_msg || (vItem.valid === '01' ? '일치' : '불일치');
-      }
-    }
-    return result;
-  } catch (e) {
-    return { error: '사업자번호 확인 API 호출 실패: ' + e.message };
   }
+  return result;
 }
 
 // 파일이 있으면 내용을 그대로, 없으면 null을 돌려준다(오류로 취급하지 않음 — 아직 안 만든 파일일 수 있어서).

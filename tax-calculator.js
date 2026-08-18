@@ -970,6 +970,7 @@ function valuationAssetMethodFieldsHtml(m, a){
   if (m === 'house' || m === 'apartment' || m === 'officetel') return '' +
     '<div class="taxcalc-field"><label>고시된 ' + (m === 'apartment' ? '공동주택가격' : m === 'officetel' ? '오피스텔·상업용건물 기준시가' : '개별주택가격') + '</label><input type="number" data-field="housePrice" value="' + (a.housePrice || '') + '">' +
     (m === 'apartment' ? '<button type="button" class="taxcalc-ai-btn" data-action="lookup-official-price" data-price-kind="apartment" style="margin-top:4px;">🔍 공동주택가격 자동조회</button>' : '') +
+    (m === 'house' ? '<button type="button" class="taxcalc-ai-btn" data-action="lookup-official-price" data-price-kind="house" style="margin-top:4px;">🔍 개별주택가격 자동조회</button>' : '') +
     '</div>';
   if (m === 'building'){
     const structureOptions = (window.BUILDING_STRUCTURE_TABLE || []).map(function(s){ return '<option value="' + s.name + '"' + (a.buildingStructure === s.name ? ' selected' : '') + '>' + s.name + '</option>'; }).join('');
@@ -3045,10 +3046,10 @@ taxCalcView.addEventListener('click', function(e){
     const priceKind = btn.dataset.priceKind;
     fetch(GAS_URL, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'lookupOfficialPrice', pnu: pnu, priceKind: priceKind })
+      body: JSON.stringify({ action: 'lookupOfficialPrice', pnu: pnu, priceKind: priceKind, dong: a.assetDong || '', ho: a.assetHo || '' })
     }).then(function(res){ return res.json(); }).then(function(data){
       if (data.error){ alert(data.error); return; }
-      if (priceKind === 'apartment') a.housePrice = data.price; else a.landPrice = data.price;
+      if (priceKind === 'apartment' || priceKind === 'house') a.housePrice = data.price; else a.landPrice = data.price;
       if (giftListEl) renderValuationAssetList('giftValuationList', giftValuationAssets);
       else if (ihListEl) renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
       else renderTransferPane();
