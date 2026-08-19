@@ -905,6 +905,42 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_capital_increase_gift_tax',
+    description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 미확인).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caseType: { type: 'string', enum: ['low_allocated', 'low_unallocated', 'high_allocated', 'high_unallocated', 'high_nonshareholder'], description: '5가지 세부 케이스 중 하나.' },
+        preValuePerShare: { type: 'number', description: '증자전 1주당 평가가액(원).' },
+        preShares: { type: 'number', description: '증자전 발행주식총수.' },
+        issuePricePerShare: { type: 'number', description: '신주 1주당 인수가액(원).' },
+        increasedShares: { type: 'number', description: 'low_allocated/high_allocated/high_unallocated/high_nonshareholder일 때 — 증자로 실제 증가한 주식수.' },
+        allocatedShares: { type: 'number', description: 'low_allocated/high_allocated일 때 — 배정받은 실권주수(또는 신주수, 균등조건 초과분 포함).' },
+        equalIncreaseShares: { type: 'number', description: 'low_unallocated일 때 — 증자전 지분비율대로 균등하게 증자할 경우의 증가주식수.' },
+        deemedAllocatedShares: { type: 'number', description: 'low_unallocated일 때 — 실권주총수×증자후신주인수자의지분비율×(신주인수자의특수관계인의실권주수/실권주총수)로 계산한 배정간주실권주수.' },
+        forfeitedShares: { type: 'number', description: 'high_unallocated일 때 — 신주인수를 포기한 주주의 실권주수.' },
+        relatedAcquiredShares: { type: 'number', description: 'high_unallocated/high_nonshareholder일 때 — 포기·미달배정 주주의 특수관계인이 인수한 실권주수(또는 신주수).' },
+        equalIncreaseTotalShares: { type: 'number', description: 'high_unallocated일 때 — 증자전 지분비율대로 균등하게 증자하는 경우의 주식총수.' },
+        underAllocatedShares: { type: 'number', description: 'high_nonshareholder일 때 — 신주를 배정받지 아니하거나 균등조건에 미달되게 배정받은 주주의 그 신주수.' },
+        nonShareholderAndExcessTotalShares: { type: 'number', description: 'high_nonshareholder일 때 — 주주가 아닌 자에게 배정된 신주 및 균등조건을 초과해 인수한 신주의 총수.' },
+        relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
+        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
+        disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
+        priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
+        underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
+      },
+      required: ['caseType', 'preShares']
+    }
+  },
+  {
     name: 'calculate_restructuring_property_reduction',
     description: '구조조정대상 부동산 취득자에 대한 양도소득세의 감면(조특법§43)을 계산한다. 1999.12.31 이전 취득분에 한해, 취득일부터 5년 이내 양도하면 그 양도소득세의 50%를 감면하고, 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액의 50%를 과세대상소득금액에서 뺀다.',
     input_schema: {
@@ -5588,6 +5624,90 @@ function toolCalculatePopulationDeclineAreaHouseExclusion(p) {
   };
 }
 
+// 증자에 따른 이익의 증여 (상증세법§39, 시행령§29②) — caseType으로 5가지 세부 케이스 중 선택.
+function toolCalculateCapitalIncreaseGiftTax(p) {
+  p = p || {};
+  const caseType = p.caseType;
+  const validCases = ['low_allocated', 'low_unallocated', 'high_allocated', 'high_unallocated', 'high_nonshareholder'];
+  if (validCases.indexOf(caseType) === -1) {
+    return { error: 'caseType을 low_allocated/low_unallocated/high_allocated/high_unallocated/high_nonshareholder 중에서 선택하세요.' };
+  }
+  const preValuePerShare = Number(p.preValuePerShare) || 0;
+  const preShares = Number(p.preShares) || 0;
+  const issuePricePerShare = Number(p.issuePricePerShare) || 0;
+  if (preShares <= 0) return { error: '증자전 발행주식총수가 필요합니다.' };
+
+  let giftAmount, postValuePerShare;
+
+  if (caseType === 'low_allocated' || caseType === 'high_allocated') {
+    const increasedShares = Number(p.increasedShares) || 0;
+    postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+    const allocatedShares = Number(p.allocatedShares) || 0;
+    if (caseType === 'low_allocated') {
+      giftAmount = Math.max(0, Math.round((postValuePerShare - issuePricePerShare) * allocatedShares));
+    } else {
+      giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * allocatedShares));
+    }
+  } else if (caseType === 'low_unallocated') {
+    const equalIncreaseShares = Number(p.equalIncreaseShares) || 0;
+    postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * equalIncreaseShares) / (preShares + equalIncreaseShares);
+    const deemedAllocatedShares = Number(p.deemedAllocatedShares) || 0;
+    giftAmount = Math.max(0, Math.round((postValuePerShare - issuePricePerShare) * deemedAllocatedShares));
+  } else if (caseType === 'high_unallocated') {
+    const increasedShares = Number(p.increasedShares) || 0;
+    postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+    const forfeitedShares = Number(p.forfeitedShares) || 0;
+    const relatedAcquiredShares = Number(p.relatedAcquiredShares) || 0;
+    const equalIncreaseTotalShares = Number(p.equalIncreaseTotalShares) || 0;
+    if (equalIncreaseTotalShares <= 0) return { error: '균등증자시 증가주식수 총수가 필요합니다.' };
+    giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * forfeitedShares * (relatedAcquiredShares / equalIncreaseTotalShares)));
+  } else { // high_nonshareholder
+    const increasedShares = Number(p.increasedShares) || 0;
+    postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+    const underAllocatedShares = Number(p.underAllocatedShares) || 0;
+    const relatedAcquiredShares = Number(p.relatedAcquiredShares) || 0;
+    const nonShareholderAndExcessTotalShares = Number(p.nonShareholderAndExcessTotalShares) || 0;
+    if (nonShareholderAndExcessTotalShares <= 0) return { error: '비주주배정신주+균등초과인수신주의 총수가 필요합니다.' };
+    giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * underAllocatedShares * (relatedAcquiredShares / nonShareholderAndExcessTotalShares)));
+  }
+
+  if (caseType === 'low_unallocated') {
+    const diffRatio = postValuePerShare > 0 ? (postValuePerShare - issuePricePerShare) / postValuePerShare : 0;
+    if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
+      return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' };
+    }
+  } else if (caseType === 'high_unallocated') {
+    const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
+    if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
+      return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' };
+    }
+  }
+
+  const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+  const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+  const priorPaidTax = Number(p.priorPaidTax) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+  return {
+    과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
+    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    납부세액: finalTax,
+    안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)의 정확한 게이트 기준금액 조문은 원문 이미지로 확인하지 못해 게이트 없이 계산했으니 별도로 재확인하세요.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -6626,6 +6746,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_nontaxable_gift_property' ||
+        b.name === 'calculate_capital_increase_gift_tax' ||
         b.name === 'calculate_restructuring_property_reduction' ||
         b.name === 'calculate_population_decline_area_house_exclusion' ||
         b.name === 'calculate_business_transfer_carryover' ||
@@ -6849,6 +6970,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_nontaxable_gift_property') {
         const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_capital_increase_gift_tax') {
+        const resultObj = toolCalculateCapitalIncreaseGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

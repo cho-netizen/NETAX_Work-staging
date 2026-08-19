@@ -2548,6 +2548,118 @@
     };
   };
 
+  // 증자에 따른 이익의 증여 (상증세법§39, 시행령§29②) — 신주를 시가보다 낮거나 높은 가액으로 발행할 때
+  // 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. caseType으로 케이스를 선택한다.
+  // low_allocated(시행령1호, 법§39①1호가·다·라목 — 저가발행, 실권주를 배정받거나 비주주가 직접배정
+  //   받거나 균등초과배정받아 이익을 얻은 경우): 게이트 없음.
+  //   이익 = (증자후1주당평가액 - 신주1주당인수가액) × 배정받은실권주수(또는 신주수)
+  //   증자후1주당평가액 = [(증자전1주당평가액×증자전발행주식총수)+(신주1주당인수가액×증자로증가한주식수)]
+  //     ÷ (증자전발행주식총수+증자로증가한주식수)
+  // low_unallocated(시행령2호, 법§39①1호나목 — 저가발행, 실권주 미배정, 포기자의 특수관계인이 신주인수):
+  //   게이트: (증자후1주당평가액-신주1주당인수가액)이 증자후1주당평가액의 30%이상, 또는 이익이 3억원이상.
+  //   증자후1주당평가액(균등증자기준) = [(증자전1주당평가액×증자전발행주식총수)+(신주1주당인수가액×균등증자시증가주식수)]
+  //     ÷ (증자전발행주식총수+균등증자시증가주식수)
+  //   배정간주실권주수 = 실권주총수×증자후신주인수자의지분비율×(신주인수자의특수관계인의실권주수/실권주총수)
+  //   이익 = (증자후1주당평가액 - 신주1주당인수가액) × 배정간주실권주수
+  // high_allocated(시행령3호, 법§39①2호가목 — 고가발행, 실권주 배정): 게이트 없음.
+  //   이익 = (신주1주당인수가액 - 증자후1주당평가액) × 배정간주실권주수(포기주주실권주수×(포기주주의특수관계인이인수한실권주수/실권주총수))
+  //   증자후1주당평가액은 low_allocated와 동일 산식(실제 증가주식수 기준).
+  // high_unallocated(시행령4호, 법§39①2호나목 — 고가발행, 실권주 미배정): 게이트: 이익이 3억원이상 또는
+  //   (인수가-평가액)이 평가액의 30%이상.
+  //   이익 = (신주1주당인수가액-증자후1주당평가액) × 포기주주의실권주수 × (포기주주의특수관계인이인수한신주수/균등증자시주식총수)
+  // high_nonshareholder(시행령5호, 법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정):
+  //   게이트 불명(법문 미확인, 안내로 대체).
+  //   이익 = (신주1주당인수가액-증자후1주당평가액) × 미달배정주주의그신주수 × (그특수관계인이인수한신주수/(비주주배정신주+균등초과인수신주총수))
+  window.calculateCapitalIncreaseGiftTaxJS = function (p) {
+    p = p || {};
+    const caseType = p.caseType;
+    const validCases = ['low_allocated', 'low_unallocated', 'high_allocated', 'high_unallocated', 'high_nonshareholder'];
+    if (validCases.indexOf(caseType) === -1) {
+      return { error: 'caseType을 low_allocated/low_unallocated/high_allocated/high_unallocated/high_nonshareholder 중에서 선택하세요.' };
+    }
+    const preValuePerShare = Number(p.preValuePerShare) || 0;
+    const preShares = Number(p.preShares) || 0;
+    const issuePricePerShare = Number(p.issuePricePerShare) || 0;
+    if (preShares <= 0) return { error: '증자전 발행주식총수가 필요합니다.' };
+
+    let giftAmount, gateApplies, gateThreshold, postValuePerShare;
+
+    if (caseType === 'low_allocated' || caseType === 'high_allocated') {
+      const increasedShares = Number(p.increasedShares) || 0;
+      postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+      const allocatedShares = Number(p.allocatedShares) || 0;
+      if (caseType === 'low_allocated') {
+        giftAmount = Math.max(0, Math.round((postValuePerShare - issuePricePerShare) * allocatedShares));
+      } else {
+        giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * allocatedShares));
+      }
+      gateApplies = false; gateThreshold = 0;
+    } else if (caseType === 'low_unallocated') {
+      const equalIncreaseShares = Number(p.equalIncreaseShares) || 0;
+      postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * equalIncreaseShares) / (preShares + equalIncreaseShares);
+      const deemedAllocatedShares = Number(p.deemedAllocatedShares) || 0;
+      giftAmount = Math.max(0, Math.round((postValuePerShare - issuePricePerShare) * deemedAllocatedShares));
+      gateApplies = true;
+      gateThreshold = Math.min(postValuePerShare * 0.3 * deemedAllocatedShares, Infinity);
+    } else if (caseType === 'high_unallocated') {
+      const increasedShares = Number(p.increasedShares) || 0;
+      postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+      const forfeitedShares = Number(p.forfeitedShares) || 0;
+      const relatedAcquiredShares = Number(p.relatedAcquiredShares) || 0;
+      const equalIncreaseTotalShares = Number(p.equalIncreaseTotalShares) || 0;
+      if (equalIncreaseTotalShares <= 0) return { error: '균등증자시 증가주식수 총수가 필요합니다.' };
+      giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * forfeitedShares * (relatedAcquiredShares / equalIncreaseTotalShares)));
+      gateApplies = true;
+      gateThreshold = 0; // 3억 또는 30% 비율, 아래에서 별도 판정
+    } else { // high_nonshareholder
+      const increasedShares = Number(p.increasedShares) || 0;
+      postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+      const underAllocatedShares = Number(p.underAllocatedShares) || 0;
+      const relatedAcquiredShares = Number(p.relatedAcquiredShares) || 0;
+      const nonShareholderAndExcessTotalShares = Number(p.nonShareholderAndExcessTotalShares) || 0;
+      if (nonShareholderAndExcessTotalShares <= 0) return { error: '비주주배정신주+균등초과인수신주의 총수가 필요합니다.' };
+      giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * underAllocatedShares * (relatedAcquiredShares / nonShareholderAndExcessTotalShares)));
+      gateApplies = false; gateThreshold = 0;
+    }
+
+    // 게이트 판정 — low_unallocated·high_unallocated는 "이익 3억원 이상 또는 차액비율 30%이상" 중 하나만 충족해도 과세.
+    if (caseType === 'low_unallocated') {
+      const diffRatio = postValuePerShare > 0 ? (postValuePerShare - issuePricePerShare) / postValuePerShare : 0;
+      if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
+        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' };
+      }
+    } else if (caseType === 'high_unallocated') {
+      const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
+      if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
+        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' };
+      }
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)의 정확한 게이트 기준금액 조문은 원문 이미지로 확인하지 못해 게이트 없이 계산했으니 별도로 재확인하세요.'
+    };
+  };
+
   // 구조조정대상 부동산 취득자에 대한 양도소득세의 감면 (조특법§43) — 1999.12.31 이전 취득분에 한해,
   // §99/§98 계열과 같은 "5년 이내 양도시 50% 세액감면, 5년 초과 후 양도시 5년간발생분의 50% 소득공제"
   // 구조를 적용한다.

@@ -162,6 +162,12 @@ function recomputeDfUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('dfUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeCiUnpaidDays(){
+  const giftDate = document.getElementById('ciGiftDate');
+  const paidDate = document.getElementById('ciPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('ciUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeFuUnpaidDays(){
   const giftDate = document.getElementById('fuGiftDate');
   const paidDate = document.getElementById('fuPaidDate');
@@ -2467,6 +2473,44 @@ function renderGiftPane(){
       '<div id="taxCalcDebtForgivenessResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>증자에 따른 이익의 증여(§39) — 신주를 시가보다 낮거나 높은 가액으로 발행할 때. 실권주 배정여부·저가/고가여부에 따라 5가지 케이스로 나뉩니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>케이스 구분</label><select id="ciCaseType">' +
+          '<option value="low_allocated">저가발행 - 실권주 배정(또는 비주주직접배정·균등초과배정)</option>' +
+          '<option value="low_unallocated">저가발행 - 실권주 미배정(특수관계인이 신주인수)</option>' +
+          '<option value="high_allocated">고가발행 - 실권주 배정</option>' +
+          '<option value="high_unallocated">고가발행 - 실권주 미배정</option>' +
+          '<option value="high_nonshareholder">고가발행 - 비주주직접배정 또는 균등초과배정</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>증자전 1주당 평가가액</label><input type="number" id="ciPreValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>증자전 발행주식총수</label><input type="number" id="ciPreShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>신주 1주당 인수가액</label><input type="number" id="ciIssuePrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[저가배정·고가배정·고가미배정·고가비주주] 증자로 실제 증가한 주식수</label><input type="number" id="ciIncreasedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[저가배정·고가배정만] 배정받은 실권주수(또는 신주수)</label><input type="number" id="ciAllocatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[저가미배정만] 균등증자시 증가주식수</label><input type="number" id="ciEqualIncreaseShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[저가미배정만] 배정간주실권주수(실권주총수×증자후지분비율×특수관계인실권주비율)</label><input type="number" id="ciDeemedAllocatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가미배정만] 포기주주의 실권주수</label><input type="number" id="ciForfeitedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가미배정·고가비주주] 특수관계인이 인수한 신주수(실권주수)</label><input type="number" id="ciRelatedAcquiredShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가미배정만] 균등증자시 주식총수</label><input type="number" id="ciEqualIncreaseTotalShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가비주주만] 미달배정 주주의 그 신주수</label><input type="number" id="ciUnderAllocatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가비주주만] 비주주배정+균등초과인수 신주 총수</label><input type="number" id="ciNonShareholderTotalShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="ciRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ciAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="ciFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ciFraudulent"><label for="ciFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="ciUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(주식대금 납입일 등)</label><input type="text" class="taxcalc-date" id="ciGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="ciPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="ciUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-capital-increase-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcCapitalIncreaseGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>부동산 무상사용·담보이용에 따른 이익의 증여(§37) — 타인의 부동산을 무상으로 사용하거나, 무상으로 담보 제공받아 차입했을 때</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>구분</label><select id="fuUseType">' +
@@ -2831,6 +2875,10 @@ function renderGiftPane(){
   const dfPaidDateEl = document.getElementById('dfPaidDate');
   if (dfGiftDateEl) dfGiftDateEl.addEventListener('input', recomputeDfUnpaidDays);
   if (dfPaidDateEl) dfPaidDateEl.addEventListener('input', recomputeDfUnpaidDays);
+  const ciGiftDateEl = document.getElementById('ciGiftDate');
+  const ciPaidDateEl = document.getElementById('ciPaidDate');
+  if (ciGiftDateEl) ciGiftDateEl.addEventListener('input', recomputeCiUnpaidDays);
+  if (ciPaidDateEl) ciPaidDateEl.addEventListener('input', recomputeCiUnpaidDays);
   const fuGiftDateEl = document.getElementById('fuGiftDate');
   const fuPaidDateEl = document.getElementById('fuPaidDate');
   if (fuGiftDateEl) fuGiftDateEl.addEventListener('input', recomputeFuUnpaidDays);
@@ -3045,6 +3093,12 @@ function renderDeemedGiftGenericResult_(box, r, fields){
 function renderDebtForgivenessResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcDebtForgivenessResult'), r, [
     { key: '채무면제등이익', label: '채무면제등이익' }
+  ]);
+}
+function renderCapitalIncreaseGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcCapitalIncreaseGiftResult'), r, [
+    { key: '증자후1주당평가액', label: '증자후 1주당 평가액' },
+    { key: '증여의제이익', label: '증여의제이익' }
   ]);
 }
 function renderFreePropertyUseResult(r){
@@ -4477,6 +4531,29 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('dfUnpaidDays').value) || 0
     };
     renderDebtForgivenessResult(calculateDebtForgivenessGiftTaxJS(input));
+  } else if (action === 'run-capital-increase-gift'){
+    const input = {
+      caseType: document.getElementById('ciCaseType').value,
+      preValuePerShare: numVal(document.getElementById('ciPreValue').value) || 0,
+      preShares: numVal(document.getElementById('ciPreShares').value) || 0,
+      issuePricePerShare: numVal(document.getElementById('ciIssuePrice').value) || 0,
+      increasedShares: numVal(document.getElementById('ciIncreasedShares').value) || 0,
+      allocatedShares: numVal(document.getElementById('ciAllocatedShares').value) || 0,
+      equalIncreaseShares: numVal(document.getElementById('ciEqualIncreaseShares').value) || 0,
+      deemedAllocatedShares: numVal(document.getElementById('ciDeemedAllocatedShares').value) || 0,
+      forfeitedShares: numVal(document.getElementById('ciForfeitedShares').value) || 0,
+      relatedAcquiredShares: numVal(document.getElementById('ciRelatedAcquiredShares').value) || 0,
+      equalIncreaseTotalShares: numVal(document.getElementById('ciEqualIncreaseTotalShares').value) || 0,
+      underAllocatedShares: numVal(document.getElementById('ciUnderAllocatedShares').value) || 0,
+      nonShareholderAndExcessTotalShares: numVal(document.getElementById('ciNonShareholderTotalShares').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('ciRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('ciAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('ciFilingStatus').value,
+      isFraudulent: document.getElementById('ciFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('ciUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('ciUnpaidDays').value) || 0
+    };
+    renderCapitalIncreaseGiftResult(calculateCapitalIncreaseGiftTaxJS(input));
   } else if (action === 'run-free-property-use'){
     const input = {
       useType: document.getElementById('fuUseType').value,
