@@ -180,6 +180,12 @@ function recomputeIpUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('ipUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeTiUnpaidDays(){
+  const giftDate = document.getElementById('tiGiftDate');
+  const paidDate = document.getElementById('tiPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('tiUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeJmUnpaidDays(){
   const fiscalYearEnd = document.getElementById('jmFiscalYearEnd');
   const paidDate = document.getElementById('jmPaidDate');
@@ -2259,6 +2265,26 @@ function renderGiftPane(){
       '<div id="taxCalcInsuranceProceedsResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>신탁이익의 증여(§33) — 위탁자가 타인을 수익자로 지정한 신탁에서, 원본 또는 수익을 받은 경우</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신탁이익(원본 또는 수익의 가액)</label><input type="number" id="tiGiftAmount" placeholder="원 — 여러 차례 나눠 받는 경우 재산평가 화면의 §61 신탁수익권 평가액을 입력"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="tiRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="tiAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="tiFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="tiFraudulent"><label for="tiFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="tiUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(원본·수익 실제 지급일 등)</label><input type="text" class="taxcalc-date" id="tiGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="tiPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="tiUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-trust-income">증여세 계산하기</button>' +
+      '<div id="taxCalcTrustIncomeResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제10호의3서식] 일감몰아주기 증여의제(§45의3) — 지배주주+친족이 지분을 가진 법인이 특수관계법인과 매출비중이 높고 지분율도 높을 때 과세</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>수혜법인 기업규모</label><select id="jmCompanySize">' +
@@ -2395,6 +2421,10 @@ function renderGiftPane(){
   const ipPaidDateEl = document.getElementById('ipPaidDate');
   if (ipGiftDateEl) ipGiftDateEl.addEventListener('input', recomputeIpUnpaidDays);
   if (ipPaidDateEl) ipPaidDateEl.addEventListener('input', recomputeIpUnpaidDays);
+  const tiGiftDateEl = document.getElementById('tiGiftDate');
+  const tiPaidDateEl = document.getElementById('tiPaidDate');
+  if (tiGiftDateEl) tiGiftDateEl.addEventListener('input', recomputeTiUnpaidDays);
+  if (tiPaidDateEl) tiPaidDateEl.addEventListener('input', recomputeTiUnpaidDays);
   recomputeSrGiftUnpaidDays();
   const jmFiscalYearEndEl = document.getElementById('jmFiscalYearEnd');
   const jmPaidDateEl = document.getElementById('jmPaidDate');
@@ -2593,6 +2623,11 @@ function renderInsuranceProceedsResult(r){
     { key: '보험금상당액', label: '보험금상당액' },
     { key: '증여받은재산으로낸보험료', label: '증여받은재산으로낸보험료' },
     { key: '증여재산가액', label: '증여재산가액' }
+  ]);
+}
+function renderTrustIncomeResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcTrustIncomeResult'), r, [
+    { key: '신탁이익', label: '신탁이익' }
   ]);
 }
 
@@ -3882,6 +3917,17 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('ipUnpaidDays').value) || 0
     };
     renderInsuranceProceedsResult(calculateInsuranceProceedsGiftTaxJS(input));
+  } else if (action === 'run-trust-income'){
+    const input = {
+      giftAmount: numVal(document.getElementById('tiGiftAmount').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('tiRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('tiAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('tiFilingStatus').value,
+      isFraudulent: document.getElementById('tiFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('tiUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('tiUnpaidDays').value) || 0
+    };
+    renderTrustIncomeResult(calculateTrustIncomeGiftTaxJS(input));
   } else if (action === 'run-related-party-gift'){
     const input = {
       companySize: document.getElementById('jmCompanySize').value,

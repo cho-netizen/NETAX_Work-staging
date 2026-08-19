@@ -809,6 +809,30 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_trust_income_gift_tax',
+    description: '신탁이익의 증여(상증세법§33)를 계산한다. 위탁자가 타인을 수익자로 지정한 신탁에서 원본 또는 수익을 받을 권리를 갖게 하는 경우, 원칙적으로 그 원본·수익이 실제 지급되는 날(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①)을 증여일로 하여 과세한다. 원본·수익을 한번에 받으면 그 가액 그대로가 증여재산가액이고, 여러 차례 나눠 받는 경우에는 증여시기를 기준으로 시행령§61(신탁수익권 평가)을 준용해 평가한 가액을 사용한다(시행령§25②) — 후자는 calculate_trust_benefit_value 도구로 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        giftAmount: { type: 'number', description: '신탁이익(원본 또는 수익의 가액, 원). 여러 차례 나눠 받는 경우 calculate_trust_benefit_value 도구의 평가액을 사용.' },
+        relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
+        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
+        disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
+        priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
+        underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
+      },
+      required: ['giftAmount']
+    }
+  },
+  {
     name: 'calculate_installment_payment_schedule',
     description: '상속세·증여세 연부연납(다년 분할납부) 회차별 납부예정세액을 계산한다([별지 제11호서식]). 연부연납대상금액을 (연부연납기간+1)회로 균등분할하고, 각 회분마다 그 시점의 잔여 미납액에 연이자율을 적용한 가산금을 더한다. 연이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않으니 신고 시점 기준 이자율을 반드시 확인해서 넣어야 한다.',
     input_schema: {
@@ -4314,6 +4338,37 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   };
 }
 
+// 신탁이익의 증여 (상증세법§33, 시행령§25) — 원본 또는 수익을 한번에 받으면 그 가액 그대로, 여러 차례
+// 나눠 받으면 증여시기를 기준으로 시행령§61을 준용해 평가한 가액(§25②)을 giftAmount로 입력받는다.
+function toolCalculateTrustIncomeGiftTax(p) {
+  p = p || {};
+  const giftAmount = Number(p.giftAmount) || 0;
+  if (giftAmount <= 0) return { error: '신탁이익(원본 또는 수익의 가액 — 여러 차례 나눠 받는 경우 §61 신탁수익권 평가액)이 필요합니다.' };
+  const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+  const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+  const priorPaidTax = Number(p.priorPaidTax) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+  return {
+    신탁이익: giftAmount,
+    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    납부세액: finalTax,
+    안내: '증여일은 원칙적으로 원본·수익이 실제 지급되는 날입니다(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①). 수익자가 특정·존재하지 않으면 위탁자(또는 상속인)를 수익자로 보아 과세하고, 나중에 수익자가 특정되면 그때 새로운 신탁이 있는 것으로 봅니다(§33②).'
+  };
+}
+
 // 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — 원금은 연부연납대상금액을 (기간+1)회로 균등분할,
 // 각 회분의 가산금은 그 시점 잔여 미납액에 연이자율을 적용해 계산한다(잔액 감소식, declining balance).
 // 정확한 가산금 이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않고 반드시 입력받는다.
@@ -5611,6 +5666,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_free_property_use_gift_tax' ||
         b.name === 'calculate_spouse_property_transfer_gift_tax' ||
         b.name === 'calculate_insurance_proceeds_gift_tax' ||
+        b.name === 'calculate_trust_income_gift_tax' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -5787,6 +5843,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_insurance_proceeds_gift_tax') {
         const resultObj = toolCalculateInsuranceProceedsGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_trust_income_gift_tax') {
+        const resultObj = toolCalculateTrustIncomeGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

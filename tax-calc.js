@@ -1973,6 +1973,40 @@
     };
   };
 
+  // 신탁이익의 증여 (상증세법§33, 시행령§25) — 위탁자가 타인을 수익자로 지정한 신탁에서, 원본 또는
+  // 수익이 (원칙적으로) 실제 지급되는 날을 증여일로 하여 그 신탁의 이익을 받을 권리의 가액을 증여재산가액으로
+  // 한다. 원본·수익을 한번에 받으면 그 가액 그대로, 여러 차례 나눠 받으면 증여시기를 기준으로 시행령§61을
+  // 준용해 평가한다(시행령§25②) — 후자는 "신탁의 이익을 받을 권리 평가" 계산기(재산평가 화면, §61)로
+  // 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력한다.
+  window.calculateTrustIncomeGiftTaxJS = function (p) {
+    p = p || {};
+    const giftAmount = Number(p.giftAmount) || 0;
+    if (giftAmount <= 0) return { error: '신탁이익(원본 또는 수익의 가액 — 여러 차례 나눠 받는 경우 재산평가 화면의 §61 신탁수익권 평가액)이 필요합니다.' };
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      신탁이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 원칙적으로 원본·수익이 실제 지급되는 날입니다(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①). 수익자가 특정·존재하지 않으면 위탁자(또는 상속인)를 수익자로 보아 과세하고, 나중에 수익자가 특정되면 그때 새로운 신탁이 있는 것으로 봅니다(§33②).'
+    };
+  };
+
   // 보험금의 증여 (상증세법§34) — 보험사고(만기보험금 포함) 발생일을 증여일로 하여, ①보험금수령인이 아닌
   // 자가 낸 보험료 부분(1호)과 ②수령인이 증여받은 재산으로 낸 보험료 부분(2호, 그 보험료액은 다시 뺀다)에
   // 대응하는 보험금 상당액을 증여재산가액으로 한다. 두 유형을 동시에 적용해 일반화하면:
