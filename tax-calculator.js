@@ -1789,6 +1789,30 @@ function renderTransferPane(){
       '<div id="taxCalcUnsoldHouseOneHouseResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>구조조정대상 부동산 취득자 양도세 감면(조특법§43) — 1999.12.31 이전 취득분만 적용. 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 양도차익으로 대신 입력하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>취득일</label><input type="date" id="rpAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="rpTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="rpAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="rpTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="rpNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="rpFiveYearMarkValue" placeholder="원 (없으면 선형 안분 추정)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-restructuring-property-reduction">감면대상 양도소득금액 계산하기</button>' +
+      '<div id="taxCalcRestructuringPropertyReductionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>인구감소지역 주택 1세대1주택 비과세 특례(조특법§71의2, 2024.1.4~2026.12.31 취득분, 현재 시행중) — 세액은 계산하지 않고 적용 가능 여부만 판정합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>인구감소지역주택 취득일</label><input type="date" id="pdAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="pdPopulationDeclineArea"><label for="pdPopulationDeclineArea">인구감소지역 또는 수도권 밖 인구감소관심지역에 소재</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="pdWasOneOrFewer"><label for="pdWasOneOrFewer">취득 전 주택·조합원입주권·분양권 중 1채(1개)를 보유한 1세대였음</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="pdAreaPriceOk"><label for="pdAreaPriceOk">주택 소재지·가액 등 시행령 요건 충족(별도 확인)</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-population-decline-house">적용 가능 여부 판정하기</button>' +
+      '<div id="taxCalcPopulationDeclineHouseResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -2202,6 +2226,29 @@ function renderUnsoldHouseReductionResult(r){
 
 function renderUnsoldHouseOneHouseResult(r){
   const box = document.getElementById('taxCalcUnsoldHouseOneHouseResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderRestructuringPropertyReductionResult(r){
+  const box = document.getElementById('taxCalcRestructuringPropertyReductionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('보유기간', r.보유기간_년 + '년');
+  html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+  html += taxCalcResultRow('감면·비과세대상 양도소득금액', '-' + won(r.감면_비과세대상_양도소득금액));
+  html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderPopulationDeclineHouseResult(r){
+  const box = document.getElementById('taxCalcPopulationDeclineHouseResult');
   if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
   html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
@@ -4213,6 +4260,24 @@ taxCalcView.addEventListener('click', function(e){
       meetsAreaAndPriceRequirements: document.getElementById('u9AreaPriceOk').checked
     };
     renderUnsoldHouseOneHouseResult(calculateUnsoldHouseOneHouseExclusionJS(input));
+  } else if (action === 'run-restructuring-property-reduction'){
+    const input = {
+      acquisitionDate: document.getElementById('rpAcquisitionDate').value,
+      transferDate: document.getElementById('rpTransferDate').value,
+      acquisitionPrice: numVal(document.getElementById('rpAcquisitionPrice').value) || 0,
+      transferPrice: numVal(document.getElementById('rpTransferPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('rpNecessaryExpenses').value) || 0,
+      fiveYearMarkValue: numVal(document.getElementById('rpFiveYearMarkValue').value) || 0
+    };
+    renderRestructuringPropertyReductionResult(calculateRestructuringPropertyReductionJS(input));
+  } else if (action === 'run-population-decline-house'){
+    const input = {
+      acquisitionDate: document.getElementById('pdAcquisitionDate').value,
+      isPopulationDeclineArea: document.getElementById('pdPopulationDeclineArea').checked,
+      wasOneOrFewerBeforeAcquisition: document.getElementById('pdWasOneOrFewer').checked,
+      meetsAreaAndPriceRequirements: document.getElementById('pdAreaPriceOk').checked
+    };
+    renderPopulationDeclineHouseResult(calculatePopulationDeclineAreaHouseExclusionJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,

@@ -905,6 +905,36 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_restructuring_property_reduction',
+    description: '구조조정대상 부동산 취득자에 대한 양도소득세의 감면(조특법§43)을 계산한다. 1999.12.31 이전 취득분에 한해, 취득일부터 5년 이내 양도하면 그 양도소득세의 50%를 감면하고, 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액의 50%를 과세대상소득금액에서 뺀다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD, 1999.12.31 이전).' },
+        transferDate: { type: 'string', description: '양도일(YYYY-MM-DD).' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다.' }
+      },
+      required: ['acquisitionDate', 'transferDate']
+    }
+  },
+  {
+    name: 'calculate_population_decline_area_house_exclusion',
+    description: '인구감소지역 주택 취득자에 대한 1세대1주택 비과세 특례(조특법§71의2, 2024.1.4~2026.12.31 취득분, 현재 시행중)를 판정한다. 주택·조합원입주권·분양권 중 1채(1개)를 보유한 1세대가 이 기간 중 인구감소지역 또는 수도권 밖 인구감소관심지역 주택을 취득한 후 종전주택을 양도하면, 그 주택은 1세대1주택 비과세(소득세법§89①3호·4호) 판정시 소유주택으로 보지 않는다. 세액을 계산하지 않고 적용 가능 여부만 판정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        acquisitionDate: { type: 'string', description: '인구감소지역주택의 취득일(YYYY-MM-DD).' },
+        isPopulationDeclineArea: { type: 'boolean', description: '인구감소지역 또는 수도권 밖 인구감소관심지역에 소재하는지.' },
+        wasOneOrFewerBeforeAcquisition: { type: 'boolean', description: '이 주택 취득 전 주택·조합원입주권·분양권 중 1채(1개)를 보유한 1세대였는지.' },
+        meetsAreaAndPriceRequirements: { type: 'boolean', description: '주택 소재지·가액 등 시행령이 정하는 요건을 충족하는지.' }
+      },
+      required: ['acquisitionDate']
+    }
+  },
+  {
     name: 'calculate_business_transfer_carryover',
     description: '중소기업간 통합(조특법§31)·법인전환(조특법§32)에 대한 양도소득세 이월과세를 판정한다. 사업용고정자산을 통합법인에 양도하거나 현물출자·사업양수도로 법인전환하면 그 시점에는 양도소득세를 과세하지 않고 나중에 법인이 그 자산을 양도할 때 정산한다. 이월과세 적용일부터 5년 이내에 승계사업을 폐지하거나 취득주식의 50% 이상을 처분하면, 사유발생일이 속하는 달의 말일부터 2개월 이내에 이월과세액(법인 기납부세액 제외)을 양도소득세로 납부해야 한다.',
     input_schema: {
@@ -5483,6 +5513,81 @@ function toolCalculateBusinessTransferCarryover(p) {
   };
 }
 
+// 구조조정대상 부동산 취득자에 대한 양도소득세의 감면 (조특법§43) — 1999.12.31 이전 취득분에 한해 5년
+// 이내 양도시 50% 세액감면, 5년 초과 후 양도시 5년간발생분의 50% 소득공제.
+function toolCalculateRestructuringPropertyReduction(p) {
+  p = p || {};
+  const acquisitionDate = p.acquisitionDate;
+  const transferDate = p.transferDate;
+  if (!acquisitionDate || !transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+  const acqTime = new Date(acquisitionDate).getTime();
+  const trfTime = new Date(transferDate).getTime();
+  if (!(trfTime > acqTime)) return { error: '양도일은 취득일 이후여야 합니다.' };
+  const yearsHeld = (trfTime - acqTime) / (365.25 * 24 * 3600 * 1000);
+
+  const transferPrice = Number(p.transferPrice) || 0;
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+  const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+  let exemptGain, note;
+  if (yearsHeld <= 5) {
+    exemptGain = Math.round(totalGain * 0.5);
+    note = '취득일로부터 5년 이내 양도이므로 그 양도소득세의 50%에 상당하는 세액을 감면합니다.';
+  } else {
+    let gainWithinFiveYears;
+    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
+    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
+      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
+      note = '취득일로부터 5년 초과 보유 후 양도 — 입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액의 50%를 과세대상소득금액에서 뺐습니다.';
+    } else {
+      gainWithinFiveYears = Math.round(totalGain * 5 / yearsHeld);
+      note = '취득일로부터 5년 초과 보유 후 양도 — 5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정한 뒤 50%를 과세대상소득금액에서 뺐습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
+    }
+    exemptGain = Math.round(gainWithinFiveYears * 0.5);
+  }
+  exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
+  const taxableGain = Math.max(0, totalGain - exemptGain);
+  return {
+    적용여부: true,
+    보유기간_년: Math.round(yearsHeld * 100) / 100,
+    전체양도차익: Math.round(totalGain),
+    감면_비과세대상_양도소득금액: Math.round(exemptGain),
+    과세대상양도소득금액: taxableGain,
+    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다). 1999.12.31 이전 취득분만 적용됩니다(§43①).'
+  };
+}
+
+// 인구감소지역 주택 취득자에 대한 1세대1주택 비과세 특례 (조특법§71의2, 2024.1.4~2026.12.31 취득분,
+// 현재 시행중) — §98의9와 같은 구조. 세액을 계산하지 않고 적용 가능 여부만 판정한다.
+function toolCalculatePopulationDeclineAreaHouseExclusion(p) {
+  p = p || {};
+  const acquisitionDate = p.acquisitionDate;
+  if (!acquisitionDate) return { error: '인구감소지역주택의 취득일이 필요합니다.' };
+  const acqTime = new Date(acquisitionDate).getTime();
+  const windowStart = new Date('2024-01-04').getTime();
+  const windowEnd = new Date('2026-12-31').getTime();
+  if (!(acqTime >= windowStart && acqTime <= windowEnd)) {
+    return {
+      적용여부: false,
+      안내: '취득일이 2024.1.4~2026.12.31 기간을 벗어나 조특법§71의2의 적용대상이 아닙니다.'
+    };
+  }
+  if (!p.isPopulationDeclineArea) {
+    return { 적용여부: false, 안내: '인구감소지역 또는 수도권 밖 인구감소관심지역에 소재한 주택이 아니어서 적용대상이 아닙니다.' };
+  }
+  if (!p.wasOneOrFewerBeforeAcquisition) {
+    return { 적용여부: false, 안내: '취득 전 주택·조합원입주권·분양권 중 1채(1개)를 보유한 1세대가 아니어서 적용대상이 아닙니다.' };
+  }
+  if (!p.meetsAreaAndPriceRequirements) {
+    return { 적용여부: false, 안내: '주택 소재지·가액 등 대통령령으로 정하는 요건(시행령에서 확인 필요)을 충족하지 못해 적용대상이 아닙니다.' };
+  }
+  return {
+    적용여부: true,
+    안내: '요건을 충족하여 그 인구감소지역주택을 1세대1주택 비과세(소득세법§89①3호·4호) 판정시 소유주택으로 보지 않습니다(조특법§71의2①). calculate_transfer_tax에서 종전주택을 양도자산으로 놓고 "1세대1주택 비과세 요건 충족 전제"를 체크해 계산하세요. 종합부동산세 특례(§71의2②)는 9.16~9.30 별도 신청이 필요하며 이 도구의 범위 밖입니다.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -6521,6 +6626,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_nontaxable_gift_property' ||
+        b.name === 'calculate_restructuring_property_reduction' ||
+        b.name === 'calculate_population_decline_area_house_exclusion' ||
         b.name === 'calculate_business_transfer_carryover' ||
         b.name === 'calculate_merger_benefit_gift_tax' ||
         b.name === 'calculate_property_use_service_gift_tax' ||
@@ -6742,6 +6849,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_nontaxable_gift_property') {
         const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_restructuring_property_reduction') {
+        const resultObj = toolCalculateRestructuringPropertyReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_population_decline_area_house_exclusion') {
+        const resultObj = toolCalculatePopulationDeclineAreaHouseExclusion(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
