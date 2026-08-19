@@ -194,6 +194,18 @@ function recomputeCbUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('cbUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeEdUnpaidDays(){
+  const giftDate = document.getElementById('edGiftDate');
+  const paidDate = document.getElementById('edPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('edUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
+function recomputeSlUnpaidDays(){
+  const giftDate = document.getElementById('slGiftDate');
+  const paidDate = document.getElementById('slPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('slUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeFuUnpaidDays(){
   const giftDate = document.getElementById('fuGiftDate');
   const paidDate = document.getElementById('fuPaidDate');
@@ -1845,6 +1857,23 @@ function renderTransferPane(){
       '<div id="taxCalcPopulationDeclineHouseResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>농어촌주택등 취득자 1세대1주택 특례(조특법§99의4, 2003.8.1~2028.12.31 취득분, 현재 시행중) — 세액은 계산하지 않고 적용 가능 여부·사후관리 추징대상 여부만 판정합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>구분</label><select id="rhHouseType">' +
+          '<option value="rural">농어촌주택(2003.8.1~)</option><option value="hometown">고향주택(2009.1.1~)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>농어촌주택등 취득일</label><input type="date" id="rhAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="rhLocationPriceOk"><label for="rhLocationPriceOk">소재지·가액(3억원, 한옥은 4억원) 등 시행령 요건 충족(별도 확인)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="rhSameDistrict"><label for="rhSameDistrict">농어촌주택등과 일반주택이 같은(연접) 읍·면·동(고향주택은 시)에 소재(체크시 적용배제)</label></div>' +
+        '<div class="taxcalc-field"><label>농어촌주택등 보유기간</label><input type="number" id="rhHoldingYears" placeholder="년"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="rhPendingHolding"><label for="rhPendingHolding">3년 보유요건 충족 전 일반주택을 먼저 양도하는 경우임</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="rhClawback"><label for="rhClawback">특례 적용 후 농어촌주택등을 3년 이상 보유하지 않게 된 사후관리 위반이 발생함</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="rhExempted"><label for="rhExempted">[사후관리 위반일 때만] 수용 등 부득이한 사유에 해당(추징 예외)</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-rural-house-exclusion">적용 가능 여부 판정하기</button>' +
+      '<div id="taxCalcRuralHouseExclusionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>장기임대주택 등 양도세 감면(조특법§97·§97의2·§97의5, §97의4와 별개) — 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 양도차익으로 대신 입력하세요</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>적용 조문</label><select id="lrProvision">' +
@@ -2988,6 +3017,56 @@ function renderGiftPane(){
       '<div id="taxCalcSpecificCorpGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>초과배당에 따른 이익의 증여(§41의2) — 최대주주등이 배당을 포기하거나 불균등 조건으로 배당받아 그 특수관계인이 본인 지분보다 많은 배당을 받았을 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="edFinalSettlement"><label for="edFinalSettlement">정산 신고임(실제소득세액 기준, 체크 안 하면 최초 신고=추정소득세상당액 기준)</label></div>' +
+        '<div class="taxcalc-field"><label>특수관계인이 실제 받은 배당등의 금액</label><input type="number" id="edBaseAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>최대주주등의 과소배당금액이 차지하는 비율</label><input type="number" step="0.01" min="0" max="1" id="edShortfallRatio" placeholder="0~1 (시행령§31의2②2호)"></div>' +
+        '<div class="taxcalc-field"><label>[최초신고만] 추정 소득세상당액</label><input type="number" id="edEstimatedTax" placeholder="원 (시행규칙§10의3① 추정율표, 별도 계산해 입력)"></div>' +
+        '<div class="taxcalc-field"><label>[정산신고만] 실제 소득세액</label><input type="number" id="edActualTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="edRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="edAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="edFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="edFraudulent"><label for="edFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="edUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(배당지급일)</label><input type="text" class="taxcalc-date" id="edGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="edPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="edUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-excess-dividend-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcExcessDividendGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>주식등 상장·합병에 따른 이익의 증여(§41의3·§41의5) — 최대주주등의 특수관계인이 증여·유상취득한 주식이 5년 이내 상장되거나 특수관계 상장법인과 합병되어 가치가 증가했을 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>구분</label><select id="slProvision">' +
+          '<option value="listing">주식등의 상장(§41의3)</option><option value="merger">합병에 따른 상장(§41의5)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>정산기준일 1주당 평가가액</label><input type="number" id="slSettlementValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>증여받은날(취득일) 1주당 과세가액(취득가액)</label><input type="number" id="slOriginalValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>1주당 기업가치의 실질적인 증가로 인한 이익</label><input type="number" id="slRealIncrease" placeholder="원 (시행령§31의3⑤, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>증여받거나 유상취득한 주식수</label><input type="number" id="slShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="slRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="slAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="slFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="slFraudulent"><label for="slFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="slUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(정산기준일)</label><input type="text" class="taxcalc-date" id="slGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="slPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="slUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-stock-listing-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcStockListingGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>비과세되는 증여재산(§46) — 국가·지자체 증여, 우리사주조합 취득이익, 정당·사내근로복지기금 등 단체 증여, 이재구호금품·치료비·생활비·교육비, 장애인 보험금, 국가유공자 유족 성금, 비영리법인 승계재산 등</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>항목 구분</label><select id="ntItemType">' +
@@ -3232,6 +3311,14 @@ function renderGiftPane(){
   const cbPaidDateEl = document.getElementById('cbPaidDate');
   if (cbGiftDateEl) cbGiftDateEl.addEventListener('input', recomputeCbUnpaidDays);
   if (cbPaidDateEl) cbPaidDateEl.addEventListener('input', recomputeCbUnpaidDays);
+  const edGiftDateEl = document.getElementById('edGiftDate');
+  const edPaidDateEl = document.getElementById('edPaidDate');
+  if (edGiftDateEl) edGiftDateEl.addEventListener('input', recomputeEdUnpaidDays);
+  if (edPaidDateEl) edPaidDateEl.addEventListener('input', recomputeEdUnpaidDays);
+  const slGiftDateEl = document.getElementById('slGiftDate');
+  const slPaidDateEl = document.getElementById('slPaidDate');
+  if (slGiftDateEl) slGiftDateEl.addEventListener('input', recomputeSlUnpaidDays);
+  if (slPaidDateEl) slPaidDateEl.addEventListener('input', recomputeSlUnpaidDays);
   const fuGiftDateEl = document.getElementById('fuGiftDate');
   const fuPaidDateEl = document.getElementById('fuPaidDate');
   if (fuGiftDateEl) fuGiftDateEl.addEventListener('input', recomputeFuUnpaidDays);
@@ -3469,6 +3556,38 @@ function renderConvertibleBondGiftResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcConvertibleBondGiftResult'), r, [
     { key: '증여의제이익', label: '증여의제이익' }
   ]);
+}
+function renderExcessDividendGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcExcessDividendGiftResult'), r, [
+    { key: '초과배당금액', label: '초과배당금액' },
+    { key: '소득세상당액', label: '소득세상당액' },
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
+}
+function renderStockListingGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcStockListingGiftResult'), r, [
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
+}
+function renderNontaxableInheritanceResult(r){
+  const box = document.getElementById('taxCalcNontaxableInheritanceResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('근거호', r.근거호);
+  html += taxCalcResultRow('비과세금액', won(r.비과세금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+function renderRuralHouseExclusionResult(r){
+  const box = document.getElementById('taxCalcRuralHouseExclusionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
+  if (r.사후관리추징대상 !== undefined) html += taxCalcResultRow('사후관리 추징대상', r.사후관리추징대상 ? '예' : '아니오');
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
 }
 function renderFreePropertyUseResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcFreePropertyUseResult'), r, [
@@ -3913,6 +4032,21 @@ function renderInheritancePane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-deemed-inheritance">포함 여부·포함액 판정하기</button>' +
       '<div id="taxCalcDeemedInheritanceResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>비과세되는 상속재산(§12) — 국가·지자체·공공단체 유증등, 민법§1008의3 제사용재산, 정당 유증등, 사내근로복지기금 등 유증등, 이재구호금품·치료비 등</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>항목 구분</label><select id="niItemType">' +
+          '<option value="government">국가·지자체·공공단체 유증등(1호)</option>' +
+          '<option value="ancestral_property">민법§1008의3 제사용재산(3호, 금양임야·묘토·족보·제구 등)</option>' +
+          '<option value="political_party">정당 유증등(4호)</option>' +
+          '<option value="labor_welfare_fund">사내근로복지기금 등 유증등(5호)</option>' +
+          '<option value="disaster_relief">이재구호금품·치료비 등(6호)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>금액</label><input type="number" id="niAmount" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-nontaxable-inheritance">비과세 여부 확인하기</button>' +
+      '<div id="taxCalcNontaxableInheritanceResult"></div>' +
     '</div>';
   renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
   renderDisposalItemsList();
@@ -5074,6 +5208,54 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('cbUnpaidDays').value) || 0
     };
     renderConvertibleBondGiftResult(calculateConvertibleBondGiftTaxJS(input));
+  } else if (action === 'run-excess-dividend-gift'){
+    const input = {
+      isFinalSettlement: document.getElementById('edFinalSettlement').checked,
+      excessDividendBaseAmount: numVal(document.getElementById('edBaseAmount').value) || 0,
+      disproportionateShortfallRatio: numVal(document.getElementById('edShortfallRatio').value) || 0,
+      estimatedIncomeTaxEquivalent: numVal(document.getElementById('edEstimatedTax').value) || 0,
+      actualIncomeTax: numVal(document.getElementById('edActualTax').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('edRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('edAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('edFilingStatus').value,
+      isFraudulent: document.getElementById('edFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('edUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('edUnpaidDays').value) || 0
+    };
+    renderExcessDividendGiftResult(calculateExcessDividendGiftTaxJS(input));
+  } else if (action === 'run-stock-listing-gift'){
+    const input = {
+      provision: document.getElementById('slProvision').value,
+      settlementValuePerShare: numVal(document.getElementById('slSettlementValue').value) || 0,
+      originalValuePerShare: numVal(document.getElementById('slOriginalValue').value) || 0,
+      realValueIncreasePerShare: numVal(document.getElementById('slRealIncrease').value) || 0,
+      shares: numVal(document.getElementById('slShares').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('slRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('slAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('slFilingStatus').value,
+      isFraudulent: document.getElementById('slFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('slUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('slUnpaidDays').value) || 0
+    };
+    renderStockListingGiftResult(calculateStockListingGiftTaxJS(input));
+  } else if (action === 'run-nontaxable-inheritance'){
+    const input = {
+      itemType: document.getElementById('niItemType').value,
+      amount: numVal(document.getElementById('niAmount').value) || 0
+    };
+    renderNontaxableInheritanceResult(calculateNontaxableInheritancePropertyJS(input));
+  } else if (action === 'run-rural-house-exclusion'){
+    const input = {
+      houseType: document.getElementById('rhHouseType').value,
+      acquisitionDate: document.getElementById('rhAcquisitionDate').value,
+      meetsLocationAndPriceRequirements: document.getElementById('rhLocationPriceOk').checked,
+      isSameOrAdjacentDistrict: document.getElementById('rhSameDistrict').checked,
+      holdingYears: numVal(document.getElementById('rhHoldingYears').value) || 0,
+      isPendingHoldingPeriod: document.getElementById('rhPendingHolding').checked,
+      triggerClawback: document.getElementById('rhClawback').checked,
+      isExemptedReason: document.getElementById('rhExempted').checked
+    };
+    renderRuralHouseExclusionResult(calculateRuralHouseOneHouseExclusionJS(input));
   } else if (action === 'run-free-property-use'){
     const input = {
       useType: document.getElementById('fuUseType').value,

@@ -2548,6 +2548,169 @@
     };
   };
 
+  // 비과세되는 상속재산 (상증세법§12) — §46(비과세되는 증여재산)의 상속세 버전. 열거된 항목에 해당하면
+  // 그 금액에 대해 상속세를 부과하지 않는다.
+  const NONTAXABLE_INHERITANCE_PROPERTY_LABELS = {
+    government: { 근거호: '§12 1호', 설명: '국가·지방자치단체·공공단체에 유증등을 한 재산' },
+    ancestral_property: { 근거호: '§12 3호', 설명: '민법§1008의3에 규정된 재산(제사를 주재하는 자가 승계하는 금양임야·묘토인 농지·족보·제구 등) 중 대통령령으로 정하는 범위의 재산' },
+    political_party: { 근거호: '§12 4호', 설명: '「정당법」에 따른 정당에 유증등을 한 재산' },
+    labor_welfare_fund: { 근거호: '§12 5호', 설명: '「근로복지기본법」에 따른 사내근로복지기금 등에 유증등을 한 재산' },
+    disaster_relief: { 근거호: '§12 6호', 설명: '사회통념상 인정되는 이재구호금품·치료비 등' }
+  };
+  window.calculateNontaxableInheritancePropertyJS = function (p) {
+    p = p || {};
+    const itemType = p.itemType;
+    const meta = NONTAXABLE_INHERITANCE_PROPERTY_LABELS[itemType];
+    if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief 중에서 선택하세요.' };
+    const amount = Math.max(0, Number(p.amount) || 0);
+    if (amount <= 0) return { error: '금액이 필요합니다.' };
+    return {
+      비과세여부: true, 근거호: meta.근거호, 비과세금액: amount,
+      안내: meta.설명 + ' — ' + meta.근거호 + '에 따라 상속세를 부과하지 않습니다. 세부 요건(대통령령으로 정하는 범위·한도 등)은 별도로 확인하세요. 이 금액은 상속세 계산기의 상속재산가액에 포함하지 마세요.'
+    };
+  };
+
+  // 초과배당에 따른 이익의 증여 (상증세법§41의2, 시행령§31의2) — 최대주주등이 배당을 포기하거나 불균등
+  // 조건으로 배당받아 그 특수관계인이 본인 지분보다 많은 배당을 받으면, 그 초과배당금액에서 소득세상당액을
+  // 뺀 금액을 증여재산가액으로 한다. 이후 실제 소득세 신고시 정산증여재산가액(=초과배당금액-실제소득세액)
+  // 기준으로 재계산해 차액을 추가납부하거나 환급받는다(②③). 초과배당금액 계산(②, 시행령§31의2②)은
+  // 텍스트로 확인되나, 신고기한 전 소득세상당액 추정율(③2호, 시행규칙§10의3① 표)은 이미지로 막혀있어
+  // 사용자가 직접 계산해서 입력해야 한다.
+  window.calculateExcessDividendGiftTaxJS = function (p) {
+    p = p || {};
+    const isFinalSettlement = !!p.isFinalSettlement;
+    const excessDividendBaseAmount = Number(p.excessDividendBaseAmount) || 0;
+    if (excessDividendBaseAmount <= 0) return { error: '최대주주등의 특수관계인이 보유주식등에 비례한 금액을 초과해 받은 배당등의 금액(초과배당금액 산정용)이 필요합니다.' };
+    const disproportionateShortfallRatio = Math.min(1, Math.max(0, Number(p.disproportionateShortfallRatio) || 0));
+    const excessDividendAmount = Math.round(excessDividendBaseAmount * disproportionateShortfallRatio);
+
+    let incomeTaxEquivalent, note;
+    if (isFinalSettlement) {
+      incomeTaxEquivalent = Number(p.actualIncomeTax) || 0;
+      note = '정산증여재산가액 = 초과배당금액 - 실제소득세액(§41의2②·④)으로 계산했습니다. 정산 신고기한은 초과배당금액이 발생한 연도의 다음 연도 5.1~5.31(성실신고확인대상사업자는 6.30)입니다.';
+    } else {
+      incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent) || 0;
+      note = '최초 신고시에는 소득세상당액을 시행규칙§10의3①의 추정율표(원문 이미지로 확인되지 않아 직접 계산해서 입력)로 산정합니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
+    }
+    const giftAmount = Math.max(0, excessDividendAmount - incomeTaxEquivalent);
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: note
+    };
+  };
+
+  // 주식등의 상장 등에 따른 이익의 증여 / 합병에 따른 상장 등 이익의 증여 (상증세법§41의3,§41의5, 시행령
+  // §31의3) — 최대주주등의 특수관계인이 그 최대주주등으로부터 주식등을 증여·유상취득(또는 증여받은 재산
+  // 으로 취득)한 후 5년 이내에 상장(§41의3)되거나 특수관계 있는 상장법인과 합병(§41의5, §41의3③~⑨를
+  // 준용해 "상장일"을 "합병등기일"로 봄)되어 그 가액이 증가하면, 정산기준일(상장·합병등기일부터 3개월
+  // 되는 날, 그 전에 사망·증여·양도시 그 날) 기준 1주당 평가액에서 증여받은날 1주당 과세가액(또는
+  // 취득가액)과 1주당 기업가치의 실질적인 증가로 인한 이익을 뺀 금액에 주식수를 곱해 이익을 계산한다.
+  window.calculateStockListingGiftTaxJS = function (p) {
+    p = p || {};
+    const provision = p.provision === 'merger' ? 'merger' : 'listing';
+    const settlementValuePerShare = Number(p.settlementValuePerShare) || 0;
+    const originalValuePerShare = Number(p.originalValuePerShare) || 0;
+    const realValueIncreasePerShare = Number(p.realValueIncreasePerShare) || 0;
+    const shares = Number(p.shares) || 0;
+    if (settlementValuePerShare <= 0 || shares <= 0) return { error: '정산기준일 1주당 평가액과 증여·취득한 주식수가 필요합니다.' };
+    const giftAmount = Math.max(0, Math.round((settlementValuePerShare - originalValuePerShare - realValueIncreasePerShare) * shares));
+
+    const gateThreshold = Math.min(Math.round((originalValuePerShare + realValueIncreasePerShare) * shares * 0.3), 300000000);
+    if (giftAmount < gateThreshold) {
+      return {
+        과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0,
+        안내: '이익(' + giftAmount + '원)이 기준금액 미만이어서 과세하지 않습니다(' + (provision === 'merger' ? '§41의5①단서' : '§41의3①단서') + ', 시행령§31의3③).'
+      };
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 증여의제이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: (provision === 'merger'
+        ? '증여일은 합병등기일부터 3개월이 되는 날(정산기준일)입니다(§41의5②가 §41의3③을 준용, "상장일"을 "합병등기일"로 봄).'
+        : '증여일은 상장일부터 3개월이 되는 날(정산기준일)입니다(§41의3③). 그 전에 사망·증여·양도하면 그 날이 정산기준일이 됩니다.')
+        + ' 당초 증여세 과세가액에 이 이익을 가산해 정산하며, 정산기준일 현재 주식가액이 당초 과세가액보다 적어졌고 그 차액이 기준 이상이면 차액분 세액을 환급받을 수 있습니다(§41의3④, 시행령 기준 별도 확인).'
+    };
+  };
+
+  // 농어촌주택등 취득자에 대한 양도소득세 과세특례 (조특법§99의4, 2003.8.1~2028.12.31 취득분, 현재
+  // 시행중) — 1세대가 농어촌주택등(농어촌주택 또는 고향주택, 3억원 이하 등 요건)을 취득해 3년 이상
+  // 보유하고 그 취득 전 보유하던 일반주택을 양도하면, 그 농어촌주택등을 소유주택으로 보지 않아 일반주택의
+  // 1세대1주택 비과세(소득세법§89①3호) 판정에서 제외한다(§98의9·§71의2와 같은 구조). 취득한 농어촌
+  // 주택등과 일반주택이 같은(연접) 읍·면·동(고향주택은 시)에 있으면 적용배제(③). 3년 보유요건 충족 전에
+  // 일반주택을 양도해도 적용되나(④), 이후 3년 미만 보유로 끝나면 사후관리로 그 감면세액상당액을 추징
+  // 한다(⑥, 수용 등 부득이한 사유는 예외). 세액 자체는 계산하지 않고 적용 가능 여부·사후관리 추징대상
+  // 여부만 판정한다.
+  window.calculateRuralHouseOneHouseExclusionJS = function (p) {
+    p = p || {};
+    const acquisitionDate = p.acquisitionDate;
+    if (!acquisitionDate) return { error: '농어촌주택등의 취득일이 필요합니다.' };
+    const acqTime = new Date(acquisitionDate).getTime();
+    const houseType = p.houseType === 'hometown' ? 'hometown' : 'rural';
+    const windowStart = new Date(houseType === 'hometown' ? '2009-01-01' : '2003-08-01').getTime();
+    const windowEnd = new Date('2028-12-31').getTime();
+    if (!(acqTime >= windowStart && acqTime <= windowEnd)) {
+      return { 적용여부: false, 안내: '취득일이 취득기간(농어촌주택 2003.8.1~2028.12.31, 고향주택 2009.1.1~2028.12.31)을 벗어나 조특법§99의4의 적용대상이 아닙니다.' };
+    }
+    if (!p.meetsLocationAndPriceRequirements) {
+      return { 적용여부: false, 안내: '소재지·가액(3억원, 한옥은 4억원) 등 시행령이 정하는 농어촌주택·고향주택 요건을 충족하지 못해 적용대상이 아닙니다.' };
+    }
+    if (p.isSameOrAdjacentDistrict) {
+      return { 적용여부: false, 안내: '취득한 농어촌주택등과 보유하던 일반주택이 행정구역상 같은(또는 연접한) ' + (houseType === 'hometown' ? '시' : '읍·면·동') + '에 있어 적용배제됩니다(§99의4③).' };
+    }
+    if (p.holdingYears !== undefined && Number(p.holdingYears) < 3 && !p.isPendingHoldingPeriod) {
+      return { 적용여부: false, 안내: '농어촌주택등을 3년 이상 보유하지 않아(또는 3년 보유요건 충족 전 일반주택 양도가 아니어서) 적용대상이 아닙니다(§99의4①④).' };
+    }
+    if (p.triggerClawback && !p.isExemptedReason) {
+      return {
+        적용여부: true, 사후관리추징대상: true,
+        안내: '3년 이상 보유 요건을 충족하기 전에 일반주택을 양도해 특례를 적용받은 후, 농어촌주택등을 3년 이상 보유하지 않게 되었습니다. 그 보유하지 않게 된 날이 속하는 달의 말일부터 2개월 이내에, 특례를 적용받지 않았을 경우 납부했을 세액상당액을 양도소득세로 납부해야 합니다(§99의4⑥, 수용 등 부득이한 사유가 있으면 제외).'
+      };
+    }
+    return {
+      적용여부: true, 사후관리추징대상: false,
+      안내: '요건을 충족하여 그 ' + (houseType === 'hometown' ? '고향주택' : '농어촌주택') + '을 1세대1주택 비과세(소득세법§89①3호) 판정시 소유주택으로 보지 않습니다(조특법§99의4①). 위 일반 양도세 계산기에서 일반주택을 양도자산으로 놓고 "1세대1주택 비과세 요건 충족 전제"를 체크해 계산하세요.'
+    };
+  };
+
   // 전환사채등의 주식전환등에 따른 이익의 증여 (상증세법§40, 시행령§30) — 4가지 세부 케이스로 나뉜다.
   // acquisition(법§40①1호, 취득시 — 특수관계인 저가취득/최대주주등 초과배정저가취득/그 특수관계인 초과배정
   //   저가취득): 이익 = 전환사채등의 시가 - 인수취득가액. 게이트: min(시가30%, 1억).
