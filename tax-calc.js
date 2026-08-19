@@ -2548,6 +2548,48 @@
     };
   };
 
+  // 국외자산 양도소득세 (소득세법§118의2~§118의8) — 국내자산 양도세와 완전히 별도로 계산한다. 양도일까지
+  // 계속 5년 이상 국내에 주소·거소를 둔 거주자가 국외 토지·건물·부동산에관한권리·기타자산을 양도할 때
+  // 적용된다. 세율은 §55①(국내양도세와 같은 기본누진세율표)을 그대로 쓰되 장기보유특별공제는 적용하지
+  // 않는다(§118의8단서). 기본공제는 국내양도세와 별개로 연250만원(§118의7①). 외국납부세액은 세액공제
+  // (한도=산출세액, 이 계산기는 국외자산양도소득만 다루므로 비율 1로 단순화) 또는 필요경비산입 중 선택
+  // 한다(§118의6①, 필요경비산입 방법을 쓰려면 이미 필요경비에 포함해 입력하고 세액공제는 0으로 둔다).
+  window.calculateOverseasAssetTransferTaxJS = function (p) {
+    p = p || {};
+    if (!p.wasResidentFiveYearsContinuously) {
+      return { 적용여부: false, 안내: '양도일까지 계속 5년 이상 국내에 주소 또는 거소를 둔 거주자가 아니어서 국외자산 양도소득세(§118의2) 적용대상이 아닙니다.' };
+    }
+    const transferPrice = Number(p.transferPrice) || 0;
+    if (transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const capitalExpenditure = Number(p.capitalExpenditure) || 0;
+    const transferExpenses = Number(p.transferExpenses) || 0;
+    const gain = transferPrice - acquisitionPrice - capitalExpenditure - transferExpenses;
+
+    const basicDeduction = Math.min(2500000, Math.max(0, gain));
+    const taxBase = Math.max(0, gain - basicDeduction);
+    const calculatedTax = progressiveTax(taxBase, TRANSFER_TAX_BRACKETS);
+
+    const foreignTaxCreditMethod = p.foreignTaxCreditMethod === 'expense' ? 'expense' : 'credit';
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const foreignTaxCredit = foreignTaxCreditMethod === 'credit' ? Math.min(foreignTaxPaidAmount, calculatedTax) : 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const localIncomeTax = Math.round(taxAfterCredit * 0.1);
+    const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+
+    return {
+      적용여부: true,
+      양도차익: Math.round(gain), 기본공제: basicDeduction, 과세표준: taxBase,
+      산출세액: calculatedTax, 외국납부세액공제: foreignTaxCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      지방소득세: localIncomeTax, 납부세액_합계: totalTax,
+      안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다.'
+    };
+  };
+
   // 감자에 따른 이익의 증여 (상증세법§39의2, 시행령§29의2) — 대주주등이 소유주식등을 시가보다 낮은
   // 대가로 소각당하면(다른 주주가 상대적으로 이익을 얻음, 1호), 반대로 소액주주 등이 시가보다 높은 대가로
   // 소각되면(소각된 주주 본인이 이익을 얻음, 2호, 1주당평가액이 액면가에 미달하는 경우만) 각각 그 차액

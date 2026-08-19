@@ -144,6 +144,14 @@ function recomputeStockUnpaidDays(){
   const deadline = new Date(y + 1, 4, 31); // 확정신고기한: 양도일 속한 해의 다음해 5.31
   setUnpaidDaysField_('stUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeOverseasAssetUnpaidDays(){
+  const transferDate = document.getElementById('oaTransferDate');
+  const paidDate = document.getElementById('oaPaidDate');
+  if (!transferDate || !transferDate.value){ setUnpaidDaysField_('oaUnpaidDays', 0); return; }
+  const y = Number(transferDate.value.slice(0, 4));
+  const deadline = new Date(y + 1, 4, 31); // 확정신고기한: 양도일 속한 해의 다음해 5.31
+  setUnpaidDaysField_('oaUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeSrGiftUnpaidDays(){
   const giftDate = document.getElementById('srGiftDate');
   const paidDate = document.getElementById('srPaidDate');
@@ -1920,6 +1928,33 @@ function renderTransferPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-stock-transfer">세액 계산하기</button>' +
       '<div id="taxCalcStockTransferResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>국외자산 양도소득세(소득세법§118의2~§118의8) — 국내자산 양도세와 완전히 별도 세목. 양도일까지 계속 5년이상 국내거주자가 국외 토지·건물·부동산에관한권리·기타자산을 양도할 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="oaResident5yr"><label for="oaResident5yr">양도일까지 계속 5년 이상 국내에 주소·거소를 둔 거주자</label></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="oaTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="oaTransferPrice" placeholder="원 (원칙 실지거래가액)"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="oaAcquisitionPrice" placeholder="원 (원칙 실지거래가액)"></div>' +
+        '<div class="taxcalc-field"><label>자본적지출액</label><input type="number" id="oaCapitalExpenditure" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>양도비</label><input type="number" id="oaTransferExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>외국납부세액 처리방법</label><select id="oaForeignTaxMethod">' +
+          '<option value="credit">외국납부세액공제(세액공제, 산출세액 한도)</option>' +
+          '<option value="expense">필요경비산입방법(위 취득가액 등에 이미 포함해 입력)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[세액공제방법만] 외국에 납부한 세액</label><input type="number" id="oaForeignTaxPaid" placeholder="원 (없으면 0)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="oaFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="oaFraudulent"><label for="oaFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="oaUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="oaPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산: 확정신고기한 다음해 5.31 대비)</label><input type="number" id="oaUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-overseas-asset-transfer">세액 계산하기</button>' +
+      '<div id="taxCalcOverseasAssetTransferResult"></div>' +
     '</div>';
 
   renderAllocationTool();
@@ -1977,6 +2012,11 @@ function renderTransferPane(){
   if (stTransferDateEl) stTransferDateEl.addEventListener('input', recomputeStockUnpaidDays);
   if (stPaidDateEl) stPaidDateEl.addEventListener('input', recomputeStockUnpaidDays);
   recomputeStockUnpaidDays();
+  const oaTransferDateEl = document.getElementById('oaTransferDate');
+  const oaPaidDateEl = document.getElementById('oaPaidDate');
+  if (oaTransferDateEl) oaTransferDateEl.addEventListener('input', recomputeOverseasAssetUnpaidDays);
+  if (oaPaidDateEl) oaPaidDateEl.addEventListener('input', recomputeOverseasAssetUnpaidDays);
+  recomputeOverseasAssetUnpaidDays();
   wireMoneyCapHint_('stBasicDeductionUsed', 'stBasicDeductionUsedHint', 2500000);
   enhanceNumberInputs(taxCalcTransferPane);
   enhanceDateInputs(taxCalcTransferPane);
@@ -2414,6 +2454,32 @@ function renderStockTransferResult(r){
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderOverseasAssetTransferResult(r){
+  const box = document.getElementById('taxCalcOverseasAssetTransferResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+    if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  html += taxCalcResultRow('양도차익', won(r.양도차익));
+  html += taxCalcResultRow('기본공제', won(r.기본공제));
+  html += taxCalcResultRow('과세표준', won(r.과세표준));
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
+  html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -4641,6 +4707,21 @@ taxCalcView.addEventListener('click', function(e){
       transactionAmountForBookkeepingPenalty: numVal(document.getElementById('stBookkeepingPenaltyTxAmount').value) || 0
     };
     renderStockTransferResult(calculateStockTransferTaxJS(input));
+  } else if (action === 'run-overseas-asset-transfer'){
+    const input = {
+      wasResidentFiveYearsContinuously: document.getElementById('oaResident5yr').checked,
+      transferPrice: numVal(document.getElementById('oaTransferPrice').value) || 0,
+      acquisitionPrice: numVal(document.getElementById('oaAcquisitionPrice').value) || 0,
+      capitalExpenditure: numVal(document.getElementById('oaCapitalExpenditure').value) || 0,
+      transferExpenses: numVal(document.getElementById('oaTransferExpenses').value) || 0,
+      foreignTaxCreditMethod: document.getElementById('oaForeignTaxMethod').value,
+      foreignTaxPaidAmount: numVal(document.getElementById('oaForeignTaxPaid').value) || 0,
+      filingStatus: document.getElementById('oaFilingStatus').value,
+      isFraudulent: document.getElementById('oaFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('oaUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('oaUnpaidDays').value) || 0
+    };
+    renderOverseasAssetTransferResult(calculateOverseasAssetTransferTaxJS(input));
   } else if (action === 'send-debt-to-transfer'){
     // 부담부증여의 인수채무액 상당분은 증여자가 그 지분만큼 대가(채무인수)를 받고 양도한 것으로
     // 과세된다(소득세법§88①). 양도가액=인수채무액, 취득가액·필요경비는 증여자의 전체 재산 기준
