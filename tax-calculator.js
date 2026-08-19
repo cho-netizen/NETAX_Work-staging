@@ -2831,6 +2831,25 @@ function renderGiftPane(){
       '<div id="taxCalcNontaxableGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>공익법인 출연재산 과세가액 불산입(§16 상속세·§48① 증여세) — 원칙 전액 불산입, 내국법인 주식등은 합산주식수가 한도비율(10/20/5%) 초과시 그 초과분만 과세가액 산입</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="cdTaxType"><option value="gift">증여세(§48①)</option><option value="inheritance">상속세(§16)</option></select></div>' +
+        '<div class="taxcalc-field"><label>출연재산 구분</label><select id="cdAssetType"><option value="general">일반재산</option><option value="stock">내국법인 의결권있는 주식등</option></select></div>' +
+        '<div class="taxcalc-field"><label>출연재산가액</label><input type="number" id="cdDonatedAmount" placeholder="원 (주식등이면 출연주식 평가액)"></div>' +
+        '<div class="taxcalc-field"><label>[주식등만] 한도비율 구분</label><select id="cdRatioType">' +
+          '<option value="general">원칙(10%)</option>' +
+          '<option value="nonvoting_charity">의결권미행사+자선장학사회복지목적(20%)</option>' +
+          '<option value="conglomerate_related">상호출자제한기업집단 특수관계(5%)</option>' +
+          '<option value="noncompliant">§48⑪요건 미충족(5%)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[주식등만] 발행주식총수등</label><input type="number" id="cdTotalShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[주식등만] 이번 출연주식수</label><input type="number" id="cdDonatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[주식등만] 합산대상 기존 보유 동일법인 주식수</label><input type="number" id="cdPriorRelatedShares" placeholder="주 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-charity-donation-exclusion">과세가액 산입액 계산하기</button>' +
+      '<div id="taxCalcCharityDonationExclusionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>합병에 따른 이익의 증여(§38) — 특수관계 법인간 합병에서 대주주등이 합병대가를 주식등으로 교부받아 이익을 얻은 경우(가장 흔한 유형)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>합병후 신설·존속법인 1주당평가액</label><input type="number" id="mgPostValue" placeholder="원"></div>' +
@@ -3352,6 +3371,23 @@ function renderNontaxableGiftResult(r){
   let html = '<div class="taxcalc-result">';
   html += taxCalcResultRow('근거호', r.근거호);
   html += taxCalcResultRow('비과세금액', won(r.비과세금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderCharityDonationExclusionResult(r){
+  const box = document.getElementById('taxCalcCharityDonationExclusionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.한도비율 !== undefined){
+    html += taxCalcResultRow('한도비율', r.한도비율 + '%');
+    html += taxCalcResultRow('한도주식수', r.한도주식수 + '주');
+    html += taxCalcResultRow('합산주식수', r.합산주식수 + '주');
+    html += taxCalcResultRow('초과주식수', r.초과주식수 + '주');
+  }
+  html += taxCalcResultRow('과세가액불산입액', won(r.과세가액불산입액));
+  html += taxCalcResultRow('과세가액산입액', won(r.과세가액산입액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -4794,6 +4830,17 @@ taxCalcView.addEventListener('click', function(e){
       amount: numVal(document.getElementById('ntAmount').value) || 0
     };
     renderNontaxableGiftResult(calculateNontaxableGiftPropertyJS(input));
+  } else if (action === 'run-charity-donation-exclusion'){
+    const input = {
+      taxType: document.getElementById('cdTaxType').value,
+      assetType: document.getElementById('cdAssetType').value,
+      donatedAmount: numVal(document.getElementById('cdDonatedAmount').value) || 0,
+      ratioType: document.getElementById('cdRatioType').value,
+      totalIssuedShares: numVal(document.getElementById('cdTotalShares').value) || 0,
+      donatedShares: numVal(document.getElementById('cdDonatedShares').value) || 0,
+      priorRelatedShares: numVal(document.getElementById('cdPriorRelatedShares').value) || 0
+    };
+    renderCharityDonationExclusionResult(calculateCharityDonationTaxExclusionJS(input));
   } else if (action === 'run-merger-gift'){
     const input = {
       postMergerValuePerShare: numVal(document.getElementById('mgPostValue').value) || 0,

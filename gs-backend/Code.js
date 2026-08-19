@@ -905,6 +905,23 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_charity_donation_tax_exclusion',
+    description: '공익법인등에 출연한(출연받은) 재산에 대한 상속세·증여세 과세가액 불산입(상속세및증여세법§16,§48①)을 계산한다. 원칙적으로 공익법인등에 출연한 재산의 가액은 상속세(§16)·증여세(§48①) 과세가액에 산입하지 않는다. 다만 내국법인의 의결권 있는 주식등을 출연하는 경우, 이번 출연분과 합산대상 기존 보유분의 합계가 발행주식총수등의 일정비율(원칙10%, 의결권미행사+자선장학사회복지목적 공익법인 20%, 상호출자제한기업집단 특수관계 공익법인 5%, 요건미충족 공익법인 5%)을 초과하면 그 초과분만 과세가액에 산입한다. §48②의 사후관리(용도외사용·3년내미사용 등)에 따른 즉시증여세 부과는 다루지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속세(§16), gift=증여세(§48①).' },
+        assetType: { type: 'string', enum: ['general', 'stock'], description: 'general=일반재산(전액 불산입), stock=내국법인의 의결권 있는 주식등(한도비율 적용).' },
+        donatedAmount: { type: 'number', description: '출연재산가액(원, 주식등이면 그 출연주식의 평가액).' },
+        ratioType: { type: 'string', enum: ['general', 'nonvoting_charity', 'conglomerate_related', 'noncompliant'], description: 'assetType이 stock일 때 필수 — general=원칙(10%), nonvoting_charity=의결권미행사+자선장학사회복지목적 공익법인(20%), conglomerate_related=상호출자제한기업집단과 특수관계있는 공익법인(5%), noncompliant=§48⑪요건 미충족 공익법인(5%).' },
+        totalIssuedShares: { type: 'number', description: 'assetType이 stock일 때 필수 — 그 내국법인의 발행주식총수등(자기주식 제외).' },
+        donatedShares: { type: 'number', description: 'assetType이 stock일 때 필수 — 이번에 출연하는 주식수.' },
+        priorRelatedShares: { type: 'number', description: 'assetType이 stock일 때 — 합산대상 기존 보유 동일법인 주식수 합계(출연당시 그 공익법인등 보유분+출연자 및 특수관계인이 다른 공익법인등에 출연한 분+상속인 등이 출연한 다른 공익법인등 보유분). 없으면 0.' }
+      },
+      required: ['taxType', 'assetType', 'donatedAmount']
+    }
+  },
+  {
     name: 'calculate_national_forest_land_reduction',
     description: '국가에 양도하는 산지에 대한 양도소득세의 감면(조특법§85의10)을 계산한다. 2년 이상 보유한 산지(도시지역 소재 제외)를 2022.12.31 이전에 국유림의 경영 및 관리에 관한 법률§18에 따라 국가에 양도하면 그 양도소득세의 10%를 감면한다(신청기한 만료로 과거 거래에만 적용 가능).',
     input_schema: {
@@ -5830,6 +5847,54 @@ function toolCalculateLongTermRentalHouseReduction(p) {
   };
 }
 
+// 공익법인등에 출연한(출연받은) 재산에 대한 상속세·증여세 과세가액 불산입 (상속세및증여세법§16,§48①) —
+// 원칙 전액 불산입, 내국법인 주식등은 합산주식수가 한도비율 초과시 그 초과분만 과세가액 산입.
+function toolCalculateCharityDonationTaxExclusion(p) {
+  p = p || {};
+  const taxType = p.taxType;
+  if (['inheritance', 'gift'].indexOf(taxType) === -1) return { error: 'taxType을 inheritance(상속세, §16)/gift(증여세, §48①) 중에서 선택하세요.' };
+  const donatedAmount = Number(p.donatedAmount) || 0;
+  if (donatedAmount <= 0) return { error: '출연재산가액이 필요합니다.' };
+  const assetType = p.assetType;
+  if (['general', 'stock'].indexOf(assetType) === -1) return { error: 'assetType을 general(일반재산)/stock(내국법인 의결권있는 주식등) 중에서 선택하세요.' };
+
+  if (assetType === 'general') {
+    return {
+      과세가액불산입액: donatedAmount, 과세가액산입액: 0,
+      안내: (taxType === 'inheritance' ? '상속세및증여세법§16①' : '상속세및증여세법§48①본문') + '에 따라 출연한 재산의 가액 전액을 과세가액에 산입하지 않습니다.'
+    };
+  }
+
+  const ratioType = p.ratioType;
+  const ratioMap = { general: 0.10, nonvoting_charity: 0.20, conglomerate_related: 0.05, noncompliant: 0.05 };
+  if (!Object.prototype.hasOwnProperty.call(ratioMap, ratioType)) {
+    return { error: 'ratioType을 general(원칙10%)/nonvoting_charity(의결권미행사+자선장학사회복지목적20%)/conglomerate_related(상호출자제한기업집단특수관계5%)/noncompliant(§48⑪요건미충족5%) 중에서 선택하세요.' };
+  }
+  const totalIssuedShares = Number(p.totalIssuedShares) || 0;
+  const donatedShares = Number(p.donatedShares) || 0;
+  if (totalIssuedShares <= 0 || donatedShares <= 0) return { error: '발행주식총수등과 출연하는 주식수가 필요합니다.' };
+  const priorRelatedShares = Number(p.priorRelatedShares) || 0;
+
+  const ratio = ratioMap[ratioType];
+  const limitShares = totalIssuedShares * ratio;
+  const combinedShares = donatedShares + priorRelatedShares;
+  const excessShares = Math.max(0, combinedShares - limitShares);
+  const excessSharesFromThisDonation = Math.min(excessShares, donatedShares);
+  const valuePerShare = donatedAmount / donatedShares;
+  const taxableInclusionAmount = Math.round(valuePerShare * excessSharesFromThisDonation);
+  const exclusionAmount = donatedAmount - taxableInclusionAmount;
+
+  return {
+    한도비율: Math.round(ratio * 100), 한도주식수: Math.round(limitShares),
+    합산주식수: combinedShares, 초과주식수: excessShares,
+    과세가액불산입액: exclusionAmount, 과세가액산입액: taxableInclusionAmount,
+    안내: (excessSharesFromThisDonation > 0
+      ? '이번 출연분을 포함한 합산 주식수(' + combinedShares + '주)가 발행주식총수등의 ' + Math.round(ratio * 100) + '%(' + Math.round(limitShares) + '주)를 초과해, 그 초과분에 상당하는 가액(' + taxableInclusionAmount + '원)을 과세가액에 산입합니다(' + (taxType === 'inheritance' ? '§16②' : '§48①단서') + ').'
+      : '합산 주식수가 한도(' + Math.round(ratio * 100) + '%, ' + Math.round(limitShares) + '주) 이내여서 전액 과세가액에 산입하지 않습니다.')
+      + ' §48②의 8가지 사후관리 위반 사유(용도외사용·3년내미사용·초과주식취득·운용소득미사용 등)에 따른 즉시증여세 부과는 이 계산기가 다루지 않으니 해당 사안이면 별도로 확인하세요.'
+  };
+}
+
 // 국가에 양도하는 산지에 대한 양도소득세의 감면 (조특법§85의10) — 2년 이상 보유한 산지를 2022.12.31
 // 이전에 국유림법§18에 따라 국가에 양도하면 그 양도소득세의 10%를 감면한다.
 function toolCalculateNationalForestLandReduction(p) {
@@ -6957,6 +7022,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_nontaxable_gift_property' ||
+        b.name === 'calculate_charity_donation_tax_exclusion' ||
         b.name === 'calculate_national_forest_land_reduction' ||
         b.name === 'calculate_industrial_complex_relocation_lot_rate' ||
         b.name === 'calculate_museum_relocation_installment' ||
@@ -7186,6 +7252,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_nontaxable_gift_property') {
         const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_charity_donation_tax_exclusion') {
+        const resultObj = toolCalculateCharityDonationTaxExclusion(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
