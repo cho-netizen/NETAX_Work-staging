@@ -2548,6 +2548,67 @@
     };
   };
 
+  // 장기임대주택 등에 대한 양도소득세 감면 (조특법§97,§97의2,§97의5, §97의4와는 별개 조문) — 모두 "양도
+  // 소득세의 일정 비율을 세액감면"하는 정액감면 구조를 공유한다.
+  // §97(2000.12.31 이전 임대개시 국민주택): 원칙 50% 감면, 건설임대주택 5년이상 임대 또는 매입임대주택
+  //   (1995.1.1이후 취득, 무입주, 5년이상) 또는 10년이상 임대는 전액(100%) 면제 — 감면율이 양도소득
+  //   "전체"에 적용된다(임대기간중 발생분만이 아님).
+  // §97의2(1999.8.20~2001.12.31 신축임대주택): 5년이상 임대 후 양도시 전액(100%) 면제, 역시 전체 양도
+  //   소득에 적용.
+  // §97의5(2018.12.31까지 취득+3개월내 등록, 10년이상 계속임대 장기일반민간임대주택등): 임대기간 중
+  //   발생한 양도소득에 대해서만 100% 감면(§97의3·§97의4와 중복적용 배제) — 등록일 평가액이 필요하다.
+  window.calculateLongTermRentalHouseReductionJS = function (p) {
+    p = p || {};
+    const provision = p.provision;
+    if (['sect97', 'sect97_2', 'sect97_5'].indexOf(provision) === -1) {
+      return { error: 'provision을 sect97/sect97_2/sect97_5 중에서 선택하세요.' };
+    }
+    const transferPrice = Number(p.transferPrice) || 0;
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+    const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+    let rate, note;
+    if (provision === 'sect97') {
+      const subType = p.subType;
+      if (subType === 'construction_5yr' || subType === 'purchase_5yr_novacancy' || subType === 'rental_10yr') {
+        rate = 100;
+        note = subType === 'construction_5yr' ? '건설임대주택으로서 5년 이상 임대한 임대주택이므로 양도소득세를 전액 면제합니다(§97①단서).'
+          : subType === 'purchase_5yr_novacancy' ? '매입임대주택(1995.1.1 이후 취득, 취득당시 무입주)으로서 5년 이상 임대했으므로 양도소득세를 전액 면제합니다(§97①단서).'
+          : '10년 이상 임대한 임대주택이므로 양도소득세를 전액 면제합니다(§97①단서).';
+      } else {
+        rate = 50;
+        note = '2000.12.31 이전 임대를 개시해 5년 이상 임대한 국민주택이므로 양도소득세의 50%를 감면합니다(§97①본문).';
+      }
+    } else if (provision === 'sect97_2') {
+      rate = 100;
+      note = '1999.8.20~2001.12.31 신축된(또는 그 이전 신축·무입주) 국민주택을 5년 이상 임대했으므로 양도소득세를 전액 면제합니다(§97의2①).';
+    } else { // sect97_5
+      rate = 100;
+      note = '장기일반민간임대주택등으로 10년 이상 계속 임대 후 양도했으므로 임대기간 중 발생한 양도소득에 대한 양도소득세를 전액 감면합니다(§97의5①). §97의3·§97의4와 중복 적용되지 않습니다(§97의5②).';
+    }
+
+    let exemptGain;
+    if (provision === 'sect97_5') {
+      const registrationDateValue = Number(p.registrationDateValue) || 0;
+      if (registrationDateValue <= 0) return { error: '장기일반민간임대주택등 등록일 현재의 평가액(임대기간중 발생분 산정용)이 필요합니다.' };
+      const rentalPeriodGain = Math.max(0, transferPrice - registrationDateValue);
+      exemptGain = Math.round(Math.min(rentalPeriodGain, totalGain) * rate / 100);
+    } else {
+      exemptGain = Math.round(totalGain * rate / 100);
+    }
+    exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
+    const taxableGain = Math.max(0, totalGain - exemptGain);
+    return {
+      적용여부: true,
+      적용감면율: rate,
+      전체양도차익: Math.round(totalGain),
+      감면대상_양도소득금액: Math.round(exemptGain),
+      과세대상양도소득금액: taxableGain,
+      안내: note + ' 이 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 계산기에서 별도 적용됩니다).'
+    };
+  };
+
   // 증자에 따른 이익의 증여 (상증세법§39, 시행령§29②) — 신주를 시가보다 낮거나 높은 가액으로 발행할 때
   // 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. caseType으로 케이스를 선택한다.
   // low_allocated(시행령1호, 법§39①1호가·다·라목 — 저가발행, 실권주를 배정받거나 비주주가 직접배정

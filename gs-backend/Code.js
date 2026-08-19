@@ -905,6 +905,22 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_long_term_rental_house_reduction',
+    description: '장기임대주택 등에 대한 양도소득세 감면(조특법§97,§97의2,§97의5)을 계산한다. §97(2000.12.31 이전 임대개시 국민주택): 원칙 50% 감면, 건설임대주택 5년이상·매입임대주택(1995.1.1이후취득,무입주) 5년이상·10년이상임대 중 하나면 전액(100%) 면제(양도소득 전체에 적용). §97의2(1999.8.20~2001.12.31 신축임대주택): 5년이상 임대 후 양도시 전액 면제(양도소득 전체). §97의5(2018.12.31까지 취득+3개월내 등록, 10년이상 계속임대 장기일반민간임대주택등): 임대기간 중 발생한 양도소득에 대해서만 100% 감면(등록일 평가액 필요, §97의3·§97의4와 중복적용 배제).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        provision: { type: 'string', enum: ['sect97', 'sect97_2', 'sect97_5'], description: '적용할 조문.' },
+        subType: { type: 'string', enum: ['construction_5yr', 'purchase_5yr_novacancy', 'rental_10yr', 'baseline'], description: 'provision이 sect97일 때만 — construction_5yr=건설임대주택 5년이상(100%), purchase_5yr_novacancy=매입임대주택 1995.1.1이후취득·무입주·5년이상(100%), rental_10yr=10년이상임대(100%), baseline=그 외 5년이상임대(50%).' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        registrationDateValue: { type: 'number', description: 'provision이 sect97_5일 때 필수 — 장기일반민간임대주택등 등록일 현재의 평가액(원, 임대기간중 발생분 산정용).' }
+      },
+      required: ['provision']
+    }
+  },
+  {
     name: 'calculate_capital_increase_gift_tax',
     description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 미확인).',
     input_schema: {
@@ -5708,6 +5724,60 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   };
 }
 
+// 장기임대주택 등에 대한 양도소득세 감면 (조특법§97,§97의2,§97의5, §97의4와는 별개 조문) — 모두 "양도
+// 소득세의 일정 비율을 세액감면"하는 정액감면 구조를 공유한다.
+function toolCalculateLongTermRentalHouseReduction(p) {
+  p = p || {};
+  const provision = p.provision;
+  if (['sect97', 'sect97_2', 'sect97_5'].indexOf(provision) === -1) {
+    return { error: 'provision을 sect97/sect97_2/sect97_5 중에서 선택하세요.' };
+  }
+  const transferPrice = Number(p.transferPrice) || 0;
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+  const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+  let rate, note;
+  if (provision === 'sect97') {
+    const subType = p.subType;
+    if (subType === 'construction_5yr' || subType === 'purchase_5yr_novacancy' || subType === 'rental_10yr') {
+      rate = 100;
+      note = subType === 'construction_5yr' ? '건설임대주택으로서 5년 이상 임대한 임대주택이므로 양도소득세를 전액 면제합니다(§97①단서).'
+        : subType === 'purchase_5yr_novacancy' ? '매입임대주택(1995.1.1 이후 취득, 취득당시 무입주)으로서 5년 이상 임대했으므로 양도소득세를 전액 면제합니다(§97①단서).'
+        : '10년 이상 임대한 임대주택이므로 양도소득세를 전액 면제합니다(§97①단서).';
+    } else {
+      rate = 50;
+      note = '2000.12.31 이전 임대를 개시해 5년 이상 임대한 국민주택이므로 양도소득세의 50%를 감면합니다(§97①본문).';
+    }
+  } else if (provision === 'sect97_2') {
+    rate = 100;
+    note = '1999.8.20~2001.12.31 신축된(또는 그 이전 신축·무입주) 국민주택을 5년 이상 임대했으므로 양도소득세를 전액 면제합니다(§97의2①).';
+  } else { // sect97_5
+    rate = 100;
+    note = '장기일반민간임대주택등으로 10년 이상 계속 임대 후 양도했으므로 임대기간 중 발생한 양도소득에 대한 양도소득세를 전액 감면합니다(§97의5①). §97의3·§97의4와 중복 적용되지 않습니다(§97의5②).';
+  }
+
+  let exemptGain;
+  if (provision === 'sect97_5') {
+    const registrationDateValue = Number(p.registrationDateValue) || 0;
+    if (registrationDateValue <= 0) return { error: '장기일반민간임대주택등 등록일 현재의 평가액(임대기간중 발생분 산정용)이 필요합니다.' };
+    const rentalPeriodGain = Math.max(0, transferPrice - registrationDateValue);
+    exemptGain = Math.round(Math.min(rentalPeriodGain, totalGain) * rate / 100);
+  } else {
+    exemptGain = Math.round(totalGain * rate / 100);
+  }
+  exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
+  const taxableGain = Math.max(0, totalGain - exemptGain);
+  return {
+    적용여부: true,
+    적용감면율: rate,
+    전체양도차익: Math.round(totalGain),
+    감면대상_양도소득금액: Math.round(exemptGain),
+    과세대상양도소득금액: taxableGain,
+    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다).'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -6746,6 +6816,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_nontaxable_gift_property' ||
+        b.name === 'calculate_long_term_rental_house_reduction' ||
         b.name === 'calculate_capital_increase_gift_tax' ||
         b.name === 'calculate_restructuring_property_reduction' ||
         b.name === 'calculate_population_decline_area_house_exclusion' ||
@@ -6970,6 +7041,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_nontaxable_gift_property') {
         const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_long_term_rental_house_reduction') {
+        const resultObj = toolCalculateLongTermRentalHouseReduction(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

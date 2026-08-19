@@ -1819,6 +1819,28 @@ function renderTransferPane(){
       '<div id="taxCalcPopulationDeclineHouseResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>장기임대주택 등 양도세 감면(조특법§97·§97의2·§97의5, §97의4와 별개) — 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 양도차익으로 대신 입력하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="lrProvision">' +
+          '<option value="sect97">§97(2000.12.31 이전 임대개시 국민주택)</option>' +
+          '<option value="sect97_2">§97의2(1999.8.20~2001.12.31 신축임대주택)</option>' +
+          '<option value="sect97_5">§97의5(2018.12.31까지 취득+3개월내 등록, 10년이상 계속임대)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[§97만] 세부 유형</label><select id="lrSubType">' +
+          '<option value="baseline">그 외 5년이상 임대(50%)</option>' +
+          '<option value="construction_5yr">건설임대주택 5년이상(100%)</option>' +
+          '<option value="purchase_5yr_novacancy">매입임대주택(1995.1.1이후취득·무입주) 5년이상(100%)</option>' +
+          '<option value="rental_10yr">10년이상 임대(100%)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="lrTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="lrAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="lrNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[§97의5만] 등록일 현재 평가액</label><input type="number" id="lrRegistrationValue" placeholder="원 (임대기간중 발생분 산정용)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-long-term-rental-house">감면대상 양도소득금액 계산하기</button>' +
+      '<div id="taxCalcLongTermRentalHouseResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -2258,6 +2280,19 @@ function renderPopulationDeclineHouseResult(r){
   if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
   html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderLongTermRentalHouseResult(r){
+  const box = document.getElementById('taxCalcLongTermRentalHouseResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용감면율', r.적용감면율 + '%');
+  html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+  html += taxCalcResultRow('감면대상 양도소득금액', '-' + won(r.감면대상_양도소득금액));
+  html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -4332,6 +4367,16 @@ taxCalcView.addEventListener('click', function(e){
       meetsAreaAndPriceRequirements: document.getElementById('pdAreaPriceOk').checked
     };
     renderPopulationDeclineHouseResult(calculatePopulationDeclineAreaHouseExclusionJS(input));
+  } else if (action === 'run-long-term-rental-house'){
+    const input = {
+      provision: document.getElementById('lrProvision').value,
+      subType: document.getElementById('lrSubType').value,
+      transferPrice: numVal(document.getElementById('lrTransferPrice').value) || 0,
+      acquisitionPrice: numVal(document.getElementById('lrAcquisitionPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('lrNecessaryExpenses').value) || 0,
+      registrationDateValue: numVal(document.getElementById('lrRegistrationValue').value) || 0
+    };
+    renderLongTermRentalHouseResult(calculateLongTermRentalHouseReductionJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,
