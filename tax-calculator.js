@@ -2867,6 +2867,17 @@ function renderInstallmentResult(r, boxId){
   box.innerHTML = html;
 }
 
+function renderDeemedInheritanceResult(r){
+  const box = document.getElementById('taxCalcDeemedInheritanceResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('원금액', won(r.원금액));
+  html += taxCalcResultRow('간주상속재산포함액', won(r.간주상속재산포함액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 function renderClawbackResult(r){
   const box = document.getElementById('taxCalcClawbackResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
@@ -3061,6 +3072,24 @@ function renderInheritancePane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-installment-inheritance">연부연납 계산하기</button>' +
       '<div id="taxCalcInstallmentInheritanceResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, §8,§9,§10) — 결과의 "간주상속재산포함액"을 위 상속재산가액에 합산해 넣으세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>항목 구분</label><select id="diItemType">' +
+          '<option value="insurance">보험금(§8)</option>' +
+          '<option value="trust_settled">피상속인이 신탁한 재산(§9①)</option>' +
+          '<option value="trust_benefit_from_others">피상속인이 타인신탁의 수익권 보유(§9②)</option>' +
+          '<option value="retirement">퇴직금·퇴직수당·공로금·연금 등(§10)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>금액</label><input type="number" id="diAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="diPolicyholderDecedent"><label for="diPolicyholderDecedent">[보험금만] 피상속인이 보험계약자였음</label></div>' +
+        '<div class="taxcalc-field"><label>[보험금만, 계약자가 다를 때] 피상속인 실질보험료부담비율</label><input type="number" step="0.01" min="0" max="1" id="diPremiumRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="diAlreadyGiftTaxed"><label for="diAlreadyGiftTaxed">[피상속인이 신탁한 재산만] 이미 §33①로 증여재산가액 처리됨</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="diExcludedPension"><label for="diExcludedPension">[퇴직금등만] 국민연금법 등 열거된 유족연금·유족보상금류에 해당</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-deemed-inheritance">포함 여부·포함액 판정하기</button>' +
+      '<div id="taxCalcDeemedInheritanceResult"></div>' +
     '</div>';
   renderValuationAssetList('inheritanceValuationList', inheritanceValuationAssets);
   renderDisposalItemsList();
@@ -4187,6 +4216,16 @@ taxCalcView.addEventListener('click', function(e){
       annualInterestRatePercent: numVal(document.getElementById('ipIhRate').value)
     };
     renderInstallmentResult(calculateInstallmentPaymentScheduleJS(input), 'taxCalcInstallmentInheritanceResult');
+  } else if (action === 'run-deemed-inheritance'){
+    const input = {
+      itemType: document.getElementById('diItemType').value,
+      amount: numVal(document.getElementById('diAmount').value) || 0,
+      wasPolicyholderDecedent: document.getElementById('diPolicyholderDecedent').checked,
+      premiumPaidByDecedentRatio: numVal(document.getElementById('diPremiumRatio').value) || 0,
+      isAlreadyGiftTaxedUnder33_1: document.getElementById('diAlreadyGiftTaxed').checked,
+      isExcludedSurvivorPension: document.getElementById('diExcludedPension').checked
+    };
+    renderDeemedInheritanceResult(calculateDeemedInheritancePropertyJS(input));
   } else if (action === 'run-inheritance'){
     const disposalPresumptionItems = inheritanceDisposalItems.map(function(item){
       return {

@@ -877,6 +877,22 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_deemed_inheritance_property',
+    description: '상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10)의 포함 여부와 포함액을 판정한다. 보험금(§8): 피상속인이 보험계약자이거나, 계약자가 다르더라도 피상속인이 실질적으로 보험료를 납부한 경우 그 비율만큼 상속재산으로 본다. 신탁재산(§9): 피상속인이 신탁한 재산은 원칙적으로 상속재산이나 §33①로 이미 증여재산가액 처리된 신탁수익권은 제외하고, 반대로 피상속인이 타인신탁의 수익권을 갖고 있었다면 그 가액도 포함한다. 퇴직금등(§10): 원칙적으로 상속재산이나 국민연금법 등이 정하는 유족연금류는 제외한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        itemType: { type: 'string', enum: ['insurance', 'trust_settled', 'trust_benefit_from_others', 'retirement'], description: 'insurance=보험금(§8), trust_settled=피상속인이 신탁한 재산(§9①), trust_benefit_from_others=피상속인이 타인신탁의 수익권 보유(§9②), retirement=퇴직금·퇴직수당·공로금·연금 등(§10).' },
+        amount: { type: 'number', description: '해당 항목의 금액(원) — 보험금은 수령한 보험금 전액, 신탁재산은 신탁재산 평가액, 퇴직금등은 지급액.' },
+        wasPolicyholderDecedent: { type: 'boolean', description: 'itemType이 insurance일 때만 — 피상속인이 보험계약자였는지.' },
+        premiumPaidByDecedentRatio: { type: 'number', description: 'itemType이 insurance이고 wasPolicyholderDecedent가 false일 때만 — 피상속인이 실질적으로 부담한 보험료 비율(0~1).' },
+        isAlreadyGiftTaxedUnder33_1: { type: 'boolean', description: 'itemType이 trust_settled일 때만 — 이 신탁수익권이 이미 §33①에 따라 수익자의 증여재산가액으로 처리되었는지(true면 상속재산 제외).' },
+        isExcludedSurvivorPension: { type: 'boolean', description: 'itemType이 retirement일 때만 — 국민연금법·공무원연금법 등이 정하는 유족연금·유족보상금류 등 §10 단서의 열거 항목에 해당하는지(true면 상속재산 제외).' }
+      },
+      required: ['itemType', 'amount']
+    }
+  },
+  {
     name: 'calculate_trust_income_gift_tax',
     description: '신탁이익의 증여(상증세법§33)를 계산한다. 위탁자가 타인을 수익자로 지정한 신탁에서 원본 또는 수익을 받을 권리를 갖게 하는 경우, 원칙적으로 그 원본·수익이 실제 지급되는 날(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①)을 증여일로 하여 과세한다. 원본·수익을 한번에 받으면 그 가액 그대로가 증여재산가액이고, 여러 차례 나눠 받는 경우에는 증여시기를 기준으로 시행령§61(신탁수익권 평가)을 준용해 평가한 가액을 사용한다(시행령§25②) — 후자는 calculate_trust_benefit_value 도구로 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력해야 한다.',
     input_schema: {
@@ -4942,6 +4958,55 @@ function toolCalculateUnsoldHouseOneHouseExclusion(p) {
   };
 }
 
+// 상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10) — 각 항목의 포함 여부·
+// 포함액을 판정해, 그 결과를 상속세 계산기의 "상속재산가액"에 합산해 넣는 용도다.
+function toolCalculateDeemedInheritanceProperty(p) {
+  p = p || {};
+  const itemType = p.itemType;
+  const validTypes = ['insurance', 'trust_settled', 'trust_benefit_from_others', 'retirement'];
+  if (validTypes.indexOf(itemType) === -1) {
+    return { error: 'itemType을 insurance(보험금)/trust_settled(피상속인이 신탁한 재산)/trust_benefit_from_others(피상속인이 타인신탁의 수익권 보유)/retirement(퇴직금등) 중에서 선택하세요.' };
+  }
+  const amount = Math.max(0, Number(p.amount) || 0);
+  let includedAmount, note;
+  if (itemType === 'insurance') {
+    if (p.wasPolicyholderDecedent) {
+      includedAmount = amount;
+      note = '피상속인이 보험계약자인 보험계약에서 받는 사망보험금이므로 전액 상속재산으로 봅니다(§8①).';
+    } else {
+      const ratio = Math.min(1, Math.max(0, Number(p.premiumPaidByDecedentRatio) || 0));
+      includedAmount = Math.round(amount * ratio);
+      note = ratio > 0
+        ? '보험계약자는 피상속인이 아니지만 피상속인이 실질적으로 보험료의 ' + Math.round(ratio * 100) + '%를 납부한 것으로 보아 그 비율만큼 상속재산으로 봅니다(§8②).'
+        : '보험계약자가 피상속인이 아니고 피상속인이 실질적으로 보험료를 납부한 사실도 없어 상속재산으로 보지 않습니다.';
+    }
+  } else if (itemType === 'trust_settled') {
+    if (p.isAlreadyGiftTaxedUnder33_1) {
+      includedAmount = 0;
+      note = '§33①에 따라 이미 수익자의 증여재산가액으로 처리된 신탁의 이익을 받을 권리이므로 상속재산으로 보지 않습니다(§9①단서).';
+    } else {
+      includedAmount = amount;
+      note = '피상속인이 신탁한 재산이므로 상속재산으로 봅니다(§9①본문).';
+    }
+  } else if (itemType === 'trust_benefit_from_others') {
+    includedAmount = amount;
+    note = '피상속인이 신탁으로 인하여 타인으로부터 신탁의 이익을 받을 권리를 소유하고 있었으므로 그 이익에 상당하는 가액을 상속재산에 포함합니다(§9②).';
+  } else { // retirement
+    if (p.isExcludedSurvivorPension) {
+      includedAmount = 0;
+      note = '국민연금법·공무원연금법 등이 정하는 유족연금·유족보상금류 등 §10 단서의 열거 항목에 해당하여 상속재산으로 보지 않습니다.';
+    } else {
+      includedAmount = amount;
+      note = '피상속인의 사망으로 지급되는 퇴직금·퇴직수당·공로금·연금 등이므로 상속재산으로 봅니다(§10본문).';
+    }
+  }
+  return {
+    원금액: amount,
+    간주상속재산포함액: includedAmount,
+    안내: note + ' 이 금액을 calculate_inheritance_tax 도구의 상속재산가액에 합산해 넣으세요.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -5977,6 +6042,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_new_house_acquisition_reduction' ||
         b.name === 'calculate_unsold_house_acquisition_reduction' ||
         b.name === 'calculate_unsold_house_one_house_exclusion' ||
+        b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -6178,6 +6244,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_unsold_house_one_house_exclusion') {
         const resultObj = toolCalculateUnsoldHouseOneHouseExclusion(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_deemed_inheritance_property') {
+        const resultObj = toolCalculateDeemedInheritanceProperty(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

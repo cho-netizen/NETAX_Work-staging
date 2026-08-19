@@ -2548,6 +2548,63 @@
     };
   };
 
+  // 상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10) — 민법상 상속재산은
+  // 아니지만 상속세법이 상속재산으로 의제하는 항목들. 각 항목의 포함 여부·포함액을 판정해, 그 결과를
+  // 위 상속세 계산기의 "상속재산가액"에 합산해 넣는 용도다.
+  // §8(보험금): 피상속인이 보험계약자이거나(①), 계약자가 다르더라도 피상속인이 실질적으로 보험료를
+  //   납부한 경우(②, 그 납부비율만큼) 사망보험금을 상속재산으로 본다.
+  // §9(신탁재산): 피상속인이 신탁한 재산은 원칙적으로 상속재산으로 보되(①본문), §33①에 따라 이미
+  //   수익자의 증여재산가액으로 처리된 신탁수익권 가액은 제외한다(①단서). 반대로 피상속인이 타인이
+  //   설정한 신탁의 이익을 받을 권리를 갖고 있었다면 그 가액도 상속재산에 포함한다(②).
+  // §10(퇴직금 등): 피상속인의 사망으로 지급되는 퇴직금·퇴직수당·공로금·연금 등은 원칙적으로 상속재산
+  //   으로 보되, 국민연금법·공무원연금법 등 열거된 유족연금·유족보상금류는 제외한다.
+  window.calculateDeemedInheritancePropertyJS = function (p) {
+    p = p || {};
+    const itemType = p.itemType;
+    const validTypes = ['insurance', 'trust_settled', 'trust_benefit_from_others', 'retirement'];
+    if (validTypes.indexOf(itemType) === -1) {
+      return { error: 'itemType을 insurance(보험금)/trust_settled(피상속인이 신탁한 재산)/trust_benefit_from_others(피상속인이 타인신탁의 수익권 보유)/retirement(퇴직금등) 중에서 선택하세요.' };
+    }
+    const amount = Math.max(0, Number(p.amount) || 0);
+    let includedAmount, note;
+    if (itemType === 'insurance') {
+      if (p.wasPolicyholderDecedent) {
+        includedAmount = amount;
+        note = '피상속인이 보험계약자인 보험계약에서 받는 사망보험금이므로 전액 상속재산으로 봅니다(§8①).';
+      } else {
+        const ratio = Math.min(1, Math.max(0, Number(p.premiumPaidByDecedentRatio) || 0));
+        includedAmount = Math.round(amount * ratio);
+        note = ratio > 0
+          ? '보험계약자는 피상속인이 아니지만 피상속인이 실질적으로 보험료의 ' + Math.round(ratio * 100) + '%를 납부한 것으로 보아 그 비율만큼 상속재산으로 봅니다(§8②).'
+          : '보험계약자가 피상속인이 아니고 피상속인이 실질적으로 보험료를 납부한 사실도 없어 상속재산으로 보지 않습니다.';
+      }
+    } else if (itemType === 'trust_settled') {
+      if (p.isAlreadyGiftTaxedUnder33_1) {
+        includedAmount = 0;
+        note = '§33①에 따라 이미 수익자의 증여재산가액으로 처리된 신탁의 이익을 받을 권리이므로 상속재산으로 보지 않습니다(§9①단서).';
+      } else {
+        includedAmount = amount;
+        note = '피상속인이 신탁한 재산이므로 상속재산으로 봅니다(§9①본문).';
+      }
+    } else if (itemType === 'trust_benefit_from_others') {
+      includedAmount = amount;
+      note = '피상속인이 신탁으로 인하여 타인으로부터 신탁의 이익을 받을 권리를 소유하고 있었으므로 그 이익에 상당하는 가액을 상속재산에 포함합니다(§9②).';
+    } else { // retirement
+      if (p.isExcludedSurvivorPension) {
+        includedAmount = 0;
+        note = '국민연금법·공무원연금법 등이 정하는 유족연금·유족보상금류 등 §10 단서의 열거 항목에 해당하여 상속재산으로 보지 않습니다.';
+      } else {
+        includedAmount = amount;
+        note = '피상속인의 사망으로 지급되는 퇴직금·퇴직수당·공로금·연금 등이므로 상속재산으로 봅니다(§10본문).';
+      }
+    }
+    return {
+      원금액: amount,
+      간주상속재산포함액: includedAmount,
+      안내: note + ' 이 금액을 상속세 계산기의 상속재산가액에 합산해 넣으세요.'
+    };
+  };
+
   // ============================================================
   // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
   // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.
