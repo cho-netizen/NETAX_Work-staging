@@ -905,6 +905,18 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_nontaxable_gift_property',
+    description: '비과세되는 증여재산(상증세법§46)에 해당하는지 판정한다. 국가·지자체 증여, 우리사주조합원 취득이익, 정당·사내근로복지기금·신용보증기금 등 단체 증여, 사회통념상 이재구호금품·치료비·생활비·교육비, 장애인 보험금, 국가유공자·의사자 유족의 성금, 비영리법인 승계재산 등 10가지 열거항목 중 하나에 해당하면 그 금액에 증여세를 부과하지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        itemType: { type: 'string', enum: ['government', 'esop', 'political_party', 'labor_welfare_fund', 'disaster_relief', 'credit_guarantee_fund', 'public_entity', 'disabled_insurance', 'veteran_bereaved', 'npo_succession'], description: 'government=국가·지자체 증여(1호), esop=우리사주조합 취득이익(2호), political_party=정당 증여(3호), labor_welfare_fund=사내근로복지기금 등(4호), disaster_relief=이재구호금품·치료비·생활비·교육비(5호), credit_guarantee_fund=신용보증기금 등(6호), public_entity=국가·지자체·공공단체(7호), disabled_insurance=장애인 보험금(8호), veteran_bereaved=국가유공자·의사자 유족 성금(9호), npo_succession=비영리법인 승계재산(10호).' },
+        amount: { type: 'number', description: '해당 항목의 금액(원).' }
+      },
+      required: ['itemType', 'amount']
+    }
+  },
+  {
     name: 'calculate_deemed_inheritance_property',
     description: '상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10)의 포함 여부와 포함액을 판정한다. 보험금(§8): 피상속인이 보험계약자이거나, 계약자가 다르더라도 피상속인이 실질적으로 보험료를 납부한 경우 그 비율만큼 상속재산으로 본다. 신탁재산(§9): 피상속인이 신탁한 재산은 원칙적으로 상속재산이나 §33①로 이미 증여재산가액 처리된 신탁수익권은 제외하고, 반대로 피상속인이 타인신탁의 수익권을 갖고 있었다면 그 가액도 포함한다. 퇴직금등(§10): 원칙적으로 상속재산이나 국민연금법 등이 정하는 유족연금류는 제외한다.',
     input_schema: {
@@ -5095,6 +5107,32 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   };
 }
 
+// 비과세되는 증여재산 (상증세법§46) — 열거된 항목에 해당하면 그 금액에 대해 증여세를 부과하지 않는다.
+const NONTAXABLE_GIFT_PROPERTY_LABELS_ = {
+  government: { 근거호: '§46 1호', 설명: '국가나 지방자치단체로부터 증여받은 재산의 가액' },
+  esop: { 근거호: '§46 2호', 설명: '우리사주조합원(소액주주 기준 충족)이 우리사주조합을 통해 취득한 주식의 취득가액과 시가의 차액 상당 이익' },
+  political_party: { 근거호: '§46 3호', 설명: '「정당법」에 따른 정당이 증여받은 재산의 가액' },
+  labor_welfare_fund: { 근거호: '§46 4호', 설명: '「근로복지기본법」에 따른 사내근로복지기금 등이 증여받은 재산의 가액' },
+  disaster_relief: { 근거호: '§46 5호', 설명: '사회통념상 인정되는 이재구호금품·치료비·피부양자의 생활비·교육비 등' },
+  credit_guarantee_fund: { 근거호: '§46 6호', 설명: '「신용보증기금법」에 따른 신용보증기금 등 유사단체가 증여받은 재산의 가액' },
+  public_entity: { 근거호: '§46 7호', 설명: '국가·지방자치단체 또는 공공단체가 증여받은 재산의 가액' },
+  disabled_insurance: { 근거호: '§46 8호', 설명: '장애인을 보험금 수령인으로 하는 대통령령이 정하는 보험의 보험금' },
+  veteran_bereaved: { 근거호: '§46 9호', 설명: '국가유공자의 유족이나 의사자의 유족이 증여받은 성금 및 물품 등 재산의 가액' },
+  npo_succession: { 근거호: '§46 10호', 설명: '비영리법인 해산·업무변경으로 다른 비영리법인이 승계받은 재산의 가액' }
+};
+function toolCalculateNontaxableGiftProperty(p) {
+  p = p || {};
+  const itemType = p.itemType;
+  const meta = NONTAXABLE_GIFT_PROPERTY_LABELS_[itemType];
+  if (!meta) return { error: 'itemType을 government/esop/political_party/labor_welfare_fund/disaster_relief/credit_guarantee_fund/public_entity/disabled_insurance/veteran_bereaved/npo_succession 중에서 선택하세요.' };
+  const amount = Math.max(0, Number(p.amount) || 0);
+  if (amount <= 0) return { error: '금액이 필요합니다.' };
+  return {
+    비과세여부: true, 근거호: meta.근거호, 비과세금액: amount,
+    안내: meta.설명 + ' — ' + meta.근거호 + '에 따라 증여세를 부과하지 않습니다. 세부 요건(대통령령으로 정하는 범위·한도 등)은 별도로 확인하세요. 이 금액은 calculate_gift_tax 도구의 증여재산가액에 포함하지 마세요.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -6132,6 +6170,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_unsold_house_one_house_exclusion' ||
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
+        b.name === 'calculate_nontaxable_gift_property' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -6343,6 +6382,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_specific_corporation_gift_tax') {
         const resultObj = toolCalculateSpecificCorporationGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_nontaxable_gift_property') {
+        const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

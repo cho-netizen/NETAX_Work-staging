@@ -2513,6 +2513,26 @@ function renderGiftPane(){
       '<div id="taxCalcSpecificCorpGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>비과세되는 증여재산(§46) — 국가·지자체 증여, 우리사주조합 취득이익, 정당·사내근로복지기금 등 단체 증여, 이재구호금품·치료비·생활비·교육비, 장애인 보험금, 국가유공자 유족 성금, 비영리법인 승계재산 등</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>항목 구분</label><select id="ntItemType">' +
+          '<option value="government">국가·지방자치단체 증여(1호)</option>' +
+          '<option value="esop">우리사주조합 취득이익(2호)</option>' +
+          '<option value="political_party">정당 증여(3호)</option>' +
+          '<option value="labor_welfare_fund">사내근로복지기금 등(4호)</option>' +
+          '<option value="disaster_relief">이재구호금품·치료비·생활비·교육비(5호)</option>' +
+          '<option value="credit_guarantee_fund">신용보증기금 등(6호)</option>' +
+          '<option value="public_entity">국가·지자체·공공단체(7호)</option>' +
+          '<option value="disabled_insurance">장애인 보험금(8호)</option>' +
+          '<option value="veteran_bereaved">국가유공자·의사자 유족 성금(9호)</option>' +
+          '<option value="npo_succession">비영리법인 승계재산(10호)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>금액</label><input type="number" id="ntAmount" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-nontaxable-gift">비과세 여부 확인하기</button>' +
+      '<div id="taxCalcNontaxableGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제11호서식] 연부연납(다년 분할납부) 계산 — 신고 후 매년 나눠 낼 회차별 세액을 계산합니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>세목</label><select id="ipGiftTaxType"><option value="gift" selected>증여세</option><option value="inheritance">상속세</option></select></div>' +
@@ -2856,6 +2876,17 @@ function renderRelatedPartyGiftResult(r){
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   html += '<div class="taxcalc-result-note">특수관계법인거래비율·주식보유비율은 과세제외매출액을 반영해 이미 계산된 최종 비율을 넣어야 합니다. 지배주주 판정, 다수 특수관계법인이 있는 경우의 증여자별 안분은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderNontaxableGiftResult(r){
+  const box = document.getElementById('taxCalcNontaxableGiftResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('근거호', r.근거호);
+  html += taxCalcResultRow('비과세금액', won(r.비과세금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -4203,6 +4234,12 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('scUnpaidDays').value) || 0
     };
     renderSpecificCorpGiftResult(calculateSpecificCorporationGiftTaxJS(input));
+  } else if (action === 'run-nontaxable-gift'){
+    const input = {
+      itemType: document.getElementById('ntItemType').value,
+      amount: numVal(document.getElementById('ntAmount').value) || 0
+    };
+    renderNontaxableGiftResult(calculateNontaxableGiftPropertyJS(input));
   } else if (action === 'run-related-party-gift'){
     const input = {
       companySize: document.getElementById('jmCompanySize').value,

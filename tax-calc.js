@@ -2548,6 +2548,34 @@
     };
   };
 
+  // 비과세되는 증여재산 (상증세법§46) — 열거된 항목에 해당하면 그 금액에 대해 증여세를 부과하지 않는다.
+  // 시행령이 정하는 세부요건(우리사주조합원 소액주주기준, 사내근로복지기금 유사단체 범위, 이재구호금품 등의
+  // 구체적 한도 등)은 이 도구가 검증하지 않으므로 별도로 확인해야 한다.
+  const NONTAXABLE_GIFT_PROPERTY_LABELS = {
+    government: { 근거호: '§46 1호', 설명: '국가나 지방자치단체로부터 증여받은 재산의 가액' },
+    esop: { 근거호: '§46 2호', 설명: '우리사주조합원(소액주주 기준 충족)이 우리사주조합을 통해 취득한 주식의 취득가액과 시가의 차액 상당 이익' },
+    political_party: { 근거호: '§46 3호', 설명: '「정당법」에 따른 정당이 증여받은 재산의 가액' },
+    labor_welfare_fund: { 근거호: '§46 4호', 설명: '「근로복지기본법」에 따른 사내근로복지기금 등이 증여받은 재산의 가액' },
+    disaster_relief: { 근거호: '§46 5호', 설명: '사회통념상 인정되는 이재구호금품·치료비·피부양자의 생활비·교육비 등' },
+    credit_guarantee_fund: { 근거호: '§46 6호', 설명: '「신용보증기금법」에 따른 신용보증기금 등 유사단체가 증여받은 재산의 가액' },
+    public_entity: { 근거호: '§46 7호', 설명: '국가·지방자치단체 또는 공공단체가 증여받은 재산의 가액' },
+    disabled_insurance: { 근거호: '§46 8호', 설명: '장애인을 보험금 수령인으로 하는 대통령령이 정하는 보험의 보험금' },
+    veteran_bereaved: { 근거호: '§46 9호', 설명: '국가유공자의 유족이나 의사자의 유족이 증여받은 성금 및 물품 등 재산의 가액' },
+    npo_succession: { 근거호: '§46 10호', 설명: '비영리법인 해산·업무변경으로 다른 비영리법인이 승계받은 재산의 가액' }
+  };
+  window.calculateNontaxableGiftPropertyJS = function (p) {
+    p = p || {};
+    const itemType = p.itemType;
+    const meta = NONTAXABLE_GIFT_PROPERTY_LABELS[itemType];
+    if (!meta) return { error: 'itemType을 government/esop/political_party/labor_welfare_fund/disaster_relief/credit_guarantee_fund/public_entity/disabled_insurance/veteran_bereaved/npo_succession 중에서 선택하세요.' };
+    const amount = Math.max(0, Number(p.amount) || 0);
+    if (amount <= 0) return { error: '금액이 필요합니다.' };
+    return {
+      비과세여부: true, 근거호: meta.근거호, 비과세금액: amount,
+      안내: meta.설명 + ' — ' + meta.근거호 + '에 따라 증여세를 부과하지 않습니다. 세부 요건(대통령령으로 정하는 범위·한도 등)은 별도로 확인하세요. 이 금액은 증여세 계산기의 증여재산가액에 포함하지 마세요.'
+    };
+  };
+
   // 특정법인과의 거래를 통한 이익의 증여 의제 (상증세법§45의5, 시행령§34의5) — 지배주주등의 주식보유비율이
   // 30% 이상인 특정법인이 지배주주의 특수관계인과 무상제공·저가양도·고가양수·불균등 자본거래 등을 하면,
   // 특정법인의 이익 × 지배주주등의 주식보유비율을 그 지배주주등이 증여받은 것으로 본다. §47①에 §45의5가
