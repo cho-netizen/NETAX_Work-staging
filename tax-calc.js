@@ -2548,6 +2548,47 @@
     };
   };
 
+  // 중소기업간 통합·법인전환에 대한 양도소득세 이월과세 (조특법§31,§32) — 사업용고정자산을 통합법인(§31)에
+  // 양도하거나 현물출자·사업양수도로 법인전환(§32)하면, 그 시점에는 양도소득세를 과세하지 않고 통합법인·
+  // 전환법인이 나중에 그 자산을 양도할 때 정산한다(이월과세액 자체는 일반 양도세 계산기로 별도 계산).
+  // 다만 이월과세 적용일(§31은 사업용고정자산 양도일, §32는 법인 설립등기일)부터 5년 이내에 승계받은
+  // 사업을 폐지하거나 통합·전환으로 취득한 주식등의 50% 이상을 처분하면, 그 사유발생일이 속하는 달의
+  // 말일부터 2개월 이내에 이월과세액(법인이 이미 납부한 세액 제외)을 양도소득세로 납부해야 한다(§31⑦,
+  // §32⑤) — 다른 사후관리 위반과 달리 이자상당가산액은 법문에 없다.
+  window.calculateBusinessTransferCarryoverJS = function (p) {
+    p = p || {};
+    const provision = p.provision;
+    if (['sect31', 'sect32'].indexOf(provision) === -1) return { error: 'provision을 sect31(중소기업간 통합)/sect32(법인전환) 중에서 선택하세요.' };
+    const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+    if (deferredTaxAmount <= 0) return { error: '이월과세액(일반 양도세 계산기로 별도 계산한 양도소득세)이 필요합니다.' };
+    const triggerEvent = p.triggerEvent;
+    if (['none', 'business_discontinued', 'shares_disposed_50pct_plus'].indexOf(triggerEvent) === -1) {
+      return { error: 'triggerEvent을 none(사후관리 위반 없음)/business_discontinued(승계사업 폐지)/shares_disposed_50pct_plus(취득주식 50%이상 처분) 중에서 선택하세요.' };
+    }
+    const provisionLabel = provision === 'sect31' ? '조특법§31(중소기업간 통합)' : '조특법§32(법인전환)';
+    if (triggerEvent === 'none') {
+      return {
+        상태: '이월과세_적용중', 이월과세액: deferredTaxAmount, 납부세액: 0,
+        안내: provisionLabel + '에 따라 이월과세를 적용받아 현재는 양도소득세를 납부하지 않습니다. ' + (provision === 'sect31' ? '통합법인' : '전환법인') + '이 나중에 이 자산을 양도할 때 이월과세액이 정산됩니다.'
+      };
+    }
+    const yearsSinceTransfer = Number(p.yearsSinceTransfer);
+    if (!(yearsSinceTransfer >= 0)) return { error: (provision === 'sect31' ? '사업용고정자산 양도일' : '법인 설립등기일') + '부터 사유발생일까지의 경과연수가 필요합니다.' };
+    if (yearsSinceTransfer > 5) {
+      return {
+        상태: '사후관리기간_경과', 이월과세액: deferredTaxAmount, 납부세액: 0,
+        안내: (provision === 'sect31' ? '사업용고정자산 양도일' : '법인 설립등기일') + '부터 5년이 지나 사후관리 추징의무가 소멸했습니다(' + provisionLabel + '). 다만 이월과세 자체는 계속 유지되며, 법인이 그 자산을 양도할 때 정산됩니다.'
+      };
+    }
+    const alreadyPaidByCorp = Number(p.alreadyPaidByCorp) || 0;
+    const clawbackAmount = Math.max(0, deferredTaxAmount - alreadyPaidByCorp);
+    return {
+      상태: '추징대상', 이월과세액: deferredTaxAmount, 법인기납부세액: alreadyPaidByCorp,
+      납부세액: clawbackAmount,
+      안내: (triggerEvent === 'business_discontinued' ? '승계받은 사업을 폐지하여' : '통합·전환으로 취득한 주식등의 50% 이상을 처분하여') + ' ' + provisionLabel + '의 사후관리 위반 사유가 발생했습니다. 사유발생일이 속하는 달의 말일부터 2개월 이내에 이월과세액(법인이 이미 납부한 세액 제외)을 양도소득세로 납부해야 합니다. 이 사후관리 위반에는 별도 이자상당가산액이 법문에 없습니다.'
+    };
+  };
+
   // 합병에 따른 이익의 증여 (상증세법§38, 시행령§28) — 특수관계 법인간 합병에서 대주주등이 합병대가를
   // 주식등으로 교부받는 경우(가장 흔한 유형만 구현, 주식등 외 재산으로 받는 경우는 별도 계산 필요),
   // (합병후 신설·존속법인 1주당평가액 - 과대평가법인 1주당평가액×(과대평가법인 합병전주식수÷과대평가법인

@@ -1704,6 +1704,24 @@ function renderTransferPane(){
       '<div id="taxCalcCarryoverResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>중소기업간 통합·법인전환 양도소득세 이월과세(조특법§31·§32) — 사업용고정자산을 통합법인에 양도하거나 현물출자·사업양수도로 법인전환할 때. 이월과세액은 위 일반 양도세 계산기로 별도 계산해 입력하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="btProvision">' +
+          '<option value="sect31">§31(중소기업간 통합)</option><option value="sect32">§32(법인전환)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>이월과세액</label><input type="number" id="btDeferredTax" placeholder="원 (일반 양도세 계산기로 별도 계산)"></div>' +
+        '<div class="taxcalc-field"><label>사후관리 위반 사유</label><select id="btTriggerEvent">' +
+          '<option value="none">없음(이월과세 계속 유지)</option>' +
+          '<option value="business_discontinued">승계받은 사업 폐지</option>' +
+          '<option value="shares_disposed_50pct_plus">취득주식·출자지분 50%이상 처분</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>양도일(§31)/설립등기일(§32)부터 경과연수</label><input type="number" id="btYearsSince" placeholder="년" maxlength="2"></div>' +
+        '<div class="taxcalc-field"><label>법인이 이미 납부한 세액</label><input type="number" id="btAlreadyPaid" placeholder="원 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-business-transfer-carryover">이월과세·사후관리 판정하기</button>' +
+      '<div id="taxCalcBusinessTransferCarryoverResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>양도소득의 부당행위계산 - 증여 후 우회양도 부인(소득세법§101②) — 배우자·직계존비속이 아닌 특수관계인(형제자매 등)에게 증여 후 수증자가 10년 이내 재양도할 때. 증여세·양도세는 각각 별도로 계산한 뒤 그 결과를 아래에 입력해 비교합니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="ddSpouseLineal"><label for="ddSpouseLineal">배우자·직계존비속으로서 이월과세(§97의2) 적용대상임(체크시 §101②는 적용대상 제외)</label></div>' +
@@ -2063,6 +2081,18 @@ function renderTransferResult(r){
   '</div>';
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '<div class="taxcalc-result-note">이 결과는 참고용 개산이며, 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderBusinessTransferCarryoverResult(r){
+  const box = document.getElementById('taxCalcBusinessTransferCarryoverResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('이월과세액', won(r.이월과세액));
+  if (r.법인기납부세액 !== undefined) html += taxCalcResultRow('법인 기납부세액', '-' + won(r.법인기납부세액));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -4130,6 +4160,15 @@ taxCalcView.addEventListener('click', function(e){
       giftTaxableValue: numVal(document.getElementById('coGiftTaxableValue').value) || 0
     };
     renderCarryoverResult(calculateTransferTaxWithCarryoverJS(input));
+  } else if (action === 'run-business-transfer-carryover'){
+    const input = {
+      provision: document.getElementById('btProvision').value,
+      deferredTaxAmount: numVal(document.getElementById('btDeferredTax').value) || 0,
+      triggerEvent: document.getElementById('btTriggerEvent').value,
+      yearsSinceTransfer: numVal(document.getElementById('btYearsSince').value) || 0,
+      alreadyPaidByCorp: numVal(document.getElementById('btAlreadyPaid').value) || 0
+    };
+    renderBusinessTransferCarryoverResult(calculateBusinessTransferCarryoverJS(input));
   } else if (action === 'run-donor-direct-transfer'){
     const input = {
       isSpouseOrLinealCarryoverApplies: document.getElementById('ddSpouseLineal').checked,
