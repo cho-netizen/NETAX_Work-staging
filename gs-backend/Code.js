@@ -825,6 +825,25 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_new_house_acquisition_reduction',
+    description: '신축주택·미분양주택 취득자 양도소득세 감면(조특법§99,§99의2,§99의3)을 계산한다. 세 조문 모두 취득기간이 정해진 특정 신축주택·미분양주택을 취득한 경우, 취득일부터 5년 이내 양도하면 그 기간 발생한 양도소득금액 전액을 과세대상에서 제외하고(§99의2는 형식상 세액 100% 감면이나 결과는 동일), 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액만 과세대상에서 뺀다(나머지는 정상 과세). §99는 1998.5.22~1999.6.30(국민주택 1999.12.31) 취득분, §99의2는 2013.4.1~2013.12.31 취득분(6억원 또는 85㎡ 요건), §99의3은 2001.5.23~2003.6.30 취득분에 적용된다. 취득기간·지역요건·감면신청 등 게이트는 이 도구가 검증하지 않으므로 별도로 확인해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        provision: { type: 'string', enum: ['sect99', 'sect99_2', 'sect99_3'], description: 'sect99=조특법§99(1998~99년 취득), sect99_2=조특법§99의2(2013년 취득), sect99_3=조특법§99의3(2001~2003년 취득).' },
+        isHighPriceHouseExcluded: { type: 'boolean', description: '소득세법§89①3호에 따라 양도소득세 비과세대상에서 제외되는 고가주택에 해당하면 true(적용배제).' },
+        isPriceOrAreaQualified: { type: 'boolean', description: 'provision이 sect99_2일 때만 — 취득가액 6억원 이하이거나 전용면적 85㎡ 이하 요건을 충족하는지.' },
+        acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD).' },
+        transferDate: { type: 'string', description: '양도일(YYYY-MM-DD).' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(감정가액 등, 원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다(부정확할 수 있음).' }
+      },
+      required: ['provision']
+    }
+  },
+  {
     name: 'calculate_trust_income_gift_tax',
     description: '신탁이익의 증여(상증세법§33)를 계산한다. 위탁자가 타인을 수익자로 지정한 신탁에서 원본 또는 수익을 받을 권리를 갖게 하는 경우, 원칙적으로 그 원본·수익이 실제 지급되는 날(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①)을 증여일로 하여 과세한다. 원본·수익을 한번에 받으면 그 가액 그대로가 증여재산가액이고, 여러 차례 나눠 받는 경우에는 증여시기를 기준으로 시행령§61(신탁수익권 평가)을 준용해 평가한 가액을 사용한다(시행령§25②) — 후자는 calculate_trust_benefit_value 도구로 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력해야 한다.',
     input_schema: {
@@ -4712,6 +4731,71 @@ function toolCalculateStockTransferTax(p) {
   };
 }
 
+// 신축주택·미분양주택 취득자 양도소득세 감면(조특법§99,§99의2,§99의3) — 세 조문 모두 취득기간이
+// 정해진 특정 신축주택·미분양주택(§99: 1998.5.22~1999.6.30(국민주택 1999.12.31), §99의2:
+// 2013.4.1~2013.12.31, §99의3: 2001.5.23~2003.6.30)을 취득한 경우, 취득일부터 5년 이내 양도하면
+// 그 기간 발생한 양도소득금액 전액을 과세대상에서 제외하고(§99의2는 형식상 "세액 100% 감면"이지만
+// 결과는 동일), 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액만 과세대상에서 뺀다.
+function toolCalculateNewHouseAcquisitionReduction(p) {
+  p = p || {};
+  const provision = p.provision;
+  if (['sect99', 'sect99_2', 'sect99_3'].indexOf(provision) === -1) {
+    return { error: 'provision을 sect99(1998~99년 취득)/sect99_2(2013년 취득)/sect99_3(2001~2003년 취득) 중에서 선택하세요.' };
+  }
+  if (p.isHighPriceHouseExcluded) {
+    return {
+      적용여부: false,
+      안내: '고가주택(소득세법§89①3호 비과세 제외 대상)에 해당하여 이 감면(조특법' + (provision === 'sect99' ? '§99' : provision === 'sect99_2' ? '§99의2' : '§99의3') + ')을 적용하지 않습니다.'
+    };
+  }
+  if (provision === 'sect99_2' && !p.isPriceOrAreaQualified) {
+    return {
+      적용여부: false,
+      안내: '조특법§99의2는 취득가액 6억원 이하이거나 전용면적 85㎡ 이하인 주택만 적용됩니다(요건 미충족).'
+    };
+  }
+  const acquisitionDate = p.acquisitionDate;
+  const transferDate = p.transferDate;
+  if (!acquisitionDate || !transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+  const acqTime = new Date(acquisitionDate).getTime();
+  const trfTime = new Date(transferDate).getTime();
+  if (!(trfTime > acqTime)) return { error: '양도일은 취득일 이후여야 합니다.' };
+  const yearsHeld = (trfTime - acqTime) / (365.25 * 24 * 3600 * 1000);
+
+  const transferPrice = Number(p.transferPrice) || 0;
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+  const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+  let exemptGain, note;
+  if (yearsHeld <= 5) {
+    exemptGain = totalGain;
+    note = provision === 'sect99_2'
+      ? '취득일로부터 5년 이내 양도이므로 그 양도소득세 전액(100%)을 감면합니다(조특법§99의2①).'
+      : '취득일로부터 5년 이내 양도이므로 취득일부터 양도일까지 발생한 양도소득금액 전액을 과세대상소득금액에서 뺍니다.';
+  } else {
+    let gainWithinFiveYears;
+    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
+    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
+      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
+      note = '취득일로부터 5년 초과 보유 후 양도 — 입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액을 계산해 과세대상소득금액에서 뺐습니다.';
+    } else {
+      gainWithinFiveYears = Math.round(totalGain * 5 / yearsHeld);
+      note = '취득일로부터 5년 초과 보유 후 양도 — 5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정했습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
+    }
+    exemptGain = Math.max(0, Math.min(gainWithinFiveYears, totalGain));
+  }
+  const taxableGain = Math.max(0, totalGain - exemptGain);
+  return {
+    적용여부: true,
+    보유기간_년: Math.round(yearsHeld * 100) / 100,
+    전체양도차익: Math.round(totalGain),
+    감면_비과세대상_양도소득금액: Math.round(exemptGain),
+    과세대상양도소득금액: taxableGain,
+    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다).'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -5744,6 +5828,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_insurance_proceeds_gift_tax' ||
         b.name === 'calculate_trust_income_gift_tax' ||
         b.name === 'calculate_donor_direct_transfer_deemed' ||
+        b.name === 'calculate_new_house_acquisition_reduction' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -5930,6 +6015,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_donor_direct_transfer_deemed') {
         const resultObj = toolCalculateDonorDirectTransferDeemed(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_new_house_acquisition_reduction') {
+        const resultObj = toolCalculateNewHouseAcquisitionReduction(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

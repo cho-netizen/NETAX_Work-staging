@@ -2363,6 +2363,73 @@
     };
   };
 
+  // 신축주택·미분양주택 취득자 양도소득세 감면(조특법§99,§99의2,§99의3) — 세 조문 모두 취득기간이
+  // 정해진 특정 신축주택·미분양주택(§99: 1998.5.22~1999.6.30(국민주택 1999.12.31), §99의2:
+  // 2013.4.1~2013.12.31, §99의3: 2001.5.23~2003.6.30)을 취득한 경우, 취득일부터 5년 이내 양도하면
+  // 그 기간 발생한 양도소득금액 전액을 과세대상에서 제외하고(§99의2는 형식상 "세액 100% 감면"이지만
+  // 결과는 동일), 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액만 과세대상에서 뺀다(나머지는
+  // 정상 과세). 고가주택(§99,§99의3) 또는 6억원·85㎡ 요건 미충족(§99의2)이면 적용하지 않는다. 취득기간·
+  // 지역요건(§99의2③)·감면신청(③) 등 게이트는 이 도구가 검증하지 않으므로 별도로 확인해야 한다.
+  window.calculateNewHouseAcquisitionReductionJS = function (p) {
+    p = p || {};
+    const provision = p.provision;
+    if (['sect99', 'sect99_2', 'sect99_3'].indexOf(provision) === -1) {
+      return { error: 'provision을 sect99(1998~99년 취득)/sect99_2(2013년 취득)/sect99_3(2001~2003년 취득) 중에서 선택하세요.' };
+    }
+    if (p.isHighPriceHouseExcluded) {
+      return {
+        적용여부: false,
+        안내: '고가주택(소득세법§89①3호 비과세 제외 대상)에 해당하여 이 감면(조특법' + (provision === 'sect99' ? '§99' : provision === 'sect99_2' ? '§99의2' : '§99의3') + ')을 적용하지 않습니다.'
+      };
+    }
+    if (provision === 'sect99_2' && !p.isPriceOrAreaQualified) {
+      return {
+        적용여부: false,
+        안내: '조특법§99의2는 취득가액 6억원 이하이거나 전용면적 85㎡ 이하인 주택만 적용됩니다(요건 미충족).'
+      };
+    }
+    const acquisitionDate = p.acquisitionDate;
+    const transferDate = p.transferDate;
+    if (!acquisitionDate || !transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+    const acqTime = new Date(acquisitionDate).getTime();
+    const trfTime = new Date(transferDate).getTime();
+    if (!(trfTime > acqTime)) return { error: '양도일은 취득일 이후여야 합니다.' };
+    const yearsHeld = (trfTime - acqTime) / (365.25 * 24 * 3600 * 1000);
+
+    const transferPrice = Number(p.transferPrice) || 0;
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+    const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+    let exemptGain, note;
+    if (yearsHeld <= 5) {
+      exemptGain = totalGain;
+      note = provision === 'sect99_2'
+        ? '취득일로부터 5년 이내 양도이므로 그 양도소득세 전액(100%)을 감면합니다(조특법§99의2①).'
+        : '취득일로부터 5년 이내 양도이므로 취득일부터 양도일까지 발생한 양도소득금액 전액을 과세대상소득금액에서 뺍니다.';
+    } else {
+      let gainWithinFiveYears;
+      const fiveYearMarkValue = Number(p.fiveYearMarkValue);
+      if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
+        gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
+        note = '취득일로부터 5년 초과 보유 후 양도 — 입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액을 계산해 과세대상소득금액에서 뺐습니다.';
+      } else {
+        gainWithinFiveYears = Math.round(totalGain * 5 / yearsHeld);
+        note = '취득일로부터 5년 초과 보유 후 양도 — 5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정했습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
+      }
+      exemptGain = Math.max(0, Math.min(gainWithinFiveYears, totalGain));
+    }
+    const taxableGain = Math.max(0, totalGain - exemptGain);
+    return {
+      적용여부: true,
+      보유기간_년: Math.round(yearsHeld * 100) / 100,
+      전체양도차익: Math.round(totalGain),
+      감면_비과세대상_양도소득금액: Math.round(exemptGain),
+      과세대상양도소득금액: taxableGain,
+      안내: note + ' 이 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 계산기에서 별도 적용됩니다).'
+    };
+  };
+
   // ============================================================
   // 상속증여재산 평가 (상속세및증여세법 §60~66, 보충적평가방법) — gs-backend와 동일 로직.
   // 증여세·상속세 화면의 "자산 목록"에서 자산별 평가액을 구할 때 이 함수들을 쓴다.

@@ -1661,6 +1661,26 @@ function renderTransferPane(){
       '<div id="taxCalcDonorDirectTransferResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>신축주택·미분양주택 취득자 양도세 감면(조특법§99/§99의2/§99의3) — 취득기간이 정해진 특정 신축주택·미분양주택을 취득해 5년 이내(또는 그 이후) 양도할 때. 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 양도차익으로 대신 입력하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="nhProvision">' +
+          '<option value="sect99">§99(1998.5.22~1999.6.30, 국민주택은 ~1999.12.31 취득)</option>' +
+          '<option value="sect99_2">§99의2(2013.4.1~2013.12.31 취득, 6억원 또는 85㎡ 이하)</option>' +
+          '<option value="sect99_3">§99의3(2001.5.23~2003.6.30 취득)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="nhHighPrice"><label for="nhHighPrice">고가주택(소득세법§89①3호 비과세 제외 대상)에 해당함(체크시 적용배제)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="nhPriceAreaQualified"><label for="nhPriceAreaQualified">[§99의2만] 취득가액 6억원 이하 또는 전용면적 85㎡ 이하 요건 충족</label></div>' +
+        '<div class="taxcalc-field"><label>취득일</label><input type="date" id="nhAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="nhTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="nhAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="nhTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="nhNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="nhFiveYearMarkValue" placeholder="원 (없으면 전체 양도차익을 보유기간에 선형 안분해 추정)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-new-house-reduction">감면대상 양도소득금액 계산하기</button>' +
+      '<div id="taxCalcNewHouseReductionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -2009,6 +2029,26 @@ function renderDonorDirectTransferResult(r){
   if (r.수증자부담세액합계 !== undefined) html += taxCalcResultRow('수증자 부담세액 합계(증여세+양도세)', won(r.수증자부담세액합계));
   if (r.증여자직접양도시양도세 !== undefined) html += taxCalcResultRow('증여자 직접양도시 양도소득세', won(r.증여자직접양도시양도세));
   if (r.납부세액 !== undefined) html += taxCalcResultRow('실제 부담할 세액', won(r.납부세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderNewHouseReductionResult(r){
+  const box = document.getElementById('taxCalcNewHouseReductionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+    if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  html += taxCalcResultRow('보유기간', r.보유기간_년 + '년');
+  html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+  html += taxCalcResultRow('감면·비과세대상 양도소득금액', '-' + won(r.감면_비과세대상_양도소득금액));
+  html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -3720,6 +3760,19 @@ taxCalcView.addEventListener('click', function(e){
       donorDirectTransferTax: numVal(document.getElementById('ddDonorTax').value) || 0
     };
     renderDonorDirectTransferResult(calculateDonorDirectTransferDeemedJS(input));
+  } else if (action === 'run-new-house-reduction'){
+    const input = {
+      provision: document.getElementById('nhProvision').value,
+      isHighPriceHouseExcluded: document.getElementById('nhHighPrice').checked,
+      isPriceOrAreaQualified: document.getElementById('nhPriceAreaQualified').checked,
+      acquisitionDate: document.getElementById('nhAcquisitionDate').value,
+      transferDate: document.getElementById('nhTransferDate').value,
+      acquisitionPrice: numVal(document.getElementById('nhAcquisitionPrice').value) || 0,
+      transferPrice: numVal(document.getElementById('nhTransferPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('nhNecessaryExpenses').value) || 0,
+      fiveYearMarkValue: numVal(document.getElementById('nhFiveYearMarkValue').value) || 0
+    };
+    renderNewHouseReductionResult(calculateNewHouseAcquisitionReductionJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,
