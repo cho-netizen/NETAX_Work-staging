@@ -1681,6 +1681,40 @@ function renderTransferPane(){
       '<div id="taxCalcNewHouseReductionResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>미분양주택 취득자 양도세 특례(조특법§98의3~§98의8) — 특정기간 미분양주택·준공후미분양주택을 취득해 양도할 때. 결과의 "과세대상양도소득금액"을 위 일반 양도세 계산기에 양도차익으로 대신 입력하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="uhProvision">' +
+          '<option value="sect98_3">§98의3(2009.2~2010.2 취득, 5년이내100%·수도권과밀60%)</option>' +
+          '<option value="sect98_4">§98의4(비거주자, 2009.3.16~2010.2.11 취득, 세액10%정액감면)</option>' +
+          '<option value="sect98_5">§98의5(2010.2~2011.4 취득, 분양가인하율별 60/80/100%)</option>' +
+          '<option value="sect98_6">§98의6(2011.5 이전 준공후미분양, 50%)</option>' +
+          '<option value="sect98_7">§98의7(2012.9~12 취득, 100%)</option>' +
+          '<option value="sect98_8">§98의8(2015년 취득, 5년이상임대, 5년간발생분의 50%)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="uhOverconcentration"><label for="uhOverconcentration">[§98의3만] 수도권과밀억제권역 소재(감면율 60%로 낮아짐)</label></div>' +
+        '<div class="taxcalc-field"><label>[§98의5만] 분양가격 인하율</label><input type="number" step="0.1" id="uhDiscountRate" placeholder="%"></div>' +
+        '<div class="taxcalc-field"><label>취득일</label><input type="date" id="uhAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="uhTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="uhAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="uhTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="uhNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="uhFiveYearMarkValue" placeholder="원 (없으면 선형 안분 추정)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-unsold-house-reduction">감면대상 양도소득금액 계산하기</button>' +
+      '<div id="taxCalcUnsoldHouseReductionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>수도권 밖 준공후미분양주택 1세대1주택 비과세 특례(조특법§98의9, 2024.1.10~2026.12.31 취득분, 현재 시행중) — 세액은 계산하지 않고 적용 가능 여부만 판정합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>준공후미분양주택 취득일</label><input type="date" id="u9AcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="u9OutsideMetro"><label for="u9OutsideMetro">수도권 밖의 지역에 소재</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="u9WasOneHouse"><label for="u9WasOneHouse">취득 전 1주택을 보유한 1세대였음</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="u9AreaPriceOk"><label for="u9AreaPriceOk">전용면적·취득가액 등 시행령 요건 충족(별도 확인)</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-unsold-house-one-house">적용 가능 여부 판정하기</button>' +
+      '<div id="taxCalcUnsoldHouseOneHouseResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -2049,6 +2083,42 @@ function renderNewHouseReductionResult(r){
   html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
   html += taxCalcResultRow('감면·비과세대상 양도소득금액', '-' + won(r.감면_비과세대상_양도소득금액));
   html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderUnsoldHouseReductionResult(r){
+  const box = document.getElementById('taxCalcUnsoldHouseReductionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+    if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  if (r.세액감면율 !== undefined){
+    html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+    html += taxCalcResultRow('세액감면율', r.세액감면율 + '%', { total: true });
+  } else {
+    html += taxCalcResultRow('보유기간', r.보유기간_년 + '년');
+    html += taxCalcResultRow('적용감면율', r.적용감면율 + '%');
+    html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+    html += taxCalcResultRow('감면·비과세대상 양도소득금액', '-' + won(r.감면_비과세대상_양도소득금액));
+    html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
+  }
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderUnsoldHouseOneHouseResult(r){
+  const box = document.getElementById('taxCalcUnsoldHouseOneHouseResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -3773,6 +3843,27 @@ taxCalcView.addEventListener('click', function(e){
       fiveYearMarkValue: numVal(document.getElementById('nhFiveYearMarkValue').value) || 0
     };
     renderNewHouseReductionResult(calculateNewHouseAcquisitionReductionJS(input));
+  } else if (action === 'run-unsold-house-reduction'){
+    const input = {
+      provision: document.getElementById('uhProvision').value,
+      isOverconcentrationZone: document.getElementById('uhOverconcentration').checked,
+      priceDiscountRate: numVal(document.getElementById('uhDiscountRate').value) || 0,
+      acquisitionDate: document.getElementById('uhAcquisitionDate').value,
+      transferDate: document.getElementById('uhTransferDate').value,
+      acquisitionPrice: numVal(document.getElementById('uhAcquisitionPrice').value) || 0,
+      transferPrice: numVal(document.getElementById('uhTransferPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('uhNecessaryExpenses').value) || 0,
+      fiveYearMarkValue: numVal(document.getElementById('uhFiveYearMarkValue').value) || 0
+    };
+    renderUnsoldHouseReductionResult(calculateUnsoldHouseAcquisitionReductionJS(input));
+  } else if (action === 'run-unsold-house-one-house'){
+    const input = {
+      acquisitionDate: document.getElementById('u9AcquisitionDate').value,
+      isOutsideMetropolitanArea: document.getElementById('u9OutsideMetro').checked,
+      wasOneHouseBeforeAcquisition: document.getElementById('u9WasOneHouse').checked,
+      meetsAreaAndPriceRequirements: document.getElementById('u9AreaPriceOk').checked
+    };
+    renderUnsoldHouseOneHouseResult(calculateUnsoldHouseOneHouseExclusionJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,

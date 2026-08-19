@@ -844,6 +844,39 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_unsold_house_acquisition_reduction',
+    description: '미분양주택의 취득자에 대한 양도소득세 과세특례(조특법§98의3,§98의4,§98의5,§98의6,§98의7,§98의8)를 계산한다. §98의3(2009.2~2010.2 취득, 5년이내 100%·수도권과밀 60% 감면, 5년초과시 5년간발생분에 같은 비율), §98의5(2010.2~2011.4 취득, 분양가인하율 10%이하 60%·20%이하 80%·초과 100%), §98의6(2011.5 이전 준공후미분양, 50%), §98의7(2012.9~12 취득, 100%), §98의8(2015년 취득 5년이상임대, 5년간발생분의 50%)은 모두 취득일부터 5년 이내 양도시 그 비율만큼 세액감면(=소득금액에서 제외), 5년 초과 후 양도시 5년간 발생분에 그 비율을 곱한 금액만 과세대상에서 제외하는 공통구조다. §98의4(비거주자, 2009.3.16~2010.2.11 취득한 §98의3 미분양주택 외 주택)만 예외로 보유기간 요건 없이 산출세액의 10%를 그대로 감면한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        provision: { type: 'string', enum: ['sect98_3', 'sect98_4', 'sect98_5', 'sect98_6', 'sect98_7', 'sect98_8'], description: '적용할 조문.' },
+        isOverconcentrationZone: { type: 'boolean', description: 'provision이 sect98_3일 때만 — 수도권과밀억제권역 소재 여부(true면 감면율 60%, false면 100%).' },
+        priceDiscountRate: { type: 'number', description: 'provision이 sect98_5일 때만 — 분양가격 인하율(%, 입주자모집공고안 공시 분양가격 대비).' },
+        acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD). sect98_4는 불필요.' },
+        transferDate: { type: 'string', description: '양도일(YYYY-MM-DD). sect98_4는 불필요.' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다.' }
+      },
+      required: ['provision']
+    }
+  },
+  {
+    name: 'calculate_unsold_house_one_house_exclusion',
+    description: '수도권 밖 준공후미분양주택 취득자에 대한 1세대1주택 비과세 특례(조특법§98의9, 2024.1.10~2026.12.31 취득분, 현재 시행중)를 판정한다. 1주택을 보유한 1세대가 이 기간 중 수도권 밖 준공후미분양주택을 취득한 후 종전주택을 양도하면, 그 준공후미분양주택은 1세대1주택 비과세(소득세법§89①3호) 판정시 소유주택으로 보지 않는다. 세액을 계산하지 않고 적용 가능 여부만 판정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        acquisitionDate: { type: 'string', description: '준공후미분양주택의 취득일(YYYY-MM-DD).' },
+        isOutsideMetropolitanArea: { type: 'boolean', description: '수도권 밖의 지역에 소재하는지.' },
+        wasOneHouseBeforeAcquisition: { type: 'boolean', description: '이 준공후미분양주택 취득 전 1주택을 보유한 1세대였는지.' },
+        meetsAreaAndPriceRequirements: { type: 'boolean', description: '전용면적·취득가액 등 시행령이 정하는 요건을 충족하는지.' }
+      },
+      required: ['acquisitionDate']
+    }
+  },
+  {
     name: 'calculate_trust_income_gift_tax',
     description: '신탁이익의 증여(상증세법§33)를 계산한다. 위탁자가 타인을 수익자로 지정한 신탁에서 원본 또는 수익을 받을 권리를 갖게 하는 경우, 원칙적으로 그 원본·수익이 실제 지급되는 날(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①)을 증여일로 하여 과세한다. 원본·수익을 한번에 받으면 그 가액 그대로가 증여재산가액이고, 여러 차례 나눠 받는 경우에는 증여시기를 기준으로 시행령§61(신탁수익권 평가)을 준용해 평가한 가액을 사용한다(시행령§25②) — 후자는 calculate_trust_benefit_value 도구로 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력해야 한다.',
     input_schema: {
@@ -4796,6 +4829,119 @@ function toolCalculateNewHouseAcquisitionReduction(p) {
   };
 }
 
+// 미분양주택의 취득자에 대한 양도소득세 과세특례 (조특법§98의3,§98의4,§98의5,§98의6,§98의7,§98의8) — §99
+// 계열과 같은 "5년 이내 양도시 감면율만큼 세액감면(=소득금액 전액에 감면율 곱해 제외), 5년 초과 후
+// 양도시 5년간 발생분에 감면율을 곱한 금액만 소득금액에서 차감"구조를 공유하되, 조문별로 감면율이 다르다.
+function toolCalculateUnsoldHouseAcquisitionReduction(p) {
+  p = p || {};
+  const provision = p.provision;
+  const validProvisions = ['sect98_3', 'sect98_4', 'sect98_5', 'sect98_6', 'sect98_7', 'sect98_8'];
+  if (validProvisions.indexOf(provision) === -1) {
+    return { error: 'provision을 sect98_3/sect98_4/sect98_5/sect98_6/sect98_7/sect98_8 중에서 선택하세요.' };
+  }
+
+  if (provision === 'sect98_4') {
+    const transferPrice = Number(p.transferPrice) || 0;
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+    const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+    return {
+      적용여부: true,
+      전체양도차익: Math.round(totalGain),
+      세액감면율: 10,
+      안내: '조특법§98의4 — 비거주자가 2009.3.16~2010.2.11 취득한 주택(§98의3 미분양주택 외)을 양도할 때는 보유기간 요건 없이 그 양도소득세 산출세액의 100분의 10을 감면합니다. calculate_transfer_tax로 전체 양도차익 기준 세액을 계산한 뒤, 그 산출세액에서 10%를 차감하세요.'
+    };
+  }
+
+  let rate;
+  if (provision === 'sect98_3') {
+    rate = p.isOverconcentrationZone ? 60 : 100;
+  } else if (provision === 'sect98_5') {
+    const discountRate = Number(p.priceDiscountRate) || 0;
+    rate = discountRate > 20 ? 100 : discountRate > 10 ? 80 : 60;
+  } else if (provision === 'sect98_6') {
+    rate = 50;
+  } else if (provision === 'sect98_7') {
+    rate = 100;
+  } else { // sect98_8
+    rate = 50;
+  }
+
+  const acquisitionDate = p.acquisitionDate;
+  const transferDate = p.transferDate;
+  if (!acquisitionDate || !transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+  const acqTime = new Date(acquisitionDate).getTime();
+  const trfTime = new Date(transferDate).getTime();
+  if (!(trfTime > acqTime)) return { error: '양도일은 취득일 이후여야 합니다.' };
+  const yearsHeld = (trfTime - acqTime) / (365.25 * 24 * 3600 * 1000);
+
+  const transferPrice = Number(p.transferPrice) || 0;
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+  const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+
+  let exemptGain, note;
+  if (yearsHeld <= 5 && provision !== 'sect98_8') {
+    exemptGain = Math.round(totalGain * rate / 100);
+    note = '취득일로부터 5년 이내 양도이므로 그 양도소득세의 ' + rate + '%에 상당하는 세액을 감면합니다(소득금액의 ' + rate + '%를 과세대상에서 제외한 것과 동일한 효과).';
+  } else {
+    let gainWithinFiveYears;
+    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
+    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
+      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
+      note = (provision === 'sect98_8' ? '' : '취득일로부터 5년 초과 보유 후 양도 — ') + '입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액의 ' + rate + '%를 과세대상소득금액에서 뺐습니다.';
+    } else {
+      const cappedYears = Math.min(yearsHeld, 5);
+      gainWithinFiveYears = Math.round(totalGain * cappedYears / Math.max(yearsHeld, cappedYears));
+      note = (provision === 'sect98_8' ? '' : '취득일로부터 5년 초과 보유 후 양도 — ') + '5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정한 뒤 ' + rate + '%를 과세대상소득금액에서 뺐습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
+    }
+    exemptGain = Math.round(gainWithinFiveYears * rate / 100);
+  }
+  exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
+  const taxableGain = Math.max(0, totalGain - exemptGain);
+  return {
+    적용여부: true,
+    보유기간_년: Math.round(yearsHeld * 100) / 100,
+    적용감면율: rate,
+    전체양도차익: Math.round(totalGain),
+    감면_비과세대상_양도소득금액: Math.round(exemptGain),
+    과세대상양도소득금액: taxableGain,
+    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다).'
+  };
+}
+
+// 수도권 밖의 지역에 있는 준공후미분양주택 취득자에 대한 1세대1주택 비과세 특례 (조특법§98의9,
+// 2024.1.10~2026.12.31 취득분) — 1주택을 보유한 1세대가 이 기간 중 수도권 밖 준공후미분양주택을
+// 취득한 후 종전주택을 양도하면, 그 준공후미분양주택은 1세대1주택 비과세(소득세법§89①3호) 판정시
+// 소유주택으로 보지 않는다. 세액 자체를 계산하지 않고 적용 가능 여부만 판정한다.
+function toolCalculateUnsoldHouseOneHouseExclusion(p) {
+  p = p || {};
+  const acquisitionDate = p.acquisitionDate;
+  if (!acquisitionDate) return { error: '준공후미분양주택의 취득일이 필요합니다.' };
+  const acqTime = new Date(acquisitionDate).getTime();
+  const windowStart = new Date('2024-01-10').getTime();
+  const windowEnd = new Date('2026-12-31').getTime();
+  if (!(acqTime >= windowStart && acqTime <= windowEnd)) {
+    return {
+      적용여부: false,
+      안내: '취득일이 2024.1.10~2026.12.31 기간을 벗어나 조특법§98의9의 적용대상이 아닙니다.'
+    };
+  }
+  if (!p.isOutsideMetropolitanArea) {
+    return { 적용여부: false, 안내: '수도권 밖의 지역에 소재한 준공후미분양주택이 아니어서 적용대상이 아닙니다.' };
+  }
+  if (!p.wasOneHouseBeforeAcquisition) {
+    return { 적용여부: false, 안내: '준공후미분양주택 취득 전 1주택을 보유한 1세대가 아니어서 적용대상이 아닙니다.' };
+  }
+  if (!p.meetsAreaAndPriceRequirements) {
+    return { 적용여부: false, 안내: '전용면적·취득가액 등 대통령령으로 정하는 요건(시행령에서 확인 필요)을 충족하지 못해 적용대상이 아닙니다.' };
+  }
+  return {
+    적용여부: true,
+    안내: '요건을 충족하여 그 준공후미분양주택을 1세대1주택 비과세(소득세법§89①3호) 판정시 소유주택으로 보지 않습니다(조특법§98의9①). calculate_transfer_tax에서 종전주택을 양도자산으로 놓고 "1세대1주택 비과세 요건 충족 전제"를 체크해 계산하세요. 종합부동산세 특례(§98의9②)는 9.16~9.30 별도 신청이 필요하며 이 도구의 범위 밖입니다.'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -5829,6 +5975,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_trust_income_gift_tax' ||
         b.name === 'calculate_donor_direct_transfer_deemed' ||
         b.name === 'calculate_new_house_acquisition_reduction' ||
+        b.name === 'calculate_unsold_house_acquisition_reduction' ||
+        b.name === 'calculate_unsold_house_one_house_exclusion' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -6020,6 +6168,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_new_house_acquisition_reduction') {
         const resultObj = toolCalculateNewHouseAcquisitionReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_unsold_house_acquisition_reduction') {
+        const resultObj = toolCalculateUnsoldHouseAcquisitionReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_unsold_house_one_house_exclusion') {
+        const resultObj = toolCalculateUnsoldHouseOneHouseExclusion(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
