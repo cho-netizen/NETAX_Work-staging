@@ -2548,6 +2548,198 @@
     };
   };
 
+  // 합병에 따른 이익의 증여 (상증세법§38, 시행령§28) — 특수관계 법인간 합병에서 대주주등이 합병대가를
+  // 주식등으로 교부받는 경우(가장 흔한 유형만 구현, 주식등 외 재산으로 받는 경우는 별도 계산 필요),
+  // (합병후 신설·존속법인 1주당평가액 - 과대평가법인 1주당평가액×(과대평가법인 합병전주식수÷과대평가법인
+  // 주주가 교부받은 신설법인주식수)) × 대주주등이 교부받은 신설법인주식수가 이익이다. §38은 합산배제
+  // 증여재산이 아니므로 일반 증여세 산식(관계별공제 등)을 따른다.
+  window.calculateMergerBenefitGiftTaxJS = function (p) {
+    p = p || {};
+    const postMergerValuePerShare = Number(p.postMergerValuePerShare) || 0;
+    const overvaluedPreMergerValuePerShare = Number(p.overvaluedPreMergerValuePerShare) || 0;
+    const overvaluedPreMergerShareCount = Number(p.overvaluedPreMergerShareCount) || 0;
+    const sharesReceivedByOvervaluedShareholders = Number(p.sharesReceivedByOvervaluedShareholders) || 0;
+    const largeShareholderSharesReceived = Number(p.largeShareholderSharesReceived) || 0;
+    if (postMergerValuePerShare <= 0 || sharesReceivedByOvervaluedShareholders <= 0 || largeShareholderSharesReceived <= 0) {
+      return { error: '합병후 1주당평가액, 과대평가법인 주주등이 교부받은 신설법인 주식수, 대주주등이 교부받은 주식수가 필요합니다.' };
+    }
+    const 나 = overvaluedPreMergerValuePerShare * (overvaluedPreMergerShareCount / sharesReceivedByOvervaluedShareholders);
+    const giftAmount = Math.max(0, Math.round((postMergerValuePerShare - 나) * largeShareholderSharesReceived));
+    const totalReceivedValue = postMergerValuePerShare * largeShareholderSharesReceived;
+    const gateThreshold = Math.min(totalReceivedValue * 0.3, 300000000);
+    if (giftAmount < gateThreshold) {
+      return { 과세대상여부: false, 합병이익: giftAmount, 납부세액: 0, 안내: '합병이익(' + giftAmount + '원)이 기준금액(합병후 교부받은 주식가액의 30%와 3억원 중 적은 금액, ' + Math.round(gateThreshold) + '원) 미만이어서 과세하지 않습니다(§38①단서, 시행령§28④1호).' };
+    }
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 합병이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 합병등기일입니다(§38①). 대주주등이 2인 이상인 경우 각자 계산하며, 합병대가를 주식등 외 재산으로 받는 경우(1주당평가액이 액면가액에 미달하는 경우)는 이 계산기가 다루지 않으니 별도로 계산하세요.'
+    };
+  };
+
+  // 재산사용 및 용역제공 등에 따른 이익의 증여 (상증세법§42, 시행령§32) — 무상으로 재산을 사용하거나
+  // 용역을 제공받으면 그 시가상당액(담보제공 차입은 차입금×적정이자율4.6%-실제이자)이, 저가/고가로
+  // 사용·제공하면 시가와 대가의 차액이 증여재산가액이다. 무상은 1천만원, 저가·고가는 시가의 30% 미만이면
+  // 과세 제외한다(시행령§32②). §42는 합산배제증여재산이 아니므로 일반 증여세 산식을 따른다.
+  window.calculatePropertyUseServiceGiftTaxJS = function (p) {
+    p = p || {};
+    const useType = p.useType;
+    if (['free', 'low_or_high'].indexOf(useType) === -1) return { error: 'useType을 free(무상사용·무상용역·무상담보차입)/low_or_high(저가 또는 고가 사용·제공) 중에서 선택하세요.' };
+    let giftAmount, gateThreshold, gateNote;
+    if (useType === 'free') {
+      if (p.isCollateralLoan) {
+        const loanAmount = Number(p.loanAmount) || 0;
+        const actualInterestPaid = Number(p.actualInterestPaid) || 0;
+        giftAmount = Math.max(0, Math.round(loanAmount * 0.046) - actualInterestPaid);
+      } else {
+        giftAmount = Math.max(0, Number(p.marketValueEquivalent) || 0);
+      }
+      gateThreshold = 10000000;
+      gateNote = '기준금액(1천만원)';
+    } else {
+      const marketValue = Number(p.marketValue) || 0;
+      const considerationPaid = Number(p.considerationPaid) || 0;
+      if (marketValue <= 0) return { error: '시가가 필요합니다.' };
+      giftAmount = Math.round(Math.abs(marketValue - considerationPaid));
+      gateThreshold = marketValue * 0.3;
+      gateNote = '기준금액(시가의 30%, ' + Math.round(gateThreshold) + '원)';
+    }
+    if (giftAmount < gateThreshold) {
+      return { 과세대상여부: false, 이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 ' + gateNote + ' 미만이어서 과세하지 않습니다(§42①단서, 시행령§32②).' };
+    }
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '재산사용·용역제공 기간이 1년 이상이면 1년이 되는 날의 다음 날마다 새로 증여받은 것으로 봅니다(§42②). 특수관계인이 아닌 자 간의 거래는 거래관행상 정당한 사유가 없는 경우에만 적용됩니다(§42③).'
+    };
+  };
+
+  // 법인의 조직 변경 등에 따른 이익의 증여 (상증세법§42의2, 시행령§32의2) — 주식의 포괄적 교환·이전,
+  // 사업양수도, 사업교환, 조직변경 등으로 소유지분이나 그 가액이 변동되어 이익을 얻으면, 지분이 변동된
+  // 경우 (변동후지분-변동전지분)×변동후1주당가액을, 평가액이 변동된 경우 변동후가액-변동전가액을 증여
+  // 재산가액으로 한다. 변동전 재산가액의 30%와 3억원 중 적은 금액 미만이면 과세 제외한다. 합산배제증여
+  // 재산이 아니므로 일반 증여세 산식을 따른다.
+  window.calculateOrgChangeGiftTaxJS = function (p) {
+    p = p || {};
+    const subType = p.subType;
+    if (['share_change', 'value_change'].indexOf(subType) === -1) return { error: 'subType을 share_change(소유지분 변동)/value_change(평가액 변동) 중에서 선택하세요.' };
+    let giftAmount, beforeValueForGate;
+    if (subType === 'share_change') {
+      const beforeShares = Number(p.beforeShares) || 0;
+      const afterShares = Number(p.afterShares) || 0;
+      const afterValuePerShare = Number(p.afterValuePerShare) || 0;
+      giftAmount = Math.max(0, Math.round((afterShares - beforeShares) * afterValuePerShare));
+      beforeValueForGate = Number(p.beforePropertyValue) || (beforeShares * afterValuePerShare);
+    } else {
+      const beforeValue = Number(p.beforeValue) || 0;
+      const afterValue = Number(p.afterValue) || 0;
+      giftAmount = Math.max(0, Math.round(afterValue - beforeValue));
+      beforeValueForGate = beforeValue;
+    }
+    const gateThreshold = Math.min(beforeValueForGate * 0.3, 300000000);
+    if (giftAmount < gateThreshold) {
+      return { 과세대상여부: false, 이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 기준금액(변동전 재산가액의 30%와 3억원 중 적은 금액, ' + Math.round(gateThreshold) + '원) 미만이어서 과세하지 않습니다(§42의2①단서, 시행령§32의2②).' };
+    }
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '특수관계인이 아닌 자 간의 거래는 거래관행상 정당한 사유가 없는 경우에만 적용됩니다(§42의2②).'
+    };
+  };
+
+  // 재산 취득 후 재산가치 증가에 따른 이익의 증여 (상증세법§42의3, 시행령§32의3) — 자력없는 자가
+  // 증여·차입 등으로 재산을 취득한 후 5년 이내 개발사업·형질변경·비상장주식 등록 등으로 재산가치가
+  // 증가하면, (사유발생일 현재가액-취득가액-통상적가치상승분-가치상승기여분)이 이익이다. (취득가액+통상적
+  // 가치상승분+가치상승기여분)의 30%와 3억원 중 적은 금액 미만이면 과세 제외한다. §42의3은 §47①에 열거된
+  // 합산배제증여재산이므로 §55①3호에 따라 그 이익에서 3천만원을 공제한 금액이 과세표준이며(관계별
+  // 증여재산공제 등은 적용하지 않음), 10년 합산에서도 제외된다.
+  window.calculatePropertyValueIncreaseGiftTaxJS = function (p) {
+    p = p || {};
+    const propertyValueAtIncreaseEvent = Number(p.propertyValueAtIncreaseEvent) || 0;
+    const acquisitionCost = Number(p.acquisitionCost) || 0;
+    const normalAppreciationAmount = Number(p.normalAppreciationAmount) || 0;
+    const valueIncreaseContributionAmount = Number(p.valueIncreaseContributionAmount) || 0;
+    if (propertyValueAtIncreaseEvent <= 0) return { error: '재산가치증가사유 발생일 현재의 재산가액이 필요합니다.' };
+    const giftAmount = Math.max(0, Math.round(propertyValueAtIncreaseEvent - acquisitionCost - normalAppreciationAmount - valueIncreaseContributionAmount));
+    const gateBase = acquisitionCost + normalAppreciationAmount + valueIncreaseContributionAmount;
+    const gateThreshold = Math.min(gateBase * 0.3, 300000000);
+    if (giftAmount < gateThreshold) {
+      return { 과세대상여부: false, 재산가치증가이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 기준금액((취득가액+통상적가치상승분+가치상승기여분)의 30%와 3억원 중 적은 금액, ' + Math.round(gateThreshold) + '원) 미만이어서 과세하지 않습니다(§42의3①단서, 시행령§32의3②).' };
+    }
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 재산가치증가이익: giftAmount,
+      과세표준_3천만원공제후: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '합산배제증여재산이므로(§47①) 관계별 증여재산공제(§53)는 적용하지 않고 이익에서 3천만원을 공제해 과세표준을 계산합니다(§55①3호). 재산가치증가사유 발생 전에 그 재산을 양도한 경우에는 양도한 날을 재산가치증가사유 발생일로 봅니다(§42의3②후단). 거짓·부정한 방법으로 증여세를 감소시킨 경우에는 특수관계인이 아닌 자 간에도 적용되며 5년 기간 제한이 없습니다(§42의3③).'
+    };
+  };
+
   // 비과세되는 증여재산 (상증세법§46) — 열거된 항목에 해당하면 그 금액에 대해 증여세를 부과하지 않는다.
   // 시행령이 정하는 세부요건(우리사주조합원 소액주주기준, 사내근로복지기금 유사단체 범위, 이재구호금품 등의
   // 구체적 한도 등)은 이 도구가 검증하지 않으므로 별도로 확인해야 한다.
