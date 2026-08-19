@@ -782,6 +782,33 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_insurance_proceeds_gift_tax',
+    description: '보험금의 증여(상증세법§34)를 계산한다. 보험사고(만기보험금 포함) 발생일을 증여일로 하여, 보험금 수령인이 아닌 자가 낸 보험료 부분과 수령인이 증여받은 재산으로 낸 보험료 부분에 대응하는 보험금 상당액이 증여재산가액이 된다(후자는 그 보험료액을 다시 뺀다). §8에 따라 이 보험금을 상속재산으로 보는 경우(피상속인이 보험계약자인 경우 등)에는 적용하지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        insuranceProceeds: { type: 'number', description: '수령한 보험금(원).' },
+        totalPremiumPaid: { type: 'number', description: '납부된 총 보험료(원).' },
+        premiumPaidByOthers: { type: 'number', description: '보험금 수령인이 아닌 자가 납부한 보험료(원, §34①1호). 없으면 0.' },
+        premiumPaidFromGiftedAssets: { type: 'number', description: '수령인이 증여받은 재산으로 납부한 보험료(원, §34①2호). 없으면 0.' },
+        relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
+        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
+        disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
+        priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
+        underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
+      },
+      required: ['insuranceProceeds', 'totalPremiumPaid']
+    }
+  },
+  {
     name: 'calculate_installment_payment_schedule',
     description: '상속세·증여세 연부연납(다년 분할납부) 회차별 납부예정세액을 계산한다([별지 제11호서식]). 연부연납대상금액을 (연부연납기간+1)회로 균등분할하고, 각 회분마다 그 시점의 잔여 미납액에 연이자율을 적용한 가산금을 더한다. 연이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않으니 신고 시점 기준 이자율을 반드시 확인해서 넣어야 한다.',
     input_schema: {
@@ -4246,6 +4273,47 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   };
 }
 
+// 보험금의 증여 (상증세법§34) — 보험사고(만기보험금 포함) 발생일을 증여일로 하여, ①보험금수령인이 아닌
+// 자가 낸 보험료 부분(1호)과 ②수령인이 증여받은 재산으로 낸 보험료 부분(2호, 그 보험료액은 다시 뺀다)에
+// 대응하는 보험금 상당액을 증여재산가액으로 한다. §8에 따라 보험금을 상속재산으로 보는 경우에는 적용하지
+// 않는다(§34②).
+function toolCalculateInsuranceProceedsGiftTax(p) {
+  p = p || {};
+  const insuranceProceeds = Number(p.insuranceProceeds) || 0;
+  if (insuranceProceeds <= 0) return { error: '보험금이 필요합니다.' };
+  const totalPremiumPaid = Number(p.totalPremiumPaid) || 0;
+  if (totalPremiumPaid <= 0) return { error: '총 납부보험료가 필요합니다.' };
+  const premiumPaidByOthers = Number(p.premiumPaidByOthers) || 0;
+  const premiumPaidFromGiftedAssets = Number(p.premiumPaidFromGiftedAssets) || 0;
+  const attributedPremium = premiumPaidByOthers + premiumPaidFromGiftedAssets;
+  const proceedsShare = Math.round(insuranceProceeds * attributedPremium / totalPremiumPaid);
+  const giftAmount = Math.max(0, proceedsShare - premiumPaidFromGiftedAssets);
+
+  const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+  const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+  const priorPaidTax = Number(p.priorPaidTax) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+  return {
+    보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
+    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    납부세액: finalTax,
+    안내: '증여일은 보험사고(만기보험금 지급 포함)가 발생한 날입니다. 피상속인이 보험계약자로서 §8에 따라 이 보험금을 상속재산으로 보는 경우에는 이 조가 아니라 상속세로 과세됩니다(§34②).'
+  };
+}
+
 // 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — 원금은 연부연납대상금액을 (기간+1)회로 균등분할,
 // 각 회분의 가산금은 그 시점 잔여 미납액에 연이자율을 적용해 계산한다(잔액 감소식, declining balance).
 // 정확한 가산금 이자율은 국세기본법 시행령 §43의3②에 따라 수시로 바뀌므로 이 도구가 자동으로 채우지 않고 반드시 입력받는다.
@@ -5542,6 +5610,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_debt_forgiveness_gift_tax' ||
         b.name === 'calculate_free_property_use_gift_tax' ||
         b.name === 'calculate_spouse_property_transfer_gift_tax' ||
+        b.name === 'calculate_insurance_proceeds_gift_tax' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -5713,6 +5782,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_spouse_property_transfer_gift_tax') {
         const resultObj = toolCalculateSpousePropertyTransferGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_insurance_proceeds_gift_tax') {
+        const resultObj = toolCalculateInsuranceProceedsGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

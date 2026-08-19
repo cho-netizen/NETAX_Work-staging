@@ -174,6 +174,12 @@ function recomputeSpUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('spUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeIpUnpaidDays(){
+  const giftDate = document.getElementById('ipGiftDate');
+  const paidDate = document.getElementById('ipPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('ipUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeJmUnpaidDays(){
   const fiscalYearEnd = document.getElementById('jmFiscalYearEnd');
   const paidDate = document.getElementById('jmPaidDate');
@@ -2230,6 +2236,29 @@ function renderGiftPane(){
       '<div id="taxCalcSpousePropertyTransferResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>보험금의 증여(§34) — 보험사고(만기보험금 포함) 발생시, 보험료를 낸 사람과 보험금을 받는 사람이 다르거나 증여받은 돈으로 보험료를 낸 경우</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>수령한 보험금</label><input type="number" id="ipProceeds" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>납부된 총 보험료</label><input type="number" id="ipTotalPremium" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>보험금 수령인이 아닌 자가 낸 보험료</label><input type="number" id="ipPremiumByOthers" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>수령인이 증여받은 재산으로 낸 보험료</label><input type="number" id="ipPremiumFromGifted" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="ipRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ipAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="ipFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ipFraudulent"><label for="ipFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="ipUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(보험사고 발생일)</label><input type="text" class="taxcalc-date" id="ipGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="ipPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="ipUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-insurance-proceeds">증여세 계산하기</button>' +
+      '<div id="taxCalcInsuranceProceedsResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제10호의3서식] 일감몰아주기 증여의제(§45의3) — 지배주주+친족이 지분을 가진 법인이 특수관계법인과 매출비중이 높고 지분율도 높을 때 과세</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>수혜법인 기업규모</label><select id="jmCompanySize">' +
@@ -2362,6 +2391,10 @@ function renderGiftPane(){
   const spPaidDateEl = document.getElementById('spPaidDate');
   if (spGiftDateEl) spGiftDateEl.addEventListener('input', recomputeSpUnpaidDays);
   if (spPaidDateEl) spPaidDateEl.addEventListener('input', recomputeSpUnpaidDays);
+  const ipGiftDateEl = document.getElementById('ipGiftDate');
+  const ipPaidDateEl = document.getElementById('ipPaidDate');
+  if (ipGiftDateEl) ipGiftDateEl.addEventListener('input', recomputeIpUnpaidDays);
+  if (ipPaidDateEl) ipPaidDateEl.addEventListener('input', recomputeIpUnpaidDays);
   recomputeSrGiftUnpaidDays();
   const jmFiscalYearEndEl = document.getElementById('jmFiscalYearEnd');
   const jmPaidDateEl = document.getElementById('jmPaidDate');
@@ -2553,6 +2586,13 @@ function renderFreePropertyUseResult(r){
 function renderSpousePropertyTransferResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcSpousePropertyTransferResult'), r, [
     { key: '증여추정재산가액', label: '증여추정재산가액' }
+  ]);
+}
+function renderInsuranceProceedsResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcInsuranceProceedsResult'), r, [
+    { key: '보험금상당액', label: '보험금상당액' },
+    { key: '증여받은재산으로낸보험료', label: '증여받은재산으로낸보험료' },
+    { key: '증여재산가액', label: '증여재산가액' }
   ]);
 }
 
@@ -3828,6 +3868,20 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('spUnpaidDays').value) || 0
     };
     renderSpousePropertyTransferResult(calculateSpousePropertyTransferGiftTaxJS(input));
+  } else if (action === 'run-insurance-proceeds'){
+    const input = {
+      insuranceProceeds: numVal(document.getElementById('ipProceeds').value) || 0,
+      totalPremiumPaid: numVal(document.getElementById('ipTotalPremium').value) || 0,
+      premiumPaidByOthers: numVal(document.getElementById('ipPremiumByOthers').value) || 0,
+      premiumPaidFromGiftedAssets: numVal(document.getElementById('ipPremiumFromGifted').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('ipRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('ipAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('ipFilingStatus').value,
+      isFraudulent: document.getElementById('ipFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('ipUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('ipUnpaidDays').value) || 0
+    };
+    renderInsuranceProceedsResult(calculateInsuranceProceedsGiftTaxJS(input));
   } else if (action === 'run-related-party-gift'){
     const input = {
       companySize: document.getElementById('jmCompanySize').value,

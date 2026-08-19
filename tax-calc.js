@@ -1973,6 +1973,48 @@
     };
   };
 
+  // 보험금의 증여 (상증세법§34) — 보험사고(만기보험금 포함) 발생일을 증여일로 하여, ①보험금수령인이 아닌
+  // 자가 낸 보험료 부분(1호)과 ②수령인이 증여받은 재산으로 낸 보험료 부분(2호, 그 보험료액은 다시 뺀다)에
+  // 대응하는 보험금 상당액을 증여재산가액으로 한다. 두 유형을 동시에 적용해 일반화하면:
+  // 증여재산가액 = 보험금×[(타인이낸보험료+증여받은재산으로낸보험료)÷총납부보험료] − 증여받은재산으로낸보험료.
+  // §8에 따라 보험금을 상속재산으로 보는 경우(피상속인이 보험계약자인 경우 등)에는 이 조를 적용하지 않는다(§34②).
+  window.calculateInsuranceProceedsGiftTaxJS = function (p) {
+    p = p || {};
+    const insuranceProceeds = Number(p.insuranceProceeds) || 0;
+    if (insuranceProceeds <= 0) return { error: '보험금이 필요합니다.' };
+    const totalPremiumPaid = Number(p.totalPremiumPaid) || 0;
+    if (totalPremiumPaid <= 0) return { error: '총 납부보험료가 필요합니다.' };
+    const premiumPaidByOthers = Number(p.premiumPaidByOthers) || 0;
+    const premiumPaidFromGiftedAssets = Number(p.premiumPaidFromGiftedAssets) || 0;
+    const attributedPremium = premiumPaidByOthers + premiumPaidFromGiftedAssets;
+    const proceedsShare = Math.round(insuranceProceeds * attributedPremium / totalPremiumPaid);
+    const giftAmount = Math.max(0, proceedsShare - premiumPaidFromGiftedAssets);
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 보험사고(만기보험금 지급 포함)가 발생한 날입니다. 피상속인이 보험계약자로서 §8에 따라 이 보험금을 상속재산으로 보는 경우에는 이 조가 아니라 상속세로 과세됩니다(§34②).'
+    };
+  };
+
   // 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — Code.js toolCalculateInstallmentPaymentSchedule와 동일 로직.
   window.calculateInstallmentPaymentScheduleJS = function (p) {
     p = p || {};
