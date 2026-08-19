@@ -2548,6 +2548,71 @@
     };
   };
 
+  // 감자에 따른 이익의 증여 (상증세법§39의2, 시행령§29의2) — 대주주등이 소유주식등을 시가보다 낮은
+  // 대가로 소각당하면(다른 주주가 상대적으로 이익을 얻음, 1호), 반대로 소액주주 등이 시가보다 높은 대가로
+  // 소각되면(소각된 주주 본인이 이익을 얻음, 2호, 1주당평가액이 액면가에 미달하는 경우만) 각각 그 차액
+  // 상당의 이익을 증여의제한다. 게이트: 기준금액 3억원, 다만 1주당평가액-지급액의 차액비율이 30%이상이면
+  // 기준금액은 0(무조건 과세). §39의2는 합산배제증여재산이 아니므로 일반 증여세 산식을 따른다.
+  // 1호(저가소각) = (1주당평가액-지급액) × 총감자주식수 × 대주주등의감자후지분비율 × (특수관계인감자
+  //   주식수 ÷ 총감자주식수) — 사용자가 시행령§29의2①1호를 직접 타이핑해 제공했고, 마지막 항의 "+"는
+  //   문맥상(다른 모든 항이 분수형태) "÷"의 오타로 확인해(사용자 확인) "÷"로 구현했다.
+  // 2호(고가소각) = (지급액-1주당평가액) × 해당주주등의감자주식수
+  window.calculateCapitalReductionGiftTaxJS = function (p) {
+    p = p || {};
+    const caseType = p.caseType;
+    if (['low_price', 'high_price'].indexOf(caseType) === -1) {
+      return { error: 'caseType을 low_price(저가소각)/high_price(고가소각) 중에서 선택하세요.' };
+    }
+    const valuePerShare = Number(p.valuePerShare) || 0;
+    const paymentPerShare = Number(p.paymentPerShare) || 0;
+    if (valuePerShare <= 0) return { error: '감자한 주식등의 1주당 평가액이 필요합니다.' };
+
+    let giftAmount;
+    if (caseType === 'low_price') {
+      const totalReducedShares = Number(p.totalReducedShares) || 0;
+      const postReductionOwnershipRatio = Number(p.postReductionOwnershipRatio) || 0;
+      const relatedReducedShares = Number(p.relatedReducedShares) || 0;
+      if (totalReducedShares <= 0) return { error: '총 감자 주식등의 수가 필요합니다.' };
+      giftAmount = Math.max(0, Math.round((valuePerShare - paymentPerShare) * totalReducedShares * postReductionOwnershipRatio * (relatedReducedShares / totalReducedShares)));
+    } else {
+      const ownReducedShares = Number(p.ownReducedShares) || 0;
+      giftAmount = Math.max(0, Math.round((paymentPerShare - valuePerShare) * ownReducedShares));
+    }
+
+    const diffRatio = Math.abs(valuePerShare - paymentPerShare) / valuePerShare;
+    const gateThreshold = diffRatio >= 0.3 ? 0 : 300000000;
+    if (giftAmount < gateThreshold) {
+      return {
+        과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0,
+        안내: '이익(' + giftAmount + '원)이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§29의2②).'
+      };
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 증여의제이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 감자를 위한 주주총회결의일 등입니다(시행령§29의2①). 대주주등의 판정기준은 §38·§39의2와 동일합니다.'
+    };
+  };
+
   // 장애인이 증여받은 재산의 과세가액 불산입 (상속세및증여세법§52의2) — 장애인이 재산을 증여받아 본인을
   // 수익자로 신탁(자익신탁)하거나 타인이 장애인을 수익자로 신탁(타익신탁)한 경우, 요건을 충족하면 그
   // 증여재산가액(자익) 또는 신탁수익(타익)을 증여세 과세가액에 산입하지 않는다. 장애인 생애 동안 자익

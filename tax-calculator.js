@@ -168,6 +168,12 @@ function recomputeCiUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('ciUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeCrUnpaidDays(){
+  const giftDate = document.getElementById('crGiftDate');
+  const paidDate = document.getElementById('crPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('crUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeFuUnpaidDays(){
   const giftDate = document.getElementById('fuGiftDate');
   const paidDate = document.getElementById('fuPaidDate');
@@ -2638,6 +2644,35 @@ function renderGiftPane(){
       '<div id="taxCalcCapitalIncreaseGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>감자에 따른 이익의 증여(§39의2) — 주식등을 시가보다 낮거나 높은 대가로 소각(감자)할 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>케이스 구분</label><select id="crCaseType">' +
+          '<option value="low_price">저가소각(시가보다 낮은 대가로 소각 — 다른 대주주등이 이익)</option>' +
+          '<option value="high_price">고가소각(시가보다 높은 대가로 소각, 1주당평가액이 액면가 미달일 때 — 소각된 주주 본인이 이익)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>감자한 주식등의 1주당 평가액</label><input type="number" id="crValuePerShare" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>소각시 지급한 1주당 금액</label><input type="number" id="crPaymentPerShare" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[저가소각만] 총 감자 주식등의 수</label><input type="number" id="crTotalReducedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[저가소각만] 대주주등의 감자후 지분비율</label><input type="number" step="0.01" min="0" max="1" id="crPostRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>[저가소각만] 대주주등과 특수관계인의 감자 주식등의 수</label><input type="number" id="crRelatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가소각만] 해당 주주등의 감자한 주식등의 수</label><input type="number" id="crOwnShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="crRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="crAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="crFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="crFraudulent"><label for="crFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="crUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(주주총회결의일 등)</label><input type="text" class="taxcalc-date" id="crGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="crPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="crUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-capital-reduction-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcCapitalReductionGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>부동산 무상사용·담보이용에 따른 이익의 증여(§37) — 타인의 부동산을 무상으로 사용하거나, 무상으로 담보 제공받아 차입했을 때</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>구분</label><select id="fuUseType">' +
@@ -3043,6 +3078,10 @@ function renderGiftPane(){
   const ciPaidDateEl = document.getElementById('ciPaidDate');
   if (ciGiftDateEl) ciGiftDateEl.addEventListener('input', recomputeCiUnpaidDays);
   if (ciPaidDateEl) ciPaidDateEl.addEventListener('input', recomputeCiUnpaidDays);
+  const crGiftDateEl = document.getElementById('crGiftDate');
+  const crPaidDateEl = document.getElementById('crPaidDate');
+  if (crGiftDateEl) crGiftDateEl.addEventListener('input', recomputeCrUnpaidDays);
+  if (crPaidDateEl) crPaidDateEl.addEventListener('input', recomputeCrUnpaidDays);
   const fuGiftDateEl = document.getElementById('fuGiftDate');
   const fuPaidDateEl = document.getElementById('fuPaidDate');
   if (fuGiftDateEl) fuGiftDateEl.addEventListener('input', recomputeFuUnpaidDays);
@@ -3262,6 +3301,11 @@ function renderDebtForgivenessResult(r){
 function renderCapitalIncreaseGiftResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcCapitalIncreaseGiftResult'), r, [
     { key: '증자후1주당평가액', label: '증자후 1주당 평가액' },
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
+}
+function renderCapitalReductionGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcCapitalReductionGiftResult'), r, [
     { key: '증여의제이익', label: '증여의제이익' }
   ]);
 }
@@ -4798,6 +4842,23 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('ciUnpaidDays').value) || 0
     };
     renderCapitalIncreaseGiftResult(calculateCapitalIncreaseGiftTaxJS(input));
+  } else if (action === 'run-capital-reduction-gift'){
+    const input = {
+      caseType: document.getElementById('crCaseType').value,
+      valuePerShare: numVal(document.getElementById('crValuePerShare').value) || 0,
+      paymentPerShare: numVal(document.getElementById('crPaymentPerShare').value) || 0,
+      totalReducedShares: numVal(document.getElementById('crTotalReducedShares').value) || 0,
+      postReductionOwnershipRatio: numVal(document.getElementById('crPostRatio').value) || 0,
+      relatedReducedShares: numVal(document.getElementById('crRelatedShares').value) || 0,
+      ownReducedShares: numVal(document.getElementById('crOwnShares').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('crRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('crAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('crFilingStatus').value,
+      isFraudulent: document.getElementById('crFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('crUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('crUnpaidDays').value) || 0
+    };
+    renderCapitalReductionGiftResult(calculateCapitalReductionGiftTaxJS(input));
   } else if (action === 'run-free-property-use'){
     const input = {
       useType: document.getElementById('fuUseType').value,
