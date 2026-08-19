@@ -2955,6 +2955,39 @@
     return Math.round(excessProfit * 3.79079);
   };
 
+  // 선박 등 그 밖의 유형재산의 평가 (상증세법§62, 시행령§52) — 선박·항공기·차량·기계장비·입목은
+  // 처분시 재취득예상가액 → (확인 안 되면) 장부가액(취득가액-감가상각비) → (그래도 없으면) 지방세법
+  // 시행령상 시가표준액을 순차 적용한다(§62①). 상품·제품 등 동산은 처분예상가액 → 장부가액 순으로
+  // 적용한다(§62②1호). 서화·골동품 등 예술적 가치가 있는 유형재산은 전문감정기관 감정가액이 필요해 이
+  // 계산기가 다루지 않는다. 사실상 임대차계약이 체결된 경우 임대료환산가액과 비교해 큰 금액을 쓰는
+  // 특례(§62③)는, 이 함수를 호출하는 재산평가 화면이 모든 자산유형에 공통으로 적용하는 §66 평가특례
+  // (임대료환산가액·담보채권액과의 Max 비교) 로직이 이미 처리하므로 여기서는 중복 계산하지 않는다.
+  window.calculateOtherTangiblePropertyValueJS = function (p) {
+    p = p || {};
+    const itemType = p.itemType;
+    if (['vessel_etc', 'commodity', 'art_antique'].indexOf(itemType) === -1) {
+      return { error: 'itemType을 vessel_etc(선박·항공기·차량·기계장비·입목)/commodity(상품·제품 등 동산)/art_antique(서화·골동품 등) 중에서 선택하세요.' };
+    }
+    if (itemType === 'art_antique') {
+      return { error: '서화·골동품 등 예술적 가치가 있는 유형재산은 전문분야별 2개 이상 전문감정기관의 감정가액 평균액(시행령§52②2호)이 필요해 이 계산기로 산정할 수 없습니다. 감정평가를 받아 직접 입력하세요.' };
+    }
+    let value, note;
+    if (itemType === 'vessel_etc') {
+      const reacquisitionValue = Number(p.reacquisitionValue) || 0;
+      const bookValue = Number(p.bookValue) || 0;
+      const standardTaxValue = Number(p.standardTaxValue) || 0;
+      if (reacquisitionValue > 0) { value = reacquisitionValue; note = '처분할 경우 다시 취득할 수 있다고 예상되는 가액(재취득예상가액)을 적용했습니다.'; }
+      else if (bookValue > 0) { value = bookValue; note = '재취득예상가액이 확인되지 않아 장부가액(취득가액-감가상각비)을 적용했습니다.'; }
+      else { value = standardTaxValue; note = '재취득예상가액·장부가액이 모두 확인되지 않아 지방세법시행령§4①의 시가표준액을 적용했습니다.'; }
+    } else { // commodity
+      const disposalValue = Number(p.disposalValue) || 0;
+      const bookValue = Number(p.bookValue) || 0;
+      if (disposalValue > 0) { value = disposalValue; note = '처분할 때에 취득할 수 있다고 예상되는 가액(처분예상가액)을 적용했습니다.'; }
+      else { value = bookValue; note = '처분예상가액이 확인되지 않아 장부가액을 적용했습니다.'; }
+    }
+    return { 평가액: Math.round(value), 안내: note };
+  };
+
   // 신탁의 이익을 받을 권리 평가 (상속세및증여세법§65①, 상속세및증여세법시행령§61①, 상속세및증여세법시행규칙§14①②)
   // — 원본을 받을 권리와 수익을 받을 권리의 수익자가 같으면 신탁재산가액 그대로. 다르면, 수익을 받을 권리는
   // "각 연도에 받을 수익의 이익 - 원천징수세액상당액"을 연 1,000분의 30(3%)로 할인한 현재가치의 합계액(시행령

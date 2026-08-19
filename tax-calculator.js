@@ -936,7 +936,8 @@ const VALUATION_METHOD_LABELS = {
   unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
   rental: '임대 중인 부동산(임대료환산가액)',
   goodwill: '영업권(§64, 초과이익의 5년 현재가치)',
-  trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)'
+  trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)',
+  otherTangible: '선박·항공기·차량·기계장비·입목/상품·제품 등(§62, 재취득가액→장부가액→시가표준액)'
 };
 // 지분은 평가방법과 무관하게 모든 자산에 공통으로 적용되는 별도 항목이다(예: 확인된 시가가 그 자체로
 // 100% 평가액인 자산도 있고, 매매실례가액 등에 피상속인 지분을 곱해야 하는 자산도 있다 — 그 구분은
@@ -977,6 +978,14 @@ function computeValuationAssetValue(a){
       break;
     }
     case 'goodwill': value = calculateGoodwillValueJS(a.gwProfit1, a.gwProfit2, a.gwProfit3, a.gwSelfCapital); break;
+    case 'otherTangible': {
+      const r = calculateOtherTangiblePropertyValueJS({
+        itemType: a.otTangibleType, reacquisitionValue: a.otReacquisitionValue, bookValue: a.otBookValue,
+        standardTaxValue: a.otStandardTaxValue, disposalValue: a.otDisposalValue
+      });
+      value = r.error ? 0 : r.평가액;
+      break;
+    }
     case 'trustBenefit': {
       const r = calculateTrustBenefitValueJS({
         trustPropertyValue: a.tbPropertyValue, sameBeneficiary: a.tbSameBeneficiary, beneficiaryType: a.tbBeneficiaryType,
@@ -1056,6 +1065,23 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>3년전 순손익액</label><input type="number" data-field="gwProfit3" value="' + (a.gwProfit3 || '') + '"></div>' +
     '<div class="taxcalc-field"><label>자기자본(평가기준일 현재)</label><input type="number" data-field="gwSelfCapital" value="' + (a.gwSelfCapital || '') + '"></div>' +
     '<div class="taxcalc-field"><label style="color:var(--sub);">※ 가중평균순손익액×50%가 자기자본×10%를 넘는 초과분만 5년 연금현가(3.79079)로 평가되며, 넘지 않으면 0원입니다</label></div>';
+  if (m === 'otherTangible') {
+    const isCommodity = a.otTangibleType === 'commodity';
+    const isArt = a.otTangibleType === 'art_antique';
+    return '<div class="taxcalc-field"><label>구분</label><select data-field="otTangibleType">' +
+        '<option value="vessel_etc"' + (a.otTangibleType === 'vessel_etc' || !a.otTangibleType ? ' selected' : '') + '>선박·항공기·차량·기계장비·입목</option>' +
+        '<option value="commodity"' + (isCommodity ? ' selected' : '') + '>상품·제품·반제품·원재료 등 동산</option>' +
+        '<option value="art_antique"' + (isArt ? ' selected' : '') + '>서화·골동품 등 예술적 가치가 있는 유형재산</option>' +
+      '</select></div>' +
+      (isArt ? '<div class="taxcalc-field"><label style="color:var(--sub);">※ 전문분야별 2개 이상 전문감정기관의 감정가액 평균액이 필요합니다(시행령§52②2호) — 감정평가를 받아 위 "직접입력" 방식으로 그 평균액을 입력하세요.</label></div>' :
+        isCommodity ? '' +
+          '<div class="taxcalc-field"><label>처분예상가액</label><input type="number" data-field="otDisposalValue" value="' + (a.otDisposalValue || '') + '"></div>' +
+          '<div class="taxcalc-field"><label>장부가액(처분예상가액 확인 안 될 때)</label><input type="number" data-field="otBookValue" value="' + (a.otBookValue || '') + '"></div>'
+        : '' +
+          '<div class="taxcalc-field"><label>재취득예상가액</label><input type="number" data-field="otReacquisitionValue" value="' + (a.otReacquisitionValue || '') + '"></div>' +
+          '<div class="taxcalc-field"><label>장부가액(취득가액-감가상각비, 재취득예상가액 없을 때)</label><input type="number" data-field="otBookValue" value="' + (a.otBookValue || '') + '"></div>' +
+          '<div class="taxcalc-field"><label>지방세법시행령§4① 시가표준액(둘 다 없을 때)</label><input type="number" data-field="otStandardTaxValue" value="' + (a.otStandardTaxValue || '') + '"></div>');
+  }
   if (m === 'trustBenefit') return '' +
     '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="tbSameBeneficiary" ' + (a.tbSameBeneficiary ? 'checked' : '') + '><label>원본을 받을 권리와 수익을 받을 권리의 수익자가 같음(상증세법시행령§61①1호 — 신탁재산가액 그대로 평가)</label></div>' +
     '<div class="taxcalc-field"><label>신탁재산가액</label><input type="number" data-field="tbPropertyValue" value="' + (a.tbPropertyValue || '') + '"></div>' +
@@ -1188,7 +1214,7 @@ function renderValuationAssetList(containerId, assets){
       const idx = numVal(el.closest('.taxcalc-asset').dataset.idx);
       const key = el.dataset.field;
       assets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
-      if (key === 'method' || key === 'assetKind' || key === 'tbSameBeneficiary'){
+      if (key === 'method' || key === 'assetKind' || key === 'tbSameBeneficiary' || key === 'otTangibleType'){
         renderValuationAssetList(containerId, assets); // 필드 구성 자체가 바뀌므로 다시 그림
       } else {
         const row = el.closest('.taxcalc-asset');
