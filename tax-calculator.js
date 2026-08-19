@@ -1648,6 +1648,19 @@ function renderTransferPane(){
       '<div id="taxCalcCarryoverResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>양도소득의 부당행위계산 - 증여 후 우회양도 부인(소득세법§101②) — 배우자·직계존비속이 아닌 특수관계인(형제자매 등)에게 증여 후 수증자가 10년 이내 재양도할 때. 증여세·양도세는 각각 별도로 계산한 뒤 그 결과를 아래에 입력해 비교합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ddSpouseLineal"><label for="ddSpouseLineal">배우자·직계존비속으로서 이월과세(§97의2) 적용대상임(체크시 §101②는 적용대상 제외)</label></div>' +
+        '<div class="taxcalc-field"><label>증여일로부터 재양도일까지 경과연수</label><input type="number" id="ddYearsSinceGift" placeholder="년" maxlength="2"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ddGainToDonee"><label for="ddGainToDonee">양도소득이 수증자에게 실질적으로 귀속됨이 명백함(§101②단서, 체크시 적용배제)</label></div>' +
+        '<div class="taxcalc-field"><label>수증자가 부담한 증여세(결정세액)</label><input type="number" id="ddDoneeGiftTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>수증자가 부담하는 양도소득세(수증자 취득가액 기준, 결정세액)</label><input type="number" id="ddDoneeTransferTax" placeholder="원 — 위 이월과세 계산기의 미적용시 세액 등으로 별도 계산"></div>' +
+        '<div class="taxcalc-field"><label>증여자가 직접 양도했다고 볼 경우의 양도소득세</label><input type="number" id="ddDonorTax" placeholder="원 — 증여자의 원취득가액 기준, 위 일반 양도세 계산기로 별도 계산"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-donor-direct-transfer">우회양도 부인 여부 판정하기</button>' +
+      '<div id="taxCalcDonorDirectTransferResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -1978,6 +1991,23 @@ function renderCarryoverResult(r){
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '<div class="taxcalc-result-note">이 결과는 참고용 개산이며, 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderDonorDirectTransferResult(r){
+  const box = document.getElementById('taxCalcDonorDirectTransferResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === true){
+    html += '<div class="taxcalc-result-note">✅ 증여자 직접양도로 의제됩니다(소득세법§101②) — 증여세는 부과되지 않고, 증여자에게 양도소득세가 과세됩니다.</div>';
+  } else {
+    html += '<div class="taxcalc-result-note">⛔ §101②을 적용하지 않습니다 — 수증자에게 증여세·양도소득세가 각각 그대로 부과됩니다.</div>';
+  }
+  if (r.수증자부담세액합계 !== undefined) html += taxCalcResultRow('수증자 부담세액 합계(증여세+양도세)', won(r.수증자부담세액합계));
+  if (r.증여자직접양도시양도세 !== undefined) html += taxCalcResultRow('증여자 직접양도시 양도소득세', won(r.증여자직접양도시양도세));
+  if (r.납부세액 !== undefined) html += taxCalcResultRow('실제 부담할 세액', won(r.납부세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
 }
@@ -3677,6 +3707,16 @@ taxCalcView.addEventListener('click', function(e){
       giftTaxableValue: numVal(document.getElementById('coGiftTaxableValue').value) || 0
     };
     renderCarryoverResult(calculateTransferTaxWithCarryoverJS(input));
+  } else if (action === 'run-donor-direct-transfer'){
+    const input = {
+      isSpouseOrLinealCarryoverApplies: document.getElementById('ddSpouseLineal').checked,
+      yearsSinceGift: numVal(document.getElementById('ddYearsSinceGift').value) || 0,
+      isGainActuallyAttributedToDonee: document.getElementById('ddGainToDonee').checked,
+      doneeGiftTax: numVal(document.getElementById('ddDoneeGiftTax').value) || 0,
+      doneeTransferTax: numVal(document.getElementById('ddDoneeTransferTax').value) || 0,
+      donorDirectTransferTax: numVal(document.getElementById('ddDonorTax').value) || 0
+    };
+    renderDonorDirectTransferResult(calculateDonorDirectTransferDeemedJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,

@@ -809,6 +809,22 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_donor_direct_transfer_deemed',
+    description: '양도소득의 부당행위계산 - 증여 후 우회양도 부인(소득세법§101②③④)을 판정한다. 거주자가 특수관계인(§97의2① 이월과세가 적용되는 배우자·직계존비속은 제외)에게 자산을 증여한 후 그 증여일부터 10년 이내에 수증자가 다시 타인에게 양도한 경우로서, (수증자의 증여세+양도소득세 합계)가 (증여자가 직접 양도했다고 볼 경우의 양도소득세)보다 적으면 증여자가 직접 양도한 것으로 보아 증여자에게 양도소득세를 과세하고 당초 증여에 대한 증여세는 부과하지 않는다. 양도소득이 수증자에게 실질적으로 귀속된 경우에는 적용하지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        isSpouseOrLinealCarryoverApplies: { type: 'boolean', description: '수증자가 배우자·직계존비속으로서 이월과세(§97의2)가 적용되는 경우 true — 이 경우 §101②은 적용대상에서 제외된다.' },
+        yearsSinceGift: { type: 'number', description: '증여일부터 재양도일까지의 경과연수.' },
+        isGainActuallyAttributedToDonee: { type: 'boolean', description: '양도소득이 수증자에게 실질적으로 귀속된 것으로 인정되는 경우 true(§101②단서 적용배제).' },
+        doneeGiftTax: { type: 'number', description: '수증자가 부담한 증여세(산출세액에서 공제·감면세액을 뺀 세액).' },
+        doneeTransferTax: { type: 'number', description: '수증자가 그 자산을 양도할 때 부담하는 양도소득세(수증자의 취득가액=증여받은 가액 기준 결정세액).' },
+        donorDirectTransferTax: { type: 'number', description: '증여자가 직접 양도했다고 볼 경우의 양도소득세(증여자의 원취득가액 기준).' }
+      },
+      required: ['yearsSinceGift']
+    }
+  },
+  {
     name: 'calculate_trust_income_gift_tax',
     description: '신탁이익의 증여(상증세법§33)를 계산한다. 위탁자가 타인을 수익자로 지정한 신탁에서 원본 또는 수익을 받을 권리를 갖게 하는 경우, 원칙적으로 그 원본·수익이 실제 지급되는 날(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①)을 증여일로 하여 과세한다. 원본·수익을 한번에 받으면 그 가액 그대로가 증여재산가액이고, 여러 차례 나눠 받는 경우에는 증여시기를 기준으로 시행령§61(신탁수익권 평가)을 준용해 평가한 가액을 사용한다(시행령§25②) — 후자는 calculate_trust_benefit_value 도구로 먼저 평가액을 구한 뒤 그 결과를 giftAmount로 입력해야 한다.',
     input_schema: {
@@ -4338,6 +4354,49 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   };
 }
 
+// 양도소득의 부당행위계산 - 증여 후 우회양도 부인 (소득세법§101②③④) — 특수관계인(배우자·직계존비속으로서
+// §97의2 이월과세 적용대상은 제외)에게 증여 후 10년 이내 재양도시, (수증자 증여세+양도세)가 (증여자 직접
+// 양도시 양도세)보다 적으면 증여자 직접양도로 의제해 증여자에게 양도세를 과세하고 증여세는 부과하지 않는다.
+function toolCalculateDonorDirectTransferDeemed(p) {
+  p = p || {};
+  if (p.isSpouseOrLinealCarryoverApplies) {
+    return {
+      적용여부: false,
+      안내: '배우자·직계존비속으로서 이월과세(소득세법§97의2)가 적용되는 대상이므로 이 조문(§101②)의 적용대상에서 제외됩니다.'
+    };
+  }
+  const yearsSinceGift = Number(p.yearsSinceGift);
+  if (!(yearsSinceGift >= 0)) return { error: '증여일로부터 재양도일까지의 경과연수가 필요합니다.' };
+  if (yearsSinceGift > 10) {
+    return {
+      적용여부: false,
+      안내: '증여일부터 10년을 초과하여 재양도하였으므로 §101② 요건(10년 이내 재양도)에 해당하지 않습니다.'
+    };
+  }
+  if (p.isGainActuallyAttributedToDonee) {
+    return {
+      적용여부: false,
+      안내: '양도소득이 수증자에게 실질적으로 귀속된 것으로 인정되어(§101②단서) 적용하지 않습니다.'
+    };
+  }
+  const doneeGiftTax = Math.max(0, Number(p.doneeGiftTax) || 0);
+  const doneeTransferTax = Math.max(0, Number(p.doneeTransferTax) || 0);
+  const donorDirectTransferTax = Math.max(0, Number(p.donorDirectTransferTax) || 0);
+  const combinedDoneeTax = doneeGiftTax + doneeTransferTax;
+  if (combinedDoneeTax >= donorDirectTransferTax) {
+    return {
+      적용여부: false, 수증자부담세액합계: combinedDoneeTax, 증여자직접양도시양도세: donorDirectTransferTax,
+      납부세액: combinedDoneeTax,
+      안내: '수증자가 부담하는 증여세·양도소득세 합계(' + combinedDoneeTax + '원)가 증여자가 직접 양도했다고 볼 경우의 양도소득세(' + donorDirectTransferTax + '원) 이상이어서 §101②을 적용하지 않습니다. 수증자에게 증여세와 양도소득세가 각각 그대로 부과됩니다.'
+    };
+  }
+  return {
+    적용여부: true, 수증자부담세액합계: combinedDoneeTax, 증여자직접양도시양도세: donorDirectTransferTax,
+    납부세액: donorDirectTransferTax,
+    안내: '수증자 부담세액 합계(' + combinedDoneeTax + '원)가 증여자 직접양도시 양도소득세(' + donorDirectTransferTax + '원)보다 적어, 증여자가 그 자산을 직접 양도한 것으로 보아 증여자에게 양도소득세를 부과합니다(소득세법§101②). 당초 증여받은 자산에 대한 증여세는 부과하지 않습니다(소득세법§101③). 그 양도소득에 대해서는 증여자와 수증자가 연대하여 납세의무를 집니다(소득세법§2의2③).'
+  };
+}
+
 // 신탁이익의 증여 (상증세법§33, 시행령§25) — 원본 또는 수익을 한번에 받으면 그 가액 그대로, 여러 차례
 // 나눠 받으면 증여시기를 기준으로 시행령§61을 준용해 평가한 가액(§25②)을 giftAmount로 입력받는다.
 function toolCalculateTrustIncomeGiftTax(p) {
@@ -5667,6 +5726,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_spouse_property_transfer_gift_tax' ||
         b.name === 'calculate_insurance_proceeds_gift_tax' ||
         b.name === 'calculate_trust_income_gift_tax' ||
+        b.name === 'calculate_donor_direct_transfer_deemed' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -5848,6 +5908,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_trust_income_gift_tax') {
         const resultObj = toolCalculateTrustIncomeGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_donor_direct_transfer_deemed') {
+        const resultObj = toolCalculateDonorDirectTransferDeemed(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

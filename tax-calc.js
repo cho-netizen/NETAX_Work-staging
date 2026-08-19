@@ -1973,6 +1973,52 @@
     };
   };
 
+  // 양도소득의 부당행위계산 - 증여 후 우회양도 부인 (소득세법§101②③④) — 거주자가 특수관계인(§97의2①
+  // 적용받는 배우자·직계존비속은 제외, 그쪽은 이월과세로 별도 처리)에게 자산을 증여한 후 수증자가 그
+  // 증여일부터 10년 이내에 다시 타인에게 양도한 경우로서, (수증자의 증여세+양도소득세 합계)가 (증여자가
+  // 직접 양도했다고 볼 경우의 양도소득세)보다 적으면 증여자가 직접 양도한 것으로 보아 증여자에게 양도소득세를
+  // 과세하고, 당초 증여에 대해서는 증여세를 부과하지 않는다(§101③). 양도소득이 수증자에게 실질적으로
+  // 귀속된 경우에는 적용하지 않는다(§101②단서).
+  window.calculateDonorDirectTransferDeemedJS = function (p) {
+    p = p || {};
+    if (p.isSpouseOrLinealCarryoverApplies) {
+      return {
+        적용여부: false,
+        안내: '배우자·직계존비속으로서 이월과세(소득세법§97의2)가 적용되는 대상이므로 이 조문(§101②)의 적용대상에서 제외됩니다.'
+      };
+    }
+    const yearsSinceGift = Number(p.yearsSinceGift);
+    if (!(yearsSinceGift >= 0)) return { error: '증여일로부터 재양도일까지의 경과연수가 필요합니다.' };
+    if (yearsSinceGift > 10) {
+      return {
+        적용여부: false,
+        안내: '증여일부터 10년을 초과하여 재양도하였으므로 §101② 요건(10년 이내 재양도)에 해당하지 않습니다.'
+      };
+    }
+    if (p.isGainActuallyAttributedToDonee) {
+      return {
+        적용여부: false,
+        안내: '양도소득이 수증자에게 실질적으로 귀속된 것으로 인정되어(§101②단서) 적용하지 않습니다.'
+      };
+    }
+    const doneeGiftTax = Math.max(0, Number(p.doneeGiftTax) || 0);
+    const doneeTransferTax = Math.max(0, Number(p.doneeTransferTax) || 0);
+    const donorDirectTransferTax = Math.max(0, Number(p.donorDirectTransferTax) || 0);
+    const combinedDoneeTax = doneeGiftTax + doneeTransferTax;
+    if (combinedDoneeTax >= donorDirectTransferTax) {
+      return {
+        적용여부: false, 수증자부담세액합계: combinedDoneeTax, 증여자직접양도시양도세: donorDirectTransferTax,
+        납부세액: combinedDoneeTax,
+        안내: '수증자가 부담하는 증여세·양도소득세 합계(' + combinedDoneeTax + '원)가 증여자가 직접 양도했다고 볼 경우의 양도소득세(' + donorDirectTransferTax + '원) 이상이어서 §101②을 적용하지 않습니다. 수증자에게 증여세와 양도소득세가 각각 그대로 부과됩니다.'
+      };
+    }
+    return {
+      적용여부: true, 수증자부담세액합계: combinedDoneeTax, 증여자직접양도시양도세: donorDirectTransferTax,
+      납부세액: donorDirectTransferTax,
+      안내: '수증자 부담세액 합계(' + combinedDoneeTax + '원)가 증여자 직접양도시 양도소득세(' + donorDirectTransferTax + '원)보다 적어, 증여자가 그 자산을 직접 양도한 것으로 보아 증여자에게 양도소득세를 부과합니다(소득세법§101②). 당초 증여받은 자산에 대한 증여세는 부과하지 않습니다(소득세법§101③). 그 양도소득에 대해서는 증여자와 수증자가 연대하여 납세의무를 집니다(소득세법§2의2③).'
+    };
+  };
+
   // 신탁이익의 증여 (상증세법§33, 시행령§25) — 위탁자가 타인을 수익자로 지정한 신탁에서, 원본 또는
   // 수익이 (원칙적으로) 실제 지급되는 날을 증여일로 하여 그 신탁의 이익을 받을 권리의 가액을 증여재산가액으로
   // 한다. 원본·수익을 한번에 받으면 그 가액 그대로, 여러 차례 나눠 받으면 증여시기를 기준으로 시행령§61을
