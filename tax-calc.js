@@ -2548,6 +2548,69 @@
     };
   };
 
+  // 특정법인과의 거래를 통한 이익의 증여 의제 (상증세법§45의5, 시행령§34의5) — 지배주주등의 주식보유비율이
+  // 30% 이상인 특정법인이 지배주주의 특수관계인과 무상제공·저가양도·고가양수·불균등 자본거래 등을 하면,
+  // 특정법인의 이익 × 지배주주등의 주식보유비율을 그 지배주주등이 증여받은 것으로 본다. §47①에 §45의5가
+  // 열거되어 있지 않아 합산배제증여재산이 "아니므로" 일반 증여세 산식(관계별공제 등)을 따르되(다만 증여자가
+  // 특정법인이므로 통상 관계별공제 한도는 0으로 처리한다), §45의5②의 "직접증여시 증여세상당액-법인세상당액"
+  // 캡이 적용되고, 지배주주등별 증여의제이익이 1억원 미만이면 과세하지 않는다(시행령§34의5⑤).
+  window.calculateSpecificCorporationGiftTaxJS = function (p) {
+    p = p || {};
+    const benefitToCorpAmount = Number(p.benefitToCorpAmount) || 0;
+    if (benefitToCorpAmount <= 0) return { error: '특정법인이 얻는 이익(증여재산가액·채무면제이익·자본거래이익·시가차액 등)이 필요합니다.' };
+    const corporateTaxAfterCredit = Math.max(0, Number(p.corporateTaxAfterCredit) || 0);
+    const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
+    const shareholderOwnershipRatio = Math.min(1, Math.max(0, Number(p.shareholderOwnershipRatio) || 0));
+    if (shareholderOwnershipRatio <= 0) return { error: '지배주주등의 주식보유비율이 필요합니다.' };
+
+    const incomeRatio = corporateTaxableIncome > 0 ? Math.min(1, benefitToCorpAmount / corporateTaxableIncome) : 0;
+    const corporateTaxEquivalentTotal = Math.round(corporateTaxAfterCredit * incomeRatio);
+    const specificCorpNetBenefit = Math.max(0, benefitToCorpAmount - corporateTaxEquivalentTotal);
+    const giftDeemedAmount = Math.round(specificCorpNetBenefit * shareholderOwnershipRatio);
+
+    if (giftDeemedAmount < 100000000) {
+      return {
+        과세대상여부: false, 증여의제이익: giftDeemedAmount, 납부세액: 0,
+        안내: '증여의제이익(' + giftDeemedAmount + '원)이 1억원 미만이어서 과세하지 않습니다(시행령§34의5⑤).'
+      };
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftDeemedAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    let calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+
+    const corporateTaxEquivalentForShareholder = Math.round(corporateTaxEquivalentTotal * shareholderOwnershipRatio);
+    const directGiftTaxEquivalent = Number(p.directGiftTaxEquivalent);
+    let capApplied = false;
+    if (Number.isFinite(directGiftTaxEquivalent) && directGiftTaxEquivalent > 0) {
+      const capLimit = Math.max(0, directGiftTaxEquivalent - corporateTaxEquivalentForShareholder);
+      if (calculatedTax > capLimit) { calculatedTax = capLimit; capApplied = true; }
+    }
+
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true,
+      특정법인의이익: specificCorpNetBenefit, 법인세상당액_전체: corporateTaxEquivalentTotal,
+      증여의제이익: giftDeemedAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: (capApplied ? '산출세액이 §45의5② 한도(직접증여시 증여세상당액-법인세상당액)를 초과해 그 한도로 낮췄습니다. ' : '') + '증여자가 지배주주의 친족이 아닌 특정법인 자체이므로 증여재산공제(§53)는 통상 적용되지 않습니다(위 관계별공제 한도는 0으로 입력하는 것이 원칙입니다). 증여세 과세표준 신고기한은 특정법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월입니다(§68①).'
+    };
+  };
+
   // 상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10) — 민법상 상속재산은
   // 아니지만 상속세법이 상속재산으로 의제하는 항목들. 각 항목의 포함 여부·포함액을 판정해, 그 결과를
   // 위 상속세 계산기의 "상속재산가액"에 합산해 넣는 용도다.

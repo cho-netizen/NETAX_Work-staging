@@ -877,6 +877,34 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_specific_corporation_gift_tax',
+    description: '특정법인과의 거래를 통한 이익의 증여 의제(상증세법§45의5)를 계산한다. 지배주주등의 주식보유비율이 30% 이상인 특정법인이 지배주주의 특수관계인과 무상제공·저가양도·고가양수·불균등 자본거래 등을 하면, (특정법인의 이익 - 그 이익에 대응하는 법인세상당액) × 지배주주등의 주식보유비율을 그 지배주주등이 증여받은 것으로 본다. 증여의제이익이 1억원 미만이면 과세하지 않는다. §45의5는 합산배제증여재산이 아니므로 일반 증여세 산식을 따르되(증여자가 법인이므로 증여재산공제는 통상 0), 직접증여시 증여세상당액에서 법인세상당액을 뺀 금액을 초과하는 산출세액은 그 초과분이 없는 것으로 본다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        benefitToCorpAmount: { type: 'number', description: '특정법인이 얻는 이익(원) — 증여재산가액, 채무면제·인수·변제로 인한 이익, 자본거래(§38·39·39의2·39의3·40·41의2·42의2 준용) 이익, 또는 시가와 대가의 차액 등 거래유형별로 계산한 금액.' },
+        corporateTaxAfterCredit: { type: 'number', description: '특정법인의 법인세법§55① 산출세액에서 공제·감면세액을 뺀 금액(원, 토지등양도소득 법인세는 제외).' },
+        corporateTaxableIncome: { type: 'number', description: '특정법인의 법인세법§14에 따른 해당 사업연도 각 사업연도의 소득금액(원).' },
+        shareholderOwnershipRatio: { type: 'number', description: '증여의제이익을 계산할 그 지배주주등의 주식보유비율(0~1).' },
+        directGiftTaxEquivalent: { type: 'number', description: '§45의5② 한도 계산용 — 그 지배주주등이 특정법인의 이익 중 자기 지분에 해당하는 금액을 직접 증여받았다고 볼 경우의 증여세 상당액(원, 관계별 공제 반영해 별도 계산). 없으면 한도를 적용하지 않는다.' },
+        relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액 — 증여자가 법인이므로 통상 0.' },
+        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
+        disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
+        priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
+        underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
+      },
+      required: ['benefitToCorpAmount', 'shareholderOwnershipRatio']
+    }
+  },
+  {
     name: 'calculate_deemed_inheritance_property',
     description: '상속재산으로 보는 보험금·신탁재산·퇴직금 등(간주상속재산, 상증세법§8,§9,§10)의 포함 여부와 포함액을 판정한다. 보험금(§8): 피상속인이 보험계약자이거나, 계약자가 다르더라도 피상속인이 실질적으로 보험료를 납부한 경우 그 비율만큼 상속재산으로 본다. 신탁재산(§9): 피상속인이 신탁한 재산은 원칙적으로 상속재산이나 §33①로 이미 증여재산가액 처리된 신탁수익권은 제외하고, 반대로 피상속인이 타인신탁의 수익권을 갖고 있었다면 그 가액도 포함한다. 퇴직금등(§10): 원칙적으로 상속재산이나 국민연금법 등이 정하는 유족연금류는 제외한다.',
     input_schema: {
@@ -5007,6 +5035,66 @@ function toolCalculateDeemedInheritanceProperty(p) {
   };
 }
 
+// 특정법인과의 거래를 통한 이익의 증여 의제 (상증세법§45의5, 시행령§34의5) — §47①에 §45의5가 열거되어
+// 있지 않아 합산배제증여재산이 아니므로 일반 증여세 산식(관계별공제 등)을 따르되, ②의 "직접증여시
+// 증여세상당액-법인세상당액" 캡이 적용되고, 지배주주등별 증여의제이익이 1억원 미만이면 과세하지 않는다.
+function toolCalculateSpecificCorporationGiftTax(p) {
+  p = p || {};
+  const benefitToCorpAmount = Number(p.benefitToCorpAmount) || 0;
+  if (benefitToCorpAmount <= 0) return { error: '특정법인이 얻는 이익(증여재산가액·채무면제이익·자본거래이익·시가차액 등)이 필요합니다.' };
+  const corporateTaxAfterCredit = Math.max(0, Number(p.corporateTaxAfterCredit) || 0);
+  const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
+  const shareholderOwnershipRatio = Math.min(1, Math.max(0, Number(p.shareholderOwnershipRatio) || 0));
+  if (shareholderOwnershipRatio <= 0) return { error: '지배주주등의 주식보유비율이 필요합니다.' };
+
+  const incomeRatio = corporateTaxableIncome > 0 ? Math.min(1, benefitToCorpAmount / corporateTaxableIncome) : 0;
+  const corporateTaxEquivalentTotal = Math.round(corporateTaxAfterCredit * incomeRatio);
+  const specificCorpNetBenefit = Math.max(0, benefitToCorpAmount - corporateTaxEquivalentTotal);
+  const giftDeemedAmount = Math.round(specificCorpNetBenefit * shareholderOwnershipRatio);
+
+  if (giftDeemedAmount < 100000000) {
+    return {
+      과세대상여부: false, 증여의제이익: giftDeemedAmount, 납부세액: 0,
+      안내: '증여의제이익(' + giftDeemedAmount + '원)이 1억원 미만이어서 과세하지 않습니다(시행령§34의5⑤).'
+    };
+  }
+
+  const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+  const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+  const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftDeemedAmount));
+  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  let calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+
+  const corporateTaxEquivalentForShareholder = Math.round(corporateTaxEquivalentTotal * shareholderOwnershipRatio);
+  const directGiftTaxEquivalent = Number(p.directGiftTaxEquivalent);
+  let capApplied = false;
+  if (Number.isFinite(directGiftTaxEquivalent) && directGiftTaxEquivalent > 0) {
+    const capLimit = Math.max(0, directGiftTaxEquivalent - corporateTaxEquivalentForShareholder);
+    if (calculatedTax > capLimit) { calculatedTax = capLimit; capApplied = true; }
+  }
+
+  const priorPaidTax = Number(p.priorPaidTax) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+  const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+  return {
+    과세대상여부: true,
+    특정법인의이익: specificCorpNetBenefit, 법인세상당액_전체: corporateTaxEquivalentTotal,
+    증여의제이익: giftDeemedAmount,
+    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    납부세액: finalTax,
+    안내: (capApplied ? '산출세액이 §45의5② 한도(직접증여시 증여세상당액-법인세상당액)를 초과해 그 한도로 낮췄습니다. ' : '') + '증여자가 지배주주의 친족이 아닌 특정법인 자체이므로 증여재산공제(§53)는 통상 적용되지 않습니다(위 관계별공제 한도는 0으로 입력하는 것이 원칙입니다). 증여세 과세표준 신고기한은 특정법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월입니다(§68①).'
+  };
+}
+
 const TASK_PLAN_FILE_NAME = '_작업진행.json';
 
 /**
@@ -6043,6 +6131,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_unsold_house_acquisition_reduction' ||
         b.name === 'calculate_unsold_house_one_house_exclusion' ||
         b.name === 'calculate_deemed_inheritance_property' ||
+        b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -6249,6 +6338,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_deemed_inheritance_property') {
         const resultObj = toolCalculateDeemedInheritanceProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_specific_corporation_gift_tax') {
+        const resultObj = toolCalculateSpecificCorporationGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

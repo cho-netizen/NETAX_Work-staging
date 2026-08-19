@@ -192,6 +192,12 @@ function recomputeJmUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(fiscalYearEnd ? fiscalYearEnd.value : '', 3);
   setUnpaidDaysField_('jmUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeScUnpaidDays(){
+  const fiscalYearEnd = document.getElementById('scFiscalYearEnd');
+  const paidDate = document.getElementById('scPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(fiscalYearEnd ? fiscalYearEnd.value : '', 3);
+  setUnpaidDaysField_('scUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeJtUnpaidDays(){
   const fiscalYearEnd = document.getElementById('jtFiscalYearEnd');
   const paidDate = document.getElementById('jtPaidDate');
@@ -2483,6 +2489,30 @@ function renderGiftPane(){
       '<div id="taxCalcBusinessOpportunityGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>특정법인과의 거래를 통한 이익의 증여의제(§45의5) — 지배주주 지분 30%이상 법인이 지배주주의 특수관계인과 무상제공·저가양도·고가양수·불균등 자본거래 등을 할 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>특정법인이 얻는 이익</label><input type="number" id="scBenefitToCorp" placeholder="원 (증여재산가액·채무면제이익·자본거래이익·시가차액 등, 별도 계산)"></div>' +
+        '<div class="taxcalc-field"><label>특정법인의 법인세 산출세액(공제·감면 차감후)</label><input type="number" id="scCorpTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>특정법인의 해당 사업연도 소득금액</label><input type="number" id="scCorpIncome" placeholder="원 (법인세법§14)"></div>' +
+        '<div class="taxcalc-field"><label>지배주주등의 주식보유비율</label><input type="number" step="0.01" min="0" max="1" id="scShareRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>직접증여시 증여세상당액(§45의5② 한도용)</label><input type="number" id="scDirectGiftTax" placeholder="원 (관계별공제 반영해 별도 계산, 없으면 한도 미적용)"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="scRelationDeduction" placeholder="원 (증여자가 법인이므로 통상 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="scAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="scFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="scFraudulent"><label for="scFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="scUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>특정법인 사업연도 종료일</label><input type="date" id="scFiscalYearEnd" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="scPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산: 사업연도종료일+3개월 신고기한 대비)</label><input type="number" id="scUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-specific-corp-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcSpecificCorpGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제11호서식] 연부연납(다년 분할납부) 계산 — 신고 후 매년 나눠 낼 회차별 세액을 계산합니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>세목</label><select id="ipGiftTaxType"><option value="gift" selected>증여세</option><option value="inheritance">상속세</option></select></div>' +
@@ -2573,6 +2603,10 @@ function renderGiftPane(){
   const jmPaidDateEl = document.getElementById('jmPaidDate');
   if (jmFiscalYearEndEl) jmFiscalYearEndEl.addEventListener('input', recomputeJmUnpaidDays);
   if (jmPaidDateEl) jmPaidDateEl.addEventListener('input', recomputeJmUnpaidDays);
+  const scFiscalYearEndEl = document.getElementById('scFiscalYearEnd');
+  const scPaidDateEl = document.getElementById('scPaidDate');
+  if (scFiscalYearEndEl) scFiscalYearEndEl.addEventListener('input', recomputeScUnpaidDays);
+  if (scPaidDateEl) scPaidDateEl.addEventListener('input', recomputeScUnpaidDays);
   recomputeJmUnpaidDays();
   const jtFiscalYearEndEl = document.getElementById('jtFiscalYearEnd');
   const jtPaidDateEl = document.getElementById('jtPaidDate');
@@ -2824,6 +2858,14 @@ function renderRelatedPartyGiftResult(r){
   html += '<div class="taxcalc-result-note">특수관계법인거래비율·주식보유비율은 과세제외매출액을 반영해 이미 계산된 최종 비율을 넣어야 합니다. 지배주주 판정, 다수 특수관계법인이 있는 경우의 증여자별 안분은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
   html += '</div>';
   box.innerHTML = html;
+}
+
+function renderSpecificCorpGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcSpecificCorpGiftResult'), r, [
+    { key: '특정법인의이익', label: '특정법인의 이익(법인세상당액 차감후)' },
+    { key: '법인세상당액_전체', label: '법인세상당액(전체)' },
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
 }
 
 function renderBusinessOpportunityGiftResult(r){
@@ -4146,6 +4188,21 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('tiUnpaidDays').value) || 0
     };
     renderTrustIncomeResult(calculateTrustIncomeGiftTaxJS(input));
+  } else if (action === 'run-specific-corp-gift'){
+    const input = {
+      benefitToCorpAmount: numVal(document.getElementById('scBenefitToCorp').value) || 0,
+      corporateTaxAfterCredit: numVal(document.getElementById('scCorpTax').value) || 0,
+      corporateTaxableIncome: numVal(document.getElementById('scCorpIncome').value) || 0,
+      shareholderOwnershipRatio: numVal(document.getElementById('scShareRatio').value) || 0,
+      directGiftTaxEquivalent: numVal(document.getElementById('scDirectGiftTax').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('scRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('scAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('scFilingStatus').value,
+      isFraudulent: document.getElementById('scFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('scUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('scUnpaidDays').value) || 0
+    };
+    renderSpecificCorpGiftResult(calculateSpecificCorporationGiftTaxJS(input));
   } else if (action === 'run-related-party-gift'){
     const input = {
       companySize: document.getElementById('jmCompanySize').value,
