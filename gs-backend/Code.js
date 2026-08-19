@@ -325,15 +325,18 @@ const DRIVE_TOOLS = [
         isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라(다주택자 중과 한시배제가 여러 차례 연장돼왔으니 신고 시점 기준으로 재확인).' },
         isNonBusinessLand: { type: 'boolean', description: '비사업용 토지인지 (기본세율+10%p 가산)' },
         isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
-        isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
-        isCarryoverBasis: { type: 'boolean', description: '배우자·직계존비속에게 증여받은 자산을 10년 이내 양도하는 이월과세(소득세법 §97-2) 대상인지 — true면 acquisitionPrice/acquisitionDate를 증여자의 원 취득가액·취득일로 넣어야 한다는 안내가 결과에 포함된다' },
-        isNewBuildingWithin5Years: { type: 'boolean', description: '건물을 신축(증축)하고 5년 이내에 양도하면서 환산취득가액을 필요경비로 적용했는지 — true면 환산취득가액 중 건물분에 5% 가산세(소득세법 §114의2)가 부과된다.' },
-        convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 환산취득가액 중 건물분 가액(원). 가산세 = 이 금액×5%.' },
+        isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. §133①1호·2호나목에 따라 §69의2~70 등 아래 다른 감면과 한도를 공유하며, 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
+        isLivestockLandExempt: { type: 'boolean', description: '8년 이상 자경 축사용지 폐업 감면(조특법§69의2) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도(연1억/5년합산2억)를 공유한다.' },
+        isFisheryLandExempt: { type: 'boolean', description: '8년 이상 자영 어업용 토지등 감면(조특법§69의3) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도를 공유한다.' },
+        isFarmlandSubstitutionExempt: { type: 'boolean', description: '농지대토 감면(조특법§70) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도를 공유한다.' },
+        isForestManagementExempt: { type: 'boolean', description: '자경산지 감면(조특법§69의4) 대상인지 — 10년 이상 산림경영계획인가받아 직접 경영해야 하며(미만이면 감면 없음), 직접 경영한 기간(취득일~양도일, 의제취득일 의제 미적용) 구간별로 감면율이 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%. isEightYearFarmland 등과 한도를 공유한다(단, 이들과 동시에 적용될 수는 없으므로 isEightYearFarmland 등이 true면 이 필드는 무시된다).' },
+        isNewBuildingWithin5Years: { type: 'boolean', description: '건물을 신축 또는 증축(증축은 바닥면적합계 85㎡ 초과분만 해당)하고 그 취득일·증축일로부터 5년 이내에 양도하면서, 그 취득가액을 감정가액 또는 환산취득가액으로 적용했는지(소득세법§97①1호나목) — true면 해당 건물분(증축이면 증축부분만) 감정가액 또는 환산취득가액의 5% 가산세(소득세법§114의2, 산출세액이 0이어도 부과)가 부과된다.' },
+        convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 취득가액으로 사용한 감정가액 또는 환산취득가액 중 건물분 가액(원, 증축이면 증축부분만). 가산세 = 이 금액×5%.' },
         rentalSpecialType: { type: 'string', enum: ['rental_general', 'rental_long'], description: '등록임대주택 장기보유특별공제 특례([별지 제84호서식] 코드04·05) — rental_general=장기일반민간임대주택(조특법§97의3, 10년이상임대 70%/8년이상 50% 정액), rental_long=장기임대주택(조특법§97의4, 일반 장특공제율에 임대기간별 2~10%p 추가). 지정하면 위 일반/1세대1주택 장특공제율을 대체하고, 다주택중과도 배제된다. 등록임대주택 요건(국민주택규모·임대료5%상한준수 등) 자체는 검증하지 않는다.' },
         rentalYears: { type: 'number', description: 'rentalSpecialType 지정 시 임대기간(년).' },
         pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의13 연금계좌세액공제. MIN(납입액, 양도차익, 1억원)×10%를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
-        compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y'], description: '공익사업용 토지 등 수용감면(조특법§77①, 2025.3.14 개정) — cash=현금보상(15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%). 산출세액에서 이 비율만큼 감면한다. 감면종합한도(연간·5년 합산, 조특법§133)는 다른 감면과 합산 확인이 필요하므로 이 도구가 추적하지 않는다. 해당 없으면 생략.' },
+        compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
         downContractPriceDifference: { type: 'number', description: '다운계약서(업계약서) 등 거짓 계약으로 비과세·감면을 적용받은 경우(소득세법§91②), 계약서상 거래가액과 실지거래가액의 차액(원). 1세대1주택 비과세라면 MIN(비과세 미적용시 산출세액, 이 차액)을, 8년자경농지·수용감면 등을 받았다면 MIN(감면세액, 이 차액)을 배제·추징한다. 정상신고 사안이면 생략.' },
         isReconstructionRights: { type: 'boolean', description: '재개발·재건축 조합원이 기존건물과 그 부수토지를 제공하고 취득한 조합원입주권 또는 신축주택을 청산금 납부하고 양도하는 경우(소득세법시행령§166①②③)인지. true면 acquisitionPrice는 무시되고, rightsValue·settlementPaid·managementDispositionDate·originalAssetAcquisitionPrice로 별도 산정한다(acquisitionDate는 기존건물 취득일 그대로, acquisitionPrice는 생략 가능).' },
         isCompletedNewHousing: { type: 'boolean', description: 'isReconstructionRights가 true일 때만 의미 있음 — false(기본값)면 조합원입주권 자체를 준공 전에 양도(§166①1호, 인가전양도차익에만 장특공제), true면 준공된 신축주택을 양도(§166②1호, 인가후양도차익을 청산금납부분·기존건물분으로 재분배해 각각 다른 보유기간으로 장특공제).' },
@@ -353,6 +356,36 @@ const DRIVE_TOOLS = [
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' }
       },
       required: ['transferPrice', 'acquisitionPrice', 'acquisitionDate', 'transferDate']
+    }
+  },
+  {
+    name: 'calculate_transfer_tax_with_carryover',
+    description: '이월과세(소득세법§97의2, 시행령§163의2) 적용 대상 양도소득세를 계산한다. 거주자가 배우자·직계존비속으로부터 증여받은 부동산·분양권·부동산과다보유법인주식을 증여일로부터 10년 이내에 양도하면, 수증자 본인의 취득가액이 아니라 증여자의 원취득가액·취득일·필요경비를 승계하고 수증자가 낸 증여세 상당액을 필요경비에 더한다. 다만 요건(관계·기간)을 충족 못하거나, 이월과세 적용시 1세대1주택 비과세가 되거나, 적용시 세액이 미적용시보다 적으면 이월과세를 적용하지 않고 수증자 본인 값(doneeOwnAcquisitionPrice 등)으로 계산한다 — 이 판정과 두 시나리오 비교를 이 도구가 전부 자동으로 한다. calculate_transfer_tax의 모든 입력 필드(assetType·isOneHouseOneFamily 등)를 그대로 받으며, 여기 추가되는 필드만 별도로 설명한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        transferPrice: { type: 'number', description: '양도가액(원)' },
+        transferDate: { type: 'string', description: '양도일 YYYY-MM-DD' },
+        assetType: { type: 'string', enum: ['house', 'presale_right', 'other'], description: 'calculate_transfer_tax와 동일.' },
+        necessaryExpenses: { type: 'number', description: '이번 양도 시 수증자가 추가로 지출한 필요경비(원, 중개보수 등). 증여자분 필요경비는 donorNecessaryExpenses로 별도 입력.' },
+        isOneHouseOneFamily: { type: 'boolean', description: 'calculate_transfer_tax와 동일 — 1세대1주택 비과세 요건 충족 전제 여부.' },
+        residenceYears: { type: 'number', description: 'calculate_transfer_tax와 동일.' },
+        multiHouseCount: { type: 'integer', description: 'calculate_transfer_tax와 동일.' },
+        isAdjustedArea: { type: 'boolean', description: 'calculate_transfer_tax와 동일.' },
+        isNonBusinessLand: { type: 'boolean', description: 'calculate_transfer_tax와 동일.' },
+        giftReceivedDate: { type: 'string', description: '증여받은 날 YYYY-MM-DD — 이 날짜와 양도일 사이가 10년을 넘으면 이월과세를 적용하지 않는다.' },
+        donorRelation: { type: 'string', enum: ['spouse', 'lineal'], description: '증여자와의 관계. spouse=배우자, lineal=직계존속 또는 직계비속. 이 둘이 아니면(예: 형제자매) 이월과세를 적용하지 않는다.' },
+        donorAcquisitionPrice: { type: 'number', description: '증여자가 해당 자산을 취득할 당시의 실지거래가액(원) — 이월과세 적용시 취득가액으로 쓰인다.' },
+        donorAcquisitionDate: { type: 'string', description: '증여자의 취득일 YYYY-MM-DD — 이월과세 적용시 취득일(보유기간 기산일)로 쓰인다.' },
+        donorNecessaryExpenses: { type: 'number', description: '증여자가 해당 자산에 지출한 필요경비(원, 취득세 등) — 이월과세 적용시 필요경비에 포함된다.' },
+        doneeOwnAcquisitionPrice: { type: 'number', description: '수증자 본인 기준 취득가액(원) — 증여 당시 상증세법상 평가액(=증여세 과세가액 산정 기초)을 넣는다. 이월과세 미적용 시나리오의 취득가액이자, 증여세상당액 계산의 분자(해당 자산의 증여세 과세가액)로도 쓰인다.' },
+        doneeOwnNecessaryExpenses: { type: 'number', description: '수증자가 증여받은 후 지출한 필요경비(원). 이월과세 미적용 시나리오에서만 쓰인다.' },
+        giftTaxPaid: { type: 'number', description: '수증자가 이 자산에 대해 납부했거나 납부할 증여세 산출세액(원, 상증세법§56에 따른 금액) — 시행령§163의2②1호. 증여세상당액 계산에 쓰인다.' },
+        giftTaxableValue: { type: 'number', description: '수증자의 전체 증여세 과세가액(상증세법§47, 원) — 시행령§163의2②3호. 이 자산 외에 함께 증여받은 재산이 있으면 그 합계까지 포함한 전체 금액이다(이 자산만 증여받았다면 doneeOwnAcquisitionPrice와 같은 값).' },
+        isEminentDomainExcludedFromCarryover: { type: 'boolean', description: '§97의2②1호 — 사업인정고시일로부터 소급 2년 이전에 증여받은 자산이 수용·협의매수된 경우인지. true면 이월과세를 적용하지 않는다.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'calculate_transfer_tax와 동일.' }
+      },
+      required: ['transferPrice', 'transferDate', 'giftReceivedDate', 'donorRelation', 'doneeOwnAcquisitionPrice']
     }
   },
   {
@@ -463,6 +496,9 @@ const DRIVE_TOOLS = [
         businessInheritanceNonBizAsset61: { type: 'number', description: '가업상속공제용(법인) — 사업무관자산 중 법인세법시행령§61①2호 해당자산(대여금)가액.' },
         businessInheritanceExcessCash: { type: 'number', description: '가업상속공제용(법인) — 과다보유현금(직전 5개 사업연도말 평균 현금성자산 보유액의 200% 초과분, 상증령§15⑤2호라목). 이미 계산된 금액을 입력한다.' },
         businessInheritanceNonBizStock: { type: 'number', description: '가업상속공제용(법인) — 영업활동과 직접 관련없이 보유하는 주식·채권 및 금융상품 가액(과다보유현금 제외분).' },
+        isMediumSizedBusiness: { type: 'boolean', description: '가업상속공제용 — 가업이 중견기업에 해당하는지(§18의2②, 시행령§15②). true면 businessHeirNonBusinessAssetValue·businessHeirTaxWithoutDeduction을 함께 넣어 중견기업 게이트를 판정한다.' },
+        businessHeirNonBusinessAssetValue: { type: 'number', description: 'isMediumSizedBusiness가 true일 때 — 가업상속인의 "가업상속재산 외의 상속재산의 가액"(원, 시행령§15⑥ = 그 상속인이 받거나 받을 상속재산가액-그가 부담하는 증명된 채무-가업상속재산가액). 이 값이 businessHeirTaxWithoutDeduction×200%를 초과하면 가업상속공제가 전액 배제된다.' },
+        businessHeirTaxWithoutDeduction: { type: 'number', description: 'isMediumSizedBusiness가 true일 때 — 가업상속인이 가업상속공제를 받지 않았을 경우 상증세법§3조의2①②에 따라 계산한 그 상속인이 납부할 의무가 있는 상속세액(원, 시행령§15⑦). 전체 상속세를 가업상속공제 없이 계산한 뒤 상속인별로 안분해서 별도로 구해야 한다.' },
         farmingInheritanceDeduction: { type: 'number', description: '영농상속공제 최종 공제액(§18의3, 원, 30억한도) — 아래 상세 자산내역([별지 제2호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다. 자격요건(8년 이상 영농 등) 판정은 이 도구가 하지 않는다.' },
         farmingIndividualAssetValue: { type: 'number', description: '영농상속공제용 — 소득세법을 적용받는 영농재산(농지·초지·산림지·어선·어업권 등)가액 합계([별지 제2호서식] ①합계).' },
         farmingStockValue: { type: 'number', description: '영농상속공제용 — 법인세법을 적용받는 영농(영농법인)인 경우, 상속재산 중 해당 법인 주식등 가액([별지 제2호서식] ③=②합계).' },
@@ -563,7 +599,7 @@ const DRIVE_TOOLS = [
         nonBizStock: { type: 'number', description: '영업활동과 직접 관련없이 보유하는 주식·채권 및 금융상품 가액.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, 재해손실공제 §54). 없으면 생략.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가수수료(원). 500만원 한도로 공제.' },
-        priorPaidTax: { type: 'number', description: '상증세법 §58 납부세액공제 — 동일인 재차증여 합산과세시 이미 납부한 증여세액. 없으면 생략.' },
+        priorPaidTax: { type: 'number', description: '조특법§30의5①후단(§30의6도 동일하게 적용)에 따라 priorSpecialGiftAmount로 합산한 이전 특례증여분에 대해 그 당시 실제 납부한 산출세액(원). 상증세법§58 납부세액공제와는 무관하다 — §58은 §47조②(10년 내 일반 증여재산 합산)에 따라 합산된 경우에만 적용되는데, §30의5⑪(§30의6⑤이 준용)이 일반 증여재산의 §47조② 합산 자체를 배제하므로 §58이 적용될 여지가 없다. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59). 없으면 생략.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
@@ -589,6 +625,7 @@ const DRIVE_TOOLS = [
         afterTaxOperatingIncome: { type: 'number', description: '수혜법인의 세후영업이익(원) — companySize가 medium(중견) 또는 general(일반)일 때 사용된다(§45의3①2호나·다목). small(중소기업)이면 이 값 대신 afterTaxNetIncome이 사용된다.' },
         afterTaxNetIncome: { type: 'number', description: '수혜법인의 세후순이익(원) — companySize가 small(중소기업)일 때만 사용된다(§45의3①2호가목). 중견·일반기업이면 무시된다.' },
         relatedPartyTransactionRatio: { type: 'number', description: '특수관계법인거래비율(%, 0~100) — (특수관계법인 매출액-과세제외매출액)/(수혜법인 총매출액-과세제외매출액)×100. 과세제외매출액(중소기업간 거래, 수출관련 거래 등 8개 항목) 반영이 끝난 최종 비율을 입력해야 한다.' },
+        relatedPartySalesAmount: { type: 'number', description: '수혜법인이 companySize가 general(일반기업)일 때만 — 특수관계법인에 대한 매출액(원, 과세제외매출액 반영 후). 거래비율이 정상거래비율(30%)의 3분의2인 20%를 초과하면서 이 금액이 1천억원을 초과하면, 거래비율이 30%를 넘지 않아도 §45의3①1호나목2)의 대체 과세요건을 충족한다.' },
         shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족(배우자, 6촌 이내 혈족, 4촌 이내 인척)의 수혜법인에 대한 직접 또는 간접 주식보유비율(%, 0~100). 직접출자와 간접출자를 모두 하고 있는 경우, 출자관계별로 세후영업이익·거래비율이 달라질 수 있으므로 이 도구를 출자관계별로 각각 호출해 증여의제이익을 따로 계산한 뒤 합산해야 한다(하나의 합계 비율로 한 번에 계산하지 말 것).' },
         dividendDeduction: { type: 'number', description: '지배주주등이 수혜법인의 직전 사업연도 증여세 과세표준 신고기한 다음날부터 이번 사업연도 신고기한까지 수혜법인(또는 간접출자법인)으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
         doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
@@ -625,6 +662,24 @@ const DRIVE_TOOLS = [
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['phase', 'profitFromOpportunity', 'shareholderOwnershipRatio']
+    }
+  },
+  {
+    name: 'calculate_nominee_trust_gift_tax',
+    description: '명의신탁재산의 증여 의제(상증세법§45의2)를 계산한다. 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 — 대표적으로 비상장·상장주식등)의 실제소유자와 명의자가 다르면, 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한 것으로 본다. §55①1호에 따라 증여재산공제(§53) 없이 명의신탁재산의 금액 전액(감정평가수수료만 차감)이 과세표준이 된다. 조세회피 목적 유무·적용 제외 사유(§45의2①각호)·추정 번복 사유(§45의2③단서) 판정은 이 도구가 하지 않으므로 별도로 확인해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nomineeTrustPropertyValue: { type: 'number', description: '명의신탁재산의 가액(원) — 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날) 현재 평가액.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산의 감정평가 수수료(원, §55①). 없으면 생략.' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
+      },
+      required: ['nomineeTrustPropertyValue']
     }
   },
   {
@@ -688,6 +743,7 @@ const DRIVE_TOOLS = [
       type: 'object',
       properties: {
         assetCategory: { type: 'string', enum: ['domestic_stock', 'foreign_stock', 'derivative', 'other_asset', 'trust_beneficiary'], description: 'domestic_stock=국내 상장·비상장주식등, foreign_stock=국외주식등(5년 이상 계속 거주자만 과세대상), derivative=파생상품등, other_asset=특정주식·부동산과다보유법인 주식등(기타자산 취급, 소득세법 §94①4), trust_beneficiary=신탁 수익권(소득세법 §94①6, §104①14 — 3억 이하 20%·3억 초과분 25%).' },
+        isMajorityNonBusinessLandCorp: { type: 'boolean', description: 'assetCategory가 other_asset(§94①4호다목·라목 주식등)일 때만 — 그 법인의 자산총액 중 법인세법§55조의2②에 따른 비사업용토지가 차지하는 비율이 100분의 50 이상인지(소득세법§104①9호, 시행령§167조의7). true면 기본세율(누진 6~45%)에 10%p를 가산한다(8호 비사업용토지 세율표와 동일 구조).' },
         transferPrice: { type: 'number', description: '양도가액(원). 상장주식은 원칙적으로 실제 거래가액.' },
         acquisitionPrice: { type: 'number', description: '취득가액(원).' },
         transferExpenses: { type: 'number', description: '양도비용(원, 증권거래세·양도소득세 신고서 작성비용 등). 없으면 생략(0).' },
@@ -2712,8 +2768,24 @@ function businessInheritanceDeductionDetailed_(p) {
   const targetAmount = targetIndividual + targetCorporate;
 
   const limitAmount = years < 10 ? 0 : (years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000));
-  const deductionAmount = Math.min(targetAmount, limitAmount);
-  return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo };
+  let deductionAmount = Math.min(targetAmount, limitAmount);
+
+  // 중견기업 게이트(상증세법§18의2②, 시행령§15⑥⑦) — 가업이 중견기업이고, 가업상속인의
+  // "가업상속재산 외의 상속재산의 가액"(=가업상속인이 받거나 받을 상속재산가액-그가 부담하는 증명된
+  // 채무-가업상속재산가액, 시행령§15⑥)이 "가업상속공제를 받지 않았을 경우 그 상속인이 납부할
+  // 상속세액×200%"(시행령§15⑦)를 초과하면, 그 상속인이 받는 가업상속재산에는 가업상속공제를
+  // 전혀 적용하지 않는다. 이 두 금액은 전체 상속세 계산(§3조의2① 상속인별 안분 등) 이후에야
+  // 확정되는 순환 종속 값이라 이 도구가 자동 산출하지 못하므로, 별도로 계산한 값을 직접 입력받는다.
+  let mediumSizedGateApplied = false;
+  if (p.isMediumSizedBusiness) {
+    const nonBusinessAssetValue = Number(p.businessHeirNonBusinessAssetValue) || 0;
+    const taxWithoutDeduction = Number(p.businessHeirTaxWithoutDeduction) || 0;
+    if (nonBusinessAssetValue > taxWithoutDeduction * 2) {
+      mediumSizedGateApplied = true;
+      deductionAmount = 0;
+    }
+  }
+  return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo, mediumSizedGateApplied };
 }
 
 // 영농상속공제 (§18의3, [별지 제2호서식]) — 소득세법 적용영농(①합계) + 법인세법 적용영농(주식등가액×사업관련자산비율), 30억원 고정한도.
@@ -2792,6 +2864,9 @@ function toolCalculateTransferTax(p) {
 
   const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(p.acquisitionDate), p.transferDate);
   if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다. 날짜를 확인하세요.' };
+  // 조특법§69의4 "직접 경영한 기간"은 양도차익 계산용 의제취득일(1985.1.1) 의제를 적용하지 않는
+  // 실제 취득일 기준 기간이므로 holdingYears와 별도로 계산한다.
+  const forestManagementYears = fullYearsElapsed_(p.acquisitionDate, p.transferDate);
 
   // 실제 취득가액을 확인할 수 없을 때(매매계약서 분실 등)의 필요경비 개산공제(시행령§163⑥1호·2호):
   // 취득 당시 기준시가 × 3%(토지·건물 일반 기준)를 필요경비로 대체 인정하되, 미등기양도자산은 3/1000(0.3%).
@@ -2860,8 +2935,9 @@ function toolCalculateTransferTax(p) {
     if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액, rightsValue)이 필요합니다.' };
     if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일(managementDispositionDate)이 필요합니다.' };
 
-    // §166③ — 기존건물과 그 부수토지의 취득가액을 확인할 수 없는 경우의 환산:
-    // 평가액 × (취득일 현재 기준시가 ÷ 관리처분계획등인가일 현재 기준시가)
+    // 소득세법시행령§166③ — 기존건물과 그 부수토지의 취득가액을 확인할 수 없는 경우의 환산(원문 확인 완료):
+    // 평가액 × (취득일 현재 기존건물과 그 부수토지의 소득세법§99①1호에 따른 기준시가 ÷
+    //           관리처분계획등인가일 현재 기존건물과 그 부수토지의 같은 호에 따른 기준시가)
     let originalAcqPrice = Number(p.originalAssetAcquisitionPrice) || 0;
     if (p.useConvertedRightsBaseAcquisitionPrice) {
       const acqStd = Number(p.originalAcquisitionStandardPrice) || 0;
@@ -3015,20 +3091,54 @@ function toolCalculateTransferTax(p) {
     }
   }
 
-  // 8년 자경농지 감면(조특법 §69) — 산출세액 전액 감면이나 연간 1억원 한도(5년 합산 2억원 한도는 여러 건에 걸친 것이라 이 도구가 추적하지 않음)
+  // 8년 자경농지(§69)·축사용지(§69의2)·어업용토지(§69의3)·농지대토(§70) 감면 — 전부 요건 충족시
+  // 산출세액 100% 감면이다. §133①1호·2호나목에 따라 §66~§70(§69의2~69의4 포함) 감면세액은 전부
+  // 합쳐 과세기간당 1억원·5개 과세기간 합산 2억원 한도를 공유한다(5년 합산은 여러 건에 걸친 것이라
+  // 이 도구가 추적하지 않음).
   let farmlandReduction = 0;
-  if (p.isEightYearFarmland) {
+  let farmlandReductionLabel = '';
+  if (p.isEightYearFarmland || p.isLivestockLandExempt || p.isFisheryLandExempt || p.isFarmlandSubstitutionExempt) {
     farmlandReduction = Math.min(calculatedTax, 100000000);
     calculatedTax -= farmlandReduction;
+    farmlandReductionLabel = p.isEightYearFarmland ? '8년 자경농지 감면(조특법§69)'
+      : p.isLivestockLandExempt ? '축사용지 감면(조특법§69의2)'
+      : p.isFisheryLandExempt ? '어업용토지 감면(조특법§69의3)'
+      : '농지대토 감면(조특법§70)';
+  } else if (p.isForestManagementExempt) {
+    // 조특법§69의4① — 10년 이상 직접 경영해야 하며(미만이면 감면 없음), 경영기간 구간별로 감면율이
+    // 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%.
+    const forestRate_ = forestManagementYears >= 50 ? 0.50 : forestManagementYears >= 40 ? 0.40
+      : forestManagementYears >= 30 ? 0.30 : forestManagementYears >= 20 ? 0.20
+      : forestManagementYears >= 10 ? 0.10 : 0;
+    if (forestRate_ > 0) {
+      farmlandReduction = Math.min(Math.round(calculatedTax * forestRate_), 100000000);
+      calculatedTax -= farmlandReduction;
+      farmlandReductionLabel = '자경산지 감면(조특법§69의4, 경영기간 ' + forestManagementYears + '년 — ' + Math.round(forestRate_ * 100) + '%)';
+    }
   }
 
   // 공익사업용 토지 등 수용감면(조특법 §77①, 2025.3.14 개정) — 현금보상 15%, 채권보상 20%(3년만기특약 35%, 5년만기특약 45%).
-  // 감면종합한도(조특법 §133, 연간·5년 합산)는 다른 감면과 합산해서 판단해야 하므로 이 도구가 추적하지 않는다.
-  const COMPENSATION_REDUCTION_RATES_ = { cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45 };
+  // §77의2(대토보상, 2026.12.31까지 양도분) — 40% 감면(과세이연 선택지는 향후 재양도시까지 세액을
+  // 이연하는 별도 구조라 이 도구는 감면 선택만 계산한다).
+  // §77의3(개발제한구역 매수, 2028.12.31까지 양도분) — 지정일 이전 취득분 40%, 매수청구·사업인정고시일로부터
+  // 20년 이전 취득분 25%.
+  const COMPENSATION_REDUCTION_RATES_ = {
+    cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45,
+    land_replacement: 0.40,
+    restricted_zone_40: 0.40, restricted_zone_25: 0.25
+  };
   let compensationReduction = 0;
+  let compensationReductionLabel = '';
   if (COMPENSATION_REDUCTION_RATES_[p.compensationType] !== undefined) {
-    compensationReduction = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
+    const compRaw_ = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
+    // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
+    // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
+    // 추적하지 않음).
+    compensationReduction = Math.min(compRaw_, 200000000);
     calculatedTax -= compensationReduction;
+    compensationReductionLabel = (p.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
+      : (p.compensationType === 'restricted_zone_40' || p.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
+      : '공익사업용토지 수용감면(조특법§77①)';
   }
 
   // 다운계약서(업계약서) 등 거짓 계약으로 위 감면을 적용받은 경우(소득세법 §91②) —
@@ -3040,8 +3150,9 @@ function toolCalculateTransferTax(p) {
     calculatedTax += downContractClawback;
   }
 
-  // 환산취득가액 가산세(소득세법 §114의2) — 건물을 신축(증축)하고 5년 이내에 양도하면서 환산취득가액을 필요경비로 적용한 경우,
-  // 환산취득가액 중 건물분에 5%를 가산세로 부과한다.
+  // 감정가액·환산취득가액 가산세(소득세법§114의2①) — 신축 또는 증축(85㎡ 초과분만)한 건물을 취득일·
+  // 증축일로부터 5년 이내에 양도하면서 그 취득가액을 감정가액 또는 환산취득가액으로 한 경우, 두 방법
+  // 모두 동일하게 해당 건물분 가액의 5%를 가산세로 부과한다(§114의2②에 따라 산출세액이 0이어도 적용).
   const convertedBuildingAcquisitionValueForPenalty = Number(p.convertedBuildingAcquisitionValueForPenalty) || 0;
   const conversionValuePenalty = (p.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
     ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
@@ -3082,7 +3193,9 @@ function toolCalculateTransferTax(p) {
     적용세율_설명: appliedRateNote,
     세율가산_내역: surchargeNotes,
     자경농지감면액: farmlandReduction,
+    자경농지감면_구분: farmlandReductionLabel,
     수용감면액: compensationReduction,
+    수용감면_구분: compensationReductionLabel,
     다운계약서_감면배제_추징액: downContractClawback,
     장기임대주택특례_적용여부: isRentalSpecial,
     산출세액: calculatedTax,
@@ -3094,11 +3207,79 @@ function toolCalculateTransferTax(p) {
     납부지연가산세: penalties.latePenalty,
     지방소득세: localIncomeTax,
     납부세액_합계: totalTax,
-    안내: (p.isCarryoverBasis
-      ? '배우자·직계존비속 증여 후 10년 이내 양도(이월과세, 소득세법 §97-2)로 전제했습니다 — acquisitionPrice/acquisitionDate는 증여자의 원 취득가액·취득일이어야 합니다. '
-      : '') +
+    안내: '배우자·직계존비속에게 증여받은 자산을 10년 이내 양도하는 경우(이월과세, 소득세법§97의2)는 이 도구가 아니라 calculate_transfer_tax_with_carryover을 써야 합니다. ' +
       '기본공제 250만원은 해당 과세기간 중 다른 양도가 없다고 가정한 값입니다. 다주택자 중과는 조정대상지역 지정 현황·한시 배제 여부가 시행령으로 수시로 바뀌므로 반드시 최신 여부를 확인하고 isAdjustedArea를 넣으세요. 8년자경농지 감면은 5년 합산 2억원 한도를 이 도구가 추적하지 않으니 다른 감면 이력과 합산해서 확인하세요. 부담부증여로 취득한 자산의 양도, 가업상속공제 관련 특례 등은 포함되지 않았습니다. 지방소득세(10%)는 가산세를 제외한 산출세액을 기준으로 계산했습니다 — 지방세 자체의 가산세는 별도이니 이 도구가 계산하지 않습니다.'
   };
+}
+
+// 이월과세 (소득세법§97의2, 시행령§163의2) — 거주자가 배우자 또는 직계존비속으로부터 증여받은
+// §94①1호(부동산)·§94①2호가목(부동산취득권리, 분양권)·§94①4호나목(부동산과다보유법인주식) 자산을
+// 증여일로부터 10년(§94①3호 주식등은 1년, 이 함수 범위 밖) 이내에 양도하면, 수증자 본인의 취득가액이
+// 아니라 증여자의 원취득가액·취득일·필요경비를 그대로 승계해서 양도차익을 계산하고, 수증자가 낸
+// 증여세 상당액(시행령§163의2②)을 필요경비에 추가로 얹는다. 다만 다음은 이월과세를 적용하지 않는다:
+// §97의2②2호 — 이월과세를 적용하면 §89①3호 주택(고가주택 포함) 비과세 대상이 되는 경우(비과세를
+//   얻기 위한 남용 방지 — 즉 증여자의 이른 취득일을 끌어써서 보유·거주요건을 채우는 것을 막는다)
+// §97의2②3호 — 이월과세 적용시 결정세액이 미적용시 결정세액보다 적은 경우(세액을 낮추는 용도로
+//   쓰는 것을 막는다 — 결과적으로 "적용/미적용 중 세액이 더 큰 쪽"이 채택된다)
+// 관계·기간 요건은 giftReceivedDate·donorRelation으로 직접 판정하고(요건 미충족이면 이월과세
+// 자체를 적용하지 않고 수증자 본인 값으로만 계산), 수용 특례(§97의2②1호)는 별도 입력으로 받는다.
+function toolCalculateTransferTaxWithCarryover(p) {
+  p = p || {};
+  const giftReceivedDate = p.giftReceivedDate;
+  const donorRelation = p.donorRelation; // 'spouse' | 'lineal'
+  const isEligibleRelation = donorRelation === 'spouse' || donorRelation === 'lineal';
+  const yearsSinceGift = (giftReceivedDate && p.transferDate) ? fullYearsElapsed_(giftReceivedDate, p.transferDate) : Infinity;
+  const isWithinWindow = yearsSinceGift < 10 || (yearsSinceGift === 10 && giftReceivedDate === p.transferDate);
+  const isEminentDomainExcluded = !!p.isEminentDomainExcludedFromCarryover; // §97의2②1호
+
+  const withoutCarryoverParams = Object.assign({}, p, {
+    acquisitionPrice: Number(p.doneeOwnAcquisitionPrice) || 0,
+    acquisitionDate: giftReceivedDate,
+    necessaryExpenses: Number(p.doneeOwnNecessaryExpenses) || 0
+  });
+  const withoutResult = toolCalculateTransferTax(withoutCarryoverParams);
+
+  if (!isEligibleRelation || !isWithinWindow || isEminentDomainExcluded) {
+    if (withoutResult && !withoutResult.error) {
+      withoutResult.이월과세_적용여부 = false;
+      withoutResult.이월과세_미적용사유 = !isEligibleRelation ? '배우자·직계존비속으로부터의 증여가 아님'
+        : (!isWithinWindow ? '증여일로부터 10년 경과' : '수용 특례(§97의2②1호) 해당');
+    }
+    return withoutResult;
+  }
+
+  const donorAcqPrice = Number(p.donorAcquisitionPrice) || 0;
+  const donorNecessaryExpenses = Number(p.donorNecessaryExpenses) || 0;
+  const giftTaxPaid = Number(p.giftTaxPaid) || 0;
+  const giftTaxableValue = Number(p.giftTaxableValue) || 0;
+  const assetGiftTaxableValue = Number(p.doneeOwnAcquisitionPrice) || 0;
+  const giftTaxEquivalent = giftTaxableValue > 0 ? Math.round(giftTaxPaid * assetGiftTaxableValue / giftTaxableValue) : 0;
+  const necessaryExpenseCap = Math.max(0, (Number(p.transferPrice) || 0) - donorAcqPrice - donorNecessaryExpenses);
+  const cappedGiftTaxEquivalent = Math.min(giftTaxEquivalent, necessaryExpenseCap);
+
+  const withCarryoverParams = Object.assign({}, p, {
+    acquisitionPrice: donorAcqPrice,
+    acquisitionDate: p.donorAcquisitionDate,
+    necessaryExpenses: donorNecessaryExpenses + cappedGiftTaxEquivalent
+  });
+  const withResult = toolCalculateTransferTax(withCarryoverParams);
+
+  const withBecomesExempt = !!(withResult && withResult.비과세여부);
+  if (withBecomesExempt) {
+    if (withoutResult && !withoutResult.error) { withoutResult.이월과세_적용여부 = false; withoutResult.이월과세_미적용사유 = '§97의2②2호 — 이월과세 적용시 1세대1주택 등 비과세 대상이 되어 배제'; }
+    return withoutResult;
+  }
+
+  const withTax = (withResult && typeof withResult.납부세액_합계 === 'number') ? withResult.납부세액_합계 : (withResult && withResult.비과세여부 ? 0 : Infinity);
+  const withoutTax = (withoutResult && typeof withoutResult.납부세액_합계 === 'number') ? withoutResult.납부세액_합계 : (withoutResult && withoutResult.비과세여부 ? 0 : Infinity);
+
+  const chosen = withTax < withoutTax ? withoutResult : withResult;
+  if (chosen && !chosen.error) {
+    chosen.이월과세_적용여부 = chosen === withResult;
+    if (chosen !== withResult) chosen.이월과세_미적용사유 = '§97의2②3호 — 이월과세를 적용한 세액(' + withTax + '원)이 미적용시 세액(' + withoutTax + '원)보다 적어 미적용';
+    chosen.이월과세_비교 = { 적용시_세액: withTax, 미적용시_세액: withoutTax, 증여세상당액_필요경비산입: cappedGiftTaxEquivalent };
+  }
+  return chosen;
 }
 
 // 혼인·출산 증여재산공제 (상증세법 §53의2, 2024.1.1. 이후 증여분부터) — 혼인일 전후 2년(또는
@@ -3435,7 +3616,8 @@ function toolCalculateInheritanceTax(p) {
     가업상속공제_계산내역: businessInheritanceDetail_ ? {
       대상금액: businessInheritanceDetail_.targetAmount, 한도액: businessInheritanceDetail_.limitAmount,
       소득세법적용분: businessInheritanceDetail_.targetIndividual, 법인세법적용분: businessInheritanceDetail_.targetCorporate,
-      사업관련자산가액비율: businessInheritanceDetail_.ratioInfo ? businessInheritanceDetail_.ratioInfo.ratio : null
+      사업관련자산가액비율: businessInheritanceDetail_.ratioInfo ? businessInheritanceDetail_.ratioInfo.ratio : null,
+      중견기업게이트_적용여부: businessInheritanceDetail_.mediumSizedGateApplied
     } : null,
     영농상속공제: farmingInheritanceDeduction,
     영농상속공제_계산내역: farmingInheritanceDetail_ ? {
@@ -3529,6 +3711,10 @@ function toolCalculateSpecialRateGiftTax(p) {
   const giftAmount = Number(p.giftAmount);
   if (!giftAmount || giftAmount <= 0) return { error: '증여재산가액(giftAmount)이 필요합니다.' };
 
+  // 조특법§30의5①후단·§30의6 — 같은 특례를 2회 이상(또는 부모 각각으로부터) 받으면 과세가액을
+  // 합산한다(priorSpecialGiftAmount). priorPaidTax는 그 이전 특례증여분에 대해 이미 낸 산출세액을
+  // 그대로 차감하는 것으로, 상증세법§58(§47②합산에 대한 기납부세액공제)과는 별개다 — §30의5⑪이
+  // 일반 증여재산의 §47② 합산 자체를 이 특례 과세가액에서 배제하므로 §58이 적용될 여지가 없다.
   const priorSpecialGiftAmount = Number(p.priorSpecialGiftAmount) || 0;
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
 
@@ -3615,8 +3801,10 @@ function toolCalculateSpecialRateGiftTax(p) {
 
 // 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 상증세법 §45의3·§45의4는 증여재산공제가 적용되지 않고
 // (과세표준 = 증여의제이익 그대로), 일반 누진세율과 신고세액공제(3%)만 적용된다.
-function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime) {
-  const taxBase = Math.max(0, Math.round(deemedGiftProfit));
+function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount) {
+  // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
+  // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다.
+  const taxBase = Math.max(0, Math.round(deemedGiftProfit) - (Number(appraisalFeeAmount) || 0));
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
   const taxAfterCredit = calculatedTax - reportCredit;
@@ -3643,15 +3831,25 @@ function toolCalculateRelatedPartyTransactionGiftTax(p) {
   // 과세요건(게이트): 소득(세후영업이익 또는 세후순이익)>0, 거래비율이 정상거래비율(30%/중견40%/중소50%) 초과, 지분율이 한계보유비율(3%/중견중소10%) 초과.
   const gateTradeThreshold = companySize === 'general' ? 30 : (companySize === 'medium' ? 40 : 50);
   const gateShareThreshold = companySize === 'general' ? 3 : 10;
-  const meetsGate = incomeBase > 0 && tradeRatio > gateTradeThreshold && shareRatio > gateShareThreshold;
+  // §45의3①1호나목2) — 일반기업(중소·중견 아님)은 가목 사유(거래비율>정상거래비율) 외에, "거래비율이
+  // 정상거래비율의 3분의 2 초과 + 특수관계법인 매출액이 시행령§34의3⑰의 1천억원 초과"인 경우도
+  // 대체로 과세요건을 충족한다(사업부문별 계산 특례는 미반영 — 그 경우 별도 계산식이 필요).
+  const generalAltGateTradeThreshold = companySize === 'general' ? gateTradeThreshold * 2 / 3 : null;
+  const relatedPartySalesAmount = Number(p.relatedPartySalesAmount) || 0;
+  const meetsGeneralAltGate = companySize === 'general' && tradeRatio > generalAltGateTradeThreshold && relatedPartySalesAmount > 100000000000;
+  const meetsTradeGate = tradeRatio > gateTradeThreshold || meetsGeneralAltGate;
+  const meetsGate = incomeBase > 0 && meetsTradeGate && shareRatio > gateShareThreshold;
 
   if (!meetsGate) {
     return {
       과세대상여부: false,
       입력값: { 기업규모: companySize, 적용소득기준: companySize === 'small' ? '세후순이익' : '세후영업이익', 적용소득금액: incomeBase, 특수관계법인거래비율: tradeRatio, 주식보유비율: shareRatio },
       과세요건_거래비율기준: gateTradeThreshold, 과세요건_지분율기준: gateShareThreshold,
+      과세요건_대체거래비율기준: generalAltGateTradeThreshold, 과세요건_대체매출액기준: companySize === 'general' ? 100000000000 : null,
       증여의제이익: 0, 납부세액: 0,
-      안내: '과세요건(소득 존재, 거래비율 ' + gateTradeThreshold + '% 초과, 주식보유비율 ' + gateShareThreshold + '% 초과)을 충족하지 못해 일감몰아주기 증여의제 과세대상이 아닙니다.'
+      안내: '과세요건(소득 존재, 거래비율 ' + gateTradeThreshold + '% 초과, 주식보유비율 ' + gateShareThreshold + '% 초과' +
+        (companySize === 'general' ? ' — 또는 거래비율 ' + generalAltGateTradeThreshold.toFixed(1) + '% 초과+특수관계법인매출액 1천억원 초과(§45의3①1호나목2)' : '') +
+        ')을 충족하지 못해 일감몰아주기 증여의제 과세대상이 아닙니다.'
     };
   }
 
@@ -3666,7 +3864,7 @@ function toolCalculateRelatedPartyTransactionGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
 
   return {
     과세대상여부: true,
@@ -3716,7 +3914,7 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
 
   return {
     과세대상여부: true,
@@ -3732,6 +3930,29 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
       ? '개시사업연도 신고는 잠정치입니다 — 2년 경과 후 정산사업연도에 phase="settlement"로 반드시 재계산·정산신고해야 합니다. '
       : '') +
       '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정, 법인세 납부세액 중 상당액 계산은 별도로 확인해서 정확한 값을 입력해야 합니다.'
+  };
+}
+
+// 명의신탁재산의 증여 의제 (상증세법§45의2) — 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 —
+// 대표적으로 주식등) 중 실제소유자와 명의자가 다르면, 명의개서일(주식처럼 명의개서 대상 재산이면
+// 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한
+// 것으로 본다. §55①1호에 따라 과세표준 = 명의신탁재산의 금액(관계별 증여재산공제 없음, 감정평가
+// 수수료만 차감).
+function toolCalculateNomineeTrustGiftTax(p) {
+  p = p || {};
+  const propertyValue = Number(p.nomineeTrustPropertyValue) || 0;
+  if (propertyValue <= 0) return { error: '명의신탁재산의 가액(nomineeTrustPropertyValue)이 필요합니다.' };
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+  const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
+
+  return {
+    명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, propertyValue),
+    과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+    무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+    납부세액: r.finalTax,
+    안내: '증여재산공제(§53)는 적용되지 않습니다(§55①1호 — 명의신탁재산의 금액 전액이 과세표준, 감정평가수수료만 차감). 조세회피 목적이 없었음(§45의2①1호) 등 적용 제외 사유에 해당하는지, 조세회피목적 추정을 뒤집을 사유(§45의2③단서)가 있는지는 이 도구가 판정하지 않으므로 별도로 확인해야 합니다. 실제소유자와 명의자 사이의 증여세는 실제소유자가 납부의무를 진다(§4의2②).'
   };
 }
 
@@ -3964,6 +4185,12 @@ function toolCalculateStockTransferTax(p) {
     // 소득세법§104①14호(§94①6호 신탁 수익권) — 3억 이하 20%, 3억 초과분 25%. 대주주·중소기업 구분 없음.
     calculatedTax = calcProgressiveTax_(taxBase, DOMESTIC_STOCK_DAEJUJU_BRACKETS);
     rateNote = '신탁 수익권(§94①6호) — 3억 이하 20%, 3억 초과분 25%';
+  } else if (assetCategory === 'other_asset' && p.isMajorityNonBusinessLandCorp) {
+    // 소득세법§104①9호(시행령§167조의7) — §94①4호다목·라목 주식등 중, 그 법인 자산총액에서
+    // 법인세법§55조의2②에 따른 비사업용토지가 차지하는 비율이 50% 이상인 법인의 주식등은
+    // 8호(비사업용토지) 세율표와 동일하게 기본세율에 10%p를 가산한다.
+    calculatedTax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS) + Math.round(taxBase * 0.10);
+    rateNote = '기타자산 중 비사업용토지 과다보유법인 주식등(§104①9호) — 기본세율(누진 6~45%)+10%p 가산';
   } else {
     calculatedTax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS);
     rateNote = '기타자산(특정주식·부동산과다보유법인 주식등) — 기본세율(누진 6~45%)';
@@ -5013,12 +5240,14 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_building_standard_price' ||
         b.name === 'calculate_building_standard_price_multi' ||
         b.name === 'calculate_transfer_tax' ||
+        b.name === 'calculate_transfer_tax_with_carryover' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
         b.name === 'allocate_inheritance_tax_by_heir' ||
         b.name === 'calculate_special_rate_gift_tax' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
+        b.name === 'calculate_nominee_trust_gift_tax' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -5132,6 +5361,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
+      if (block.name === 'calculate_transfer_tax_with_carryover') {
+        const resultObj = toolCalculateTransferTaxWithCarryover(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
       if (block.name === 'calculate_gift_tax') {
         const resultObj = toolCalculateGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
@@ -5160,6 +5394,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_business_opportunity_gift_tax') {
         const resultObj = toolCalculateBusinessOpportunityGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_nominee_trust_gift_tax') {
+        const resultObj = toolCalculateNomineeTrustGiftTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
