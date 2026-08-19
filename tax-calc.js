@@ -2548,6 +2548,42 @@
     };
   };
 
+  // 장애인이 증여받은 재산의 과세가액 불산입 (상속세및증여세법§52의2) — 장애인이 재산을 증여받아 본인을
+  // 수익자로 신탁(자익신탁)하거나 타인이 장애인을 수익자로 신탁(타익신탁)한 경우, 요건을 충족하면 그
+  // 증여재산가액(자익) 또는 신탁수익(타익)을 증여세 과세가액에 산입하지 않는다. 장애인 생애 동안 자익
+  // 신탁 증여재산가액과 타익신탁 설정당시 원본가액을 합산해 5억원이 한도다(§52의2③). 신탁 해지·만료
+  // (1개월내 재가입 제외)·수익자변경·이익 타인귀속·원본감소 등 사후관리 위반시 즉시 증여세를 부과한다
+  // (부득이한 사유·의료비 등 인출은 예외).
+  window.calculateDisabledPersonTrustExclusionJS = function (p) {
+    p = p || {};
+    if (!p.meetsRequirements) {
+      return { 적용여부: false, 안내: '신탁업자에게 신탁, 장애인이 신탁이익 전부를 받는 수익자일 것 등 §52의2①·②의 요건을 충족하지 못해 적용대상이 아닙니다.' };
+    }
+    const amount = Number(p.amount) || 0;
+    if (amount <= 0) return { error: '증여받은 재산가액(자익신탁) 또는 신탁원본가액(타익신탁)이 필요합니다.' };
+    const priorCumulativeAmount = Math.max(0, Number(p.priorCumulativeAmount) || 0);
+
+    const triggerEvent = p.triggerEvent;
+    if (triggerEvent && triggerEvent !== 'none' && !p.isExemptedReason) {
+      return {
+        적용여부: true, 즉시과세대상: true, 납부세액대상금액: amount,
+        안내: '신탁 해지·만료(1개월 이내 재가입 제외)·수익자변경·이익의 타인귀속·신탁원본감소 등 사후관리 위반 사유가 발생해(§52의2④), 부득이한 사유나 의료비 등 인출에 해당하지 않는 한 그 재산가액을 증여받은 것으로 보아 즉시 증여세를 부과합니다.'
+      };
+    }
+
+    const remainingLimit = Math.max(0, 500000000 - priorCumulativeAmount);
+    const exclusionAmount = Math.min(amount, remainingLimit);
+    const taxableAmount = amount - exclusionAmount;
+    return {
+      적용여부: true, 즉시과세대상: false,
+      생애누적한도: 500000000, 기존누적활용액: priorCumulativeAmount, 이번한도잔액: remainingLimit,
+      과세가액불산입액: exclusionAmount, 과세가액산입액: taxableAmount,
+      안내: taxableAmount > 0
+        ? '장애인이 살아있는 동안 자익신탁 증여재산가액과 타익신탁 원본가액을 합산한 5억원 한도(§52의2③)를 초과해, 초과분(' + taxableAmount + '원)은 과세가액에 산입합니다.'
+        : '5억원 한도 이내여서 전액 증여세 과세가액에 산입하지 않습니다.'
+    };
+  };
+
   // 공익법인등에 출연한(출연받은) 재산에 대한 상속세·증여세 과세가액 불산입 (상속세및증여세법§16,§48①) —
   // 원칙적으로 공익법인등에 출연한 재산의 가액은 상속세(§16)·증여세(§48①) 과세가액에 산입하지 않는다.
   // 다만 내국법인의 의결권 있는 주식등을 출연하는 경우, 이번 출연분+합산대상 기존 보유분(§16②1호 가~다목/

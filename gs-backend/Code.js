@@ -905,6 +905,21 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_disabled_person_trust_exclusion',
+    description: '장애인이 증여받은 재산의 과세가액 불산입(상속세및증여세법§52의2)을 계산한다. 장애인이 재산을 증여받아 본인을 수익자로 신탁(자익신탁)하거나 타인이 장애인을 수익자로 신탁(타익신탁)한 경우, 요건을 충족하면 그 증여재산가액(자익) 또는 신탁수익(타익)을 증여세 과세가액에 산입하지 않는다. 장애인 생애 동안 자익신탁 증여재산가액과 타익신탁 원본가액을 합산해 5억원이 한도다. 신탁 해지·만료(1개월내 재가입 제외)·수익자변경·이익 타인귀속·원본감소 등 사후관리 위반시 즉시 증여세를 부과한다(부득이한 사유·의료비 등 인출은 예외).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        meetsRequirements: { type: 'boolean', description: '신탁업자에게 신탁, 장애인이 신탁이익 전부를 받는 수익자일 것 등 §52의2①·②의 요건을 모두 충족하는지.' },
+        amount: { type: 'number', description: '증여받은 재산가액(자익신탁) 또는 신탁원본가액(타익신탁 설정 당시, 원).' },
+        priorCumulativeAmount: { type: 'number', description: '이 장애인이 생애 동안 이미 이 특례로 과세가액불산입 받은 자익신탁+타익신탁 누적액(원). 없으면 0.' },
+        triggerEvent: { type: 'string', enum: ['none', 'terminated_not_rejoined', 'beneficiary_changed', 'benefit_diverted', 'principal_decreased'], description: 'none=사후관리 위반 없음, terminated_not_rejoined=신탁 해지·만료(1개월내 재가입 안함), beneficiary_changed=수익자 변경, benefit_diverted=신탁이익이 타인에게 귀속, principal_decreased=신탁원본 감소.' },
+        isExemptedReason: { type: 'boolean', description: 'triggerEvent이 사후관리 위반일 때 — 부득이한 사유이거나 장애인 본인 의료비 등 정해진 용도의 인출로 인한 것인지(true면 즉시과세 예외).' }
+      },
+      required: ['meetsRequirements', 'amount']
+    }
+  },
+  {
     name: 'calculate_charity_donation_tax_exclusion',
     description: '공익법인등에 출연한(출연받은) 재산에 대한 상속세·증여세 과세가액 불산입(상속세및증여세법§16,§48①)을 계산한다. 원칙적으로 공익법인등에 출연한 재산의 가액은 상속세(§16)·증여세(§48①) 과세가액에 산입하지 않는다. 다만 내국법인의 의결권 있는 주식등을 출연하는 경우, 이번 출연분과 합산대상 기존 보유분의 합계가 발행주식총수등의 일정비율(원칙10%, 의결권미행사+자선장학사회복지목적 공익법인 20%, 상호출자제한기업집단 특수관계 공익법인 5%, 요건미충족 공익법인 5%)을 초과하면 그 초과분만 과세가액에 산입한다. §48②의 사후관리(용도외사용·3년내미사용 등)에 따른 즉시증여세 부과는 다루지 않는다.',
     input_schema: {
@@ -5847,6 +5862,39 @@ function toolCalculateLongTermRentalHouseReduction(p) {
   };
 }
 
+// 장애인이 증여받은 재산의 과세가액 불산입 (상속세및증여세법§52의2) — 요건 충족시 자익신탁 증여재산가액
+// 또는 타익신탁 신탁수익을 증여세 과세가액에 산입하지 않는다. 장애인 생애 5억원 한도(§52의2③), 신탁
+// 해지·만료·수익자변경·이익타인귀속·원본감소 등 사후관리 위반시 즉시 증여세 부과(부득이한사유 예외).
+function toolCalculateDisabledPersonTrustExclusion(p) {
+  p = p || {};
+  if (!p.meetsRequirements) {
+    return { 적용여부: false, 안내: '신탁업자에게 신탁, 장애인이 신탁이익 전부를 받는 수익자일 것 등 §52의2①·②의 요건을 충족하지 못해 적용대상이 아닙니다.' };
+  }
+  const amount = Number(p.amount) || 0;
+  if (amount <= 0) return { error: '증여받은 재산가액(자익신탁) 또는 신탁원본가액(타익신탁)이 필요합니다.' };
+  const priorCumulativeAmount = Math.max(0, Number(p.priorCumulativeAmount) || 0);
+
+  const triggerEvent = p.triggerEvent;
+  if (triggerEvent && triggerEvent !== 'none' && !p.isExemptedReason) {
+    return {
+      적용여부: true, 즉시과세대상: true, 납부세액대상금액: amount,
+      안내: '신탁 해지·만료(1개월 이내 재가입 제외)·수익자변경·이익의 타인귀속·신탁원본감소 등 사후관리 위반 사유가 발생해(§52의2④), 부득이한 사유나 의료비 등 인출에 해당하지 않는 한 그 재산가액을 증여받은 것으로 보아 즉시 증여세를 부과합니다.'
+    };
+  }
+
+  const remainingLimit = Math.max(0, 500000000 - priorCumulativeAmount);
+  const exclusionAmount = Math.min(amount, remainingLimit);
+  const taxableAmount = amount - exclusionAmount;
+  return {
+    적용여부: true, 즉시과세대상: false,
+    생애누적한도: 500000000, 기존누적활용액: priorCumulativeAmount, 이번한도잔액: remainingLimit,
+    과세가액불산입액: exclusionAmount, 과세가액산입액: taxableAmount,
+    안내: taxableAmount > 0
+      ? '장애인이 살아있는 동안 자익신탁 증여재산가액과 타익신탁 원본가액을 합산한 5억원 한도(§52의2③)를 초과해, 초과분(' + taxableAmount + '원)은 과세가액에 산입합니다.'
+      : '5억원 한도 이내여서 전액 증여세 과세가액에 산입하지 않습니다.'
+  };
+}
+
 // 공익법인등에 출연한(출연받은) 재산에 대한 상속세·증여세 과세가액 불산입 (상속세및증여세법§16,§48①) —
 // 원칙 전액 불산입, 내국법인 주식등은 합산주식수가 한도비율 초과시 그 초과분만 과세가액 산입.
 function toolCalculateCharityDonationTaxExclusion(p) {
@@ -7022,6 +7070,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_deemed_inheritance_property' ||
         b.name === 'calculate_specific_corporation_gift_tax' ||
         b.name === 'calculate_nontaxable_gift_property' ||
+        b.name === 'calculate_disabled_person_trust_exclusion' ||
         b.name === 'calculate_charity_donation_tax_exclusion' ||
         b.name === 'calculate_national_forest_land_reduction' ||
         b.name === 'calculate_industrial_complex_relocation_lot_rate' ||
@@ -7252,6 +7301,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_nontaxable_gift_property') {
         const resultObj = toolCalculateNontaxableGiftProperty(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_disabled_person_trust_exclusion') {
+        const resultObj = toolCalculateDisabledPersonTrustExclusion(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

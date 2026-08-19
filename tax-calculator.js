@@ -2850,6 +2850,24 @@ function renderGiftPane(){
       '<div id="taxCalcCharityDonationExclusionResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>장애인이 증여받은 재산의 과세가액 불산입(§52의2) — 장애인 본인 수익 자익신탁 또는 타인이 장애인 수익으로 설정한 타익신탁, 생애 5억원 한도</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="dtMeetsRequirements"><label for="dtMeetsRequirements">신탁업자 신탁·장애인 전부수익자 등 §52의2①·②요건 충족</label></div>' +
+        '<div class="taxcalc-field"><label>증여받은 재산가액(자익) 또는 신탁원본가액(타익)</label><input type="number" id="dtAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>기존 누적 활용액(생애)</label><input type="number" id="dtPriorCumulative" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>사후관리 위반 사유</label><select id="dtTriggerEvent">' +
+          '<option value="none">없음</option>' +
+          '<option value="terminated_not_rejoined">해지·만료(1개월내 재가입 안함)</option>' +
+          '<option value="beneficiary_changed">수익자 변경</option>' +
+          '<option value="benefit_diverted">이익이 타인에게 귀속</option>' +
+          '<option value="principal_decreased">신탁원본 감소</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="dtExempted"><label for="dtExempted">부득이한 사유 또는 의료비 등 정해진 용도의 인출임(즉시과세 예외)</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-disabled-trust-exclusion">과세가액 산입액 계산하기</button>' +
+      '<div id="taxCalcDisabledTrustExclusionResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>합병에 따른 이익의 증여(§38) — 특수관계 법인간 합병에서 대주주등이 합병대가를 주식등으로 교부받아 이익을 얻은 경우(가장 흔한 유형)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>합병후 신설·존속법인 1주당평가액</label><input type="number" id="mgPostValue" placeholder="원"></div>' +
@@ -3388,6 +3406,31 @@ function renderCharityDonationExclusionResult(r){
   }
   html += taxCalcResultRow('과세가액불산입액', won(r.과세가액불산입액));
   html += taxCalcResultRow('과세가액산입액', won(r.과세가액산입액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderDisabledTrustExclusionResult(r){
+  const box = document.getElementById('taxCalcDisabledTrustExclusionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+    if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  if (r.즉시과세대상){
+    html += taxCalcResultRow('즉시과세대상금액', won(r.납부세액대상금액), { total: true });
+  } else {
+    html += taxCalcResultRow('생애누적한도', won(r.생애누적한도));
+    html += taxCalcResultRow('기존누적활용액', won(r.기존누적활용액));
+    html += taxCalcResultRow('이번한도잔액', won(r.이번한도잔액));
+    html += taxCalcResultRow('과세가액불산입액', won(r.과세가액불산입액));
+    html += taxCalcResultRow('과세가액산입액', won(r.과세가액산입액), { total: true });
+  }
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -4841,6 +4884,15 @@ taxCalcView.addEventListener('click', function(e){
       priorRelatedShares: numVal(document.getElementById('cdPriorRelatedShares').value) || 0
     };
     renderCharityDonationExclusionResult(calculateCharityDonationTaxExclusionJS(input));
+  } else if (action === 'run-disabled-trust-exclusion'){
+    const input = {
+      meetsRequirements: document.getElementById('dtMeetsRequirements').checked,
+      amount: numVal(document.getElementById('dtAmount').value) || 0,
+      priorCumulativeAmount: numVal(document.getElementById('dtPriorCumulative').value) || 0,
+      triggerEvent: document.getElementById('dtTriggerEvent').value,
+      isExemptedReason: document.getElementById('dtExempted').checked
+    };
+    renderDisabledTrustExclusionResult(calculateDisabledPersonTrustExclusionJS(input));
   } else if (action === 'run-merger-gift'){
     const input = {
       postMergerValuePerShare: numVal(document.getElementById('mgPostValue').value) || 0,
