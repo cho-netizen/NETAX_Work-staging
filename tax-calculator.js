@@ -869,7 +869,8 @@ const VALUATION_METHOD_LABELS = {
   listedStock: '상장주식(기준일 전후 2개월 종가평균 × 주식수)',
   unlistedStock: '비상장주식(순손익·순자산가치 가중평균)',
   rental: '임대 중인 부동산(임대료환산가액)',
-  goodwill: '영업권(§64, 초과이익의 5년 현재가치)'
+  goodwill: '영업권(§64, 초과이익의 5년 현재가치)',
+  trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)'
 };
 // 지분은 평가방법과 무관하게 모든 자산에 공통으로 적용되는 별도 항목이다(예: 확인된 시가가 그 자체로
 // 100% 평가액인 자산도 있고, 매매실례가액 등에 피상속인 지분을 곱해야 하는 자산도 있다 — 그 구분은
@@ -910,6 +911,14 @@ function computeValuationAssetValue(a){
       break;
     }
     case 'goodwill': value = calculateGoodwillValueJS(a.gwProfit1, a.gwProfit2, a.gwProfit3, a.gwSelfCapital); break;
+    case 'trustBenefit': {
+      const r = calculateTrustBenefitValueJS({
+        trustPropertyValue: a.tbPropertyValue, sameBeneficiary: a.tbSameBeneficiary, beneficiaryType: a.tbBeneficiaryType,
+        cancellationValue: a.tbCancellationValue, annualBenefits: a.trustAnnualBenefits
+      });
+      value = r.error ? 0 : r.평가액;
+      break;
+    }
     case 'unlistedStock': {
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
@@ -981,6 +990,17 @@ function valuationAssetMethodFieldsHtml(m, a){
     '<div class="taxcalc-field"><label>3년전 순손익액</label><input type="number" data-field="gwProfit3" value="' + (a.gwProfit3 || '') + '"></div>' +
     '<div class="taxcalc-field"><label>자기자본(평가기준일 현재)</label><input type="number" data-field="gwSelfCapital" value="' + (a.gwSelfCapital || '') + '"></div>' +
     '<div class="taxcalc-field"><label style="color:var(--sub);">※ 가중평균순손익액×50%가 자기자본×10%를 넘는 초과분만 5년 연금현가(3.79079)로 평가되며, 넘지 않으면 0원입니다</label></div>';
+  if (m === 'trustBenefit') return '' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="tbSameBeneficiary" ' + (a.tbSameBeneficiary ? 'checked' : '') + '><label>원본을 받을 권리와 수익을 받을 권리의 수익자가 같음(상증세법시행령§61①1호 — 신탁재산가액 그대로 평가)</label></div>' +
+    '<div class="taxcalc-field"><label>신탁재산가액</label><input type="number" data-field="tbPropertyValue" value="' + (a.tbPropertyValue || '') + '"></div>' +
+    (a.tbSameBeneficiary ? '' :
+      '<div class="taxcalc-field"><label>평가 대상 권리</label><select data-field="tbBeneficiaryType">' +
+        '<option value="">선택</option>' +
+        '<option value="income"' + (a.tbBeneficiaryType === 'income' ? ' selected' : '') + '>수익을 받을 권리(상증세법시행령§61①2호나목)</option>' +
+        '<option value="principal"' + (a.tbBeneficiaryType === 'principal' ? ' selected' : '') + '>원본을 받을 권리(상증세법시행령§61①2호가목)</option>' +
+      '</select></div>') +
+    '<div class="taxcalc-field"><label>해지시 받을 일시금(있으면)</label><input type="number" data-field="tbCancellationValue" placeholder="원 (신탁 철회·해지·취소로 받을 수 있는 일시금 — 이보다 크면 이 금액을 그대로 평가액으로 씀)" value="' + (a.tbCancellationValue || '') + '"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연 이자율 1,000분의 30(상증세법시행규칙§14①)으로 각 연도 수익의 현재가치를 할인합니다. 아래 "신탁 수익 내역"에서 연도별로 입력하세요</label></div>';
   return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"><button type="button" class="taxcalc-ai-btn" data-action="lookup-real-price" style="margin-top:4px;">🔍 아파트 실거래가 조회(참고)</button></div>';
 }
 
@@ -1003,6 +1023,24 @@ function renderRentalLeasesSectionHtml_(a){
     leaseRowsHtml +
     '<button type="button" class="taxcalc-add-asset" data-action="add-rental-lease" style="margin-top:6px;">+ 임대차 추가</button>' +
     '<div class="taxcalc-result-note" data-rental-hint="1">보증금 합계 ' + won(totals.deposit) + ' · 연간임대료 합계 ' + won(totals.annualRent) + '</div>';
+}
+// 신탁의 이익을 받을 권리(상증세법시행령§61①2호나목) 평가는 "각 연도에 받을 수익의 이익"을 연도별로
+// 따로 현재가치할인해서 더해야 하므로, 임대차 내역처럼 연도별 행을 여러 개 입력받는다.
+function renderTrustBenefitsSectionHtml_(a){
+  const benefits = (Array.isArray(a.trustAnnualBenefits) && a.trustAnnualBenefits.length) ? a.trustAnnualBenefits : [{}];
+  const rowsHtml = benefits.map(function(b, bidx){
+    const undetermined = !!b.isRateUndetermined;
+    return '<div class="taxcalc-grid" data-tb-idx="' + bidx + '" style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);">' +
+      '<div class="taxcalc-field"><label>평가기준일부터 수익시기까지 연수(n)</label><input type="number" data-tbfield="yearsFromValuation" value="' + (b.yearsFromValuation || '') + '"></div>' +
+      '<div class="taxcalc-field checkbox"><input type="checkbox" data-tbfield="isRateUndetermined" ' + (undetermined ? 'checked' : '') + '><label>수익률 미확정(시행규칙§14② — 신탁재산가액×3%로 추산)</label></div>' +
+      (undetermined ? '' : '<div class="taxcalc-field"><label>그 연도에 받을 수익의 이익</label><input type="number" data-tbfield="annualBenefit" value="' + (b.annualBenefit || '') + '"></div>') +
+      '<div class="taxcalc-field"><label>원천징수세액상당액</label><input type="number" data-tbfield="withholdingTaxEquivalent" value="' + (b.withholdingTaxEquivalent || '') + '"></div>' +
+      (benefits.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-trust-benefit" data-idx="' + bidx + '">✕ 삭제</button>' : '') +
+    '</div>';
+  }).join('');
+  return '<div class="taxcalc-asset-head" style="margin-top:10px;"><b>신탁 수익 내역(연도별)</b></div>' +
+    rowsHtml +
+    '<button type="button" class="taxcalc-add-asset" data-action="add-trust-benefit" style="margin-top:6px;">+ 연도 추가</button>';
 }
 // 상속인별 실제상속재산가액은 상속인 명부에서 지분을 미리 적어 넣는 게 아니라, 협의분할·유언에
 // 따라 "이 자산을 누가 받는지"를 자산별로 배분해야 정해지는 값이다(법정상속지분은 이것과 별개로
@@ -1045,6 +1083,7 @@ function renderValuationAssetRow(a, idx, isInheritance){
       '</div>' +
       '<div class="taxcalc-grid" style="margin-top:6px;">' + valuationAssetMethodFieldsHtml(method, a) + '</div>' +
       renderRentalLeasesSectionHtml_(a) +
+      (method === 'trustBenefit' && !a.tbSameBeneficiary ? renderTrustBenefitsSectionHtml_(a) : '') +
       (isInheritance ? renderHeirAllocationSectionHtml_(a) : '') +
       '<div class="taxcalc-result-row"><span>평가액</span><span class="v">' + won(value) + '</span></div>' +
     '</div>';
@@ -1083,7 +1122,7 @@ function renderValuationAssetList(containerId, assets){
       const idx = numVal(el.closest('.taxcalc-asset').dataset.idx);
       const key = el.dataset.field;
       assets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
-      if (key === 'method' || key === 'assetKind'){
+      if (key === 'method' || key === 'assetKind' || key === 'tbSameBeneficiary'){
         renderValuationAssetList(containerId, assets); // 필드 구성 자체가 바뀌므로 다시 그림
       } else {
         const row = el.closest('.taxcalc-asset');
@@ -1116,6 +1155,20 @@ function renderValuationAssetList(containerId, assets){
       if (netRowEl) netRowEl.textContent = won(Math.max(0, newTotal - newDebt));
       if (newDebt > 0 && !debtRowEl) renderValuationAssetList(containerId, assets); // 채무가 새로 생긴 경우에만 합계행을 새로 그림
       recomputeBusinessAssetTotal_(containerId, assets);
+    });
+  });
+  container.querySelectorAll('[data-tbfield]').forEach(function (el) {
+    el.addEventListener((el.type === 'checkbox') ? 'change' : 'input', function () {
+      const assetIdx = numVal(el.closest('.taxcalc-asset').dataset.idx);
+      const benefitIdx = numVal(el.closest('[data-tb-idx]').dataset.tbIdx);
+      const key = el.dataset.tbfield;
+      if (!Array.isArray(assets[assetIdx].trustAnnualBenefits)) assets[assetIdx].trustAnnualBenefits = [{}];
+      assets[assetIdx].trustAnnualBenefits[benefitIdx][key] = el.type === 'checkbox' ? el.checked : el.value;
+      if (key === 'isRateUndetermined') { renderValuationAssetList(containerId, assets); return; } // 수익금 입력란 표시 여부가 바뀌므로 다시 그림
+      const row = el.closest('.taxcalc-asset');
+      row.querySelector('.taxcalc-result-row .v').textContent = won(computeValuationAssetValue(assets[assetIdx]));
+      const totalEl = container.querySelector('.taxcalc-result-row.total .v');
+      if (totalEl) totalEl.textContent = won(assets.reduce(function (s, a) { return s + computeValuationAssetValue(a); }, 0));
     });
   });
   container.querySelectorAll('[data-hafield]').forEach(function (el) {
@@ -3092,6 +3145,14 @@ taxCalcView.addEventListener('click', function(e){
     if (!Array.isArray(assets[assetIdx].rentalLeases)) assets[assetIdx].rentalLeases = [{}];
     if (action === 'add-rental-lease') assets[assetIdx].rentalLeases.push({});
     else assets[assetIdx].rentalLeases.splice(numVal(btn.dataset.idx), 1);
+    renderValuationAssetList(containerId, assets);
+  } else if (action === 'add-trust-benefit' || action === 'del-trust-benefit'){
+    const containerId = btn.closest('[id="giftValuationList"], [id="inheritanceValuationList"]').id;
+    const assets = containerId === 'giftValuationList' ? giftValuationAssets : inheritanceValuationAssets;
+    const assetIdx = numVal(btn.closest('.taxcalc-asset').dataset.idx);
+    if (!Array.isArray(assets[assetIdx].trustAnnualBenefits)) assets[assetIdx].trustAnnualBenefits = [{}];
+    if (action === 'add-trust-benefit') assets[assetIdx].trustAnnualBenefits.push({});
+    else assets[assetIdx].trustAnnualBenefits.splice(numVal(btn.dataset.idx), 1);
     renderValuationAssetList(containerId, assets);
   } else if (action === 'add-heir-alloc' || action === 'del-heir-alloc'){
     const assets = inheritanceValuationAssets;

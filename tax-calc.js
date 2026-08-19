@@ -2101,4 +2101,45 @@
     const excessProfit = Math.max(0, weightedNetProfit * 0.5 - (Number(selfCapital) || 0) * 0.1);
     return Math.round(excessProfit * 3.79079);
   };
+
+  // 신탁의 이익을 받을 권리 평가 (상속세및증여세법§65①, 상속세및증여세법시행령§61①, 상속세및증여세법시행규칙§14①②)
+  // — 원본을 받을 권리와 수익을 받을 권리의 수익자가 같으면 신탁재산가액 그대로. 다르면, 수익을 받을 권리는
+  // "각 연도에 받을 수익의 이익 - 원천징수세액상당액"을 연 1,000분의 30(3%)로 할인한 현재가치의 합계액(시행령
+  // §61①2호나목, 시행규칙§14①), 원본을 받을 권리는 신탁재산가액에서 그 합계액을 뺀 금액(시행령§61①2호가목).
+  // 신탁계약의 철회·해지·취소 등으로 받을 수 있는 일시금이 이보다 크면 그 일시금 가액을 적용한다(§61① 단서).
+  // 수익률이 확정되지 않은 연도는 시행규칙§14②에 따라 원본가액×3%를 그 연도 수익금으로 추산한다.
+  window.calculateTrustBenefitValueJS = function (p) {
+    p = p || {};
+    const trustPropertyValue = Number(p.trustPropertyValue) || 0;
+    const cancellationValue = Number(p.cancellationValue) || 0;
+    if (p.sameBeneficiary) {
+      const value = Math.max(trustPropertyValue, cancellationValue);
+      return { 평가방법: '원본·수익 수익자 동일(§61①1호)', 신탁재산가액: trustPropertyValue, 해지시일시금: cancellationValue, 평가액: value };
+    }
+    const beneficiaryType = p.beneficiaryType;
+    if (['principal', 'income'].indexOf(beneficiaryType) === -1) {
+      return { error: '원본을 받을 권리 또는 수익을 받을 권리 중에서 선택하세요.' };
+    }
+    const RATE = 0.03;
+    const annualBenefits = Array.isArray(p.annualBenefits) ? p.annualBenefits : [];
+    let incomeInterestValue = 0;
+    const yearlyDetail = annualBenefits.map(function (item) {
+      const n = Number(item.yearsFromValuation) || 0;
+      const benefit = item.isRateUndetermined ? trustPropertyValue * RATE : (Number(item.annualBenefit) || 0);
+      const withholding = Number(item.withholdingTaxEquivalent) || 0;
+      const pv = (benefit - withholding) / Math.pow(1 + RATE, n);
+      incomeInterestValue += pv;
+      return { 연수: n, 수익금: Math.round(benefit), 원천징수세액상당액: withholding, 현재가치: Math.round(pv) };
+    });
+    incomeInterestValue = Math.round(incomeInterestValue);
+    const principalInterestValue = Math.max(0, trustPropertyValue - incomeInterestValue);
+    const beforeCancellation = beneficiaryType === 'income' ? incomeInterestValue : principalInterestValue;
+    const value = Math.max(beforeCancellation, cancellationValue);
+    return {
+      평가방법: beneficiaryType === 'income' ? '수익을 받을 권리(§61①2호나목)' : '원본을 받을 권리(§61①2호가목)',
+      적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
+      수익권_평가액: incomeInterestValue, 원본권_평가액: principalInterestValue,
+      해지시일시금: cancellationValue, 평가액: value
+    };
+  };
 })();
