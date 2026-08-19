@@ -150,6 +150,30 @@ function recomputeSrGiftUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('srUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeAfUnpaidDays(){
+  const giftDate = document.getElementById('afGiftDate');
+  const paidDate = document.getElementById('afPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('afUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
+function recomputeDfUnpaidDays(){
+  const giftDate = document.getElementById('dfGiftDate');
+  const paidDate = document.getElementById('dfPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('dfUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
+function recomputeFuUnpaidDays(){
+  const giftDate = document.getElementById('fuGiftDate');
+  const paidDate = document.getElementById('fuPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('fuUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
+function recomputeSpUnpaidDays(){
+  const giftDate = document.getElementById('spGiftDate');
+  const paidDate = document.getElementById('spPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('spUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeJmUnpaidDays(){
   const fiscalYearEnd = document.getElementById('jmFiscalYearEnd');
   const paidDate = document.getElementById('jmPaidDate');
@@ -2114,6 +2138,98 @@ function renderGiftPane(){
       '<div id="taxCalcNomineeTrustResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>재산 취득자금 등의 증여 추정(§45) — 자력취득 능력이 부족한 사람이 재산을 취득(또는 채무를 상환)했는데 그 자금출처를 입증하지 못하면, 미입증금액을 증여받은 것으로 추정합니다(자금출처조사)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>취득재산의 가액(또는 채무 상환금액)</label><input type="number" id="afTotalValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>자금출처로 입증된 금액 합계</label><input type="number" id="afProvenAmount" placeholder="원 (신고·과세된 소득·상속·수증재산가액, 재산처분대가 등 — 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="afAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="afFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="afFraudulent"><label for="afFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="afUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(자금출처가 된 재산 취득일 또는 채무 상환일)</label><input type="text" class="taxcalc-date" id="afGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="afPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산: 증여일+3개월 신고기한 대비)</label><input type="number" id="afUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-property-funds">증여세 계산하기</button>' +
+      '<div id="taxCalcPropertyFundsResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>채무면제 등에 따른 증여(§36) — 채권자로부터 채무를 면제받거나 제3자로부터 채무의 인수·변제를 받았을 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>면제·인수·변제받은 채무액</label><input type="number" id="dfDebtAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>지급한 보상액</label><input type="number" id="dfCompensation" placeholder="원 (없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="dfRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="dfAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="dfFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="dfFraudulent"><label for="dfFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="dfUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(면제·인수·변제받은 날)</label><input type="text" class="taxcalc-date" id="dfGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="dfPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="dfUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-debt-forgiveness">증여세 계산하기</button>' +
+      '<div id="taxCalcDebtForgivenessResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>부동산 무상사용·담보이용에 따른 이익의 증여(§37) — 타인의 부동산을 무상으로 사용하거나, 무상으로 담보 제공받아 차입했을 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>구분</label><select id="fuUseType">' +
+          '<option value="occupancy">부동산 무상사용</option><option value="collateral">부동산 무상담보 이용(차입)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>부동산가액(무상사용일 때)</label><input type="number" id="fuPropertyValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>차입금액(담보이용일 때)</label><input type="number" id="fuLoanAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>실제 지급한 이자(담보이용일 때)</label><input type="number" id="fuActualInterest" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="fuRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="fuAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="fuFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="fuFraudulent"><label for="fuFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="fuUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(무상사용·담보이용 개시일)</label><input type="text" class="taxcalc-date" id="fuGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="fuPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="fuUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-free-property-use">증여세 계산하기</button>' +
+      '<div id="taxCalcFreePropertyUseResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>배우자 등에게 양도한 재산의 증여 추정(§44) — 배우자·직계존비속에게 양도한 재산, 또는 특수관계인을 거쳐 3년 이내 재양도한 재산</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>구분</label><select id="spTransferType">' +
+          '<option value="direct">배우자·직계존비속에게 직접 양도(§44①)</option><option value="bypass">특수관계인 경유 후 3년 이내 재양도(§44②)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>증여추정 대상 재산가액</label><input type="number" id="spAssetValue" placeholder="원 (직접양도는 양도가액, 재양도는 재양도 당시 재산가액)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="spExcluded"><label for="spExcluded">적용배제 사유 해당(§44③ — 경매·파산선고·공매·증권시장처분·대가받고 양도한 사실이 명백히 인정)</label></div>' +
+        '<div class="taxcalc-field"><label>당초양도자·양수자 소득세 결정세액 합계(재양도일 때만)</label><input type="number" id="spPriorTaxesSum" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>재양도가액 증여추정시 증여세액(재양도일 때만, 별도계산)</label><input type="number" id="spComparisonGiftTax" placeholder="원 (관계별 공제 반영해 별도 계산)"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="spRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="spAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="spFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="spFraudulent"><label for="spFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="spUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(양도일)</label><input type="text" class="taxcalc-date" id="spGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="spPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="spUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-spouse-property-transfer">증여세 계산하기</button>' +
+      '<div id="taxCalcSpousePropertyTransferResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제10호의3서식] 일감몰아주기 증여의제(§45의3) — 지배주주+친족이 지분을 가진 법인이 특수관계법인과 매출비중이 높고 지분율도 높을 때 과세</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>수혜법인 기업규모</label><select id="jmCompanySize">' +
@@ -2230,6 +2346,22 @@ function renderGiftPane(){
   const srPaidDateEl = document.getElementById('srPaidDate');
   if (srGiftDateEl) srGiftDateEl.addEventListener('input', recomputeSrGiftUnpaidDays);
   if (srPaidDateEl) srPaidDateEl.addEventListener('input', recomputeSrGiftUnpaidDays);
+  const afGiftDateEl = document.getElementById('afGiftDate');
+  const afPaidDateEl = document.getElementById('afPaidDate');
+  if (afGiftDateEl) afGiftDateEl.addEventListener('input', recomputeAfUnpaidDays);
+  if (afPaidDateEl) afPaidDateEl.addEventListener('input', recomputeAfUnpaidDays);
+  const dfGiftDateEl = document.getElementById('dfGiftDate');
+  const dfPaidDateEl = document.getElementById('dfPaidDate');
+  if (dfGiftDateEl) dfGiftDateEl.addEventListener('input', recomputeDfUnpaidDays);
+  if (dfPaidDateEl) dfPaidDateEl.addEventListener('input', recomputeDfUnpaidDays);
+  const fuGiftDateEl = document.getElementById('fuGiftDate');
+  const fuPaidDateEl = document.getElementById('fuPaidDate');
+  if (fuGiftDateEl) fuGiftDateEl.addEventListener('input', recomputeFuUnpaidDays);
+  if (fuPaidDateEl) fuPaidDateEl.addEventListener('input', recomputeFuUnpaidDays);
+  const spGiftDateEl = document.getElementById('spGiftDate');
+  const spPaidDateEl = document.getElementById('spPaidDate');
+  if (spGiftDateEl) spGiftDateEl.addEventListener('input', recomputeSpUnpaidDays);
+  if (spPaidDateEl) spPaidDateEl.addEventListener('input', recomputeSpUnpaidDays);
   recomputeSrGiftUnpaidDays();
   const jmFiscalYearEndEl = document.getElementById('jmFiscalYearEnd');
   const jmPaidDateEl = document.getElementById('jmPaidDate');
@@ -2349,6 +2481,79 @@ function renderNomineeTrustResult(r){
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
+}
+
+function renderPropertyFundsResult(r){
+  const box = document.getElementById('taxCalcPropertyFundsResult');
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('취득재산의 가액(또는 상환금액)', won(r.취득재산가액));
+  html += taxCalcResultRow('입증된 금액', won(r.입증된금액));
+  html += taxCalcResultRow('미입증금액', won(r.미입증금액));
+  html += taxCalcResultRow('배제기준금액(20%와 2억원 중 적은 금액)', won(r.배제기준금액));
+  if (!r.과세대상여부){
+    html += taxCalcResultRow('증여추정 적용여부', '적용 안 됨', { total: true });
+    html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  html += taxCalcResultRow('증여의제이익(=미입증금액)', won(r.증여의제이익));
+  html += taxCalcResultRow('과세표준', won(r.과세표준));
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.신고세액공제) html += taxCalcResultRow('신고세액공제', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderDeemedGiftGenericResult_(box, r, fields){
+  if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  fields.forEach(function(f){ if (r[f.key] !== undefined && r[f.key] !== null) html += taxCalcResultRow(f.label, f.fmt ? f.fmt(r[f.key]) : won(r[f.key])); });
+  if (r.과세대상여부 === false){
+    html += taxCalcResultRow('과세대상 여부', '적용 안 됨', { total: true });
+    html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+    html += '</div>';
+    box.innerHTML = html;
+    return;
+  }
+  if (r.증여재산공제) html += taxCalcResultRow('증여재산공제', '-' + won(r.증여재산공제));
+  if (r.혼인출산공제) html += taxCalcResultRow('혼인출산공제', '-' + won(r.혼인출산공제));
+  if (r.감정평가수수료공제) html += taxCalcResultRow('감정평가수수료공제', '-' + won(r.감정평가수수료공제));
+  if (r.재해손실공제) html += taxCalcResultRow('재해손실공제', '-' + won(r.재해손실공제));
+  if (r.과세표준 !== undefined) html += taxCalcResultRow('과세표준', won(r.과세표준));
+  if (r.산출세액 !== undefined) html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.신고세액공제) html += taxCalcResultRow('신고세액공제', '-' + won(r.신고세액공제));
+  if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
+  if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
+  if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+function renderDebtForgivenessResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcDebtForgivenessResult'), r, [
+    { key: '채무면제등이익', label: '채무면제등이익' }
+  ]);
+}
+function renderFreePropertyUseResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcFreePropertyUseResult'), r, [
+    { key: '연간이익', label: '연간이익' },
+    { key: '오년간현재가치합계', label: '5년간 현재가치 합계' },
+    { key: '기준금액', label: '기준금액' },
+    { key: '담보이용이익', label: '담보이용이익' }
+  ]);
+}
+function renderSpousePropertyTransferResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcSpousePropertyTransferResult'), r, [
+    { key: '증여추정재산가액', label: '증여추정재산가액' }
+  ]);
 }
 
 function renderSpecialRateGiftResult(r){
@@ -3571,6 +3776,58 @@ taxCalcView.addEventListener('click', function(e){
       appraisalFeeAmount: numVal(document.getElementById('ntAppraisalFee').value) || 0
     };
     renderNomineeTrustResult(calculateNomineeTrustGiftTaxJS(input));
+  } else if (action === 'run-property-funds'){
+    const input = {
+      acquisitionValue: numVal(document.getElementById('afTotalValue').value) || 0,
+      provenAmount: numVal(document.getElementById('afProvenAmount').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('afAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('afFilingStatus').value,
+      isFraudulent: document.getElementById('afFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('afUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('afUnpaidDays').value) || 0
+    };
+    renderPropertyFundsResult(calculatePropertyAcquisitionFundsGiftTaxJS(input));
+  } else if (action === 'run-debt-forgiveness'){
+    const input = {
+      debtAmount: numVal(document.getElementById('dfDebtAmount').value) || 0,
+      compensationPaid: numVal(document.getElementById('dfCompensation').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('dfRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('dfAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('dfFilingStatus').value,
+      isFraudulent: document.getElementById('dfFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('dfUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('dfUnpaidDays').value) || 0
+    };
+    renderDebtForgivenessResult(calculateDebtForgivenessGiftTaxJS(input));
+  } else if (action === 'run-free-property-use'){
+    const input = {
+      useType: document.getElementById('fuUseType').value,
+      propertyValue: numVal(document.getElementById('fuPropertyValue').value) || 0,
+      loanAmount: numVal(document.getElementById('fuLoanAmount').value) || 0,
+      actualInterestPaid: numVal(document.getElementById('fuActualInterest').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('fuRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('fuAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('fuFilingStatus').value,
+      isFraudulent: document.getElementById('fuFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('fuUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('fuUnpaidDays').value) || 0
+    };
+    renderFreePropertyUseResult(calculateFreePropertyUseGiftTaxJS(input));
+  } else if (action === 'run-spouse-property-transfer'){
+    const input = {
+      transferType: document.getElementById('spTransferType').value,
+      assetValue: numVal(document.getElementById('spAssetValue').value) || 0,
+      isExcluded: document.getElementById('spExcluded').checked,
+      priorTaxesSum: numVal(document.getElementById('spPriorTaxesSum').value) || 0,
+      comparisonGiftTax: numVal(document.getElementById('spComparisonGiftTax').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('spRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('spAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('spFilingStatus').value,
+      isFraudulent: document.getElementById('spFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('spUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('spUnpaidDays').value) || 0
+    };
+    renderSpousePropertyTransferResult(calculateSpousePropertyTransferGiftTaxJS(input));
   } else if (action === 'run-related-party-gift'){
     const input = {
       companySize: document.getElementById('jmCompanySize').value,

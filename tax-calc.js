@@ -1782,6 +1782,197 @@
     };
   };
 
+  // 재산 취득자금 등의 증여 추정 (상증세법§45, 시행령§34) — 자력취득 능력이 부족한 자가 재산을 취득(또는
+  // 채무를 상환)했는데 그 자금출처를 입증하지 못하면, 미입증금액을 증여받은 것으로 추정한다. 다만
+  // 미입증금액이 "취득재산가액(또는 상환금액)의 20%"와 "2억원" 중 적은 금액에 미달하면 추정 자체를
+  // 배제한다(시행령§34①). §47①에 따라 합산배제증여재산이므로 §55①에 따라 증여재산공제 없이 미입증금액
+  // 그대로가 과세표준이다(taxOnDeemedGiftProfit 재사용). §45③ 단서의 "국세청장이 정하는 금액 이하"
+  // 적용배제 기준(연령·직업·재산상태별 소액취득 기준, 국세청 고시)은 수시로 바뀌는 행정 고시라 이 도구가
+  // 추적하지 않는다 — 통상적인 소액 취득(전세보증금 등)은 별도로 그 고시 기준을 확인해야 한다.
+  window.calculatePropertyAcquisitionFundsGiftTaxJS = function (p) {
+    p = p || {};
+    const acquisitionValue = Number(p.acquisitionValue) || 0;
+    if (acquisitionValue <= 0) return { error: '취득재산의 가액(또는 채무 상환금액)이 필요합니다.' };
+    const provenAmount = Number(p.provenAmount) || 0;
+    const unprovenAmount = Math.max(0, acquisitionValue - provenAmount);
+    const gateThreshold = Math.min(Math.round(acquisitionValue * 0.2), 200000000);
+    const meetsGate = unprovenAmount >= gateThreshold;
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false, 취득재산가액: acquisitionValue, 입증된금액: provenAmount, 미입증금액: unprovenAmount,
+        배제기준금액: gateThreshold, 증여의제이익: 0, 납부세액: 0,
+        안내: '미입증금액(' + unprovenAmount + '원)이 배제기준금액(취득재산가액의 20%와 2억원 중 적은 금액, ' + gateThreshold + '원)에 미달해(시행령§34①단서) 증여추정 대상이 아닙니다.'
+      };
+    }
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const r = taxOnDeemedGiftProfit(unprovenAmount, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
+
+    return {
+      과세대상여부: true, 취득재산가액: acquisitionValue, 입증된금액: provenAmount, 미입증금액: unprovenAmount, 배제기준금액: gateThreshold,
+      증여의제이익: unprovenAmount,
+      과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
+      무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
+      납부세액: r.finalTax,
+      안내: '증여재산공제(§53)는 적용되지 않습니다(합산배제증여재산 — §47①·§55①). 자금출처로 인정되는 항목(시행령§34①: 신고·과세된 소득금액, 신고·과세된 상속·수증재산가액, 재산처분대가·부담한 채무로 실제 그 취득·상환에 쓴 금액)을 정확히 소명했는지 다시 확인하세요. §45③ 단서의 국세청장 고시 소액기준 적용 여부는 이 도구가 판정하지 않습니다.'
+    };
+  };
+
+  // 채무면제 등에 따른 증여 (상증세법§36) — 채권자로부터 채무를 면제받거나 제3자로부터 채무의 인수·변제를
+  // 받으면, 그 면제·인수·변제로 얻은 이익(보상액을 지급했으면 그 보상액을 뺀 금액)이 증여재산가액이다.
+  window.calculateDebtForgivenessGiftTaxJS = function (p) {
+    p = p || {};
+    const debtAmount = Number(p.debtAmount) || 0;
+    if (debtAmount <= 0) return { error: '면제·인수·변제받은 채무액이 필요합니다.' };
+    const compensationPaid = Number(p.compensationPaid) || 0;
+    const giftAmount = Math.max(0, debtAmount - compensationPaid);
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      채무면제등이익: giftAmount, 증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction,
+      감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount, 과세표준: taxBase,
+      산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 면제·인수·변제를 받은 날입니다(§36②). 배우자·직계존비속 등 관계별 증여재산공제(§53) 한도는 10년간 합산 사용액을 감안해 직접 계산해서 넣어야 합니다.'
+    };
+  };
+
+  // 부동산 무상사용·담보이용에 따른 이익의 증여 (상증세법§37, 시행령§27, 시행규칙§10) — 타인의 부동산(그
+  // 소유자와 함께 거주하는 주택·부수토지는 제외)을 무상사용하면 연간 부동산가액×2%(시행규칙§10②)의
+  // 이익을 5년간(무상사용기간은 5년 단위로 재산정) 매년 얻는 것으로 보아, 10% 할인율 5년 연금현가계수
+  // 3.79079로 현재가치화한 금액이 증여재산가액이다(§59② 영업권평가와 동일한 현가환산 방식 — 시행규칙§11②이
+  // §51①·§59②를 함께 규정하는 것으로 보아 §10③의 환산방법도 동일 계수를 쓰는 것으로 판단했으며, 시행규칙§10③
+  // 산식 원문 이미지 자체는 확인하지 못했다). 5년간 합계이익이 1억원 미만이면 과세 제외(§37①단서, 시행령§27④).
+  // 부동산을 무상으로 담보로 제공받아 차입한 경우(§37②)는 별도로, 차입금×적정이자율(4.6%)-실제지급이자를
+  // 1년 단위로 계산해 1천만원 미만이면 제외한다(시행령§27⑤⑥).
+  window.calculateFreePropertyUseGiftTaxJS = function (p) {
+    p = p || {};
+    const useType = p.useType;
+    if (['occupancy', 'collateral'].indexOf(useType) === -1) return { error: '무상사용 또는 담보이용 중에서 선택하세요.' };
+    let giftAmount, annualBenefit;
+    if (useType === 'occupancy') {
+      const propertyValue = Number(p.propertyValue) || 0;
+      annualBenefit = Math.round(propertyValue * 0.02);
+      giftAmount = Math.round(annualBenefit * 3.79079);
+      if (giftAmount < 100000000) {
+        return {
+          과세대상여부: false, 연간이익: annualBenefit, 오년간현재가치합계: giftAmount, 기준금액: 100000000, 납부세액: 0,
+          안내: '5년간 이익의 현재가치 합계(' + giftAmount + '원)가 기준금액(1억원, 시행령§27④)에 미달해 과세대상이 아닙니다.'
+        };
+      }
+    } else {
+      const loanAmount = Number(p.loanAmount) || 0;
+      const appropriateInterestRate = 0.046;
+      const actualInterestPaid = Number(p.actualInterestPaid) || 0;
+      giftAmount = Math.max(0, Math.round(loanAmount * appropriateInterestRate) - actualInterestPaid);
+      if (giftAmount < 10000000) {
+        return {
+          과세대상여부: false, 담보이용이익: giftAmount, 기준금액: 10000000, 납부세액: 0,
+          안내: '담보이용이익(' + giftAmount + '원)이 기준금액(1천만원, 시행령§27⑥)에 미달해 과세대상이 아닙니다.'
+        };
+      }
+    }
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return Object.assign({
+      과세대상여부: true,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: useType === 'occupancy'
+        ? '5년마다 증여시기가 재산정되므로(무상사용 개시일로부터 5년이 되는 날의 다음날에 새로 개시한 것으로 봄), 5년을 초과해 계속 무상사용하면 그 다음 5년분도 별도로 계산해서 신고해야 합니다. 특수관계인이 아닌 경우 거래관행상 정당한 사유가 없을 때만 과세됩니다(§37③).'
+        : '차입기간을 정하지 않았으면 1년으로 보고, 1년 초과시 그 다음 1년분도 새로 계산합니다(시행령§27⑤). 적정이자율(4.6%)은 시행령§31의4①과 동일합니다.'
+    }, useType === 'occupancy' ? { 연간이익: annualBenefit, 오년간현재가치합계: giftAmount } : { 담보이용이익: giftAmount });
+  };
+
+  // 배우자 등에게 양도한 재산의 증여 추정 (상증세법§44) — 배우자·직계존비속에게 양도한 재산은 그 재산가액을
+  // 양도자가 증여한 것으로 추정한다(①). 특수관계인에게 양도한 재산을 그 특수관계인이 3년 이내에 당초
+  // 양도자의 배우자등에게 다시 양도하면, 재양도 당시 재산가액을 증여추정한다(②) — 다만 당초양도자·양수자가
+  // 부담한 소득세 결정세액 합계가 재양도 재산가액을 증여추정할 경우의 증여세액보다 크면 배제한다(②단서,
+  // 그 비교대상 증여세액은 관계별 공제가 적용되는 일반 증여세 계산이 필요하므로 별도로 계산해서 입력받는다).
+  // ③ 각호(경매·파산선고·공매·증권시장처분·대가받고양도한사실이명백히인정) 중 하나에 해당하면 적용하지 않는다.
+  window.calculateSpousePropertyTransferGiftTaxJS = function (p) {
+    p = p || {};
+    if (p.isExcluded) {
+      return {
+        과세대상여부: false, 납부세액: 0,
+        안내: '적용배제 사유(§44③ — 경매·파산선고·공매·증권시장처분·대가받고 양도한 사실이 명백히 인정되는 경우)에 해당해 증여추정을 적용하지 않습니다.'
+      };
+    }
+    const transferType = p.transferType;
+    if (['direct', 'bypass'].indexOf(transferType) === -1) return { error: '직접양도 또는 우회양도(3년 이내 재양도) 중에서 선택하세요.' };
+    const assetValue = Number(p.assetValue) || 0;
+    if (assetValue <= 0) return { error: '증여추정 대상 재산가액이 필요합니다.' };
+
+    if (transferType === 'bypass') {
+      const priorTaxesSum = Number(p.priorTaxesSum) || 0;
+      const comparisonGiftTax = Number(p.comparisonGiftTax) || 0;
+      if (priorTaxesSum > comparisonGiftTax) {
+        return {
+          과세대상여부: false, 납부세액: 0,
+          안내: '당초 양도자·양수자가 부담한 소득세 결정세액 합계(' + priorTaxesSum + '원)가 재양도 재산가액을 증여추정할 경우의 증여세액(' + comparisonGiftTax + '원)보다 커서(§44②단서) 증여추정을 적용하지 않습니다.'
+        };
+      }
+    }
+
+    const giftAmount = assetValue;
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 증여추정재산가액: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: transferType === 'direct'
+        ? '증여로 추정되어 배우자등에게 증여세가 부과되면, 당초 양도자·양수자에게는 그 양도에 대한 소득세를 부과하지 않습니다(§44④).'
+        : '재양도 당시의 재산가액을 증여받은 것으로 추정합니다(§44②). 마찬가지로 소득세는 부과되지 않습니다(§44④).'
+    };
+  };
+
   // 상속세(증여세) 연부연납 회차별 납부예정세액 계산 ([별지 제11호서식]) — Code.js toolCalculateInstallmentPaymentSchedule와 동일 로직.
   window.calculateInstallmentPaymentScheduleJS = function (p) {
     p = p || {};
