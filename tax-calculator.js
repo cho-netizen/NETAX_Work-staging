@@ -1674,6 +1674,8 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>양도비용</label><input type="number" id="stTransferExpenses" placeholder="원 (증권거래세 등, 없으면 0)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="stMajorityNonBizLand"><label for="stMajorityNonBizLand">[기타자산만] 발행법인 자산의 50%이상이 비사업용토지(§104①9호, 기본세율+10%p 가산)</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="stIsDaejuju"><label for="stIsDaejuju">대주주(국내주식만 해당, 지분율·시가총액 기준은 별도 확인)</label></div>' +
+        '<div class="taxcalc-field"><label>기장누락·미기장 소득금액(대주주만, §115)</label><input type="number" id="stUnrecordedIncome" placeholder="원 (거래명세 등 기장의무 위반분, 없으면 비움)"></div>' +
+        '<div class="taxcalc-field"><label>기장불성실가산세용 거래금액(산출세액 0원일 때만)</label><input type="number" id="stBookkeepingPenaltyTxAmount" placeholder="원 (산출세액이 없을 때 거래금액×7/10000으로 가산)"></div>' +
         '<div class="taxcalc-field"><label>보유기간(대주주만)</label><input type="number" id="stHoldingMonths" placeholder="개월 (12개월 미만이면 30%)" maxlength="3"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="stIsSmallMedium"><label for="stIsSmallMedium">중소기업 발행주식</label></div>' +
         '<div class="taxcalc-field"><label>같은 기간 다른 국내외주식 순손익</label><input type="number" id="stPriorNetGain" placeholder="원 (이익+/손실-, 손익통산용, 없으면 0)"></div>' +
@@ -2026,6 +2028,7 @@ function renderStockTransferResult(r){
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  if (r.기장불성실가산세) html += taxCalcResultRow('기장불성실가산세(§115)', '+' + won(r.기장불성실가산세));
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
@@ -3733,7 +3736,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('stFilingStatus').value,
       isFraudulent: document.getElementById('stFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('stUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('stUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('stUnpaidDays').value) || 0,
+      unrecordedIncomeAmount: numVal(document.getElementById('stUnrecordedIncome').value) || 0,
+      transactionAmountForBookkeepingPenalty: numVal(document.getElementById('stBookkeepingPenaltyTxAmount').value) || 0
     };
     renderStockTransferResult(calculateStockTransferTaxJS(input));
   } else if (action === 'send-debt-to-transfer'){

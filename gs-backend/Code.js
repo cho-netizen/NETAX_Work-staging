@@ -923,7 +923,9 @@ const DRIVE_TOOLS = [
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
-        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' }
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' },
+        unrecordedIncomeAmount: { type: 'number', description: '주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세(소득세법§115) — assetCategory가 domestic_stock이고 isDaejuju가 true일 때만 의미가 있다. 법인의 대주주가 양도하는 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 소득금액(원). 없으면 생략.' },
+        transactionAmountForBookkeepingPenalty: { type: 'number', description: '§115 기장불성실가산세 계산용 — 산출세액이 0원일 때만 쓰인다. 그 거래금액(원)에 1만분의 7을 곱해 가산세로 한다. 없으면 생략.' }
       },
       required: ['assetCategory', 'transferPrice']
     }
@@ -4674,8 +4676,22 @@ function toolCalculateStockTransferTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
+  // 주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세 (소득세법§115) — 법인의 대주주가 양도하는
+  // 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 경우, (누락소득금액/양도소득금액)×산출세액×10%를
+  // 가산한다. 다만 산출세액이 없으면 그 거래금액의 1만분의 7을 가산세로 한다.
+  let bookkeepingPenalty = 0;
+  const unrecordedIncomeAmount = Math.max(0, Number(p.unrecordedIncomeAmount) || 0);
+  if (assetCategory === 'domestic_stock' && p.isDaejuju && unrecordedIncomeAmount > 0) {
+    if (calculatedTax > 0 && combinedGain > 0) {
+      bookkeepingPenalty = Math.round((Math.min(unrecordedIncomeAmount, combinedGain) / combinedGain) * calculatedTax * 0.10);
+    } else {
+      const transactionAmountForPenalty = Math.max(0, Number(p.transactionAmountForBookkeepingPenalty) || 0);
+      bookkeepingPenalty = Math.round(transactionAmountForPenalty * 0.0007);
+    }
+  }
+
   const localIncomeTax = Math.round(taxAfterCredit * 0.1);
-  const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+  const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + bookkeepingPenalty + localIncomeTax);
 
   return {
     입력값: { 자산구분: assetCategory, 양도가액: transferPrice, 취득가액: acquisitionPrice, 양도비용: transferExpenses, 신고상태: filingStatus },
@@ -4689,9 +4705,10 @@ function toolCalculateStockTransferTax(p) {
     무신고가산세: penalties.unreportedPenalty,
     과소신고가산세: penalties.underreportedPenalty,
     납부지연가산세: penalties.latePenalty,
+    기장불성실가산세: bookkeepingPenalty,
     지방소득세: localIncomeTax,
     납부세액_합계: totalTax,
-    안내: '장기보유특별공제는 주식등에는 적용되지 않습니다. 기본공제(연 250만원)는 국내·국외주식 합산 1회이며, 같은 과세기간에 이미 다른 주식양도에서 기본공제를 썼다면 basicDeductionAlreadyUsed에 넣어야 중복 적용을 막을 수 있습니다. 대주주 판정기준(지분율·시가총액)은 이 도구가 검증하지 않으므로 별도로 확인한 뒤 isDaejuju를 넣으세요. 대주주 등이 주식·출자지분을 양도하면서 기장을 누락한 경우의 기장불성실가산세(산출세액×기장누락소득금액/양도소득금액×10%, 산출세액이 없으면 거래금액×7/10000)는 이 도구가 계산하지 않으니 해당 사안이면 별도로 계산해서 더하세요. 예정신고(반기별, 파생상품은 생략)와 확정신고(다음해 5월) 의무는 자산 종류별로 다르니 별도로 확인하세요.'
+    안내: '장기보유특별공제는 주식등에는 적용되지 않습니다. 기본공제(연 250만원)는 국내·국외주식 합산 1회이며, 같은 과세기간에 이미 다른 주식양도에서 기본공제를 썼다면 basicDeductionAlreadyUsed에 넣어야 중복 적용을 막을 수 있습니다. 대주주 판정기준(지분율·시가총액)은 이 도구가 검증하지 않으므로 별도로 확인한 뒤 isDaejuju를 넣으세요. 예정신고(반기별, 파생상품은 생략)와 확정신고(다음해 5월) 의무는 자산 종류별로 다르니 별도로 확인하세요.'
   };
 }
 

@@ -2329,8 +2329,22 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
 
+    // 주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세 (소득세법§115) — 법인의 대주주가 양도하는
+    // 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 경우, (누락소득금액/양도소득금액)×산출세액×10%를
+    // 가산한다. 다만 산출세액이 없으면 그 거래금액의 1만분의 7을 가산세로 한다.
+    let bookkeepingPenalty = 0;
+    const unrecordedIncomeAmount = Math.max(0, Number(p.unrecordedIncomeAmount) || 0);
+    if (assetCategory === 'domestic_stock' && p.isDaejuju && unrecordedIncomeAmount > 0) {
+      if (calculatedTax > 0 && combinedGain > 0) {
+        bookkeepingPenalty = Math.round((Math.min(unrecordedIncomeAmount, combinedGain) / combinedGain) * calculatedTax * 0.10);
+      } else {
+        const transactionAmountForPenalty = Math.max(0, Number(p.transactionAmountForBookkeepingPenalty) || 0);
+        bookkeepingPenalty = Math.round(transactionAmountForPenalty * 0.0007);
+      }
+    }
+
     const localIncomeTax = Math.round(taxAfterCredit * 0.1);
-    const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+    const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + bookkeepingPenalty + localIncomeTax);
 
     return {
       양도차익: Math.round(gain),
@@ -2343,6 +2357,7 @@
       무신고가산세: penalties.unreportedPenalty,
       과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
+      기장불성실가산세: bookkeepingPenalty,
       지방소득세: localIncomeTax,
       납부세액_합계: totalTax
     };
