@@ -2548,6 +2548,174 @@
     };
   };
 
+  // 전환사채등의 주식전환등에 따른 이익의 증여 (상증세법§40, 시행령§30) — 4가지 세부 케이스로 나뉜다.
+  // acquisition(법§40①1호, 취득시 — 특수관계인 저가취득/최대주주등 초과배정저가취득/그 특수관계인 초과배정
+  //   저가취득): 이익 = 전환사채등의 시가 - 인수취득가액. 게이트: min(시가30%, 1억).
+  // conversion(법§40①2호가~다목, 전환시 — 특수관계인취득자·최대주주등·그특수관계인의 전환이익): 이익 =
+  //   (교부받은주식가액-전환가액등)×교부받은주식수-이자손실분-acquisition이익(있으면). 전환사채등을
+  //   양도한 경우 이익은 양도가액-취득가액을 초과할 수 없다. 게이트: 1억원(고정).
+  //   교부받은주식가액 = [(전환등전1주당평가액×전환등전발행주식총수)+(전환가액등×전환등으로증가한주식수)]
+  //     ÷(전환등전발행주식총수+증가한주식수) — §39①1호가목과 동일 형태(사용자가 시행령§30⑤ 원문을 직접
+  //     제공해 확인).
+  // conversion_reverse(법§40①2호라목, 반대편 — 교부받은주식가액이 낮아짐으로써 그 주식을 교부받은 자의
+  //   특수관계인이 얻은 이익): 이익 = (전환가액등-교부받은주식가액)×증가한주식수×그특수관계인이전환등전에
+  //   보유한지분비율. 게이트: 0원(무조건 과세).
+  // transfer(법§40①3호, 양도시 — 특수관계인에게 시가보다 높은 가액으로 양도): 이익 = 양도가액-시가.
+  //   게이트: min(시가30%, 1억).
+  // 이자손실분(시행규칙§10의2, 사채발행이율 기준 현재가치-적정할인율 기준 현재가치의 차액)은 가변적인
+  // 이자율(§58의2②1호가목 적정할인율)에 의존해 이 계산기가 직접 산정하지 않으니 별도로 계산해서
+  // 입력해야 한다. conversion·conversion_reverse·transfer(법§40①2·3호)는 §47①에 열거된 합산배제
+  // 증여재산이므로 §55①3호에 따라 이익에서 3천만원을 공제한 금액이 과세표준이며(관계별공제 미적용),
+  // acquisition(법§40①1호)은 열거되지 않아 일반 증여세 산식(관계별공제 등)을 따른다.
+  window.calculateConvertibleBondGiftTaxJS = function (p) {
+    p = p || {};
+    const caseType = p.caseType;
+    const validCases = ['acquisition', 'conversion', 'conversion_reverse', 'transfer'];
+    if (validCases.indexOf(caseType) === -1) {
+      return { error: 'caseType을 acquisition(취득시)/conversion(전환시)/conversion_reverse(전환시 반대편)/transfer(양도시) 중에서 선택하세요.' };
+    }
+
+    let giftAmount, gateThreshold;
+    if (caseType === 'acquisition') {
+      const fairValue = Number(p.fairValue) || 0;
+      const acquisitionCost = Number(p.acquisitionCost) || 0;
+      if (fairValue <= 0) return { error: '전환사채등의 시가가 필요합니다.' };
+      giftAmount = Math.max(0, Math.round(fairValue - acquisitionCost));
+      gateThreshold = Math.min(fairValue * 0.3, 100000000);
+    } else if (caseType === 'transfer') {
+      const fairValue = Number(p.fairValue) || 0;
+      const transferPrice = Number(p.transferPrice) || 0;
+      if (fairValue <= 0) return { error: '전환사채등의 시가가 필요합니다.' };
+      giftAmount = Math.max(0, Math.round(transferPrice - fairValue));
+      gateThreshold = Math.min(fairValue * 0.3, 100000000);
+    } else {
+      const preConversionValuePerShare = Number(p.preConversionValuePerShare) || 0;
+      const preConversionShares = Number(p.preConversionShares) || 0;
+      const conversionPricePerShare = Number(p.conversionPricePerShare) || 0;
+      const increasedShares = Number(p.increasedShares) || 0;
+      if (preConversionShares <= 0 || increasedShares <= 0) return { error: '전환등 전 발행주식총수와 전환등으로 증가한 주식수가 필요합니다.' };
+      const receivedSharesValue = (preConversionValuePerShare * preConversionShares + conversionPricePerShare * increasedShares) / (preConversionShares + increasedShares);
+
+      if (caseType === 'conversion') {
+        const interestLossAmount = Number(p.interestLossAmount) || 0;
+        const priorAcquisitionGiftAmount = Number(p.priorAcquisitionGiftAmount) || 0;
+        giftAmount = Math.max(0, Math.round((receivedSharesValue - conversionPricePerShare) * increasedShares - interestLossAmount - priorAcquisitionGiftAmount));
+        if (p.isBondTransferred) {
+          const cap = Math.max(0, (Number(p.bondTransferPrice) || 0) - (Number(p.bondAcquisitionCost) || 0));
+          giftAmount = Math.min(giftAmount, cap);
+        }
+        gateThreshold = 100000000;
+      } else { // conversion_reverse
+        const relatedPriorOwnershipRatio = Number(p.relatedPriorOwnershipRatio) || 0;
+        giftAmount = Math.max(0, Math.round((conversionPricePerShare - receivedSharesValue) * increasedShares * relatedPriorOwnershipRatio));
+        gateThreshold = 0;
+      }
+    }
+
+    if (giftAmount < gateThreshold) {
+      return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§30②).' };
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+
+    let taxBase, isAggregationExcluded;
+    if (caseType === 'acquisition') {
+      isAggregationExcluded = false;
+      const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+      const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+      const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+      const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+      taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+      var relationDeductionOut = relationDeduction, marriageBirthDeductionOut = marriageBirthDeduction, disasterLossAmountOut = disasterLossAmount;
+    } else {
+      isAggregationExcluded = true;
+      taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
+    }
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+
+    const result = {
+      과세대상여부: true, 증여의제이익: giftAmount,
+      감정평가수수료공제: appraisalFeeAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: isAggregationExcluded
+        ? '합산배제증여재산이므로(§47①) 관계별 증여재산공제(§53)는 적용하지 않고 이익에서 3천만원을 공제해 과세표준을 계산합니다(§55①3호). 이자손실분·조정공제 등 세부 계산은 시행규칙§10의2를 별도로 확인해서 반영하세요.'
+        : '증여일은 전환사채등을 인수·취득한 날입니다(시행령§30①1호).'
+    };
+    if (!isAggregationExcluded) {
+      result.증여재산공제 = relationDeductionOut; result.혼인출산공제 = marriageBirthDeductionOut; result.재해손실공제 = disasterLossAmountOut;
+    }
+    return result;
+  };
+
+  // 현물출자에 따른 이익의 증여 (상증세법§39의3, 시행령§29의3) — §39(증자)의 이미 확립된 공식을
+  // "증자"를 "현물출자"로 치환해 그대로 준용한다(시행령§29의3①). low_price(1호, 저가발행+현물출자자가
+  // 배정받은 신주 — §39의 low_allocated와 동일 산식, 게이트 없음): 이익 = (현물출자후1주당평가액-신주
+  // 1주당인수가액)×현물출자자가배정받은신주수. high_price(2호, 고가발행 — 현물출자자가 인수한 신주수와
+  // 특수관계인 주주등의 지분비율을 곱하는 점이 §39의 high_allocated와 다름): 이익 = (신주1주당인수가액-
+  // 현물출자후1주당평가액)×현물출자자가인수한신주수×현물출자자외특수관계인주주등의지분비율. 게이트(2호만):
+  // 차액비율 30%이상이거나 이익 3억원이상.
+  window.calculateInKindContributionGiftTaxJS = function (p) {
+    p = p || {};
+    const caseType = p.caseType;
+    if (['low_price', 'high_price'].indexOf(caseType) === -1) {
+      return { error: 'caseType을 low_price(저가발행)/high_price(고가발행) 중에서 선택하세요.' };
+    }
+    const preValuePerShare = Number(p.preValuePerShare) || 0;
+    const preShares = Number(p.preShares) || 0;
+    const issuePricePerShare = Number(p.issuePricePerShare) || 0;
+    const increasedShares = Number(p.increasedShares) || 0;
+    if (preShares <= 0 || increasedShares <= 0) return { error: '현물출자전 발행주식총수와 현물출자로 증가한 주식수가 필요합니다.' };
+    const postValuePerShare = (preValuePerShare * preShares + issuePricePerShare * increasedShares) / (preShares + increasedShares);
+
+    let giftAmount;
+    if (caseType === 'low_price') {
+      const allocatedShares = Number(p.allocatedShares) || 0;
+      giftAmount = Math.max(0, Math.round((postValuePerShare - issuePricePerShare) * allocatedShares));
+    } else {
+      const acquiredShares = Number(p.acquiredShares) || 0;
+      const relatedShareholderRatio = Number(p.relatedShareholderRatio) || 0;
+      giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * acquiredShares * relatedShareholderRatio));
+      const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
+      if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
+        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29의3②).' };
+      }
+    }
+
+    const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    const disasterLossAmount = Number(p.disasterLossAmount) || 0;
+    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
+    const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
+    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+    const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    const priorPaidTax = Number(p.priorPaidTax) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
+    const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
+    const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
+    return {
+      과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
+      증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+      과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      납부세액: finalTax,
+      안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.'
+    };
+  };
+
   // 국외자산 양도소득세 (소득세법§118의2~§118의8) — 국내자산 양도세와 완전히 별도로 계산한다. 양도일까지
   // 계속 5년 이상 국내에 주소·거소를 둔 거주자가 국외 토지·건물·부동산에관한권리·기타자산을 양도할 때
   // 적용된다. 세율은 §55①(국내양도세와 같은 기본누진세율표)을 그대로 쓰되 장기보유특별공제는 적용하지

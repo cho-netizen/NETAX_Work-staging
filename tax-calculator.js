@@ -182,6 +182,18 @@ function recomputeCrUnpaidDays(){
   const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
   setUnpaidDaysField_('crUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
 }
+function recomputeIcfUnpaidDays(){
+  const giftDate = document.getElementById('icfGiftDate');
+  const paidDate = document.getElementById('icfPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('icfUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
+function recomputeCbUnpaidDays(){
+  const giftDate = document.getElementById('cbGiftDate');
+  const paidDate = document.getElementById('cbPaidDate');
+  const deadline = taxCalcDeadlineFromMonthEnd_(giftDate ? giftDate.value : '', 3);
+  setUnpaidDaysField_('cbUnpaidDays', taxCalcDaysLate_(deadline, paidDate ? paidDate.value : ''));
+}
 function recomputeFuUnpaidDays(){
   const giftDate = document.getElementById('fuGiftDate');
   const paidDate = document.getElementById('fuPaidDate');
@@ -2739,6 +2751,70 @@ function renderGiftPane(){
       '<div id="taxCalcCapitalReductionGiftResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>현물출자에 따른 이익의 증여(§39의3) — §39(증자)와 계산구조가 같습니다(증자→현물출자로 치환)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>케이스 구분</label><select id="icfCaseType">' +
+          '<option value="low_price">저가발행(1호)</option><option value="high_price">고가발행(2호)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>현물출자전 1주당 평가가액</label><input type="number" id="icfPreValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>현물출자전 발행주식총수</label><input type="number" id="icfPreShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>신주 1주당 인수가액</label><input type="number" id="icfIssuePrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>현물출자로 증가한 주식수(전체)</label><input type="number" id="icfIncreasedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[저가발행만] 현물출자자가 배정받은 신주수</label><input type="number" id="icfAllocatedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가발행만] 현물출자자가 인수한 신주수</label><input type="number" id="icfAcquiredShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[고가발행만] 현물출자자 외 특수관계인주주등의 지분비율</label><input type="number" step="0.01" min="0" max="1" id="icfRelatedRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="icfRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="icfAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="icfFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="icfFraudulent"><label for="icfFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="icfUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일(현물출자 납입일 등)</label><input type="text" class="taxcalc-date" id="icfGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="icfPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="icfUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-in-kind-contribution-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcInKindContributionGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>전환사채등의 주식전환등에 따른 이익의 증여(§40) — 전환사채·신주인수권부사채 등을 인수·취득·양도하거나 주식전환등을 할 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>케이스 구분</label><select id="cbCaseType">' +
+          '<option value="acquisition">취득시(법1호 — 저가취득)</option>' +
+          '<option value="conversion">전환시(법2호가~다목 — 교부주식가액이 전환가액등 초과)</option>' +
+          '<option value="conversion_reverse">전환시 반대편(법2호라목 — 특수관계인이 얻은 이익)</option>' +
+          '<option value="transfer">양도시(법3호 — 특수관계인에게 고가양도)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[취득·양도시만] 전환사채등의 시가</label><input type="number" id="cbFairValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[취득시만] 인수·취득가액</label><input type="number" id="cbAcquisitionCost" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[양도시만] 양도가액</label><input type="number" id="cbTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전환시만] 전환등 전 1주당 평가가액</label><input type="number" id="cbPreValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전환시만] 전환등 전 발행주식총수</label><input type="number" id="cbPreShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[전환시만] 전환가액등(1주당 전환·교환·인수가액)</label><input type="number" id="cbConversionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전환시만] 전환등으로 증가한(교부받은) 주식수</label><input type="number" id="cbIncreasedShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 이자손실분</label><input type="number" id="cbInterestLoss" placeholder="원 (시행규칙§10의2, 별도 계산해 입력, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 기과세된 취득시 이익</label><input type="number" id="cbPriorAcquisitionGift" placeholder="원 (같은 건 법1호로 이미 과세된 금액, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[전환시 반대편만] 그 특수관계인의 전환등전 보유지분비율</label><input type="number" step="0.01" min="0" max="1" id="cbRelatedRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>증여재산공제 남은 한도액(취득시만)</label><input type="number" id="cbRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="cbAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>신고 상태</label><select id="cbFilingStatus">' +
+          '<option value="ontime">정상(기한내) 신고</option><option value="unreported">무신고</option><option value="underreported">과소신고</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="cbFraudulent"><label for="cbFraudulent">부정행위(가산세율 40%로 상향)</label></div>' +
+        '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="cbUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
+        '<div class="taxcalc-field"><label>증여일</label><input type="text" class="taxcalc-date" id="cbGiftDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="cbPaidDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="cbUnpaidDays" placeholder="0" readonly></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-convertible-bond-gift">증여세 계산하기</button>' +
+      '<div id="taxCalcConvertibleBondGiftResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>부동산 무상사용·담보이용에 따른 이익의 증여(§37) — 타인의 부동산을 무상으로 사용하거나, 무상으로 담보 제공받아 차입했을 때</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>구분</label><select id="fuUseType">' +
@@ -3148,6 +3224,14 @@ function renderGiftPane(){
   const crPaidDateEl = document.getElementById('crPaidDate');
   if (crGiftDateEl) crGiftDateEl.addEventListener('input', recomputeCrUnpaidDays);
   if (crPaidDateEl) crPaidDateEl.addEventListener('input', recomputeCrUnpaidDays);
+  const icfGiftDateEl = document.getElementById('icfGiftDate');
+  const icfPaidDateEl = document.getElementById('icfPaidDate');
+  if (icfGiftDateEl) icfGiftDateEl.addEventListener('input', recomputeIcfUnpaidDays);
+  if (icfPaidDateEl) icfPaidDateEl.addEventListener('input', recomputeIcfUnpaidDays);
+  const cbGiftDateEl = document.getElementById('cbGiftDate');
+  const cbPaidDateEl = document.getElementById('cbPaidDate');
+  if (cbGiftDateEl) cbGiftDateEl.addEventListener('input', recomputeCbUnpaidDays);
+  if (cbPaidDateEl) cbPaidDateEl.addEventListener('input', recomputeCbUnpaidDays);
   const fuGiftDateEl = document.getElementById('fuGiftDate');
   const fuPaidDateEl = document.getElementById('fuPaidDate');
   if (fuGiftDateEl) fuGiftDateEl.addEventListener('input', recomputeFuUnpaidDays);
@@ -3372,6 +3456,17 @@ function renderCapitalIncreaseGiftResult(r){
 }
 function renderCapitalReductionGiftResult(r){
   renderDeemedGiftGenericResult_(document.getElementById('taxCalcCapitalReductionGiftResult'), r, [
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
+}
+function renderInKindContributionGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcInKindContributionGiftResult'), r, [
+    { key: '현물출자후1주당평가액', label: '현물출자후 1주당 평가액' },
+    { key: '증여의제이익', label: '증여의제이익' }
+  ]);
+}
+function renderConvertibleBondGiftResult(r){
+  renderDeemedGiftGenericResult_(document.getElementById('taxCalcConvertibleBondGiftResult'), r, [
     { key: '증여의제이익', label: '증여의제이익' }
   ]);
 }
@@ -4940,6 +5035,45 @@ taxCalcView.addEventListener('click', function(e){
       unpaidDays: numVal(document.getElementById('crUnpaidDays').value) || 0
     };
     renderCapitalReductionGiftResult(calculateCapitalReductionGiftTaxJS(input));
+  } else if (action === 'run-in-kind-contribution-gift'){
+    const input = {
+      caseType: document.getElementById('icfCaseType').value,
+      preValuePerShare: numVal(document.getElementById('icfPreValue').value) || 0,
+      preShares: numVal(document.getElementById('icfPreShares').value) || 0,
+      issuePricePerShare: numVal(document.getElementById('icfIssuePrice').value) || 0,
+      increasedShares: numVal(document.getElementById('icfIncreasedShares').value) || 0,
+      allocatedShares: numVal(document.getElementById('icfAllocatedShares').value) || 0,
+      acquiredShares: numVal(document.getElementById('icfAcquiredShares').value) || 0,
+      relatedShareholderRatio: numVal(document.getElementById('icfRelatedRatio').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('icfRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('icfAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('icfFilingStatus').value,
+      isFraudulent: document.getElementById('icfFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('icfUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('icfUnpaidDays').value) || 0
+    };
+    renderInKindContributionGiftResult(calculateInKindContributionGiftTaxJS(input));
+  } else if (action === 'run-convertible-bond-gift'){
+    const input = {
+      caseType: document.getElementById('cbCaseType').value,
+      fairValue: numVal(document.getElementById('cbFairValue').value) || 0,
+      acquisitionCost: numVal(document.getElementById('cbAcquisitionCost').value) || 0,
+      transferPrice: numVal(document.getElementById('cbTransferPrice').value) || 0,
+      preConversionValuePerShare: numVal(document.getElementById('cbPreValue').value) || 0,
+      preConversionShares: numVal(document.getElementById('cbPreShares').value) || 0,
+      conversionPricePerShare: numVal(document.getElementById('cbConversionPrice').value) || 0,
+      increasedShares: numVal(document.getElementById('cbIncreasedShares').value) || 0,
+      interestLossAmount: numVal(document.getElementById('cbInterestLoss').value) || 0,
+      priorAcquisitionGiftAmount: numVal(document.getElementById('cbPriorAcquisitionGift').value) || 0,
+      relatedPriorOwnershipRatio: numVal(document.getElementById('cbRelatedRatio').value) || 0,
+      relationDeductionLimit: numVal(document.getElementById('cbRelationDeduction').value) || 0,
+      appraisalFeeAmount: numVal(document.getElementById('cbAppraisalFee').value) || 0,
+      filingStatus: document.getElementById('cbFilingStatus').value,
+      isFraudulent: document.getElementById('cbFraudulent').checked,
+      underreportedTaxAmount: numVal(document.getElementById('cbUnderreportedTax').value) || 0,
+      unpaidDays: numVal(document.getElementById('cbUnpaidDays').value) || 0
+    };
+    renderConvertibleBondGiftResult(calculateConvertibleBondGiftTaxJS(input));
   } else if (action === 'run-free-property-use'){
     const input = {
       useType: document.getElementById('fuUseType').value,
