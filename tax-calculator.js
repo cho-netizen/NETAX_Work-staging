@@ -1841,6 +1841,46 @@ function renderTransferPane(){
       '<div id="taxCalcLongTermRentalHouseResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>국가양도산지 감면(조특법§85의10, 2022.12.31 신청기한 만료 — 과거 거래용) — 2년이상 보유한 산지를 국가에 양도할 때 10% 세액감면</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="nfTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>보유기간</label><input type="number" id="nfHoldingYears" placeholder="년"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="nfTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="nfAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="nfNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-national-forest-land">적용 가능 여부 확인하기</button>' +
+      '<div id="taxCalcNationalForestLandResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>산업단지 이주택지 세율특례(조특법§104의20, 2012.12.31 적용기한 만료 — 과거 거래용) — 세액은 계산하지 않고 적용 가능 여부만 판정합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="icTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>이주택지 분양가격</label><input type="number" id="icSalePrice" placeholder="원 (1억원 이하)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="icWasResident"><label for="icWasResident">실시계획승인일부터 소급 2년이상 그 사업 제공 주거용건축물에 거주</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-industrial-complex-lot">적용 가능 여부 확인하기</button>' +
+      '<div id="taxCalcIndustrialComplexLotResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>박물관등 이전 양도세 분할납부(조특법§83, 2022.12.31 적용기한 만료 — 과거 거래용) — 신고기한 종료일+3년부터 5년간 균분납부 스케줄</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>종전시설 양도일</label><input type="date" id="mrTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>분할납부할 양도소득세액</label><input type="number" id="mrTotalTax" placeholder="원 (종전시설 양도차익에 대한 산출세액)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-museum-relocation">분할납부 스케줄 계산하기</button>' +
+      '<div id="taxCalcMuseumRelocationResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>경영회생 지원 농지 매매 환급(조특법§70의2) — 한국농어촌공사에 양도한 농지등을 임차기간 내 환매했을 때</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="frWithinLeaseTerm"><label for="frWithinLeaseTerm">한국농어촌공사와의 임차기간 내에 환매함</label></div>' +
+        '<div class="taxcalc-field"><label>한국농어촌공사 양도 당시 납부한 양도소득세</label><input type="number" id="frOriginalTax" placeholder="원 (환급대상액)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-farmland-repurchase">환급 가능 여부 확인하기</button>' +
+      '<div id="taxCalcFarmlandRepurchaseResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>[별지 제62호서식 등] 주식등 양도소득세 — 부동산과 완전히 별도 세목입니다(장기보유특별공제 없음, 대주주/소액주주·국내/국외·중소기업 여부로 세율 결정)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>자산구분</label><select id="stAssetCategory">' +
@@ -2293,6 +2333,58 @@ function renderLongTermRentalHouseResult(r){
   html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
   html += taxCalcResultRow('감면대상 양도소득금액', '-' + won(r.감면대상_양도소득금액));
   html += taxCalcResultRow('과세대상양도소득금액', won(r.과세대상양도소득금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderNationalForestLandResult(r){
+  const box = document.getElementById('taxCalcNationalForestLandResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+  } else {
+    html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+    html += taxCalcResultRow('세액감면율', r.세액감면율 + '%', { total: true });
+  }
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderIndustrialComplexLotResult(r){
+  const box = document.getElementById('taxCalcIndustrialComplexLotResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용 여부', r.적용여부 ? '적용 가능' : '적용 안 됨', { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderMuseumRelocationResult(r){
+  const box = document.getElementById('taxCalcMuseumRelocationResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('분할납부대상세액', won(r.분할납부대상세액));
+  html += '<div class="taxcalc-result-note" style="margin:6px 0;"><table style="width:100%; border-collapse:collapse; font-size:0.9em;">' +
+    '<tr><th style="text-align:left;">회차</th><th style="text-align:right;">납부액</th></tr>' +
+    (r.회차별_납부예정세액 || []).map(function(row){
+      return '<tr><td>' + row.회차 + '</td><td style="text-align:right;">' + won(row.납부액) + '</td></tr>';
+    }).join('') +
+  '</table></div>';
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderFarmlandRepurchaseResult(r){
+  const box = document.getElementById('taxCalcFarmlandRepurchaseResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('환급 가능 여부', r.환급가능여부 ? '환급 가능' : '환급 불가');
+  if (r.환급대상세액 !== undefined) html += taxCalcResultRow('환급대상세액', won(r.환급대상세액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -4377,6 +4469,34 @@ taxCalcView.addEventListener('click', function(e){
       registrationDateValue: numVal(document.getElementById('lrRegistrationValue').value) || 0
     };
     renderLongTermRentalHouseResult(calculateLongTermRentalHouseReductionJS(input));
+  } else if (action === 'run-national-forest-land'){
+    const input = {
+      transferDate: document.getElementById('nfTransferDate').value,
+      holdingYears: numVal(document.getElementById('nfHoldingYears').value) || 0,
+      transferPrice: numVal(document.getElementById('nfTransferPrice').value) || 0,
+      acquisitionPrice: numVal(document.getElementById('nfAcquisitionPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('nfNecessaryExpenses').value) || 0
+    };
+    renderNationalForestLandResult(calculateNationalForestLandReductionJS(input));
+  } else if (action === 'run-industrial-complex-lot'){
+    const input = {
+      transferDate: document.getElementById('icTransferDate').value,
+      salePrice: numVal(document.getElementById('icSalePrice').value) || 0,
+      wasResidentForTwoYears: document.getElementById('icWasResident').checked
+    };
+    renderIndustrialComplexLotResult(calculateIndustrialComplexRelocationLotRateJS(input));
+  } else if (action === 'run-museum-relocation'){
+    const input = {
+      transferDate: document.getElementById('mrTransferDate').value,
+      totalTaxAmount: numVal(document.getElementById('mrTotalTax').value) || 0
+    };
+    renderMuseumRelocationResult(calculateMuseumRelocationInstallmentJS(input));
+  } else if (action === 'run-farmland-repurchase'){
+    const input = {
+      wasRepurchasedWithinLeaseTerm: document.getElementById('frWithinLeaseTerm').checked,
+      originalTaxPaid: numVal(document.getElementById('frOriginalTax').value) || 0
+    };
+    renderFarmlandRepurchaseResult(calculateFarmlandRepurchaseRefundJS(input));
   } else if (action === 'run-stock-transfer'){
     const input = {
       assetCategory: document.getElementById('stAssetCategory').value,

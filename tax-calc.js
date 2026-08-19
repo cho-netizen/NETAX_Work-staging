@@ -2548,6 +2548,99 @@
     };
   };
 
+  // 국가에 양도하는 산지에 대한 양도소득세의 감면 (조특법§85의10) — 2년 이상 보유한 산지(도시지역
+  // 소재 제외)를 2022.12.31 이전에 국유림법§18에 따라 국가에 양도하면 그 양도소득세의 10%를 감면한다.
+  window.calculateNationalForestLandReductionJS = function (p) {
+    p = p || {};
+    const transferDate = p.transferDate;
+    if (!transferDate) return { error: '양도일이 필요합니다.' };
+    if (new Date(transferDate).getTime() > new Date('2022-12-31').getTime()) {
+      return { 적용여부: false, 안내: '양도일이 2022.12.31을 초과하여 조특법§85의10의 적용대상이 아닙니다(신청기한 만료).' };
+    }
+    const holdingYears = Number(p.holdingYears) || 0;
+    if (holdingYears < 2) {
+      return { 적용여부: false, 안내: '2년 이상 보유한 산지가 아니어서 적용대상이 아닙니다.' };
+    }
+    const transferPrice = Number(p.transferPrice) || 0;
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+    const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+    return {
+      적용여부: true,
+      전체양도차익: Math.round(totalGain),
+      세액감면율: 10,
+      안내: '조특법§85의10 — 2년 이상 보유한 산지(도시지역 소재 제외)를 국유림의 경영 및 관리에 관한 법률§18에 따라 국가에 양도할 때는 그 양도소득세 산출세액의 100분의 10을 감면합니다. 위 일반 양도세 계산기로 전체 양도차익 기준 세액을 계산한 뒤, 그 산출세액에서 10%를 차감하세요.'
+    };
+  };
+
+  // 산업단지 개발사업 시행에 따른 이주택지 양도소득세 세율특례 (조특법§104의20) — 산업단지 이주자가
+  // 분양받은 이주택지(분양가 1억원 이하)를 2012.12.31까지 양도하면, 다주택중과세율(소득세법§104①2·3호)
+  // 대신 기본세율(같은 항 1호)을 적용한다. 세액 자체는 위 일반 양도세 계산기에서 다주택 중과 옵션을
+  // 끄고(조정대상지역 아님·소유주택수 무관) 계산하면 되므로 이 함수는 적용 가능 여부만 판정한다.
+  window.calculateIndustrialComplexRelocationLotRateJS = function (p) {
+    p = p || {};
+    const transferDate = p.transferDate;
+    if (!transferDate) return { error: '양도일이 필요합니다.' };
+    if (new Date(transferDate).getTime() > new Date('2012-12-31').getTime()) {
+      return { 적용여부: false, 안내: '양도일이 2012.12.31을 초과하여 조특법§104의20의 적용대상이 아닙니다(적용기한 만료).' };
+    }
+    const salePrice = Number(p.salePrice) || 0;
+    if (salePrice > 100000000) {
+      return { 적용여부: false, 안내: '분양가격이 1억원을 초과하여 적용대상이 아닙니다.' };
+    }
+    if (!p.wasResidentForTwoYears) {
+      return { 적용여부: false, 안내: '실시계획승인일부터 소급 2년 이상 그 사업을 위해 제공된 주거용 건축물에서 거주한 이주자가 아니어서 적용대상이 아닙니다.' };
+    }
+    return {
+      적용여부: true,
+      안내: '조특법§104의20에 따라 다주택중과세율(소득세법§104①2·3호) 대신 기본세율(같은 항 1호)을 적용합니다. 위 일반 양도세 계산기에서 "조정대상지역 소재"를 체크 해제하고 "소유 주택 수"를 0으로 두어(중과 미적용) 계산하세요.'
+    };
+  };
+
+  // 박물관 등의 이전에 대한 양도소득세의 과세특례 (조특법§83) — 3년 이상 운영한 박물관등의 종전시설을
+  // 2022.12.31까지 양도하면, 그 양도소득세를 양도소득세 과세표준 확정신고기한 종료일 이후 3년이 되는
+  // 날부터 5년의 기간 동안 균분한 금액 이상씩 분할납부할 수 있다(이자상당가산액 없음, 다만 3년이내
+  // 미이전·처분·폐관시 §33③후단 준용 이자상당가산액 추징).
+  window.calculateMuseumRelocationInstallmentJS = function (p) {
+    p = p || {};
+    const transferDate = p.transferDate;
+    if (!transferDate) return { error: '양도일이 필요합니다.' };
+    if (new Date(transferDate).getTime() > new Date('2022-12-31').getTime()) {
+      return { error: '양도일이 2022.12.31을 초과하여 조특법§83의 적용대상이 아닙니다(적용기한 만료).' };
+    }
+    const totalTaxAmount = Number(p.totalTaxAmount) || 0;
+    if (totalTaxAmount <= 0) return { error: '분할납부할 양도소득세액(종전시설 양도차익에 대한 산출세액)이 필요합니다.' };
+    const installments = 5;
+    const perInstallment = Math.round(totalTaxAmount / installments);
+    const schedule = [];
+    let remaining = totalTaxAmount;
+    for (let i = 1; i <= installments; i++) {
+      const amount = i === installments ? remaining : perInstallment;
+      schedule.push({ 회차: i, 납부액: amount });
+      remaining -= amount;
+    }
+    return {
+      분할납부대상세액: totalTaxAmount,
+      회차별_납부예정세액: schedule,
+      안내: '신고기한 종료일 이후 3년이 되는 날부터 매년 균분(최소 1/5)해 5년간 분할납부합니다. 개관 후 3년 이내에 처분하거나 폐관하면(또는 애초에 이전하지 않으면) 남은 세액을 즉시 납부해야 하며 §33③후단을 준용한 이자상당가산액이 붙습니다(calculate_clawback_interest 도구로 별도 계산).'
+    };
+  };
+
+  // 경영회생 지원을 위한 농지 매매 등에 대한 양도소득세 과세특례 (조특법§70의2) — 농업인이 한국농어촌
+  // 공사에 양도한 농지등을 임차기간 내에 환매하면 당초 납부한 양도소득세를 환급받을 수 있고, 이후 그
+  // 환매농지를 다시 양도할 때는 한국농어촌공사에 양도하기 전 원래의 취득가액·취득시기를 그대로 적용한다.
+  window.calculateFarmlandRepurchaseRefundJS = function (p) {
+    p = p || {};
+    if (!p.wasRepurchasedWithinLeaseTerm) {
+      return { 환급가능여부: false, 안내: '한국농어촌공사와의 임차기간 내에 해당 농지등을 환매하지 않아 조특법§70의2①의 환급대상이 아닙니다.' };
+    }
+    const originalTaxPaid = Number(p.originalTaxPaid) || 0;
+    return {
+      환급가능여부: true, 환급대상세액: originalTaxPaid,
+      안내: '한국농어촌공사에 양도했던 농지등을 임차기간 내에 환매했으므로, 당초 그 농지등의 양도소득에 대해 납부한 양도소득세를 환급받을 수 있습니다(§70의2①, 환급신청 필요). 이후 이 환매농지를 다시 양도할 때는 한국농어촌공사에 양도하기 전 원래의 취득가액·취득시기를 그대로 적용해 양도세를 계산하세요(§70의2②) — 위 일반 양도세 계산기에 그 원래의 취득가액·취득일을 입력하면 됩니다.'
+    };
+  };
+
   // 장기임대주택 등에 대한 양도소득세 감면 (조특법§97,§97의2,§97의5, §97의4와는 별개 조문) — 모두 "양도
   // 소득세의 일정 비율을 세액감면"하는 정액감면 구조를 공유한다.
   // §97(2000.12.31 이전 임대개시 국민주택): 원칙 50% 감면, 건설임대주택 5년이상 임대 또는 매입임대주택
