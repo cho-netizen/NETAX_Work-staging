@@ -1154,11 +1154,11 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_public_interest_org_penalty',
-    description: '공익법인등에 대한 가산세 등(상속세및증여세법§78)을 계산한다. 12가지 penaltyType: report_not_filed(§78③ 출연재산 사용계획보고서 미제출·불분명, 세액×1%), stock_holding_exceeded_5pct(§78④·§49① 5%보유기준 초과, 초과분시가×5%/년·10년한도), management_violation(§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행, (수입금액+출연재산가액)×0.07%, 세무확인유형은 최소100만원), director_excess(§78⑥ 이사정원초과, 관련경비 전액), stock_holding_exceeded_related(§78⑦·§48⑨ 특수관계법인주식 30%/50%한도초과, 초과분시가×5%), advertising(§78⑧·§48⑩ 무상광고홍보, 직접경비 전액), income_underused(§78⑨·§48②5호·7호 운용소득·매각대금·기준금액 미달사용, 미달액×10%(또는 특정유형 200%)), dedicated_account_unused(§78⑩1호 전용계좌미사용, 미사용거래금액×0.5%), disclosure_violation(§78⑪ 결산공시의무위반, 자산총액×0.5%), report_not_filed_5pct(§78⑭·§48⑬ 의무이행신고 미이행, 자산총액×0.5%), cultural_heritage_status_not_filed(§78⑮1호·§74⑤⑥ 문화유산등 징수유예 담보미제공자의 보유현황자료 미제출, 징수유예세액×1%), cultural_heritage_transfer_not_filed(§78⑮2호·§74⑤⑦ 담보미제공자의 양도사실 미신고, 징수유예세액×20%). "기준금액"·전용계좌 미개설시 계산식 등 일부 세부항목은 시행령·원문이미지 문제로 직접입력값을 받거나 다루지 않는다.',
+    description: '공익법인등에 대한 가산세 등(상속세및증여세법§78)을 계산한다. 13가지 penaltyType: report_not_filed(§78③ 출연재산 사용계획보고서 미제출·불분명, 세액×1%), stock_holding_exceeded_5pct(§78④·§49① 5%보유기준 초과, 초과분시가×5%/년·10년한도), management_violation(§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행, (수입금액+출연재산가액)×0.07%, 세무확인유형은 최소100만원), director_excess(§78⑥ 이사정원초과, 관련경비 전액), stock_holding_exceeded_related(§78⑦·§48⑨ 특수관계법인주식 30%/50%한도초과, 초과분시가×5%), advertising(§78⑧·§48⑩ 무상광고홍보, 직접경비 전액), income_underused(§78⑨·§48②5호·7호 운용소득·매각대금·기준금액 미달사용, 미달액×10%(또는 특정유형 200%)), dedicated_account_not_opened(§78⑩2호 전용계좌 개설·신고 미이행, 가목[수입금액총액×미개설일수/총일수×0.5%]과 나목[거래금액합계×0.5%] 중 큰 금액), dedicated_account_unused(§78⑩1호 전용계좌미사용, 미사용거래금액×0.5%), disclosure_violation(§78⑪ 결산공시의무위반, 자산총액×0.5%), report_not_filed_5pct(§78⑭·§48⑬ 의무이행신고 미이행, 자산총액×0.5%), cultural_heritage_status_not_filed(§78⑮1호·§74⑤⑥ 문화유산등 징수유예 담보미제공자의 보유현황자료 미제출, 징수유예세액×1%), cultural_heritage_transfer_not_filed(§78⑮2호·§74⑤⑦ 담보미제공자의 양도사실 미신고, 징수유예세액×20%).',
     input_schema: {
       type: 'object',
       properties: {
-        penaltyType: { type: 'string', enum: ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess', 'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused', 'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'], description: '가산세 유형.' },
+        penaltyType: { type: 'string', enum: ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess', 'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_not_opened', 'dedicated_account_unused', 'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'], description: '가산세 유형.' },
         deferredTaxAmount: { type: 'number', description: 'penaltyType이 cultural_heritage_status_not_filed/cultural_heritage_transfer_not_filed일 때 필수 — §74에 따라 징수유예 받은 상속세액(원).' },
         baseTaxAmount: { type: 'number', description: 'penaltyType이 report_not_filed일 때 필수 — 미제출분·불분명분에 상당하는 상속세액(증여세액, 원).' },
         excessStockValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_5pct일 때 필수 — §49①의 5% 보유기준을 초과하는 주식등의 시가(원).' },
@@ -1178,7 +1178,14 @@ const DRIVE_TOOLS = [
         saleProceedsAmount: { type: 'number', description: 'penaltyType이 income_underused이고 §48②5호 매각대금 기준금액을 자동계산할 때 — 기본재산 매각대금(원).' },
         saleCheckpointYear: { type: 'integer', enum: [1, 2], description: 'penaltyType이 income_underused이고 §48②5호 매각대금 기준금액을 자동계산할 때 — 매각일이 속하는 과세기간(사업연도) 종료일부터 확인시점(1년=30%기준, 2년=60%기준).' },
         cumulativeActualUsedAmount: { type: 'number', description: 'penaltyType이 income_underused이고 §48②5호 매각대금 기준금액을 자동계산할 때 — 매각일이 속하는 과세기간(사업연도) 종료일부터 확인시점까지 누적 실제 직접공익목적사업 사용액(원).' },
-        unusedTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_unused일 때 필수 — 전용계좌를 사용하지 않은 거래금액(원).' }
+        operatingIncomeAmount: { type: 'number', description: 'penaltyType이 income_underused이고 §48②5호 운용소득 기준금액을 자동계산할 때 — 해당 과세기간(사업연도) 수익사업 소득금액 등 합계(시행령§38⑤1호, 원).' },
+        taxAndCarryforwardLossAmount: { type: 'number', description: 'penaltyType이 income_underused이고 §48②5호 운용소득 기준금액을 자동계산할 때 — 해당 소득에 대한 법인세·소득세·농어촌특별세·주민세 및 이월결손금(시행령§38⑤2호, 원).' },
+        actualOperatingIncomeUsedAmount: { type: 'number', description: 'penaltyType이 income_underused이고 §48②5호 운용소득 기준금액을 자동계산할 때 — 운용소득을 실제로 직접공익목적사업에 사용한 금액(원). 없으면 0.' },
+        unusedTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_unused일 때 필수 — 전용계좌를 사용하지 않은 거래금액(원).' },
+        directBusinessRevenueAmount: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 해당 과세기간(사업연도)의 직접 공익목적사업과 관련한 수입금액의 총액(원).' },
+        unregisteredDays: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 전용계좌를 개설·신고하지 않은 기간의 일수(신고기한 다음날부터 신고일 전날까지).' },
+        totalPeriodDays: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 해당 과세기간(사업연도)의 총 일수.' },
+        totalRelevantTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 나목 금액을 계산할 때 — §50의2①1~4호에 따른 거래금액을 합친 금액(원). 가목·나목 중 큰 금액이 적용되므로 둘 다 입력 가능.' }
       },
       required: ['penaltyType']
     }
@@ -6903,16 +6910,13 @@ function toolCalculateCharityDonationTaxExclusion(p) {
   };
 }
 
-// 공익법인등에 대한 가산세 등 (상속세및증여세법§78) — §48②5호·7호(운용소득·매각대금 기준금액 미달사용,
-// 사후관리)의 "기준금액" 자체는 시행령 위임이라 정확한 산정식을 모르므로, 이미 산정된 미달사용액을
-// 직접 입력받는다. §78⑩2호가목("전용계좌 개설·신고를 하지 않은 경우"의 두 금액 중 큰 금액)은 가목
-// 계산식이 원문 이미지로 확인되지 않아 나목(거래금액합계×1000분의5)만 계산한다 — 실제로는 가목과
-// 비교해 더 큰 금액을 써야 하므로 이 결과가 최종 가산세액보다 작을 수 있다.
+// 공익법인등에 대한 가산세 등 (상속세및증여세법§78) — §48②5호·7호 미달사용 기준금액은 §38⑤(운용소득)·
+// §38⑦(매각대금)·§38⑱(7호)의 산식으로 자동계산하거나, 이미 산정된 미달사용액을 직접 입력받는다.
 function toolCalculatePublicInterestOrgPenalty(p) {
   p = p || {};
   const penaltyType = p.penaltyType;
   const validTypes = ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess',
-    'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused',
+    'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_not_opened', 'dedicated_account_unused',
     'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'];
   if (validTypes.indexOf(penaltyType) === -1) return { error: 'penaltyType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
 
@@ -6981,14 +6985,34 @@ function toolCalculatePublicInterestOrgPenalty(p) {
       underusedAmount = Math.max(0, requiredAmount - cumulativeActualUsedAmount);
       baseNote = '시행령§38⑦에 따라 매각대금(' + saleProceedsAmount + '원)의 ' + (saleCheckpointYear === 2 ? '2년 이내 60%' : '1년 이내 30%') + '(' + requiredAmount + '원)를 직접공익목적사업에 사용해야 하는데, 매각일이 속하는 과세기간(사업연도) 종료일부터 ' + saleCheckpointYear + '년 이내 누적 실제사용액(' + cumulativeActualUsedAmount + '원)이 이에 미달해 그 차액을 미달사용액으로 계산했습니다. ';
     }
-    if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을, §48②5호 매각대금 기준금액을 계산하려면 매각대금·확인시점(1년/2년)·누적실제사용액을 입력하세요(§48②5호 중 운용소득 기준금액 산정식은 이 도구가 다루지 않으므로 그 경우는 미달사용액을 직접 입력해야 합니다).' };
+    const operatingIncomeAmount = Number(p.operatingIncomeAmount) || 0;
+    const taxAndCarryforwardLossAmount = Number(p.taxAndCarryforwardLossAmount) || 0;
+    if (underusedAmount <= 0 && operatingIncomeAmount > 0) {
+      const operatingIncome = Math.max(0, operatingIncomeAmount - taxAndCarryforwardLossAmount);
+      const usageStandardAmount = Math.round(operatingIncome * 0.8);
+      const actualOperatingIncomeUsedAmount = Number(p.actualOperatingIncomeUsedAmount) || 0;
+      underusedAmount = Math.max(0, usageStandardAmount - actualOperatingIncomeUsedAmount);
+      baseNote = '시행령§38⑤에 따라 [수익사업 소득금액 등 합계(' + operatingIncomeAmount + '원)－법인세등 및 이월결손금(' + taxAndCarryforwardLossAmount + '원)]=' + operatingIncome + '원(운용소득)의 80%인 사용기준금액(' + usageStandardAmount + '원)에서 실제 사용액(' + actualOperatingIncomeUsedAmount + '원)을 차감해 미달사용액을 계산했습니다. ';
+    }
+    if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을, §48②5호 매각대금 기준금액을 계산하려면 매각대금·확인시점(1년/2년)·누적실제사용액을, §48②5호 운용소득 기준금액을 계산하려면 수익사업소득금액등합계·법인세등및이월결손금·실제사용액을 입력하세요.' };
     penaltyAmount = Math.round(underusedAmount * rate);
     note = baseNote + '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
+  } else if (penaltyType === 'dedicated_account_not_opened') {
+    const directBusinessRevenueAmount = Number(p.directBusinessRevenueAmount) || 0;
+    const unregisteredDays = Number(p.unregisteredDays) || 0;
+    const totalPeriodDays = Number(p.totalPeriodDays) || 0;
+    const totalRelevantTransactionAmount = Number(p.totalRelevantTransactionAmount) || 0;
+    if ((directBusinessRevenueAmount <= 0 || unregisteredDays <= 0 || totalPeriodDays <= 0) && totalRelevantTransactionAmount <= 0) return { error: '가목 계산을 위한 직접 공익목적사업 관련 수입금액 총액·전용계좌 미개설·미신고 일수(신고기한 다음날부터 신고일 전날까지)·해당 과세기간(사업연도) 총 일수, 또는 나목 계산을 위한 §50의2①1~4호 거래금액 합계액 중 최소 하나는 입력해야 합니다.' };
+    const amountA = (directBusinessRevenueAmount > 0 && unregisteredDays > 0 && totalPeriodDays > 0)
+      ? Math.round(directBusinessRevenueAmount * (unregisteredDays / totalPeriodDays) * 0.005) : 0;
+    const amountB = Math.round(totalRelevantTransactionAmount * 0.005);
+    penaltyAmount = Math.max(amountA, amountB);
+    note = '§50의2③을 위반해 전용계좌를 개설·신고하지 않아, §78⑩2호에 따라 가목[직접 공익목적사업 관련 수입금액 총액(' + directBusinessRevenueAmount + '원) × (미개설·미신고 일수(' + unregisteredDays + '일) / 해당 과세기간(사업연도) 일수(' + totalPeriodDays + '일)) × 1000분의 5 = ' + amountA + '원]과 나목[§50의2①1~4호 거래금액 합계(' + totalRelevantTransactionAmount + '원) × 1000분의 5 = ' + amountB + '원] 중 큰 금액을 가산세로 부과합니다.';
   } else if (penaltyType === 'dedicated_account_unused') {
     const unusedTransactionAmount = Number(p.unusedTransactionAmount) || 0;
     if (unusedTransactionAmount <= 0) return { error: '전용계좌를 사용하지 않은 거래금액이 필요합니다.' };
     penaltyAmount = Math.round(unusedTransactionAmount * 0.005);
-    note = '§50의2①에 해당하는 거래를 전용계좌로 하지 않아 §78⑩1호에 따라 그 미사용 거래금액의 1000분의 5를 가산세로 부과합니다. (전용계좌를 아예 개설·신고하지 않은 경우의 가산세는 §78⑩2호로 별도이며, 그 중 가목 계산식은 원문 이미지라 이 계산기가 다루지 않습니다 — 나목만 필요하면 penaltyType을 이 값으로 그대로 쓰되 "미사용 거래금액"에 §50의2①1~4호 거래금액 합계를 넣어 근사치로 활용할 수 있습니다.)';
+    note = '§50의2①에 해당하는 거래를 전용계좌로 하지 않아 §78⑩1호에 따라 그 미사용 거래금액의 1000분의 5를 가산세로 부과합니다. (전용계좌를 아예 개설·신고하지 않은 경우의 가산세는 §78⑩2호로 별도이며, penaltyType을 dedicated_account_not_opened로 선택하면 계산할 수 있습니다.)';
   } else if (penaltyType === 'disclosure_violation') {
     const totalAssetValue = Number(p.totalAssetValue) || 0;
     if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };

@@ -3153,7 +3153,7 @@ function renderGiftPane(){
       '<div id="taxCalcCharityDonationExclusionResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
-      '<div class="taxcalc-asset-head"><b>공익법인등에 대한 가산세(§78) — 유형을 고른 뒤 해당하는 입력란만 채우세요. "기준금액"·전용계좌 미개설시 계산식 등 일부는 시행령·원문이미지 문제로 다루지 않습니다</b></div>' +
+      '<div class="taxcalc-asset-head"><b>공익법인등에 대한 가산세(§78) — 유형을 고른 뒤 해당하는 입력란만 채우세요</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>가산세 유형</label><select id="poPenaltyType">' +
           '<option value="report_not_filed">§78③ 출연재산 사용계획보고서 미제출·불분명</option>' +
@@ -3163,6 +3163,7 @@ function renderGiftPane(){
           '<option value="stock_holding_exceeded_related">§78⑦(§48⑨) 특수관계법인주식 30%/50%한도 초과</option>' +
           '<option value="advertising">§78⑧(§48⑩) 특수관계법인 무상 광고·홍보</option>' +
           '<option value="income_underused">§78⑨(§48②5·7호) 운용소득·매각대금·기준금액 미달사용</option>' +
+          '<option value="dedicated_account_not_opened">§78⑩2호 전용계좌 개설·신고 미이행</option>' +
           '<option value="dedicated_account_unused">§78⑩1호 전용계좌 미사용</option>' +
           '<option value="disclosure_violation">§78⑪ 결산서류등 공시의무 위반</option>' +
           '<option value="report_not_filed_5pct">§78⑭(§48⑬) 의무이행여부 신고 미이행</option>' +
@@ -3196,7 +3197,14 @@ function renderGiftPane(){
           '<option value="2">매각일로부터 2년(60%기준)</option>' +
         '</select></div>' +
         '<div class="taxcalc-field"><label>[미달사용·§48②5호매각대금만] 누적 실제사용액</label><input type="number" id="poCumulativeActualUsedAmount" placeholder="원 (매각일부터 확인시점까지)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호운용소득만] 수익사업 소득금액등 합계</label><input type="number" id="poOperatingIncomeAmount" placeholder="원 (시행령§38⑤1호)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호운용소득만] 법인세등 및 이월결손금</label><input type="number" id="poTaxAndCarryforwardLossAmount" placeholder="원 (시행령§38⑤2호)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호운용소득만] 실제 사용액</label><input type="number" id="poActualOperatingIncomeUsedAmount" placeholder="원 (없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>[전용계좌미사용만] 미사용 거래금액</label><input type="number" id="poUnusedTransaction" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전용계좌미개설·가목만] 직접 공익목적사업 관련 수입금액 총액</label><input type="number" id="poDirectBusinessRevenueAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전용계좌미개설·가목만] 미개설·미신고 일수</label><input type="number" id="poUnregisteredDays" placeholder="일 (신고기한 다음날~신고일 전날)"></div>' +
+        '<div class="taxcalc-field"><label>[전용계좌미개설·가목만] 해당 과세기간(사업연도) 총 일수</label><input type="number" id="poTotalPeriodDays" placeholder="일"></div>' +
+        '<div class="taxcalc-field"><label>[전용계좌미개설·나목만] §50의2①1~4호 거래금액 합계</label><input type="number" id="poTotalRelevantTransactionAmount" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-public-interest-org-penalty">가산세액 계산하기</button>' +
       '<div id="taxCalcPublicInterestOrgPenaltyResult"></div>' +
@@ -5585,7 +5593,14 @@ taxCalcView.addEventListener('click', function(e){
       saleProceedsAmount: numVal(document.getElementById('poSaleProceedsAmount').value) || 0,
       saleCheckpointYear: Number(document.getElementById('poSaleCheckpointYear').value) || 0,
       cumulativeActualUsedAmount: numVal(document.getElementById('poCumulativeActualUsedAmount').value) || 0,
+      operatingIncomeAmount: numVal(document.getElementById('poOperatingIncomeAmount').value) || 0,
+      taxAndCarryforwardLossAmount: numVal(document.getElementById('poTaxAndCarryforwardLossAmount').value) || 0,
+      actualOperatingIncomeUsedAmount: numVal(document.getElementById('poActualOperatingIncomeUsedAmount').value) || 0,
       unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0,
+      directBusinessRevenueAmount: numVal(document.getElementById('poDirectBusinessRevenueAmount').value) || 0,
+      unregisteredDays: numVal(document.getElementById('poUnregisteredDays').value) || 0,
+      totalPeriodDays: numVal(document.getElementById('poTotalPeriodDays').value) || 0,
+      totalRelevantTransactionAmount: numVal(document.getElementById('poTotalRelevantTransactionAmount').value) || 0,
       deferredTaxAmount: numVal(document.getElementById('poDeferredTaxAmount').value) || 0
     };
     renderPublicInterestOrgPenaltyResult(calculatePublicInterestOrgPenaltyJS(input));
