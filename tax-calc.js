@@ -2754,9 +2754,24 @@
 
     const gateThreshold = Math.min(Math.round((originalValuePerShare + realValueIncreasePerShare) * shares * 0.3), 300000000);
     if (giftAmount < gateThreshold) {
+      // §41의3④단서(§41의5②가 준용) — 정산기준일 현재 주식등의 가액이 당초 증여세 과세가액보다 낮아진
+      // 경우로서 그 차액이 기준금액(§31의3⑥ — ③과 동일한 기준금액) 이상이면, "그 차액에 상당하는
+      // 증여세액(증여받은 때에 납부한 당초의 증여세액을 말한다)"을 환급받을 수 있다 — 괄호가 "차액에
+      // 상당하는 증여세액"을 "당초의 증여세액"으로 직접 정의하므로, 기준을 충족하면 당초 납부세액
+      // 전액을 환급액으로 계산한다(비례 안분이 아님).
+      const originalTaxableValue = originalValuePerShare * shares;
+      const settlementTotalValue = settlementValuePerShare * shares;
+      const decreaseAmount = Math.max(0, originalTaxableValue - settlementTotalValue);
+      if (decreaseAmount >= gateThreshold) {
+        const originalGiftTaxPaid = Number(p.originalGiftTaxPaid) || 0;
+        return {
+          과세대상여부: false, 환급대상여부: true, 가액하락액: decreaseAmount, 환급세액: originalGiftTaxPaid, 납부세액: -originalGiftTaxPaid,
+          안내: (provision === 'merger' ? '§41의5②(§41의3④단서 준용)' : '§41의3④단서') + '에 따라, 정산기준일 현재 주식등의 가액(' + settlementTotalValue + '원)이 당초 증여세 과세가액(' + originalTaxableValue + '원)보다 ' + decreaseAmount + '원 낮아졌고 그 차액이 기준금액(' + gateThreshold + '원) 이상이어서, 증여받은 때 납부한 당초의 증여세액(originalGiftTaxPaid로 입력, ' + originalGiftTaxPaid + '원)을 전액 환급받을 수 있습니다.'
+        };
+      }
       return {
         과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0,
-        안내: '이익(' + giftAmount + '원)이 기준금액 미만이어서 과세하지 않습니다(' + (provision === 'merger' ? '§41의5①단서' : '§41의3①단서') + ', 시행령§31의3③).'
+        안내: '이익(' + giftAmount + '원)이 기준금액 미만이어서 과세하지 않습니다(' + (provision === 'merger' ? '§41의5①단서' : '§41의3①단서') + ', 시행령§31의3③). 정산기준일 현재 가액 하락분(' + decreaseAmount + '원)도 기준금액 미만이어서 환급 대상도 아닙니다.'
       };
     }
 
@@ -2784,7 +2799,7 @@
       안내: (provision === 'merger'
         ? '증여일은 합병등기일부터 3개월이 되는 날(정산기준일)입니다(§41의5②가 §41의3③을 준용, "상장일"을 "합병등기일"로 봄).'
         : '증여일은 상장일부터 3개월이 되는 날(정산기준일)입니다(§41의3③). 그 전에 사망·증여·양도하면 그 날이 정산기준일이 됩니다.')
-        + ' 당초 증여세 과세가액에 이 이익을 가산해 정산하며, 정산기준일 현재 주식가액이 당초 과세가액보다 적어졌고 그 차액이 기준 이상이면 차액분 세액을 환급받을 수 있습니다(§41의3④, 시행령 기준 별도 확인).'
+        + ' 당초 증여세 과세가액에 이 이익을 가산해 정산합니다(§41의3④). 정산기준일 현재 가액이 당초 과세가액보다 낮아졌다면 이 도구를 같은 입력값으로 다시 호출했을 때(이 결과가 과세대상이 아니라면) 환급 여부·환급액을 함께 안내합니다.'
     };
   };
 

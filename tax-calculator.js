@@ -3146,6 +3146,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>정산기준일 1주당 평가가액</label><input type="number" id="slSettlementValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>증여받은날(취득일) 1주당 과세가액(취득가액)</label><input type="number" id="slOriginalValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>1주당 기업가치의 실질적인 증가로 인한 이익</label><input type="number" id="slRealIncrease" placeholder="원 (시행령§31의3⑤, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[가액 하락시만] 당초 납부한 증여세액</label><input type="number" id="slOriginalGiftTaxPaid" placeholder="원 (정산기준일 가액이 당초보다 기준금액 이상 낮아졌을 때 환급액 계산용)"></div>' +
         '<div class="taxcalc-field"><label>증여받거나 유상취득한 주식수</label><input type="number" id="slShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="slRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="slAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
@@ -3760,7 +3761,12 @@ function renderDeemedGiftGenericResult_(box, r, fields){
   let html = '<div class="taxcalc-result">';
   fields.forEach(function(f){ if (r[f.key] !== undefined && r[f.key] !== null) html += taxCalcResultRow(f.label, f.fmt ? f.fmt(r[f.key]) : won(r[f.key])); });
   if (r.과세대상여부 === false){
-    html += taxCalcResultRow('과세대상 여부', '적용 안 됨', { total: true });
+    if (r.환급대상여부){
+      html += taxCalcResultRow('가액하락액', won(r.가액하락액));
+      html += taxCalcResultRow('환급세액', won(r.환급세액), { total: true });
+    } else {
+      html += taxCalcResultRow('과세대상 여부', '적용 안 됨', { total: true });
+    }
     html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
     html += '</div>';
     box.innerHTML = html;
@@ -5572,6 +5578,7 @@ taxCalcView.addEventListener('click', function(e){
       originalValuePerShare: numVal(document.getElementById('slOriginalValue').value) || 0,
       realValueIncreasePerShare: numVal(document.getElementById('slRealIncrease').value) || 0,
       shares: numVal(document.getElementById('slShares').value) || 0,
+      originalGiftTaxPaid: numVal(document.getElementById('slOriginalGiftTaxPaid').value) || 0,
       relationDeductionLimit: numVal(document.getElementById('slRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('slAppraisalFee').value) || 0,
       filingStatus: document.getElementById('slFilingStatus').value,

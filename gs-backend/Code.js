@@ -960,7 +960,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_stock_listing_gift_tax',
-    description: '주식등의 상장 등에 따른 이익의 증여(상증세법§41의3) 또는 합병에 따른 상장 등 이익의 증여(§41의5)를 계산한다. 최대주주등의 특수관계인이 그 최대주주등으로부터 주식등을 증여·유상취득한 후 5년 이내에 상장(§41의3)되거나 특수관계 있는 상장법인과 합병(§41의5, "상장일"을 "합병등기일"로 봄)되어 가액이 증가하면, 정산기준일(상장·합병등기일부터 3개월 되는 날, 그 전에 사망·증여·양도시 그 날) 1주당 평가액에서 당초 1주당 과세가액(또는 취득가액)과 1주당 기업가치의 실질적인 증가로 인한 이익을 뺀 금액에 주식수를 곱해 이익을 계산한다. 게이트: min((당초가액+실질증가이익)×주식수×30%, 3억원).',
+    description: '주식등의 상장 등에 따른 이익의 증여(상증세법§41의3) 또는 합병에 따른 상장 등 이익의 증여(§41의5)를 계산한다. 최대주주등의 특수관계인이 그 최대주주등으로부터 주식등을 증여·유상취득한 후 5년 이내에 상장(§41의3)되거나 특수관계 있는 상장법인과 합병(§41의5, "상장일"을 "합병등기일"로 봄)되어 가액이 증가하면, 정산기준일(상장·합병등기일부터 3개월 되는 날, 그 전에 사망·증여·양도시 그 날) 1주당 평가액에서 당초 1주당 과세가액(또는 취득가액)과 1주당 기업가치의 실질적인 증가로 인한 이익을 뺀 금액에 주식수를 곱해 이익을 계산한다. 게이트: min((당초가액+실질증가이익)×주식수×30%, 3억원). 반대로 정산기준일 가액이 당초 과세가액보다 낮아졌고 그 차액이 같은 기준금액 이상이면(§41의3④단서), originalGiftTaxPaid로 입력한 당초 납부세액을 전액 환급 대상으로 계산해 반환한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -969,6 +969,7 @@ const DRIVE_TOOLS = [
         originalValuePerShare: { type: 'number', description: '주식등을 증여받은 날 현재의 1주당 증여세 과세가액(취득의 경우 취득일 현재 1주당 취득가액, 원).' },
         realValueIncreasePerShare: { type: 'number', description: '1주당 기업가치의 실질적인 증가로 인한 이익(원, 시행령§31의3⑤에 따라 별도 계산).' },
         shares: { type: 'number', description: '증여받거나 유상으로 취득한 주식등의 수.' },
+        originalGiftTaxPaid: { type: 'number', description: '정산기준일 현재 가액이 당초 과세가액보다 기준금액 이상 낮아졌을 때(환급 대상 판정시)만 사용 — 증여받은 때 실제 납부한 당초의 증여세액(원). §41의3④단서에 따라 이 금액 전액이 환급액으로 계산된다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
         marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
@@ -6718,9 +6719,24 @@ function toolCalculateStockListingGiftTax(p) {
 
   const gateThreshold = Math.min(Math.round((originalValuePerShare + realValueIncreasePerShare) * shares * 0.3), 300000000);
   if (giftAmount < gateThreshold) {
+    // §41의3④단서(§41의5②가 준용) — 정산기준일 현재 주식등의 가액이 당초 증여세 과세가액보다 낮아진
+    // 경우로서 그 차액이 기준금액(§31의3⑥ — ③과 동일한 기준금액) 이상이면, "그 차액에 상당하는
+    // 증여세액(증여받은 때에 납부한 당초의 증여세액을 말한다)"을 환급받을 수 있다 — 괄호가 "차액에
+    // 상당하는 증여세액"을 "당초의 증여세액"으로 직접 정의하므로, 기준을 충족하면 당초 납부세액
+    // 전액을 환급액으로 계산한다(비례 안분이 아님).
+    const originalTaxableValue = originalValuePerShare * shares;
+    const settlementTotalValue = settlementValuePerShare * shares;
+    const decreaseAmount = Math.max(0, originalTaxableValue - settlementTotalValue);
+    if (decreaseAmount >= gateThreshold) {
+      const originalGiftTaxPaid = Number(p.originalGiftTaxPaid) || 0;
+      return {
+        과세대상여부: false, 환급대상여부: true, 가액하락액: decreaseAmount, 환급세액: originalGiftTaxPaid, 납부세액: -originalGiftTaxPaid,
+        안내: (provision === 'merger' ? '§41의5②(§41의3④단서 준용)' : '§41의3④단서') + '에 따라, 정산기준일 현재 주식등의 가액(' + settlementTotalValue + '원)이 당초 증여세 과세가액(' + originalTaxableValue + '원)보다 ' + decreaseAmount + '원 낮아졌고 그 차액이 기준금액(' + gateThreshold + '원) 이상이어서, 증여받은 때 납부한 당초의 증여세액(originalGiftTaxPaid로 입력, ' + originalGiftTaxPaid + '원)을 전액 환급받을 수 있습니다.'
+      };
+    }
     return {
       과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0,
-      안내: '이익(' + giftAmount + '원)이 기준금액 미만이어서 과세하지 않습니다(' + (provision === 'merger' ? '§41의5①단서' : '§41의3①단서') + ', 시행령§31의3③).'
+      안내: '이익(' + giftAmount + '원)이 기준금액 미만이어서 과세하지 않습니다(' + (provision === 'merger' ? '§41의5①단서' : '§41의3①단서') + ', 시행령§31의3③). 정산기준일 현재 가액 하락분(' + decreaseAmount + '원)도 기준금액 미만이어서 환급 대상도 아닙니다.'
     };
   }
 
@@ -6748,7 +6764,7 @@ function toolCalculateStockListingGiftTax(p) {
     안내: (provision === 'merger'
       ? '증여일은 합병등기일부터 3개월이 되는 날(정산기준일)입니다(§41의5②가 §41의3③을 준용, "상장일"을 "합병등기일"로 봄).'
       : '증여일은 상장일부터 3개월이 되는 날(정산기준일)입니다(§41의3③). 그 전에 사망·증여·양도하면 그 날이 정산기준일이 됩니다.')
-      + ' 당초 증여세 과세가액에 이 이익을 가산해 정산하며, 정산기준일 현재 주식가액이 당초 과세가액보다 적어졌고 그 차액이 기준 이상이면 차액분 세액을 환급받을 수 있습니다(§41의3④, 시행령 기준 별도 확인).'
+      + ' 당초 증여세 과세가액에 이 이익을 가산해 정산합니다(§41의3④). 정산기준일 현재 가액이 당초 과세가액보다 낮아졌다면 이 도구를 같은 입력값으로 다시 호출했을 때(이 결과가 과세대상이 아니라면) 환급 여부·환급액을 함께 안내합니다.'
   };
 }
 
