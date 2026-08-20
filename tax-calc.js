@@ -3182,12 +3182,31 @@
       note = '§48⑩에 따라 특수관계에 있는 내국법인의 이익을 증가시키기 위해 정당한 대가를 받지 않고 광고·홍보를 하여, §78⑧에 따라 그 행위와 관련해 직접 지출된 경비 상당액을 가산세로 부과합니다.';
     } else if (penaltyType === 'income_underused') {
       // §78⑨ — §48②5호(운용소득·매각대금 기준금액 미달사용) 또는 §48②7호(직접공익목적사업 기준금액 미달사용)
-      const underusedAmount = Number(p.underusedAmount) || 0;
-      if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액(운용소득·매각대금 미달사용액, 또는 §48②7호 기준금액에서 직접공익목적사업사용액을 차감한 금액)이 필요합니다.' };
       const isHighRateType = !!p.isSect48_2_7HighHoldingType;
       const rate = isHighRateType ? 2.0 : 0.10;
+      let underusedAmount = Number(p.underusedAmount) || 0;
+      let baseNote = '';
+      const totalAssetValue = Number(p.totalAssetValue) || 0;
+      const liabilityValue = Number(p.liabilityValue);
+      const netIncomeValue = Number(p.netIncomeValue);
+      if (underusedAmount <= 0 && totalAssetValue > 0 && Number.isFinite(liabilityValue) && Number.isFinite(netIncomeValue)) {
+        // 시행령§38⑱ — §48②7호의 "대통령령으로 정하는 출연받은 재산의 가액"(수익용·수익사업용으로 운용하는
+        // 재산, 직접공익목적사업용 재산 제외)은 [총자산가액－(부채가액＋당기순이익)]으로 계산하고, 여기에
+        // 1%(또는 3%)를 곱한 금액이 "기준금액"이다. 3년~5년 미만/5년 이상 보유한 상장주식의 가액은 각각
+        // 직전 3개/5개 과세기간(사업연도) 평균액을 쓰도록 정하나, 그 세부 산정은 이 계산기가 다루지 않는다
+        // (totalAssetValue에 이미 반영된 값을 입력해야 함). 재무상태표상 자산가액이 상증세법상 평가액의
+        // 70% 이하인 특정 공익법인등(§41의2⑥ 또는 §43③단서 해당 공익법인등)은 평가액을 기준으로 이 산식을
+        // 적용하므로, 그 경우 totalAssetValue에 상증세법상 평가액을 넣고 useAssessedValueBasis를 true로
+        // 표시하면 된다(계산식 자체는 동일).
+        const operatingAssetValue = Math.max(0, totalAssetValue - (liabilityValue + netIncomeValue));
+        const standardAmount = Math.round(operatingAssetValue * (isHighRateType ? 0.03 : 0.01));
+        const actualDirectUseAmount = Number(p.actualDirectUseAmount) || 0;
+        underusedAmount = Math.max(0, standardAmount - actualDirectUseAmount);
+        baseNote = '시행령§38⑱에 따라 [총자산가액(' + totalAssetValue + '원)－(부채가액(' + liabilityValue + '원)＋당기순이익(' + netIncomeValue + '원))]=' + operatingAssetValue + '원(수익용·수익사업용 운용재산가액)에 ' + (isHighRateType ? '3%' : '1%') + '를 곱한 기준금액(' + standardAmount + '원)에서 실제 직접공익목적사업 사용액(' + actualDirectUseAmount + '원)을 차감해 미달사용액을 계산했습니다' + (p.useAssessedValueBasis ? '(재무상태표상 자산가액이 상증세법상 평가액의 70% 이하인 공익법인등이라 평가액 기준으로 계산).' : '.') + ' ';
+      }
+      if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을 입력하세요(§48②5호의 운용소득·매각대금 기준금액 산정식은 이 계산기가 다루지 않으므로 그 경우는 미달사용액을 직접 입력해야 합니다).' };
       penaltyAmount = Math.round(underusedAmount * rate);
-      note = '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
+      note = baseNote + '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
     } else if (penaltyType === 'dedicated_account_unused') {
       // §78⑩1호 — §50의2① 전용계좌 사용의무 위반
       const unusedTransactionAmount = Number(p.unusedTransactionAmount) || 0;

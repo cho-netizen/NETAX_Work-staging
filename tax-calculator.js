@@ -3183,7 +3183,11 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[30/50%초과·공시위반·미신고만] 총재산가액(자산총액)</label><input type="number" id="poTotalAssetValue" placeholder="원"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="poMeetsCompliance"><label for="poMeetsCompliance">[30/50%초과만] 회계감사·전용계좌·결산공시 의무 모두 이행(한도 50%)</label></div>' +
         '<div class="taxcalc-field"><label>[광고홍보만] 직접 지출경비</label><input type="number" id="poDirectExpense" placeholder="원"></div>' +
-        '<div class="taxcalc-field"><label>[미달사용만] 기준금액 미달사용액</label><input type="number" id="poUnderusedAmount" placeholder="원 (기준금액 자체는 별도 산정 후 입력)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용만] 기준금액 미달사용액(직접입력, §48②5호)</label><input type="number" id="poUnderusedAmount" placeholder="원 (§48②7호는 아래 4개 필드로 자동계산 가능)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②7호만] 부채가액</label><input type="number" id="poLiabilityValue" placeholder="원 (직전 과세기간·사업연도 종료일 재무상태표)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②7호만] 당기순이익</label><input type="number" id="poNetIncomeValue" placeholder="원 (같은 기준일 운영성과표)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②7호만] 실제 직접공익목적사업 사용액</label><input type="number" id="poActualDirectUseAmount" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="poUseAssessedValueBasis"><label for="poUseAssessedValueBasis">[미달사용·§48②7호만] 위 총재산가액이 상증세법상 평가액 기준(재무상태표 자산가액이 평가액의 70%이하인 경우)</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="poHighHoldingType"><label for="poHighHoldingType">[미달사용만] §48②7호가목 유형(10%초과보유, 가산율 200%)</label></div>' +
         '<div class="taxcalc-field"><label>[전용계좌미사용만] 미사용 거래금액</label><input type="number" id="poUnusedTransaction" placeholder="원"></div>' +
       '</div>' +
@@ -5566,6 +5570,10 @@ taxCalcView.addEventListener('click', function(e){
       meetsComplianceRequirements: document.getElementById('poMeetsCompliance').checked,
       directExpenseAmount: numVal(document.getElementById('poDirectExpense').value) || 0,
       underusedAmount: numVal(document.getElementById('poUnderusedAmount').value) || 0,
+      liabilityValue: numVal(document.getElementById('poLiabilityValue').value) || 0,
+      netIncomeValue: numVal(document.getElementById('poNetIncomeValue').value) || 0,
+      actualDirectUseAmount: numVal(document.getElementById('poActualDirectUseAmount').value) || 0,
+      useAssessedValueBasis: document.getElementById('poUseAssessedValueBasis').checked,
       isSect48_2_7HighHoldingType: document.getElementById('poHighHoldingType').checked,
       unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0,
       deferredTaxAmount: numVal(document.getElementById('poDeferredTaxAmount').value) || 0
