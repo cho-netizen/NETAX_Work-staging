@@ -1362,15 +1362,16 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_business_succession_deferral_amount',
-    description: '가업상속납부유예금액(상증세법§72의2①, 시행령§69의3①)을 계산한다. 납부유예금액 = 상속세납부세액×(가업상속재산가액÷총상속재산가액).',
+    description: '가업상속·가업승계 납부유예금액을 계산한다. inheritance(상증세법§72의2①, 시행령§69의3①): 납부유예금액 = 상속세납부세액×(가업상속재산가액÷총상속재산가액). gift(조특법§30의7①, 조특법시행령§27의7④): 납부유예금액 = 증여세납부세액×(가업자산상당액÷총증여재산가액), 가업자산상당액은 상증세법시행령§15⑤2호를 준용(같은 호 중 "상속개시일"은 "증여일"로 봄)해 계산한다.',
     input_schema: {
       type: 'object',
       properties: {
-        inheritanceTaxPayable: { type: 'number', description: '상속세 납부세액(원).' },
-        businessSuccessionPropertyValue: { type: 'number', description: '가업상속재산가액(원, 시행령§15⑤ 기준 — 가업상속공제 대상 재산가액).' },
-        totalInheritanceValue: { type: 'number', description: '총 상속재산가액(원).' }
+        provision: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상증세법§72의2(가업상속납부유예), gift=조특법§30의7(가업승계증여세납부유예). 기본값 inheritance.' },
+        taxPayable: { type: 'number', description: '상속세(또는 증여세) 납부세액(원).' },
+        businessSuccessionPropertyValue: { type: 'number', description: 'provision이 inheritance면 가업상속재산가액(시행령§15⑤ 기준), gift면 가업자산상당액(상증세법시행령§15⑤2호 준용, "상속개시일"→"증여일")(원).' },
+        totalPropertyValue: { type: 'number', description: '총 상속재산가액(또는 총 증여재산가액)(원).' }
       },
-      required: ['inheritanceTaxPayable', 'businessSuccessionPropertyValue', 'totalInheritanceValue']
+      required: ['taxPayable', 'businessSuccessionPropertyValue', 'totalPropertyValue']
     }
   },
   {
@@ -6091,18 +6092,25 @@ function toolCalculateBurdenedGiftTransfer(p) {
   };
 }
 
-// 가업상속납부유예금액 계산 (상증세법§72의2①, 시행령§69의3①) — 납부유예금액 = 상속세납부세액×
-// (가업상속재산가액÷총상속재산가액). 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)이다.
+// 가업상속·가업승계 납부유예금액 계산 — inheritance(상증세법§72의2①, 시행령§69의3①): 납부유예금액 =
+// 상속세납부세액×(가업상속재산가액÷총상속재산가액), 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제
+// 대상 재산가액). gift(조특법§30의7①, 조특법시행령§27의7④): 납부유예금액 = 증여세납부세액×
+// (가업자산상당액÷총증여재산가액), 가업자산상당액은 상증세법시행령§15⑤2호를 준용(같은 호 중
+// "상속개시일"은 "증여일"로 봄)해 계산한다.
 function toolCalculateBusinessSuccessionDeferralAmount(p) {
   p = p || {};
-  const taxPayable = Number(p.inheritanceTaxPayable) || 0;
+  const provision = p.provision === 'gift' ? 'gift' : 'inheritance';
+  const taxPayable = Number(p.taxPayable) || 0;
   const businessValue = Number(p.businessSuccessionPropertyValue) || 0;
-  const totalValue = Number(p.totalInheritanceValue);
-  if (!totalValue || totalValue <= 0) return { error: '총 상속재산가액이 필요합니다.' };
+  const totalValue = Number(p.totalPropertyValue);
+  if (!totalValue || totalValue <= 0) return { error: (provision === 'gift' ? '총 증여재산가액' : '총 상속재산가액') + '이 필요합니다.' };
   const deferralAmount = Math.round(taxPayable * businessValue / totalValue);
+  const note = provision === 'gift'
+    ? '조특법시행령§27의7④에 따라 증여세 납부세액(' + taxPayable + '원)×(가업자산상당액(' + businessValue + '원)÷총증여재산가액(' + totalValue + '원))로 계산했습니다. 가업자산상당액은 상증세법시행령§15⑤2호를 준용(같은 호 중 "상속개시일"은 "증여일"로 봄)해 계산합니다.'
+    : '시행령§69의3①에 따라 상속세 납부세액(' + taxPayable + '원)×(가업상속재산가액(' + businessValue + '원)÷총상속재산가액(' + totalValue + '원))로 계산했습니다. 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)입니다.';
   return {
     납부유예금액: deferralAmount,
-    안내: '시행령§69의3①에 따라 상속세 납부세액(' + taxPayable + '원)×(가업상속재산가액(' + businessValue + '원)÷총상속재산가액(' + totalValue + '원))로 계산했습니다. 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)입니다.'
+    안내: note
   };
 }
 

@@ -3725,18 +3725,23 @@
     };
   };
 
-  // 가업상속납부유예금액 계산 (상증세법§72의2①, 시행령§69의3①) — 납부유예금액 = 상속세납부세액×
-  // (가업상속재산가액÷총상속재산가액). 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)이다.
-  window.calculateBusinessSuccessionDeferralAmountJS = function (inheritanceTaxPayable, businessSuccessionPropertyValue, totalInheritanceValue) {
-    const taxPayable = Number(inheritanceTaxPayable) || 0;
-    const businessValue = Number(businessSuccessionPropertyValue) || 0;
-    const totalValue = Number(totalInheritanceValue);
-    if (!totalValue || totalValue <= 0) return { error: '총 상속재산가액이 필요합니다.' };
+  // 가업상속·가업승계 납부유예금액 계산 — inheritance(상증세법§72의2①, 시행령§69의3①): 납부유예금액 =
+  // 상속세납부세액×(가업상속재산가액÷총상속재산가액), 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제
+  // 대상 재산가액). gift(조특법§30의7①, 조특법시행령§27의7④): 납부유예금액 = 증여세납부세액×
+  // (가업자산상당액÷총증여재산가액), 가업자산상당액은 상증세법시행령§15⑤2호를 준용(같은 호 중
+  // "상속개시일"은 "증여일"로 봄)해 계산한다.
+  window.calculateBusinessSuccessionDeferralAmountJS = function (p) {
+    p = p || {};
+    const provision = p.provision === 'gift' ? 'gift' : 'inheritance';
+    const taxPayable = Number(p.taxPayable) || 0;
+    const businessValue = Number(p.businessSuccessionPropertyValue) || 0;
+    const totalValue = Number(p.totalPropertyValue);
+    if (!totalValue || totalValue <= 0) return { error: (provision === 'gift' ? '총 증여재산가액' : '총 상속재산가액') + '이 필요합니다.' };
     const deferralAmount = Math.round(taxPayable * businessValue / totalValue);
-    return {
-      납부유예금액: deferralAmount,
-      안내: '시행령§69의3①에 따라 상속세 납부세액(' + taxPayable + '원)×(가업상속재산가액(' + businessValue + '원)÷총상속재산가액(' + totalValue + '원))로 계산했습니다. 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)입니다.'
-    };
+    const note = provision === 'gift'
+      ? '조특법시행령§27의7④에 따라 증여세 납부세액(' + taxPayable + '원)×(가업자산상당액(' + businessValue + '원)÷총증여재산가액(' + totalValue + '원))로 계산했습니다. 가업자산상당액은 상증세법시행령§15⑤2호를 준용(같은 호 중 "상속개시일"은 "증여일"로 봄)해 계산합니다.'
+      : '시행령§69의3①에 따라 상속세 납부세액(' + taxPayable + '원)×(가업상속재산가액(' + businessValue + '원)÷총상속재산가액(' + totalValue + '원))로 계산했습니다. 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)입니다.';
+    return { 납부유예금액: deferralAmount, 안내: note };
   };
 
   // 물납충당재산(주식)의 수납가액 — 상속개시일부터 수납할 때까지 신주발행·감자가 있었던 경우
