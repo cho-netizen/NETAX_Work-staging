@@ -2976,7 +2976,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여추정 대상 재산가액</label><input type="number" id="spAssetValue" placeholder="원 (직접양도는 양도가액, 재양도는 재양도 당시 재산가액)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="spExcluded"><label for="spExcluded">적용배제 사유 해당(§44③ — 경매·파산선고·공매·증권시장처분·대가받고 양도한 사실이 명백히 인정)</label></div>' +
         '<div class="taxcalc-field"><label>당초양도자·양수자 소득세 결정세액 합계(재양도일 때만)</label><input type="number" id="spPriorTaxesSum" placeholder="원"></div>' +
-        '<div class="taxcalc-field"><label>재양도가액 증여추정시 증여세액(재양도일 때만, 별도계산)</label><input type="number" id="spComparisonGiftTax" placeholder="원 (관계별 공제 반영해 별도 계산)"></div>' +
+        '<div class="taxcalc-field"><label>재양도가액 증여추정시 증여세액 직접입력(선택, 재양도일 때만)</label><input type="number" id="spComparisonGiftTax" placeholder="비워두면 아래 재산가액·공제로 자동계산"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="spRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="spAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +

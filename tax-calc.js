@@ -2023,8 +2023,8 @@
   // 배우자 등에게 양도한 재산의 증여 추정 (상증세법§44) — 배우자·직계존비속에게 양도한 재산은 그 재산가액을
   // 양도자가 증여한 것으로 추정한다(①). 특수관계인에게 양도한 재산을 그 특수관계인이 3년 이내에 당초
   // 양도자의 배우자등에게 다시 양도하면, 재양도 당시 재산가액을 증여추정한다(②) — 다만 당초양도자·양수자가
-  // 부담한 소득세 결정세액 합계가 재양도 재산가액을 증여추정할 경우의 증여세액보다 크면 배제한다(②단서,
-  // 그 비교대상 증여세액은 관계별 공제가 적용되는 일반 증여세 계산이 필요하므로 별도로 계산해서 입력받는다).
+  // 부담한 소득세 결정세액 합계가 재양도 재산가액을 증여추정할 경우의 증여세액보다 크면 배제한다(②단서 —
+  // 그 비교대상 증여세액은 이 함수가 아래에서 어차피 계산하는 값과 동일해 자동으로 재사용한다).
   // ③ 각호(경매·파산선고·공매·증권시장처분·대가받고양도한사실이명백히인정) 중 하나에 해당하면 적용하지 않는다.
   window.calculateSpousePropertyTransferGiftTaxJS = function (p) {
     p = p || {};
@@ -2039,17 +2039,6 @@
     const assetValue = Number(p.assetValue) || 0;
     if (assetValue <= 0) return { error: '증여추정 대상 재산가액이 필요합니다.' };
 
-    if (transferType === 'bypass') {
-      const priorTaxesSum = Number(p.priorTaxesSum) || 0;
-      const comparisonGiftTax = Number(p.comparisonGiftTax) || 0;
-      if (priorTaxesSum > comparisonGiftTax) {
-        return {
-          과세대상여부: false, 납부세액: 0,
-          안내: '당초 양도자·양수자가 부담한 소득세 결정세액 합계(' + priorTaxesSum + '원)가 재양도 재산가액을 증여추정할 경우의 증여세액(' + comparisonGiftTax + '원)보다 커서(§44②단서) 증여추정을 적용하지 않습니다.'
-        };
-      }
-    }
-
     const giftAmount = assetValue;
     const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossAmount = Number(p.disasterLossAmount) || 0;
@@ -2058,6 +2047,22 @@
     const priorGiftAmount = Number(p.priorGiftAmount) || 0;
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+
+    if (transferType === 'bypass') {
+      // §44②단서 비교대상 증여세액 — "재양도 재산가액을 증여추정할 경우의 증여세액"은 바로 아래에서
+      // 이 함수가 어차피 계산하는 값(assetValue를 증여재산가액으로, 같은 관계별공제 등을 적용한 산출세액)과
+      // 동일하므로, comparisonGiftTax를 별도로 입력받는 대신 위에서 이미 계산한 calculatedTax를 그대로
+      // 쓴다(직접 입력하면 그 값을 우선 사용, 하위호환 유지).
+      const priorTaxesSum = Number(p.priorTaxesSum) || 0;
+      const comparisonGiftTax = Number(p.comparisonGiftTax) > 0 ? Number(p.comparisonGiftTax) : calculatedTax;
+      if (priorTaxesSum > comparisonGiftTax) {
+        return {
+          과세대상여부: false, 납부세액: 0,
+          안내: '당초 양도자·양수자가 부담한 소득세 결정세액 합계(' + priorTaxesSum + '원)가 재양도 재산가액을 증여추정할 경우의 증여세액(' + comparisonGiftTax + '원)보다 커서(§44②단서) 증여추정을 적용하지 않습니다.'
+        };
+      }
+    }
+
     const priorPaidTax = Number(p.priorPaidTax) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
     const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
