@@ -3189,6 +3189,13 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[미달사용·§48②7호만] 실제 직접공익목적사업 사용액</label><input type="number" id="poActualDirectUseAmount" placeholder="원 (없으면 0)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="poUseAssessedValueBasis"><label for="poUseAssessedValueBasis">[미달사용·§48②7호만] 위 총재산가액이 상증세법상 평가액 기준(재무상태표 자산가액이 평가액의 70%이하인 경우)</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="poHighHoldingType"><label for="poHighHoldingType">[미달사용만] §48②7호가목 유형(10%초과보유, 가산율 200%)</label></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호매각대금만] 매각대금</label><input type="number" id="poSaleProceedsAmount" placeholder="원 (기본재산 매각대금)"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호매각대금만] 확인시점</label><select id="poSaleCheckpointYear">' +
+          '<option value="">선택</option>' +
+          '<option value="1">매각일로부터 1년(30%기준)</option>' +
+          '<option value="2">매각일로부터 2년(60%기준)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[미달사용·§48②5호매각대금만] 누적 실제사용액</label><input type="number" id="poCumulativeActualUsedAmount" placeholder="원 (매각일부터 확인시점까지)"></div>' +
         '<div class="taxcalc-field"><label>[전용계좌미사용만] 미사용 거래금액</label><input type="number" id="poUnusedTransaction" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-public-interest-org-penalty">가산세액 계산하기</button>' +
@@ -5575,6 +5582,9 @@ taxCalcView.addEventListener('click', function(e){
       actualDirectUseAmount: numVal(document.getElementById('poActualDirectUseAmount').value) || 0,
       useAssessedValueBasis: document.getElementById('poUseAssessedValueBasis').checked,
       isSect48_2_7HighHoldingType: document.getElementById('poHighHoldingType').checked,
+      saleProceedsAmount: numVal(document.getElementById('poSaleProceedsAmount').value) || 0,
+      saleCheckpointYear: Number(document.getElementById('poSaleCheckpointYear').value) || 0,
+      cumulativeActualUsedAmount: numVal(document.getElementById('poCumulativeActualUsedAmount').value) || 0,
       unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0,
       deferredTaxAmount: numVal(document.getElementById('poDeferredTaxAmount').value) || 0
     };

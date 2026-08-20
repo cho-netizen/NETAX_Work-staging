@@ -3204,7 +3204,19 @@
         underusedAmount = Math.max(0, standardAmount - actualDirectUseAmount);
         baseNote = '시행령§38⑱에 따라 [총자산가액(' + totalAssetValue + '원)－(부채가액(' + liabilityValue + '원)＋당기순이익(' + netIncomeValue + '원))]=' + operatingAssetValue + '원(수익용·수익사업용 운용재산가액)에 ' + (isHighRateType ? '3%' : '1%') + '를 곱한 기준금액(' + standardAmount + '원)에서 실제 직접공익목적사업 사용액(' + actualDirectUseAmount + '원)을 차감해 미달사용액을 계산했습니다' + (p.useAssessedValueBasis ? '(재무상태표상 자산가액이 상증세법상 평가액의 70% 이하인 공익법인등이라 평가액 기준으로 계산).' : '.') + ' ';
       }
-      if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을 입력하세요(§48②5호의 운용소득·매각대금 기준금액 산정식은 이 계산기가 다루지 않으므로 그 경우는 미달사용액을 직접 입력해야 합니다).' };
+      const saleProceedsAmount = Number(p.saleProceedsAmount) || 0;
+      const saleCheckpointYear = Number(p.saleCheckpointYear);
+      if (underusedAmount <= 0 && saleProceedsAmount > 0 && (saleCheckpointYear === 1 || saleCheckpointYear === 2)) {
+        // 시행령§38⑦ — §48②5호 중 "매각대금" 기준금액 미달사용: 매각한 날이 속하는 과세기간(사업연도)
+        // 종료일부터 1년 이내 매각대금의 30%, 2년 이내 매각대금의 60%에 미달하게 직접공익목적사업에
+        // 사용하면 그 미달분(요구액－누적실제사용액)에 가산세를 부과한다.
+        const requiredRatio = saleCheckpointYear === 2 ? 0.60 : 0.30;
+        const requiredAmount = Math.round(saleProceedsAmount * requiredRatio);
+        const cumulativeActualUsedAmount = Number(p.cumulativeActualUsedAmount) || 0;
+        underusedAmount = Math.max(0, requiredAmount - cumulativeActualUsedAmount);
+        baseNote = '시행령§38⑦에 따라 매각대금(' + saleProceedsAmount + '원)의 ' + (saleCheckpointYear === 2 ? '2년 이내 60%' : '1년 이내 30%') + '(' + requiredAmount + '원)를 직접공익목적사업에 사용해야 하는데, 매각일이 속하는 과세기간(사업연도) 종료일부터 ' + saleCheckpointYear + '년 이내 누적 실제사용액(' + cumulativeActualUsedAmount + '원)이 이에 미달해 그 차액을 미달사용액으로 계산했습니다. ';
+      }
+      if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을, §48②5호 매각대금 기준금액을 계산하려면 매각대금·확인시점(1년/2년)·누적실제사용액을 입력하세요(§48②5호 중 운용소득 기준금액 산정식은 이 계산기가 다루지 않으므로 그 경우는 미달사용액을 직접 입력해야 합니다).' };
       penaltyAmount = Math.round(underusedAmount * rate);
       note = baseNote + '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
     } else if (penaltyType === 'dedicated_account_unused') {
