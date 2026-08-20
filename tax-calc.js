@@ -3474,7 +3474,8 @@
   //   이익 = (신주1주당인수가액 - 증자후1주당평가액) × 배정간주실권주수(포기주주실권주수×(포기주주의특수관계인이인수한실권주수/실권주총수))
   //   증자후1주당평가액은 low_allocated와 동일 산식(실제 증가주식수 기준).
   // high_unallocated(시행령4호, 법§39①2호나목 — 고가발행, 실권주 미배정): 게이트: 이익이 3억원이상 또는
-  //   (인수가-평가액)이 평가액의 30%이상.
+  //   (신주1주당인수가액-증자후1주당평가액)이 신주1주당인수가액의 30%이상(나목값 기준 — 저가발행인
+  //   low_unallocated의 게이트가 가목값(증자후평가액) 기준인 것과 분모가 다르므로 주의, 원문 확인).
   //   이익 = (신주1주당인수가액-증자후1주당평가액) × 포기주주의실권주수 × (포기주주의특수관계인이인수한신주수/균등증자시주식총수)
   // high_nonshareholder(시행령5호, 법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정):
   //   게이트 없음(시행령§29②5호 원문 확인 — 2·4호와 달리 "3억원 이상 또는 30%이상" 문턱 조항이 없다).
@@ -3538,7 +3539,7 @@
         return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' };
       }
     } else if (caseType === 'high_unallocated') {
-      const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
+      const diffRatio = issuePricePerShare > 0 ? (issuePricePerShare - postValuePerShare) / issuePricePerShare : 0;
       if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
         return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' };
       }

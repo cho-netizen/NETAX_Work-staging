@@ -6345,7 +6345,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
       return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' };
     }
   } else if (caseType === 'high_unallocated') {
-    const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
+    const diffRatio = issuePricePerShare > 0 ? (issuePricePerShare - postValuePerShare) / issuePricePerShare : 0;
     if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
       return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' };
     }
