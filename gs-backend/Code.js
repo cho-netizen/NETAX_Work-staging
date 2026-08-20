@@ -934,7 +934,7 @@ const DRIVE_TOOLS = [
         isFinalSettlement: { type: 'boolean', description: 'false=최초 신고(추정 소득세상당액 사용), true=정산 신고(실제 소득세액 사용).' },
         excessDividendBaseAmount: { type: 'number', description: '최대주주등의 특수관계인이 실제 받은 배당등의 금액(원, 초과배당금액 산정의 기초).' },
         disproportionateShortfallRatio: { type: 'number', description: '과소배당금액 중 최대주주등의 과소배당금액이 차지하는 비율(0~1) — 시행령§31의2②2호.' },
-        estimatedIncomeTaxEquivalent: { type: 'number', description: 'isFinalSettlement가 false일 때 — 초과배당금액에 대한 소득세상당액 추정치(원, 시행규칙§10의3① 추정율표를 별도로 확인해서 계산해 입력).' },
+        estimatedIncomeTaxEquivalent: { type: 'number', description: 'isFinalSettlement가 false일 때 — 초과배당금액에 대한 소득세상당액 추정치(원). 비워두면 시행규칙§10의3①의 추정율표로 자동계산하며, 입력하면 그 값을 그대로 우선 사용한다.' },
         actualIncomeTax: { type: 'number', description: 'isFinalSettlement가 true일 때 — 초과배당금액에 대해 실제 납부한(또는 납부할) 소득세액(원).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
         marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
@@ -1263,7 +1263,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_capital_increase_gift_tax',
-    description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 미확인).',
+    description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 없음).',
     input_schema: {
       type: 'object',
       properties: {
@@ -1387,7 +1387,8 @@ const DRIVE_TOOLS = [
         financialAssetValue: { type: 'number', description: '상속재산가액 중 금융재산가액(원, §13 가산 증여재산가액 제외). 없으면 0.' },
         realEstateSecuritiesValue: { type: 'number', description: 'provision이 general일 때 — 상속재산 중 부동산과 유가증권(물납충당가능재산으로 한정)의 가액(원).' },
         totalInheritanceValue: { type: 'number', description: '상속재산가액(원, §13 가산 증여재산 포함). provision이 general이면 필수이고, cultural_heritage에서 물납한도 계산시에도 필요.' },
-        culturalHeritageValue: { type: 'number', description: 'provision이 cultural_heritage일 때 — 물납 신청하려는 문화유산등의 가액(원). 물납신청가능세액 한도 계산용.' }
+        culturalHeritageValue: { type: 'number', description: 'provision이 cultural_heritage일 때 — 물납 신청하려는 문화유산등의 가액(원). 물납신청가능세액 한도 계산용.' },
+        excludedDamagedCulturalHeritageValue: { type: 'number', description: 'provision이 cultural_heritage일 때 — 상속개시일 이후 물납신청 전까지 정당한 사유 없이 훼손·멸실 등(시행령§75의4①)에 해당하게 된 문화유산등의 가액(원). 있으면 물납신청가능세액 한도 계산에서 제외한다(시행령§75의2⑤). 없으면 0.' }
       },
       required: ['provision', 'inheritanceTaxPayable']
     }
@@ -3428,6 +3429,18 @@ const TRANSFER_TAX_BRACKETS = [
   { max: 14000000, rate: 0.06, deduction: 0 },
   { max: 50000000, rate: 0.15, deduction: 1260000 },
   { max: 88000000, rate: 0.24, deduction: 5760000 },
+  { max: 150000000, rate: 0.35, deduction: 15440000 },
+  { max: 300000000, rate: 0.38, deduction: 19940000 },
+  { max: 500000000, rate: 0.40, deduction: 25940000 },
+  { max: 1000000000, rate: 0.42, deduction: 35940000 },
+  { max: Infinity, rate: 0.45, deduction: 65940000 }
+];
+
+// 초과배당 소득세상당액 최초신고시 추정율표 (상증세법시행령§31의2③2호, 시행규칙§10의3①) — 초과배당금액에
+// 이 표를 적용해 정산 전 잠정 소득세상당액을 추정한다.
+const EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS = [
+  { max: 57600000, rate: 0.14, deduction: 0 },
+  { max: 88000000, rate: 0.24, deduction: 5764000 },
   { max: 150000000, rate: 0.35, deduction: 15440000 },
   { max: 300000000, rate: 0.38, deduction: 19940000 },
   { max: 500000000, rate: 0.40, deduction: 25940000 },
@@ -6121,9 +6134,10 @@ function toolCalculateBusinessSuccessionDeferralClawback(p) {
 // 물납 적용 가능 여부 판정 (상속세및증여세법§73 일반물납, §73의2 문화유산등물납) — 세액 자체가 아니라
 // 요건 충족 여부를 판정한다(물납충당재산의 "수납가액" 산정은 시행령 세부공식이 원문 이미지로 확인되지
 // 않아 다루지 않는다). §73①은 3요건 모두 충족해야 하고(관리·처분부적당시 그래도 불허가 가능),
-// §73의2①은 2요건만 있으며 부동산·유가증권 비율 요건이 없다. §73의2⑤(물납신청가능세액 한도)는
-// "문화유산등의 가액에 대한 상속세납부세액"을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로
-// 근사 계산한다(정확한 시행령 산식 미확인).
+// §73의2①은 2요건만 있으며 부동산·유가증권 비율 요건이 없다. §73의2⑤(물납신청가능세액 한도="문화유산등의
+// 가액에 대한 상속세 납부세액"을 초과할 수 없음)은 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로
+// 계산한다. 상속개시일 이후 물납신청 전까지 정당한 사유 없이 훼손·멸실 등(시행령§75의4①)에 해당하게 된
+// 문화유산등이 있으면 그 가액은 한도 계산에서 제외한다(시행령§75의2⑤).
 function toolCalculatePropertyInKindPaymentEligibility(p) {
   p = p || {};
   const provision = p.provision;
@@ -6159,10 +6173,13 @@ function toolCalculatePropertyInKindPaymentEligibility(p) {
   if (provision === 'cultural_heritage' && eligible) {
     const culturalHeritageValue = Number(p.culturalHeritageValue) || 0;
     const totalInheritanceValue = Number(p.totalInheritanceValue) || 0;
+    const excludedDamagedValue = Math.min(culturalHeritageValue, Number(p.excludedDamagedCulturalHeritageValue) || 0);
+    const eligibleCulturalHeritageValue = culturalHeritageValue - excludedDamagedValue;
     if (culturalHeritageValue > 0 && totalInheritanceValue > 0) {
-      const maxRequestable = Math.round(inheritanceTaxPayable * culturalHeritageValue / totalInheritanceValue);
+      const maxRequestable = Math.round(inheritanceTaxPayable * eligibleCulturalHeritageValue / totalInheritanceValue);
       result.물납신청가능세액_한도 = maxRequestable;
-      result.안내 += ' 물납신청가능세액 한도는 "문화유산등의 가액에 대한 상속세 납부세액"(§73의2⑤)을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로 근사 계산해 ' + maxRequestable + '원입니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+      result.안내 += ' 물납신청가능세액 한도는 "문화유산등의 가액에 대한 상속세 납부세액"(§73의2⑤)을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로 계산해 ' + maxRequestable + '원입니다' +
+        (excludedDamagedValue > 0 ? ' (정당한 사유 없이 훼손·멸실 등에 해당하게 된 문화유산등 가액 ' + excludedDamagedValue + '원은 시행령§75의2⑤에 따라 제외했습니다).' : '.');
     }
   }
   return result;
@@ -6355,7 +6372,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
-    안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)의 정확한 게이트 기준금액 조문은 원문 이미지로 확인하지 못해 게이트 없이 계산했으니 별도로 재확인하세요.'
+    안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.'
   };
 }
 
@@ -6448,7 +6465,9 @@ function toolCalculateNontaxableInheritanceProperty(p) {
 }
 
 // 초과배당에 따른 이익의 증여 (상증세법§41의2, 시행령§31의2) — 초과배당금액에서 소득세상당액을 뺀
-// 금액을 증여재산가액으로 한다. 신고기한전 추정율표(시행규칙§10의3①)는 이미지로 막혀 사용자 입력.
+// 금액을 증여재산가액으로 한다. 신고기한전 소득세상당액은 시행규칙§10의3①의 추정율표
+// (EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS)로 자동계산하며, estimatedIncomeTaxEquivalent를
+// 직접 입력하면 그 값을 그대로 우선 사용한다.
 function toolCalculateExcessDividendGiftTax(p) {
   p = p || {};
   const isFinalSettlement = !!p.isFinalSettlement;
@@ -6461,9 +6480,12 @@ function toolCalculateExcessDividendGiftTax(p) {
   if (isFinalSettlement) {
     incomeTaxEquivalent = Number(p.actualIncomeTax) || 0;
     note = '정산증여재산가액 = 초과배당금액 - 실제소득세액(§41의2②·④)으로 계산했습니다. 정산 신고기한은 초과배당금액이 발생한 연도의 다음 연도 5.1~5.31(성실신고확인대상사업자는 6.30)입니다.';
+  } else if (Number(p.estimatedIncomeTaxEquivalent) > 0) {
+    incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent);
+    note = '직접 입력한 소득세상당액 추정치를 그대로 사용했습니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
   } else {
-    incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent) || 0;
-    note = '최초 신고시에는 소득세상당액을 시행규칙§10의3①의 추정율표(원문 이미지로 확인되지 않아 직접 계산해서 입력)로 산정합니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
+    incomeTaxEquivalent = calcProgressiveTax_(excessDividendAmount, EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS);
+    note = '최초 신고시 소득세상당액은 시행규칙§10의3①의 추정율표로 초과배당금액(' + excessDividendAmount + '원)에서 산정한 ' + incomeTaxEquivalent + '원입니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
   }
   const giftAmount = Math.max(0, excessDividendAmount - incomeTaxEquivalent);
 

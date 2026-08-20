@@ -3105,7 +3105,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="edFinalSettlement"><label for="edFinalSettlement">정산 신고임(실제소득세액 기준, 체크 안 하면 최초 신고=추정소득세상당액 기준)</label></div>' +
         '<div class="taxcalc-field"><label>특수관계인이 실제 받은 배당등의 금액</label><input type="number" id="edBaseAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>최대주주등의 과소배당금액이 차지하는 비율</label><input type="number" step="0.01" min="0" max="1" id="edShortfallRatio" placeholder="0~1 (시행령§31의2②2호)"></div>' +
-        '<div class="taxcalc-field"><label>[최초신고만] 추정 소득세상당액</label><input type="number" id="edEstimatedTax" placeholder="원 (시행규칙§10의3① 추정율표, 별도 계산해 입력)"></div>' +
+        '<div class="taxcalc-field"><label>[최초신고만] 추정 소득세상당액(선택)</label><input type="number" id="edEstimatedTax" placeholder="비워두면 시행규칙§10의3① 추정율표로 자동계산"></div>' +
         '<div class="taxcalc-field"><label>[정산신고만] 실제 소득세액</label><input type="number" id="edActualTax" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="edRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="edAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
@@ -3423,6 +3423,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[일반물납만] 부동산·유가증권 가액</label><input type="number" id="ikRealEstateSecurities" placeholder="원 (물납충당가능재산으로 한정)"></div>' +
         '<div class="taxcalc-field"><label>상속재산가액</label><input type="number" id="ikTotalValue" placeholder="원 (§13 가산 증여재산 포함, 일반물납은 필수)"></div>' +
         '<div class="taxcalc-field"><label>[문화유산등물납만] 문화유산등 가액</label><input type="number" id="ikCulturalValue" placeholder="원 (물납신청가능세액 한도 계산용)"></div>' +
+        '<div class="taxcalc-field"><label>[문화유산등물납만] 정당한사유없이 훼손·멸실된 가액(선택)</label><input type="number" id="ikExcludedDamagedValue" placeholder="원 (상속개시일~물납신청 전, 있으면 한도에서 제외)"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-property-in-kind-payment-eligibility">적용 가능 여부 판정하기</button>' +
       '<div id="taxCalcPropertyInKindPaymentResult"></div>' +
@@ -5775,7 +5776,8 @@ taxCalcView.addEventListener('click', function(e){
       financialAssetValue: numVal(document.getElementById('ikFinancialAsset').value) || 0,
       realEstateSecuritiesValue: numVal(document.getElementById('ikRealEstateSecurities').value) || 0,
       totalInheritanceValue: numVal(document.getElementById('ikTotalValue').value) || 0,
-      culturalHeritageValue: numVal(document.getElementById('ikCulturalValue').value) || 0
+      culturalHeritageValue: numVal(document.getElementById('ikCulturalValue').value) || 0,
+      excludedDamagedCulturalHeritageValue: numVal(document.getElementById('ikExcludedDamagedValue').value) || 0
     };
     renderPropertyInKindPaymentResult(calculatePropertyInKindPaymentEligibilityJS(input));
   } else if (action === 'run-cultural-heritage-tax-deferral'){

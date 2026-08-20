@@ -36,6 +36,18 @@
     return Math.max(0, Math.round(base * bracket.rate - bracket.deduction));
   }
 
+  // 초과배당 소득세상당액 최초신고시 추정율표 (상증세법시행령§31의2③2호, 시행규칙§10의3①) — 초과배당금액에
+  // 이 표를 적용해 정산 전 잠정 소득세상당액을 추정한다.
+  const EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS = [
+    { max: 57600000, rate: 0.14, deduction: 0 },
+    { max: 88000000, rate: 0.24, deduction: 5764000 },
+    { max: 150000000, rate: 0.35, deduction: 15440000 },
+    { max: 300000000, rate: 0.38, deduction: 19940000 },
+    { max: 500000000, rate: 0.40, deduction: 25940000 },
+    { max: 1000000000, rate: 0.42, deduction: 35940000 },
+    { max: Infinity, rate: 0.45, deduction: 65940000 }
+  ];
+
   // "취득일부터 5년간 발생한 양도소득금액" 산정 (조특법시행령§40①, §98의3③·§98의5③ 등에서 준용,
   // §99①1호·②2호, §99의3②2호 등) — 원칙은 기준시가 비율로 계산한다:
   //   5년간발생분 = 전체양도소득금액 × (5년시점기준시가－취득당시기준시가) ÷ (양도당시기준시가－취득당시기준시가)
@@ -1904,10 +1916,9 @@
 
   // 부동산 무상사용·담보이용에 따른 이익의 증여 (상증세법§37, 시행령§27, 시행규칙§10) — 타인의 부동산(그
   // 소유자와 함께 거주하는 주택·부수토지는 제외)을 무상사용하면 연간 부동산가액×2%(시행규칙§10②)의
-  // 이익을 5년간(무상사용기간은 5년 단위로 재산정) 매년 얻는 것으로 보아, 10% 할인율 5년 연금현가계수
-  // 3.79079로 현재가치화한 금액이 증여재산가액이다(§59② 영업권평가와 동일한 현가환산 방식 — 시행규칙§11②이
-  // §51①·§59②를 함께 규정하는 것으로 보아 §10③의 환산방법도 동일 계수를 쓰는 것으로 판단했으며, 시행규칙§10③
-  // 산식 원문 이미지 자체는 확인하지 못했다). 5년간 합계이익이 1억원 미만이면 과세 제외(§37①단서, 시행령§27④).
+  // 이익을 5년간(무상사용기간은 5년 단위로 재산정) 매년 얻는 것으로 보아, 매 연도 이익을 10% 할인율로
+  // 현재가치화해 합산한다(시행규칙§10③ — 5년 연금현가계수 3.79079, §59② 영업권평가와 동일한 방식).
+  // 5년간 합계이익이 1억원 미만이면 과세 제외(§37①단서, 시행령§27④).
   // 부동산을 무상으로 담보로 제공받아 차입한 경우(§37②)는 별도로, 차입금×적정이자율(4.6%)-실제지급이자를
   // 1년 단위로 계산해 1천만원 미만이면 제외한다(시행령§27⑤⑥).
   window.calculateFreePropertyUseGiftTaxJS = function (p) {
@@ -2613,9 +2624,9 @@
   // 초과배당에 따른 이익의 증여 (상증세법§41의2, 시행령§31의2) — 최대주주등이 배당을 포기하거나 불균등
   // 조건으로 배당받아 그 특수관계인이 본인 지분보다 많은 배당을 받으면, 그 초과배당금액에서 소득세상당액을
   // 뺀 금액을 증여재산가액으로 한다. 이후 실제 소득세 신고시 정산증여재산가액(=초과배당금액-실제소득세액)
-  // 기준으로 재계산해 차액을 추가납부하거나 환급받는다(②③). 초과배당금액 계산(②, 시행령§31의2②)은
-  // 텍스트로 확인되나, 신고기한 전 소득세상당액 추정율(③2호, 시행규칙§10의3① 표)은 이미지로 막혀있어
-  // 사용자가 직접 계산해서 입력해야 한다.
+  // 기준으로 재계산해 차액을 추가납부하거나 환급받는다(②③). 신고기한 전 소득세상당액은 시행규칙§10의3①의
+  // 추정율표(EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS)로 자동계산하며, estimatedIncomeTaxEquivalent를
+  // 직접 입력하면 그 값을 그대로 우선 사용한다.
   window.calculateExcessDividendGiftTaxJS = function (p) {
     p = p || {};
     const isFinalSettlement = !!p.isFinalSettlement;
@@ -2628,9 +2639,12 @@
     if (isFinalSettlement) {
       incomeTaxEquivalent = Number(p.actualIncomeTax) || 0;
       note = '정산증여재산가액 = 초과배당금액 - 실제소득세액(§41의2②·④)으로 계산했습니다. 정산 신고기한은 초과배당금액이 발생한 연도의 다음 연도 5.1~5.31(성실신고확인대상사업자는 6.30)입니다.';
+    } else if (Number(p.estimatedIncomeTaxEquivalent) > 0) {
+      incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent);
+      note = '직접 입력한 소득세상당액 추정치를 그대로 사용했습니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
     } else {
-      incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent) || 0;
-      note = '최초 신고시에는 소득세상당액을 시행규칙§10의3①의 추정율표(원문 이미지로 확인되지 않아 직접 계산해서 입력)로 산정합니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
+      incomeTaxEquivalent = progressiveTax(excessDividendAmount, EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS);
+      note = '최초 신고시 소득세상당액은 시행규칙§10의3①의 추정율표로 초과배당금액(' + excessDividendAmount + '원)에서 산정한 ' + incomeTaxEquivalent + '원입니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
     }
     const giftAmount = Math.max(0, excessDividendAmount - incomeTaxEquivalent);
 
@@ -3463,7 +3477,7 @@
   //   (인수가-평가액)이 평가액의 30%이상.
   //   이익 = (신주1주당인수가액-증자후1주당평가액) × 포기주주의실권주수 × (포기주주의특수관계인이인수한신주수/균등증자시주식총수)
   // high_nonshareholder(시행령5호, 법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정):
-  //   게이트 불명(법문 미확인, 안내로 대체).
+  //   게이트 없음(시행령§29②5호 원문 확인 — 2·4호와 달리 "3억원 이상 또는 30%이상" 문턱 조항이 없다).
   //   이익 = (신주1주당인수가액-증자후1주당평가액) × 미달배정주주의그신주수 × (그특수관계인이인수한신주수/(비주주배정신주+균등초과인수신주총수))
   window.calculateCapitalIncreaseGiftTaxJS = function (p) {
     p = p || {};
@@ -3551,7 +3565,7 @@
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)의 정확한 게이트 기준금액 조문은 원문 이미지로 확인하지 못해 게이트 없이 계산했으니 별도로 재확인하세요.'
+      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.'
     };
   };
 
@@ -3785,9 +3799,10 @@
   // 물납 적용 가능 여부 판정 (상속세및증여세법§73 일반물납, §73의2 문화유산등물납) — 세액 자체가 아니라
   // 요건 충족 여부를 판정한다(물납충당재산의 "수납가액" 산정은 시행령 세부공식이 원문 이미지로 확인되지
   // 않아 다루지 않는다). §73①은 3요건 모두 충족해야 하고(관리·처분부적당시 그래도 불허가 가능),
-  // §73의2①은 2요건만 있으며 부동산·유가증권 비율 요건이 없다. §73의2⑤(물납신청가능세액 한도)는
-  // "문화유산등의 가액에 대한 상속세납부세액"을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로
-  // 근사 계산한다(정확한 시행령 산식 미확인).
+  // §73의2①은 2요건만 있으며 부동산·유가증권 비율 요건이 없다. §73의2⑤(물납신청가능세액 한도="문화유산등의
+  // 가액에 대한 상속세 납부세액"을 초과할 수 없음)은 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로
+  // 계산한다. 상속개시일 이후 물납신청 전까지 정당한 사유 없이 훼손·멸실 등(시행령§75의4①)에 해당하게 된
+  // 문화유산등이 있으면 그 가액은 한도 계산에서 제외한다(시행령§75의2⑤).
   window.calculatePropertyInKindPaymentEligibilityJS = function (p) {
     p = p || {};
     const provision = p.provision;
@@ -3823,10 +3838,13 @@
     if (provision === 'cultural_heritage' && eligible) {
       const culturalHeritageValue = Number(p.culturalHeritageValue) || 0;
       const totalInheritanceValue = Number(p.totalInheritanceValue) || 0;
+      const excludedDamagedValue = Math.min(culturalHeritageValue, Number(p.excludedDamagedCulturalHeritageValue) || 0);
+      const eligibleCulturalHeritageValue = culturalHeritageValue - excludedDamagedValue;
       if (culturalHeritageValue > 0 && totalInheritanceValue > 0) {
-        const maxRequestable = Math.round(inheritanceTaxPayable * culturalHeritageValue / totalInheritanceValue);
+        const maxRequestable = Math.round(inheritanceTaxPayable * eligibleCulturalHeritageValue / totalInheritanceValue);
         result.물납신청가능세액_한도 = maxRequestable;
-        result.안내 += ' 물납신청가능세액 한도는 "문화유산등의 가액에 대한 상속세 납부세액"(§73의2⑤)을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로 근사 계산해 ' + maxRequestable + '원입니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+        result.안내 += ' 물납신청가능세액 한도는 "문화유산등의 가액에 대한 상속세 납부세액"(§73의2⑤)을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로 계산해 ' + maxRequestable + '원입니다' +
+          (excludedDamagedValue > 0 ? ' (정당한 사유 없이 훼손·멸실 등에 해당하게 된 문화유산등 가액 ' + excludedDamagedValue + '원은 시행령§75의2⑤에 따라 제외했습니다).' : '.');
       }
     }
     return result;
