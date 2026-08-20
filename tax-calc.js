@@ -628,7 +628,15 @@
       const acqStd = Number(t.acquisitionStandardPrice) || 0;
       const regStd = Number(t.registrationStandardPrice) || 0;
       const trfStd = Number(t.transferStandardPrice) || 0;
-      if (isRentalSpecial && t.rentalSpecialType === 'rental_general' && ltRate > 0 && acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd) {
+      const rentalGeneralNeedsSplit = isRentalSpecial && t.rentalSpecialType === 'rental_general' && ltRate > 0;
+      if (rentalGeneralNeedsSplit && !(acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd)) {
+        // 기준시가 3종이 없거나 취득당시=양도당시(분모 0)이면 안분이 불가능하다. 이 경우 전체
+        // 양도차익에 70%/50%(rentalRate)를 그대로 적용하면 "임대기간중 발생분"이 아닌 임대개시전
+        // 발생분까지 특례공제를 받아 과다공제가 되므로, §97의5 자매함수와 마찬가지로 안분에 필요한
+        // 값을 반드시 요구한다(조특법시행령§97의3⑤).
+        return { error: '등록임대주택 장특공제 특례(§97의3, 10년이상 70%/8년이상 50%)는 임대기간중 발생한 양도차익에만 적용되므로, 취득당시·등록일당시·양도당시 기준시가(acquisitionStandardPrice·registrationStandardPrice·transferStandardPrice) 3종을 모두 입력해야 합니다(취득당시=양도당시 기준시가는 안분 불가).' };
+      }
+      if (rentalGeneralNeedsSplit) {
         const rentalPeriodGain = taxableGain * (trfStd - regStd) / (trfStd - acqStd);
         const beforeRentalGain = taxableGain - rentalPeriodGain;
         const normalRate = longTermRate(holdingYears);

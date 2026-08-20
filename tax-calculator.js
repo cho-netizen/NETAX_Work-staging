@@ -1706,9 +1706,9 @@ function renderTransferPane(){
             '<option value="rental_long">장기임대주택(조특법§97의4, 일반공제+임대기간별 추가공제)</option>' +
           '</select></div>' +
           '<div class="taxcalc-field"><label>임대기간</label><input type="number" data-field="rentalYears" placeholder="년 (위 특례 선택 시)" maxlength="2"></div>' +
-          '<div class="taxcalc-field"><label>[§97의3만] 취득 당시 기준시가</label><input type="number" data-field="acquisitionStandardPrice" placeholder="원 (임대기간중 양도차익 정확히 안분시)"></div>' +
-          '<div class="taxcalc-field"><label>[§97의3만] 등록일 당시 기준시가</label><input type="number" data-field="registrationStandardPrice" placeholder="원"></div>' +
-          '<div class="taxcalc-field"><label>[§97의3만] 양도 당시 기준시가</label><input type="number" data-field="transferStandardPrice" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 취득 당시 기준시가</label><input type="number" data-field="acquisitionStandardPrice" placeholder="원 (임대기간중 양도차익 안분용, 3종 모두 없으면 계산 불가)"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 등록일 당시 기준시가</label><input type="number" data-field="registrationStandardPrice" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 양도 당시 기준시가</label><input type="number" data-field="transferStandardPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의14, 양도대금 중 6개월 내 납입액 — 기초연금수급자·1주택 또는 무주택 세대구성원만 해당)"></div>' +
           '<div class="taxcalc-field"><label>공익사업용토지 수용감면</label><select data-field="compensationType">' +
             '<option value="">해당없음</option>' +

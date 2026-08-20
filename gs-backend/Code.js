@@ -338,9 +338,9 @@ const DRIVE_TOOLS = [
         convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 취득가액으로 사용한 감정가액 또는 환산취득가액 중 건물분 가액(원, 증축이면 증축부분만). 가산세 = 이 금액×5%.' },
         rentalSpecialType: { type: 'string', enum: ['rental_general', 'rental_long'], description: '등록임대주택 장기보유특별공제 특례([별지 제84호서식] 코드04·05) — rental_general=장기일반민간임대주택(조특법§97의3, 10년이상임대 70%/8년이상 50% 정액), rental_long=장기임대주택(조특법§97의4, 일반 장특공제율에 임대기간별 2~10%p 추가). 지정하면 위 일반/1세대1주택 장특공제율을 대체하고, 다주택중과도 배제된다. 등록임대주택 요건(국민주택규모·임대료5%상한준수 등) 자체는 검증하지 않는다.' },
         rentalYears: { type: 'number', description: 'rentalSpecialType 지정 시 임대기간(년).' },
-        acquisitionStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 조특법시행령§97의3⑤ 원문대로 "임대기간중 발생한 양도차익"을 기준시가 비율로 정확히 안분해 70%를 그 부분에만 적용한다(없으면 70%를 전체 양도차익에 적용하는 근사치를 씀).' },
-        registrationStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
-        transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 양도 당시 기준시가(원).' },
+        acquisitionStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 셋 다 있어야 조특법시행령§97의3⑤ 원문대로 "임대기간중 발생한 양도차익"을 기준시가 비율로 안분해 70%를 그 부분에만 적용한다(셋 중 하나라도 없으면 임대개시전 발생분까지 과다공제되므로 에러를 반환한다).' },
+        registrationStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 양도 당시 기준시가(원).' },
         pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의13 연금계좌세액공제. MIN(납입액, 양도차익, 1억원)×10%를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
         compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
@@ -4070,7 +4070,15 @@ function toolCalculateTransferTax(p) {
     const acqStd = Number(p.acquisitionStandardPrice) || 0;
     const regStd = Number(p.registrationStandardPrice) || 0;
     const trfStd = Number(p.transferStandardPrice) || 0;
-    if (isRentalSpecial && p.rentalSpecialType === 'rental_general' && longTermRate > 0 && acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd) {
+    const rentalGeneralNeedsSplit = isRentalSpecial && p.rentalSpecialType === 'rental_general' && longTermRate > 0;
+    if (rentalGeneralNeedsSplit && !(acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd)) {
+      // 기준시가 3종이 없거나 취득당시=양도당시(분모 0)이면 안분이 불가능하다. 이 경우 전체
+      // 양도차익에 70%/50%를 그대로 적용하면 "임대기간중 발생분"이 아닌 임대개시전 발생분까지
+      // 특례공제를 받아 과다공제가 되므로, §97의5(toolCalculateLongTermRentalHouseReduction)와
+      // 마찬가지로 안분에 필요한 값을 반드시 요구한다(조특법시행령§97의3⑤).
+      return { error: '등록임대주택 장특공제 특례(§97의3, 10년이상 70%/8년이상 50%)는 임대기간중 발생한 양도차익에만 적용되므로, 취득당시·등록일당시·양도당시 기준시가(acquisitionStandardPrice·registrationStandardPrice·transferStandardPrice) 3종을 모두 입력해야 합니다(취득당시=양도당시 기준시가는 안분 불가).' };
+    }
+    if (rentalGeneralNeedsSplit) {
       const rentalPeriodGain = taxableGain * (trfStd - regStd) / (trfStd - acqStd);
       const beforeRentalGain = taxableGain - rentalPeriodGain;
       const normalRate = longTermHoldingDeductionRate_(holdingYears);
