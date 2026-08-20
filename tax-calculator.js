@@ -3389,6 +3389,20 @@ function renderGiftPane(){
       '<div id="taxCalcClawbackResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>가업상속납부유예(§72의2)·가업승계증여세납부유예(조특법§30의7) 납부유예금액 계산 — 얼마까지 유예받을 수 있는지 계산합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="bdProvision">' +
+          '<option value="inheritance">§72의2(가업상속납부유예)</option>' +
+          '<option value="gift">조특법§30의7(가업승계증여세납부유예)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>산출세액</label><input type="number" id="bdTaxPayable" placeholder="원 (상속세 또는 증여세)"></div>' +
+        '<div class="taxcalc-field"><label>가업상속재산가액·가업자산상당액</label><input type="number" id="bdBusinessValue" placeholder="원 (§15⑤ 기준, 증여는 같은 호 준용·상속개시일→증여일)"></div>' +
+        '<div class="taxcalc-field"><label>총 상속재산가액·총 증여재산가액</label><input type="number" id="bdTotalValue" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-business-succession-deferral-amount">납부유예금액 계산하기</button>' +
+      '<div id="taxCalcBusinessSuccessionDeferralAmountResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>가업상속납부유예(§72의2)·가업승계증여세납부유예(조특법§30의7) 사후관리 추징 판정 — 추징세액이 나오면 위 "사후관리 위반 추징 이자상당액 계산"에 이 추징세액과 납부유예 허가일·사유발생일을 넣어 이자상당액을 마저 계산하세요</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>적용 조문</label><select id="bcProvision">' +
@@ -3405,7 +3419,7 @@ function renderGiftPane(){
           '<option value="heir_death">[§72의2만] 상속인 사망</option>' +
           '<option value="donee_death">[조특법§30의7만] 수증자 사망</option>' +
         '</select></div>' +
-        '<div class="taxcalc-field"><label>[가업용자산처분만] 처분비율</label><input type="number" step="0.01" id="bcDisposalRatio" placeholder="0~1 (근사치 계산용)"></div>' +
+        '<div class="taxcalc-field"><label>[가업용자산처분만] 처분비율</label><input type="number" step="0.01" id="bcDisposalRatio" placeholder="0~1"></div>' +
         '<div class="taxcalc-field"><label>[지분감소만] 상속개시일·증여일부터 경과연수</label><input type="number" id="bcYearsSinceBase" placeholder="년"></div>' +
         '<div class="taxcalc-field"><label>[지분감소·5년후만] 기준일 현재 지분율</label><input type="number" step="0.01" id="bcEquityRatioAtBase" placeholder="0~1 (상속개시일·증여일 현재)"></div>' +
         '<div class="taxcalc-field"><label>[지분감소·5년후만] 감소 후 현재 지분율</label><input type="number" step="0.01" id="bcCurrentEquityRatio" placeholder="0~1"></div>' +
@@ -3430,6 +3444,24 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-property-in-kind-payment-eligibility">적용 가능 여부 판정하기</button>' +
       '<div id="taxCalcPropertyInKindPaymentResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>물납충당재산(주식) 수납가액 계산(시행규칙§20의2) — 상속개시일부터 물납수납일까지 신주발행·감자가 있었던 경우에만 씁니다(그 외에는 수납가액=상속재산의 가액)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>구분</label><select id="svChangeType">' +
+          '<option value="free_increase">무상증자</option>' +
+          '<option value="paid_increase">유상증자</option>' +
+          '<option value="free_decrease">무상감자</option>' +
+          '<option value="paid_decrease">유상감자</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>구주식 1주당 과세가액</label><input type="number" id="svOldValue" placeholder="원 (신주발행·감자 전)"></div>' +
+        '<div class="taxcalc-field"><label>[증자만] 구주식 1주당 신주배정수</label><input type="number" step="0.01" id="svNewSharesPerOld" placeholder="예: 0.2 (구주 5주당 신주 1주)"></div>' +
+        '<div class="taxcalc-field"><label>[유상증자만] 신주 1주당 주금납입액</label><input type="number" id="svPaymentPerNewShare" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[감자만] 구주식 1주당 감자주식수</label><input type="number" step="0.01" id="svDecreasedSharesPerOld" placeholder="예: 0.1 (1 미만)"></div>' +
+        '<div class="taxcalc-field"><label>[유상감자만] 1주당 지급금액</label><input type="number" id="svPaymentPerDecreasedShare" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-property-in-kind-stock-receipt-value">수납가액 계산하기</button>' +
+      '<div id="taxCalcPropertyInKindStockReceiptResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>지정문화유산 등에 대한 상속세·증여세 징수유예(상증세법§74·§75) — 문화유산자료등·박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 세액의 징수를 유예합니다</b></div>' +
@@ -4052,6 +4084,26 @@ function renderClawbackResult(r){
   html += '</div>';
   box.innerHTML = html;
   box.dataset.lastInterestTotal = r.이자상당액_합계;
+}
+
+function renderBusinessSuccessionDeferralAmountResult(r){
+  const box = document.getElementById('taxCalcBusinessSuccessionDeferralAmountResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('납부유예금액', won(r.납부유예금액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderPropertyInKindStockReceiptResult(r){
+  const box = document.getElementById('taxCalcPropertyInKindStockReceiptResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('구주1주당 수납가액', won(r.구주1주당수납가액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 function renderBusinessSuccessionDeferralClawbackResult(r){
@@ -5769,6 +5821,14 @@ taxCalcView.addEventListener('click', function(e){
       endDate: document.getElementById('ckEndDate').value
     };
     renderClawbackResult(calculateClawbackInterestJS(input));
+  } else if (action === 'run-business-succession-deferral-amount'){
+    const input = {
+      provision: document.getElementById('bdProvision').value,
+      taxPayable: numVal(document.getElementById('bdTaxPayable').value) || 0,
+      businessSuccessionPropertyValue: numVal(document.getElementById('bdBusinessValue').value) || 0,
+      totalPropertyValue: numVal(document.getElementById('bdTotalValue').value) || 0
+    };
+    renderBusinessSuccessionDeferralAmountResult(calculateBusinessSuccessionDeferralAmountJS(input));
   } else if (action === 'run-business-succession-deferral-clawback'){
     const input = {
       provision: document.getElementById('bcProvision').value,
@@ -5792,6 +5852,16 @@ taxCalcView.addEventListener('click', function(e){
       excludedDamagedCulturalHeritageValue: numVal(document.getElementById('ikExcludedDamagedValue').value) || 0
     };
     renderPropertyInKindPaymentResult(calculatePropertyInKindPaymentEligibilityJS(input));
+  } else if (action === 'run-property-in-kind-stock-receipt-value'){
+    const input = {
+      changeType: document.getElementById('svChangeType').value,
+      oldSharePreChangeValue: numVal(document.getElementById('svOldValue').value) || 0,
+      newSharesPerOldShare: numVal(document.getElementById('svNewSharesPerOld').value) || 0,
+      paymentPerNewShare: numVal(document.getElementById('svPaymentPerNewShare').value) || 0,
+      decreasedSharesPerOldShare: numVal(document.getElementById('svDecreasedSharesPerOld').value) || 0,
+      paymentPerDecreasedShare: numVal(document.getElementById('svPaymentPerDecreasedShare').value) || 0
+    };
+    renderPropertyInKindStockReceiptResult(calculatePropertyInKindStockReceiptValueJS(input));
   } else if (action === 'run-cultural-heritage-tax-deferral'){
     const input = {
       taxType: document.getElementById('chTaxType').value,
