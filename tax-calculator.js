@@ -1641,11 +1641,12 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>양도일</label><input type="date" data-field="transferDate" min="1900-01-01" max="2099-12-31"></div>' +
           '<div class="taxcalc-field"><label>양도가액</label><input type="number" data-field="transferPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>취득일</label><input type="date" data-field="acquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
-          '<div class="taxcalc-field"><label>취득가액</label><input type="number" data-field="acquisitionPrice" placeholder="원 (환산취득가액을 쓰거나 재건축·재개발 특례에 해당하면 무시됩니다)"></div>' +
-          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useConvertedAcquisitionPrice" id="convAcq-' + idx + '"><label for="convAcq-' + idx + '">취득당시 실지거래가액을 확인할 수 없어 환산취득가액 사용</label></div>' +
+          '<div class="taxcalc-field"><label>취득가액(실지거래가액)</label><input type="number" data-field="acquisitionPrice" placeholder="원 (모르면 비워두세요 — 아래 값들로 자동 산정합니다. 재건축·재개발 특례에 해당하면 무시됩니다)"></div>' +
+          '<div class="taxcalc-field"><label>[실지거래가액 모를 때] 매매사례가액</label><input type="number" data-field="comparableTransactionPrice" placeholder="원 (취득일 전후 3개월 이내 유사자산 매매사례, §176의2③1호 — 최우선 적용)"></div>' +
+          '<div class="taxcalc-field"><label>[실지거래가액·매매사례가액 모를 때] 감정가액</label><input type="number" data-field="appraisalValue" placeholder="원 (§176의2③2호)"></div>' +
+          '<div class="taxcalc-field"><label>[그마저 모를 때] 취득당시 기준시가</label><input type="number" data-field="acquisitionStandardPriceForExpense" placeholder="원 (환산취득가액·개산공제 계산용)"></div>' +
+          '<div class="taxcalc-field"><label>[그마저 모를 때] 양도당시 기준시가</label><input type="number" data-field="transferStandardPriceForConversion" placeholder="원 (함께 입력하면 환산취득가액=양도가액×취득당시÷양도당시 기준시가 자동계산, 없으면 취득당시기준시가를 그대로 취득가액으로 사용)"></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useEstimatedNecessaryExpense" id="estExp-' + idx + '"><label for="estExp-' + idx + '">취득가액은 알지만 필요경비 지출증빙이 없어 개산공제(3%, 미등기양도자산은 0.3%)만 사용(위 비용 내역을 입력하지 않았을 때만 적용)</label></div>' +
-          '<div class="taxcalc-field"><label>취득당시 기준시가</label><input type="number" data-field="acquisitionStandardPriceForExpense" placeholder="원 (환산취득가액·개산공제 계산용)"></div>' +
-          '<div class="taxcalc-field"><label>양도당시 기준시가</label><input type="number" data-field="transferStandardPriceForConversion" placeholder="원 (환산취득가액 비율 계산용)"></div>' +
           (transferAssets[idx].acquisitionDate && transferAssets[idx].acquisitionDate < '1990-08-31' ?
             '<div class="taxcalc-field"><span class="taxcalc-result-note">⚠ 1990.8.31. 이전 취득분은 개별공시지가가 없어 국세청 고시 배율표에 따른 별도 환산방법이 적용될 수 있습니다 — 이 계산기는 그 배율표를 반영하지 않으니 취득당시 기준시가를 직접 확인해서 입력하세요.</span></div>' : '') +
         '</div>' +
@@ -2140,14 +2141,26 @@ function collectTransferInput(vals){
   const transferPrice = numVal(vals.transferPrice) || 0;
   let acquisitionPrice = numVal(vals.acquisitionPrice) || 0;
   let necessaryExpenses = computeCostItemsTotal_(vals.acquisitionExpenseItems) + computeCostItemsTotal_(vals.transferExpenseItems);
-  // 환산취득가액(소득세법 시행령§176의2) — 취득당시 실지거래가액을 확인할 수 없을 때, 양도가액에
-  // (취득당시기준시가÷양도당시기준시가) 비율을 곱해 취득가액을 추정하고, 취득당시기준시가의 3%를
-  // 필요경비 개산공제로 추가 인정한다. 취득가액 직접입력을 대체한다(직접입력값보다 우선 적용).
-  if (vals.useConvertedAcquisitionPrice){
+  // 취득가액 자동산정 — 실지거래가액(위 직접입력)이 없으면 소득세법시행령§176의2③ 순차적용
+  // (1호 매매사례가액 → 2호 감정가액 → 3호 환산취득가액 → 4호 취득당시기준시가)으로 자동 결정한다.
+  // 환산취득가액·기준시가로 대체하는 경우에는 실제 필요경비 증빙도 없는 게 보통이므로, 그 경우에 한해
+  // 취득당시기준시가의 3%를 필요경비 개산공제로 함께 인정한다(매매사례가액·감정가액을 확인할 수 있는
+  // 경우는 실제 필요경비도 확인 가능한 게 보통이라 개산공제를 자동으로 얹지 않는다 — 필요하면
+  // "필요경비 지출증빙이 없어 개산공제만 사용" 체크박스를 별도로 쓰면 된다).
+  if (!acquisitionPrice){
+    const comparableTransactionPrice = numVal(vals.comparableTransactionPrice) || 0;
+    const appraisalValue = numVal(vals.appraisalValue) || 0;
     const acqStd = numVal(vals.acquisitionStandardPriceForExpense) || 0;
     const trStd = numVal(vals.transferStandardPriceForConversion) || 0;
-    if (acqStd > 0 && trStd > 0){
+    if (comparableTransactionPrice > 0){
+      acquisitionPrice = comparableTransactionPrice;
+    } else if (appraisalValue > 0){
+      acquisitionPrice = appraisalValue;
+    } else if (acqStd > 0 && trStd > 0){
       acquisitionPrice = Math.round(transferPrice * acqStd / trStd);
+      necessaryExpenses += Math.round(acqStd * 0.03);
+    } else if (acqStd > 0){
+      acquisitionPrice = acqStd;
       necessaryExpenses += Math.round(acqStd * 0.03);
     }
   }

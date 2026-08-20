@@ -438,20 +438,53 @@
   function transferAssetCore(t) {
     const transferPrice = Number(t.transferPrice);
     let necessaryExpenses = Number(t.necessaryExpenses) || 0;
-    const acquisitionPrice = Number(t.acquisitionPrice);
     if (!transferPrice || transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
+
+    // 취득가액 결정 — 실지거래가액(acquisitionPrice 직접입력)이 최우선이다. 이를 확인할 수 없으면
+    // 소득세법시행령§176의2③의 순차적용(1호 매매사례가액 → 2호 감정가액 → 3호 환산취득가액 → 4호
+    // 취득당시 기준시가)에 따라 자동으로 결정한다. 환산취득가액(§176의2②2호, 토지·건물·부동산취득권리
+    // 기준)은 [양도당시 실지거래가액 × (취득당시기준시가÷양도당시기준시가)]이다. acquisitionStandardPrice는
+    // 이 환산취득가액 계산과 아래 필요경비 개산공제(§163⑥) 계산에 공통으로 쓰인다(기존
+    // acquisitionStandardPriceForExpense 필드도 하위호환으로 계속 인식한다).
+    let acquisitionPrice = Number(t.acquisitionPrice) || 0;
+    let acquisitionPriceMethodNote = '';
+    let acquisitionPriceUsedAppraisalOrConversion = false;
+    // acquisitionStandardPriceForConversion/transferStandardPriceForConversion은 이 환산취득가액 계산
+    // 전용 필드다 — rentalSpecialType=rental_general에서 쓰는 acquisitionStandardPrice·transferStandardPrice
+    // (임대기간중 양도차익 안분용, 아래 별도 분기)와 이름이 겹치지 않도록 의도적으로 구분했다.
+    const acquisitionStandardPriceForConversion = Number(t.acquisitionStandardPriceForConversion) || Number(t.acquisitionStandardPriceForExpense) || 0;
+    if (!t.acquisitionPrice && !t.isReconstructionRights) {
+      const comparableTransactionPrice = Number(t.comparableTransactionPrice) || 0;
+      const appraisalValue = Number(t.appraisalValue) || 0;
+      const transferStandardPriceForConversion = Number(t.transferStandardPriceForConversion) || 0;
+      if (comparableTransactionPrice > 0) {
+        acquisitionPrice = comparableTransactionPrice;
+        acquisitionPriceMethodNote = '취득가액은 매매사례가액(' + comparableTransactionPrice + '원, 시행령§176의2③1호)을 적용했습니다.';
+      } else if (appraisalValue > 0) {
+        acquisitionPrice = appraisalValue;
+        acquisitionPriceUsedAppraisalOrConversion = true;
+        acquisitionPriceMethodNote = '취득가액은 감정가액(' + appraisalValue + '원, 시행령§176의2③2호)을 적용했습니다.';
+      } else if (acquisitionStandardPriceForConversion > 0 && transferStandardPriceForConversion > 0) {
+        acquisitionPriceUsedAppraisalOrConversion = true;
+        acquisitionPrice = Math.round(transferPrice * acquisitionStandardPriceForConversion / transferStandardPriceForConversion);
+        acquisitionPriceMethodNote = '취득가액은 환산취득가액(시행령§176의2②2호·③3호) = 양도가액(' + transferPrice + '원)×[취득당시기준시가(' + acquisitionStandardPriceForConversion + '원)÷양도당시기준시가(' + transferStandardPriceForConversion + '원)] = ' + acquisitionPrice + '원으로 자동계산했습니다.';
+      } else if (acquisitionStandardPriceForConversion > 0) {
+        acquisitionPrice = acquisitionStandardPriceForConversion;
+        acquisitionPriceMethodNote = '취득가액은 취득당시 기준시가(' + acquisitionStandardPriceForConversion + '원, 시행령§176의2③4호)를 그대로 적용했습니다.';
+      }
+    }
     // 재건축·재개발 특례는 취득가액 대신 종전자산 취득가액(originalAssetAcquisitionPrice)·권리가액(rightsValue)을
     // 별도로 쓰므로, 이 경우에는 일반 취득가액 필수 검증을 적용하지 않는다(아래 재건축 분기에서 별도 검증).
-    if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액이 필요합니다.' };
+    if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
     if (!t.acquisitionDate || !t.transferDate) return { error: '취득일과 양도일이 필요합니다.' };
 
     const holdingYears = fullYearsElapsed(deemedAcquisitionDate(t.acquisitionDate), t.transferDate);
     if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다.' };
 
     // 개산공제율(시행령§163⑥1호·2호) — 원칙 3/100(3%)이나, 미등기양도자산은 3/1000(0.3%)로 10분의 1이다.
-    if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && Number(t.acquisitionStandardPriceForExpense) > 0) {
+    if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && acquisitionStandardPriceForConversion > 0) {
       const estimatedExpenseRate = t.isUnregisteredTransfer ? 0.003 : 0.03;
-      necessaryExpenses = Math.round(Number(t.acquisitionStandardPriceForExpense) * estimatedExpenseRate);
+      necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
     }
 
     const assetType = t.assetType === 'house' ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
@@ -471,14 +504,14 @@
     const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
 
     if (isUnregistered) {
-      return { holdingYears, isUnregistered: true, gainBeforeDeduction, transferPrice, acquisitionPrice, necessaryExpenses, assetType, raw: t };
+      return { holdingYears, isUnregistered: true, gainBeforeDeduction, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
     }
 
     if (isOneHouse && transferPrice <= 1200000000) {
-      return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, raw: t };
+      return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
     }
     if (isOneMemberRightOnly && transferPrice <= 1200000000) {
-      return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, raw: t };
+      return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
     }
 
     let taxableGain = gainBeforeDeduction;
@@ -616,12 +649,17 @@
     // 해당 건물분 감정가액(또는 환산취득가액)의 5%를 가산세로 더한다 — 두 방법 모두 세율·기간요건이
     // 동일하므로 하나의 입력값(감정가액이든 환산취득가액이든)으로 함께 받는다. §114의2②에 따라
     // 산출세액이 0이어도(비과세 등) 적용된다(아래 totalTax 계산에서 무조건 가산).
-    const convertedBuildingAcquisitionValueForPenalty = Number(t.convertedBuildingAcquisitionValueForPenalty) || 0;
+    // 건물분만 별도로 지정하려면 convertedBuildingAcquisitionValueForPenalty를 직접 입력하고, 없으면
+    // 위에서 감정가액·환산취득가액으로 자동결정된 취득가액(acquisitionPrice, 토지·건물 합산분)을 그대로
+    // 쓴다(건물·토지를 분리평가하지 않은 단일자산 양도를 가정한 근사 — 토지·건물을 구분평가했다면
+    // convertedBuildingAcquisitionValueForPenalty에 건물분만 직접 입력하세요).
+    const convertedBuildingAcquisitionValueForPenalty = Number(t.convertedBuildingAcquisitionValueForPenalty) ||
+      (acquisitionPriceUsedAppraisalOrConversion ? acquisitionPrice : 0);
     const conversionValuePenalty = (t.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
       ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
 
     return {
-      reconstructionDetail, rentalPeriodSplit,
+      reconstructionDetail, rentalPeriodSplit, acquisitionPriceMethodNote,
       holdingYears, exempt: false, isUnregistered: false, isPoolable,
       transferPrice, acquisitionPrice, necessaryExpenses, assetType, isOneHouse, isRentalSpecial,
       gainBeforeDeduction, taxableGain, longTermRate: ltRate, longTermDeductionAmount, incomeAmount,
@@ -652,6 +690,7 @@
       const local = Math.round(tax * 0.1);
       return {
         입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 미등기양도: true },
+        취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
         양도차익: Math.round(core.gainBeforeDeduction), 과세표준: Math.max(0, Math.round(core.gainBeforeDeduction)),
         적용세율_설명: '미등기양도자산 — 장기보유특별공제·기본공제 배제, 70% 단일세율',
         산출세액: tax, 지방소득세: local, 납부세액_합계: tax + local
@@ -665,6 +704,7 @@
         const clawback = Math.min(wouldBeTax, downContractDiff);
         return {
           입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+          취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
           비과세여부: false, 다운계약서_비과세배제: true,
           비과세미적용시_산출세액: wouldBeTax, 계약서_실거래_차액: downContractDiff,
           납부세액: clawback, 납부세액_합계: clawback
@@ -672,6 +712,7 @@
       }
       return {
         입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+        취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
         비과세여부: true, 납부세액: 0
       };
     }
@@ -770,6 +811,7 @@
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
     return {
       입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+      취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
       조합원입주권_재건축상세: core.reconstructionDetail,
       양도차익: Math.round(core.reconstructionDetail ? core.taxableGain : core.gainBeforeDeduction), 과세대상양도차익: Math.round(core.taxableGain),
       장기보유특별공제율: core.longTermRate, 장기보유특별공제액: core.longTermDeductionAmount,
@@ -892,6 +934,9 @@
 
     let poolSurchargeTotal = 0;
     const assetNotes = [];
+    cores.forEach(function (c) {
+      if (c.acquisitionPriceMethodNote) assetNotes.push({ idx: c.idx, 구분: '취득가액산정', 특례: c.acquisitionPriceMethodNote });
+    });
     pooled.forEach(function (c) {
       let rate = 0; const notes = [];
       if (c.isMultiHouseSurcharge) { rate += (c.multiHouseCount >= 3 ? 0.30 : 0.20); notes.push('다주택중과'); }

@@ -312,10 +312,14 @@ const DRIVE_TOOLS = [
       type: 'object',
       properties: {
         transferPrice: { type: 'number', description: '양도가액(원)' },
-        acquisitionPrice: { type: 'number', description: '취득가액(원)' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원, 실지거래가액). 생략하면 소득세법시행령§176의2③ 순차적용(매매사례가액→감정가액→환산취득가액→기준시가)으로 자동 산정한다 — comparableTransactionPrice(매매사례가액)/appraisalValue(감정가액)/acquisitionStandardPriceForConversion+transferStandardPriceForConversion(환산취득가액) 중 있는 것을 우선순위대로 쓴다.' },
+        comparableTransactionPrice: { type: 'number', description: 'acquisitionPrice를 모를 때 — 양도일 또는 취득일 전후 3개월 이내 매매사례가액(원, §176의2③1호). 취득가액 결정에서 최우선으로 쓰인다.' },
+        appraisalValue: { type: 'number', description: 'acquisitionPrice·comparableTransactionPrice를 모두 모를 때 — 감정가액(원, §176의2③2호).' },
+        acquisitionStandardPriceForConversion: { type: 'number', description: 'acquisitionPrice·comparableTransactionPrice·appraisalValue를 모두 모를 때 — 환산취득가액 계산용 취득당시기준시가(원, §176의2②2호). transferStandardPriceForConversion과 함께 입력하면 [양도가액×(취득당시기준시가÷양도당시기준시가)]로 자동계산하고, 이것만 입력하면 이 기준시가를 그대로 취득가액으로 쓴다(§176의2③4호). rentalSpecialType 안분에 쓰는 acquisitionStandardPrice와는 다른 필드다.' },
+        transferStandardPriceForConversion: { type: 'number', description: 'acquisitionStandardPriceForConversion과 함께 — 환산취득가액 계산용 양도당시기준시가(원).' },
         necessaryExpenses: { type: 'number', description: '필요경비(원, 중개보수·취득세·자본적지출 등). 생략 시 0(단, useEstimatedNecessaryExpense가 true면 개산공제로 자동 계산됨).' },
         useEstimatedNecessaryExpense: { type: 'boolean', description: '실제 취득가액 증빙이 없어 필요경비를 개산공제(취득 당시 기준시가×3%, 미등기양도자산은 0.3%)로 대체할지' },
-        acquisitionStandardPriceForExpense: { type: 'number', description: 'useEstimatedNecessaryExpense가 true일 때, 취득 당시 기준시가(원)' },
+        acquisitionStandardPriceForExpense: { type: 'number', description: 'useEstimatedNecessaryExpense가 true일 때, 취득 당시 기준시가(원). acquisitionStandardPriceForConversion을 이미 입력했다면 생략 가능(같은 값을 재사용한다).' },
         acquisitionDate: { type: 'string', description: '취득일 YYYY-MM-DD' },
         transferDate: { type: 'string', description: '양도일 YYYY-MM-DD' },
         assetType: { type: 'string', enum: ['house', 'presale_right', 'other'], description: 'house=주택·조합원입주권(단기세율 70%/60%, 2년이상 기본세율누진), presale_right=분양권(§104①1·2·3호 — 1년미만 70%/1년이상 60% 단일세율, 보유기간 불문 장기보유특별공제·기본세율누진 배제), other=그 외 부동산(단기세율 50%/40%)' },
@@ -3821,12 +3825,43 @@ function toolCalculateTransferTax(p) {
   p = p || {};
   const transferPrice = Number(p.transferPrice);
   let necessaryExpenses = Number(p.necessaryExpenses) || 0;
-  const acquisitionPrice = Number(p.acquisitionPrice);
   const isReconstruction = !!p.isReconstructionRights;
   if (!transferPrice || transferPrice <= 0) return { error: '양도가액(transferPrice)이 필요합니다.' };
+
+  // 취득가액 결정 — 실지거래가액(acquisitionPrice 직접입력)이 최우선이다. 이를 확인할 수 없으면
+  // 소득세법시행령§176의2③의 순차적용(1호 매매사례가액 → 2호 감정가액 → 3호 환산취득가액 → 4호
+  // 취득당시 기준시가)에 따라 자동으로 결정한다. 환산취득가액(§176의2②2호, 토지·건물·부동산취득권리
+  // 기준)은 [양도당시 실지거래가액 × (취득당시기준시가÷양도당시기준시가)]이다.
+  // acquisitionStandardPriceForConversion/transferStandardPriceForConversion은 이 환산취득가액 계산
+  // 전용 필드다 — rentalSpecialType=rental_general에서 쓰는 acquisitionStandardPrice·transferStandardPrice
+  // (임대기간중 양도차익 안분용, 아래 별도 분기)와 이름이 겹치지 않도록 의도적으로 구분했다.
+  let acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  let acquisitionPriceMethodNote = '';
+  let acquisitionPriceUsedAppraisalOrConversion = false;
+  const acquisitionStandardPriceForConversion = Number(p.acquisitionStandardPriceForConversion) || Number(p.acquisitionStandardPriceForExpense) || 0;
+  if (!p.acquisitionPrice && !isReconstruction) {
+    const comparableTransactionPrice = Number(p.comparableTransactionPrice) || 0;
+    const appraisalValue = Number(p.appraisalValue) || 0;
+    const transferStandardPriceForConversion = Number(p.transferStandardPriceForConversion) || 0;
+    if (comparableTransactionPrice > 0) {
+      acquisitionPrice = comparableTransactionPrice;
+      acquisitionPriceMethodNote = '취득가액은 매매사례가액(' + comparableTransactionPrice + '원, 시행령§176의2③1호)을 적용했습니다.';
+    } else if (appraisalValue > 0) {
+      acquisitionPrice = appraisalValue;
+      acquisitionPriceUsedAppraisalOrConversion = true;
+      acquisitionPriceMethodNote = '취득가액은 감정가액(' + appraisalValue + '원, 시행령§176의2③2호)을 적용했습니다.';
+    } else if (acquisitionStandardPriceForConversion > 0 && transferStandardPriceForConversion > 0) {
+      acquisitionPriceUsedAppraisalOrConversion = true;
+      acquisitionPrice = Math.round(transferPrice * acquisitionStandardPriceForConversion / transferStandardPriceForConversion);
+      acquisitionPriceMethodNote = '취득가액은 환산취득가액(시행령§176의2②2호·③3호) = 양도가액(' + transferPrice + '원)×[취득당시기준시가(' + acquisitionStandardPriceForConversion + '원)÷양도당시기준시가(' + transferStandardPriceForConversion + '원)] = ' + acquisitionPrice + '원으로 자동계산했습니다.';
+    } else if (acquisitionStandardPriceForConversion > 0) {
+      acquisitionPrice = acquisitionStandardPriceForConversion;
+      acquisitionPriceMethodNote = '취득가액은 취득당시 기준시가(' + acquisitionStandardPriceForConversion + '원, 시행령§176의2③4호)를 그대로 적용했습니다.';
+    }
+  }
   // 재건축·재개발 특례는 취득가액 대신 종전자산 취득가액(originalAssetAcquisitionPrice)·권리가액(rightsValue)을
   // 별도로 쓰므로, 이 경우에는 일반 취득가액 필수 검증을 적용하지 않는다(아래 재건축 분기에서 별도 검증).
-  if (!isReconstruction && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액(acquisitionPrice)이 필요합니다.' };
+  if (!isReconstruction && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액(acquisitionPrice)이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
   if (!p.acquisitionDate || !p.transferDate) return { error: '취득일(acquisitionDate)과 양도일(transferDate)이 YYYY-MM-DD 형식으로 필요합니다.' };
 
   const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(p.acquisitionDate), p.transferDate);
@@ -3837,9 +3872,9 @@ function toolCalculateTransferTax(p) {
 
   // 실제 취득가액을 확인할 수 없을 때(매매계약서 분실 등)의 필요경비 개산공제(시행령§163⑥1호·2호):
   // 취득 당시 기준시가 × 3%(토지·건물 일반 기준)를 필요경비로 대체 인정하되, 미등기양도자산은 3/1000(0.3%).
-  if (!p.necessaryExpenses && p.useEstimatedNecessaryExpense && Number(p.acquisitionStandardPriceForExpense) > 0) {
+  if (!p.necessaryExpenses && p.useEstimatedNecessaryExpense && acquisitionStandardPriceForConversion > 0) {
     const estimatedExpenseRate = p.isUnregisteredTransfer ? 0.003 : 0.03;
-    necessaryExpenses = Math.round(Number(p.acquisitionStandardPriceForExpense) * estimatedExpenseRate);
+    necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
   }
 
   const assetType = p.assetType === 'house' ? 'house' : (p.assetType === 'presale_right' ? 'presale_right' : 'other');
@@ -3864,6 +3899,7 @@ function toolCalculateTransferTax(p) {
     const uLocalTax = Math.round(uCalculatedTax * 0.1);
     return {
       입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 미등기양도: true },
+      취득가액_산정방법: acquisitionPriceMethodNote || undefined,
       양도차익: Math.round(gainBeforeDeduction),
       과세표준: Math.max(0, Math.round(gainBeforeDeduction)),
       적용세율_설명: '미등기양도자산 — 장기보유특별공제·기본공제 배제, 70% 단일세율',
@@ -3880,6 +3916,7 @@ function toolCalculateTransferTax(p) {
   if (isOneMemberRightOnly && transferPrice <= 1200000000) {
     return {
       입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
+      취득가액_산정방법: acquisitionPriceMethodNote || undefined,
       비과세여부: true,
       납부세액: 0,
       안내: '1세대1조합원입주권 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다(§89①4호). 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
@@ -3982,6 +4019,7 @@ function toolCalculateTransferTax(p) {
         const clawback = Math.min(wouldBeTax, downContractDiff);
         return {
           입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
+          취득가액_산정방법: acquisitionPriceMethodNote || undefined,
           비과세여부: false,
           다운계약서_비과세배제: true,
           비과세미적용시_산출세액: wouldBeTax,
@@ -3993,6 +4031,7 @@ function toolCalculateTransferTax(p) {
       }
       return {
         입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
+        취득가액_산정방법: acquisitionPriceMethodNote || undefined,
         비과세여부: true,
         납부세액: 0,
         안내: '1세대1주택 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다. 2년 이상 보유(조정대상지역은 거주요건 포함) 등 비과세 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
@@ -4135,7 +4174,12 @@ function toolCalculateTransferTax(p) {
   // 감정가액·환산취득가액 가산세(소득세법§114의2①) — 신축 또는 증축(85㎡ 초과분만)한 건물을 취득일·
   // 증축일로부터 5년 이내에 양도하면서 그 취득가액을 감정가액 또는 환산취득가액으로 한 경우, 두 방법
   // 모두 동일하게 해당 건물분 가액의 5%를 가산세로 부과한다(§114의2②에 따라 산출세액이 0이어도 적용).
-  const convertedBuildingAcquisitionValueForPenalty = Number(p.convertedBuildingAcquisitionValueForPenalty) || 0;
+  // 건물분만 별도로 지정하려면 convertedBuildingAcquisitionValueForPenalty를 직접 입력하고, 없으면
+  // 위에서 감정가액·환산취득가액으로 자동결정된 취득가액(acquisitionPrice, 토지·건물 합산분)을 그대로
+  // 쓴다(건물·토지를 분리평가하지 않은 단일자산 양도를 가정한 근사 — 토지·건물을 구분평가했다면
+  // convertedBuildingAcquisitionValueForPenalty에 건물분만 직접 입력하세요).
+  const convertedBuildingAcquisitionValueForPenalty = Number(p.convertedBuildingAcquisitionValueForPenalty) ||
+    (acquisitionPriceUsedAppraisalOrConversion ? acquisitionPrice : 0);
   const conversionValuePenalty = (p.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
     ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
 
@@ -4164,6 +4208,7 @@ function toolCalculateTransferTax(p) {
       '1세대1주택_전제': isOneHouse, 다주택중과_전제: isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland,
       신고상태: filingStatus
     },
+    취득가액_산정방법: acquisitionPriceMethodNote || undefined,
     조합원입주권_재건축상세: reconstructionDetail,
     양도차익: Math.round(reconstructionDetail ? taxableGain : gainBeforeDeduction),
     과세대상양도차익: Math.round(taxableGain),
