@@ -1323,6 +1323,22 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_business_succession_deferral_clawback',
+    description: '가업상속납부유예(상증세법§72의2)·가업승계증여세납부유예(조특법§30의7)의 사후관리 위반시 추징세액을 판정한다. 두 조문 모두 정당한 사유 없이 사후관리 위반 사유가 생기면 허가를 취소하고 추징세액과 이자상당액을 징수한다. inheritance(§72의2)는 가업용자산40%이상처분/가업미종사/지분감소/고용유지요건미달/상속인사망 5가지, gift(§30의7)는 가업미종사/지분감소/고용유지요건미달/수증자사망 4가지 사유가 있다(§30의7은 자산처분 사유가 없음). 가업미종사·고용유지요건미달·사망과 5년이내 지분감소는 유예세액 전부를 추징하고, 자산처분비율·5년후 지분감소비율은 그 비율에 비례한 근사치로 계산한다(정확한 시행령 산식은 별도 확인 필요). 추징세액이 확정되면 calculate_clawback_interest 도구로 이자상당액을 별도 계산해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        provision: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상증세법§72의2(가업상속납부유예), gift=조특법§30의7(가업승계증여세납부유예).' },
+        deferredTaxAmount: { type: 'number', description: '납부유예된 세액(원).' },
+        triggerEvent: { type: 'string', enum: ['none', 'asset_disposed_40pct', 'not_engaged', 'equity_decreased', 'employment_failed', 'heir_death', 'donee_death'], description: 'none=사후관리 위반 없음, asset_disposed_40pct=가업용자산 40%이상 처분(inheritance만), not_engaged=가업 미종사, equity_decreased=지분 감소, employment_failed=고용유지요건(70%기준) 미달, heir_death=상속인 사망(inheritance만), donee_death=수증자 사망(gift만).' },
+        disposalRatio: { type: 'number', description: 'triggerEvent가 asset_disposed_40pct일 때 필수 — 가업용자산 처분비율(0~1).' },
+        yearsSinceBase: { type: 'number', description: 'triggerEvent가 equity_decreased일 때 필수 — 상속개시일(inheritance) 또는 증여일(gift)부터 지분 감소일까지의 경과연수.' },
+        equityDecreaseRatio: { type: 'number', description: 'triggerEvent가 equity_decreased이고 yearsSinceBase가 5 초과일 때 필수 — 지분 감소 비율(0~1).' }
+      },
+      required: ['provision', 'deferredTaxAmount', 'triggerEvent']
+    }
+  },
+  {
     name: 'calculate_merger_benefit_gift_tax',
     description: '합병에 따른 이익의 증여(상증세법§38)를 계산한다. 특수관계 법인간 합병에서 대주주등이 합병대가를 주식등으로 교부받는 경우(가장 흔한 유형), (합병후 신설·존속법인 1주당평가액-과대평가법인 1주당평가액×(과대평가법인 합병전주식수÷과대평가법인 주주등이 교부받은 신설법인주식수))×대주주등이 교부받은 신설법인주식수가 이익이다. 기준금액(교부받은 주식가액의 30%와 3억원 중 적은 금액) 미만이면 과세하지 않는다.',
     input_schema: {
@@ -5957,7 +5973,79 @@ function toolCalculateBurdenedGiftTransfer(p) {
     안분채무액: allocatedDebtToAsset, 채무액비율: debtRatio,
     양도로보는부분_양도가액: transferPortionTransferPrice, 양도로보는부분_취득가액: transferPortionAcquisitionPrice,
     필요경비: necessaryExpenses, 양도차익: Math.round(gain),
-    안내: note + '이 양도가액(' + transferPortionTransferPrice + '원)·취득가액(' + transferPortionAcquisitionPrice + '원)·필요경비를 위 일반 양도세 계산기에 그대로 넣어 나머지 세액(장기보유특별공제·기본공제·세율 등)을 계산하세요. 배우자·직계존비속간 부담부증여는 채무 인수를 객관적으로 입증하지 못하면 양도로 보지 않습니다(소득세법§101②·상증세법§47③과 같은 취지 — 이 계산기는 인수 사실이 입증됐다는 전제입니다).'
+    안내: note + '이 양도가액(' + transferPortionTransferPrice + '원)·취득가액(' + transferPortionAcquisitionPrice + '원)·필요경비를 calculate_transfer_tax 도구에 그대로 넣어 나머지 세액(장기보유특별공제·기본공제·세율 등)을 계산하세요. 배우자·직계존비속간 부담부증여는 채무 인수를 객관적으로 입증하지 못하면 양도로 보지 않습니다(소득세법§101②·상증세법§47③과 같은 취지 — 이 계산기는 인수 사실이 입증됐다는 전제입니다).'
+  };
+}
+
+// 가업상속납부유예(상증세법§72의2)·가업승계증여세납부유예(조특법§30의7) 사후관리 위반시 추징 판정 —
+// 두 조문 모두 "정당한 사유 없이" 다음 사유가 생기면 허가를 취소하고 대통령령으로 정하는 이자상당액과
+// 함께 징수한다(이자상당액은 calculate_clawback_interest 도구로 별도 계산 — 두 조문 모두 그 도구가
+// 쓰는 "국세환급가산금 이율 365분의1" 방식을 적용한다).
+// §72의2③: 1호 가업용자산 40%이상처분(소득세법적용 가업만, 처분비율 고려 계산) 2호 가업미종사(전부)
+//   3호 지분감소(5년내 전부, 5년후 비율계산) 4호 §18조의2⑤4호 고용유지요건(70%기준) 미달(전부) 5호 상속인사망(전부)
+// 조특법§30의7③: 1호 가업미종사(전부) 2호 지분감소(5년내 전부, 5년후 비율계산) 3호 고용유지요건(전부) 4호 수증자사망(전부)
+//   — §72의2의 "가업용자산40%처분" 사유(개인가업만 해당)가 없다(§30의7은 법인 주식등 증여만 다루므로).
+// "처분비율·지분감소비율을 고려하여 대통령령으로 정하는 바에 따라 계산한 세액"의 정확한 시행령 산식은
+// 확인하지 못해, 유예세액에 해당 비율을 단순 비례한 근사치를 쓴다(정확한 산식은 시행령 확인 후 재계산 필요).
+function toolCalculateBusinessSuccessionDeferralClawback(p) {
+  p = p || {};
+  const provision = p.provision;
+  if (['inheritance', 'gift'].indexOf(provision) === -1) return { error: 'provision을 inheritance(§72의2, 가업상속납부유예)/gift(조특법§30의7, 가업승계증여세납부유예) 중에서 선택하세요.' };
+  const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+  if (deferredTaxAmount <= 0) return { error: '납부유예된 세액이 필요합니다.' };
+
+  const validEvents = provision === 'inheritance'
+    ? ['none', 'asset_disposed_40pct', 'not_engaged', 'equity_decreased', 'employment_failed', 'heir_death']
+    : ['none', 'not_engaged', 'equity_decreased', 'employment_failed', 'donee_death'];
+  const triggerEvent = p.triggerEvent;
+  if (validEvents.indexOf(triggerEvent) === -1) {
+    return { error: 'triggerEvent을 ' + validEvents.join('/') + ' 중에서 선택하세요.' };
+  }
+  const provisionLabel = provision === 'inheritance' ? '상증세법§72의2(가업상속납부유예)' : '조특법§30의7(가업승계증여세납부유예)';
+  const baseDateLabel = provision === 'inheritance' ? '상속개시일' : '증여일';
+  const personSubj = provision === 'inheritance' ? '상속인이' : '수증자가';
+
+  if (triggerEvent === 'none') {
+    return {
+      상태: '납부유예_적용중', 납부유예세액: deferredTaxAmount, 추징세액: 0,
+      안내: provisionLabel + '에 따라 상속세(또는 증여세)의 납부를 유예받아 현재는 납부하지 않습니다. 사후관리 위반 사유가 없는 한 계속 유지됩니다.'
+    };
+  }
+
+  let clawbackAmount, note, ratioUsed = null;
+  if (triggerEvent === 'asset_disposed_40pct') {
+    const disposalRatio = Math.max(0, Math.min(1, Number(p.disposalRatio) || 0));
+    if (disposalRatio <= 0) return { error: '가업용자산 처분비율(0~1)이 필요합니다.' };
+    ratioUsed = disposalRatio;
+    clawbackAmount = Math.round(deferredTaxAmount * disposalRatio);
+    note = '「소득세법」을 적용받는 가업의 가업용 자산을 100분의 40 이상 처분하여 ' + provisionLabel + '③1호 사유가 발생했습니다. 처분비율(' + Math.round(disposalRatio * 100) + '%)에 비례한 근사치로 추징세액을 계산했습니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+  } else if (triggerEvent === 'not_engaged') {
+    clawbackAmount = deferredTaxAmount;
+    note = personSubj + ' 가업에 종사하지 아니하게 되어 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
+  } else if (triggerEvent === 'equity_decreased') {
+    const yearsSinceBase = Number(p.yearsSinceBase);
+    if (!(yearsSinceBase >= 0)) return { error: baseDateLabel + '부터 지분 감소일까지의 경과연수가 필요합니다.' };
+    if (yearsSinceBase <= 5) {
+      clawbackAmount = deferredTaxAmount;
+      note = baseDateLabel + '부터 5년 이내에 지분이 감소하여 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
+    } else {
+      const equityDecreaseRatio = Math.max(0, Math.min(1, Number(p.equityDecreaseRatio) || 0));
+      if (equityDecreaseRatio <= 0) return { error: baseDateLabel + '부터 5년 후 지분감소이므로 지분 감소 비율(0~1)이 필요합니다.' };
+      ratioUsed = equityDecreaseRatio;
+      clawbackAmount = Math.round(deferredTaxAmount * equityDecreaseRatio);
+      note = baseDateLabel + '부터 5년 후에 지분이 감소하여 ' + provisionLabel + '③ 사유가 발생했습니다. 지분감소비율(' + Math.round(equityDecreaseRatio * 100) + '%)에 비례한 근사치로 추징세액을 계산했습니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+    }
+  } else if (triggerEvent === 'employment_failed') {
+    clawbackAmount = deferredTaxAmount;
+    note = baseDateLabel + '부터 5년간의 정규직 근로자 수 평균 및 총급여액 평균이 모두 직전 2개 사업연도 평균의 100분의 70에 미달하여 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
+  } else {
+    clawbackAmount = deferredTaxAmount;
+    note = personSubj + ' 사망하여 상속이 개시되어 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
+  }
+
+  return {
+    상태: '추징대상', 납부유예세액: deferredTaxAmount, 추징세액: clawbackAmount, 사용비율: ratioUsed,
+    안내: note + ' 사유발생일이 속하는 달의 말일부터 ' + (provision === 'inheritance' ? '6개월' : '3개월') + ' 이내에 신고하고 이 추징세액과 이자상당액을 납부해야 합니다(' + provisionLabel + '④). 이자상당액은 calculate_clawback_interest 도구에 이 추징세액과 납부유예 허가일(이자 기산일)·사유발생일을 넣어 별도로 계산하세요. "정당한 사유"가 있는 경우(수용, 폐업 후 사업전환 등 시행령이 정하는 사유)에는 추징하지 않으니 해당 여부를 먼저 확인하세요.'
   };
 }
 
@@ -7814,6 +7902,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_population_decline_area_house_exclusion' ||
         b.name === 'calculate_business_transfer_carryover' ||
         b.name === 'calculate_burdened_gift_transfer' ||
+        b.name === 'calculate_business_succession_deferral_clawback' ||
         b.name === 'calculate_merger_benefit_gift_tax' ||
         b.name === 'calculate_property_use_service_gift_tax' ||
         b.name === 'calculate_org_change_gift_tax' ||
@@ -8134,6 +8223,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_burdened_gift_transfer') {
         const resultObj = toolCalculateBurdenedGiftTransfer(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_business_succession_deferral_clawback') {
+        const resultObj = toolCalculateBusinessSuccessionDeferralClawback(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

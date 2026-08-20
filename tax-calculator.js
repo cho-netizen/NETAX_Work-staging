@@ -3295,6 +3295,30 @@ function renderGiftPane(){
       '<div id="taxCalcClawbackResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>가업상속납부유예(§72의2)·가업승계증여세납부유예(조특법§30의7) 사후관리 추징 판정 — 추징세액이 나오면 위 "사후관리 위반 추징 이자상당액 계산"에 이 추징세액과 납부유예 허가일·사유발생일을 넣어 이자상당액을 마저 계산하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>적용 조문</label><select id="bcProvision">' +
+          '<option value="inheritance">§72의2(가업상속납부유예)</option>' +
+          '<option value="gift">조특법§30의7(가업승계증여세납부유예)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>납부유예된 세액</label><input type="number" id="bcDeferredTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>사후관리 위반 사유</label><select id="bcTriggerEvent">' +
+          '<option value="none">없음(납부유예 계속 유지)</option>' +
+          '<option value="asset_disposed_40pct">[§72의2만] 가업용자산 40%이상 처분</option>' +
+          '<option value="not_engaged">가업 미종사</option>' +
+          '<option value="equity_decreased">지분 감소</option>' +
+          '<option value="employment_failed">고용유지요건(70%기준) 미달</option>' +
+          '<option value="heir_death">[§72의2만] 상속인 사망</option>' +
+          '<option value="donee_death">[조특법§30의7만] 수증자 사망</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[가업용자산처분만] 처분비율</label><input type="number" step="0.01" id="bcDisposalRatio" placeholder="0~1 (근사치 계산용)"></div>' +
+        '<div class="taxcalc-field"><label>[지분감소만] 상속개시일·증여일부터 경과연수</label><input type="number" id="bcYearsSinceBase" placeholder="년"></div>' +
+        '<div class="taxcalc-field"><label>[지분감소·5년후만] 지분 감소 비율</label><input type="number" step="0.01" id="bcEquityDecreaseRatio" placeholder="0~1 (근사치 계산용)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-business-succession-deferral-clawback">추징세액 판정하기</button>' +
+      '<div id="taxCalcBusinessSuccessionDeferralClawbackResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>저가양수·고가양도에 따른 이익의 증여의제(§35) — 특수관계인 간 시가보다 낮게(높게) 거래했을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>시가</label><input type="number" id="lpFairValue" placeholder="원"></div>' +
@@ -3883,6 +3907,19 @@ function renderClawbackResult(r){
   html += '</div>';
   box.innerHTML = html;
   box.dataset.lastInterestTotal = r.이자상당액_합계;
+}
+
+function renderBusinessSuccessionDeferralClawbackResult(r){
+  const box = document.getElementById('taxCalcBusinessSuccessionDeferralClawbackResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('상태', r.상태);
+  html += taxCalcResultRow('납부유예세액', won(r.납부유예세액));
+  if (r.사용비율 !== null && r.사용비율 !== undefined) html += taxCalcResultRow('적용비율', (r.사용비율 * 100).toFixed(1) + '%');
+  html += taxCalcResultRow('추징세액', won(r.추징세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 function renderLowPriceResult(r){
@@ -5529,6 +5566,16 @@ taxCalcView.addEventListener('click', function(e){
       endDate: document.getElementById('ckEndDate').value
     };
     renderClawbackResult(calculateClawbackInterestJS(input));
+  } else if (action === 'run-business-succession-deferral-clawback'){
+    const input = {
+      provision: document.getElementById('bcProvision').value,
+      deferredTaxAmount: numVal(document.getElementById('bcDeferredTax').value) || 0,
+      triggerEvent: document.getElementById('bcTriggerEvent').value,
+      disposalRatio: numVal(document.getElementById('bcDisposalRatio').value) || 0,
+      yearsSinceBase: numVal(document.getElementById('bcYearsSinceBase').value) || 0,
+      equityDecreaseRatio: numVal(document.getElementById('bcEquityDecreaseRatio').value) || 0
+    };
+    renderBusinessSuccessionDeferralClawbackResult(calculateBusinessSuccessionDeferralClawbackJS(input));
   } else if (action === 'run-low-price-transfer'){
     const input = {
       fairMarketValue: numVal(document.getElementById('lpFairValue').value) || 0,
