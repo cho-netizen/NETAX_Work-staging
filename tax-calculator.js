@@ -645,7 +645,7 @@ function assetDetailFieldsHtml_(a){
       '<option value="building"' + (kind === 'building' ? ' selected' : '') + '>건물(구분소유 건물·아파트 등 대지권 포함분도 건물면적만 입력)</option>' +
       '<option value="other"' + (kind === 'other' ? ' selected' : '') + '>기타</option>' +
     '</select></div>' +
-    '<div class="taxcalc-field"><label>소재지</label><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search" style="margin-top:4px;">🔍 주소 검색</button>' +
+    '<div class="taxcalc-field"><label>소재지</label><div class="taxcalc-field-inline"><input type="text" data-field="assetLocation" value="' + (a.assetLocation || '').replace(/"/g, '&quot;') + '" placeholder="예: OO시 OO구 OO동 123-4"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search" title="주소 검색">🔍</button></div>' +
       (a.assetZipNo ? '<span class="taxcalc-result-note" style="margin:2px 0 0;">우편번호 ' + a.assetZipNo + '</span>' : '') +
     '</div>' +
     '<div class="taxcalc-field"><label>동</label><select data-field="assetDong"><option value="">직접입력/해당없음</option>' +
@@ -690,43 +690,6 @@ function extractJsonFromReply(text){
   const candidate = fenced ? fenced[1] : (text.match(/\{[\s\S]*\}/) || [null])[0];
   if (!candidate) return null;
   try { return JSON.parse(candidate); } catch (e) { return null; }
-}
-
-// 증빙파일 선택 모달 — 현재 탐색기 폴더(explorerPath)의 파일 목록을 보여주고, 고르면 onPick(fileName)을 호출한다.
-function openEvidencePicker(onPick){
-  const overlay = document.getElementById('taxCalcEvidenceOverlay');
-  const listBox = document.getElementById('taxCalcEvidenceList');
-  const folderLabel = document.getElementById('taxCalcEvidenceFolderLabel');
-  folderLabel.textContent = explorerPath.length ? '📁 ' + explorerPath.join(' / ') + ' 폴더의 파일' : '⚠️ 먼저 탐색기에서 고객/사건 폴더를 여세요.';
-  listBox.innerHTML = '<div class="taxcalc-evidence-empty">불러오는 중…</div>';
-  overlay.style.display = 'flex';
-
-  if (!explorerPath.length){
-    listBox.innerHTML = '<div class="taxcalc-evidence-empty">사건 폴더가 선택되지 않았습니다.</div>';
-  } else {
-    listFolder(explorerPath).then(function(data){
-      const files = (data.files || []).filter(function(f){ return !/\.gdoc$|\.gsheet$/i.test(f.name); });
-      if (!files.length){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">이 폴더에 파일이 없습니다. 스캔해서 추가하세요.</div>'; return; }
-      listBox.innerHTML = files.map(function(f){
-        return '<div class="taxcalc-evidence-item"><span class="name">' + f.name.replace(/</g,'&lt;') + '</span>' +
-          '<button type="button" data-pick-file="' + f.name.replace(/"/g,'&quot;') + '">이 파일로 채우기</button></div>';
-      }).join('');
-      listBox.querySelectorAll('[data-pick-file]').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          overlay.style.display = 'none';
-          onPick(btn.dataset.pickFile);
-        });
-      });
-    }).catch(function(err){
-      listBox.innerHTML = '<div class="taxcalc-evidence-empty">폴더 목록을 가져오지 못했습니다: ' + (err && err.message || err) + '</div>';
-    });
-  }
-
-  document.getElementById('btnCloseTaxCalcEvidence').onclick = function(){ overlay.style.display = 'none'; };
-  document.getElementById('btnTaxCalcEvidenceScan').onclick = function(){
-    overlay.style.display = 'none';
-    openScanModal();
-  };
 }
 
 // 도로명주소 API(juso.go.kr) 검색 모달 — 건물명(아파트명 등)으로 검색하면 도로명·지번주소 후보와,
@@ -853,45 +816,54 @@ function renderAiStatusHtml(vals){
   return '';
 }
 
-// 양도소득세 거래 1건을 증빙 파일 하나로 채운다(파일럿 — 다른 세목은 추후 확장).
+// 양도소득세 — 사건폴더 전체를 한 번에 훑어서 거래를 몇 건이든 찾아 각 거래행에 자동 배분한다.
+// 기존 값이 비어있는 행부터 채우고, 모자라면 행을 새로 만든다(버튼을 거래마다 누를 필요 없음).
 const TRANSFER_AI_FIELD_LABELS = {
   transferPrice: '양도가액', acquisitionPrice: '취득가액', acquisitionExpenses: '취득 관련 비용', transferExpensesOnly: '양도비용',
   acquisitionDate: '취득일', transferDate: '양도일', assetType: '자산종류',
   assetKind: '유형', assetLocation: '소재지', assetSubType: '지목/층수·용도', assetArea: '면적'
 };
-async function runAiAutoFillTransfer(fileName, idx){
-  const vals = transferAssets[idx];
-  vals._aiStatus = 'loading';
-  document.getElementById('aiStatus-' + idx).innerHTML = renderAiStatusHtml(vals);
+async function runAiAutoFillTransferBulk(){
+  transferBulkAiState = { _aiStatus: 'loading' };
+  const statusEl = document.getElementById('aiStatus-transfer-bulk');
+  if (statusEl) statusEl.innerHTML = renderAiStatusHtml(transferBulkAiState);
 
-  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 그 안에서 양도소득세 계산에 필요한 값을 찾아서, ' +
-    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
-    '```json\n{"transferPrice": 숫자 또는 null, "acquisitionPrice": 숫자 또는 null, "acquisitionExpenses": 숫자 또는 null, "transferExpensesOnly": 숫자 또는 null, ' +
+  const instruction = '현재 사건 폴더 안의 모든 파일을 살펴봐줘(매매계약서·등기부등본 등 양도소득세 관련 증빙일 수 있는 파일 전부). ' +
+    '그 안에서 서로 다른 양도거래가 몇 건인지 파악하고, 각 거래마다 아래 스키마의 객체를 하나씩 만들어서, 다른 설명 없이 ' +
+    '그 객체들을 담은 JSON 배열 코드블록 하나만 답해줘(거래가 1건이면 원소도 1개). 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
+    '```json\n[{"transferPrice": 숫자 또는 null, "acquisitionPrice": 숫자 또는 null, "acquisitionExpenses": 숫자 또는 null, "transferExpensesOnly": 숫자 또는 null, ' +
     '"acquisitionDate": "YYYY-MM-DD 또는 null", "transferDate": "YYYY-MM-DD 또는 null", "assetType": "house 또는 presale_right 또는 other 또는 null", ' +
     '"assetKind": "land 또는 building 또는 other 또는 null", "assetLocation": "문자열 또는 null(소재지·지번)", ' +
-    '"assetSubType": "문자열 또는 null(토지면 지목, 건물이면 층수·용도)", "assetArea": "숫자 또는 null(면적, ㎡)"}\n```\n' +
-    '(transferPrice=양도가액, acquisitionPrice=취득가액, acquisitionExpenses=취득세·법무사비 등 취득 관련 비용, transferExpensesOnly=중개보수·양도세 신고수수료 등 양도비용, assetType은 주택·조합원입주권이면 house, 분양권(아파트 등 공급계약상 지위)이면 presale_right, 그 외 부동산이면 other, assetKind는 토지만이면 land·구분소유 건물 포함 건물이면 building)';
+    '"assetSubType": "문자열 또는 null(토지면 지목, 건물이면 층수·용도)", "assetArea": "숫자 또는 null(면적, ㎡)"}]\n```\n' +
+    '(transferPrice=양도가액, acquisitionPrice=취득가액, acquisitionExpenses=취득세·법무사비 등 취득 관련 비용, transferExpensesOnly=중개보수·양도세 신고수수료 등 양도비용, assetType은 주택·조합원입주권이면 house, 분양권(아파트 등 공급계약상 지위)이면 presale_right, 그 외 부동산이면 other, assetKind는 토지만이면 land·구분소유 건물 포함 건물이면 building. 같은 거래를 서로 다른 문서에서 중복으로 찾았으면 하나로 합쳐라.)';
 
   try {
     const reply = await runFolderAiExtraction(instruction);
     const json = extractJsonFromReply(reply);
-    if (!json) throw new Error('응답에서 값을 찾지 못했습니다. 응답: ' + reply.slice(0, 200));
-    const filled = [];
-    ['transferPrice','acquisitionPrice','acquisitionExpenses','transferExpensesOnly','acquisitionDate','transferDate','assetType','assetKind','assetLocation','assetSubType','assetArea'].forEach(function(key){
-      if (json[key] !== null && json[key] !== undefined && json[key] !== '') {
-        if (key === 'acquisitionExpenses') vals.acquisitionExpenseItems = [{ label: '증빙 자동입력', amount: json[key] }];
-        else if (key === 'transferExpensesOnly') vals.transferExpenseItems = [{ label: '증빙 자동입력', amount: json[key] }];
-        else vals[key] = json[key];
-        filled.push(TRANSFER_AI_FIELD_LABELS[key]);
-      }
+    const items = Array.isArray(json) ? json : (json ? [json] : []);
+    if (!items.length) throw new Error('응답에서 거래를 찾지 못했습니다. 응답: ' + reply.slice(0, 200));
+    let filledCount = 0;
+    items.forEach(function(item){
+      let target = transferAssets.find(function(v){ return !v.transferPrice && !v._aiStatus; });
+      if (!target) { target = {}; transferAssets.push(target); }
+      const filled = [];
+      Object.keys(TRANSFER_AI_FIELD_LABELS).forEach(function(key){
+        if (item[key] !== null && item[key] !== undefined && item[key] !== '') {
+          if (key === 'acquisitionExpenses') target.acquisitionExpenseItems = [{ label: '증빙 자동입력', amount: item[key] }];
+          else if (key === 'transferExpensesOnly') target.transferExpenseItems = [{ label: '증빙 자동입력', amount: item[key] }];
+          else target[key] = item[key];
+          filled.push(TRANSFER_AI_FIELD_LABELS[key]);
+        }
+      });
+      target._aiStatus = filled.length ? 'done' : 'error';
+      target._aiFilledFields = filled;
+      target._aiFileName = '증빙 일괄조회';
+      if (!filled.length) target._aiError = '이 거래는 문서에서 값을 찾지 못했습니다 — 직접 입력하세요.';
+      else filledCount++;
     });
-    if (!filled.length) throw new Error('문서에서 값을 찾지 못했습니다(전부 null) — 직접 입력하세요.');
-    vals._aiStatus = 'done';
-    vals._aiFilledFields = filled;
-    vals._aiFileName = fileName;
+    transferBulkAiState = { _aiStatus: 'done', _aiFilledFields: [items.length + '건 거래 인식, ' + filledCount + '건 자동입력 완료'] };
   } catch (err) {
-    vals._aiStatus = 'error';
-    vals._aiError = err && err.message ? err.message : String(err);
+    transferBulkAiState = { _aiStatus: 'error', _aiError: err && err.message ? err.message : String(err) };
   }
   renderTransferPane();
 }
@@ -936,14 +908,14 @@ const GIFT_AI_FIELD_LABELS = {
   doneeName: '수증자 성명', doneeRegNo: '수증자 주민등록번호', doneeAddress: '수증자 주소',
   donorName: '증여자 성명', donorRegNo: '증여자 주민등록번호', donorAddress: '증여자 주소'
 };
-function runAiAutoFillGift(fileName){
-  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 증여세 신고에 필요한 값을 찾아서, ' +
-    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
+function runAiAutoFillGift(){
+  const instruction = '현재 사건 폴더 안의 모든 파일을 살펴봐줘(증여계약서·가족관계증명서·주민등록초본 등 증여세 관련 증빙일 수 있는 파일 전부, 여러 개면 전부 종합해서). ' +
+    '증여세 신고에 필요한 값을 찾아서, 다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
     '```json\n{"giftAmount": 숫자 또는 null, "relation": "배우자 또는 직계존속 또는 직계비속 또는 기타친족 또는 기타 또는 null(수증자 기준 증여자와의 관계)", ' +
     '"giftDate": "YYYY-MM-DD 또는 null", "debtAssumedAmount": 숫자 또는 null(부담부증여로 수증자가 인수한 채무, 없으면 0), ' +
     '"doneeName": "문자열 또는 null", "doneeRegNo": "문자열 또는 null", "doneeAddress": "문자열 또는 null", ' +
     '"donorName": "문자열 또는 null", "donorRegNo": "문자열 또는 null", "donorAddress": "문자열 또는 null"}\n```';
-  return runAiAutoFillForm(fileName, 'aiStatus-gift', instruction, GIFT_AI_FIELD_MAP, GIFT_AI_FIELD_LABELS);
+  return runAiAutoFillForm('증빙 일괄조회', 'aiStatus-gift', instruction, GIFT_AI_FIELD_MAP, GIFT_AI_FIELD_LABELS);
 }
 
 const INHERITANCE_AI_FIELD_MAP = {
@@ -954,11 +926,11 @@ const INHERITANCE_AI_FIELD_LABELS = {
 };
 // 자녀 수·배우자 유무·신고인 등은 이제 상속인 명부에서 자동으로 유도하므로(recomputeHeirDerivedFields),
 // AI자동입력은 피상속인 정보만 채운다 — 상속인 명부 자체는 사건 폴더의 가족관계증명서를 보고 직접 입력한다.
-function runAiAutoFillInheritance(fileName){
-  const instruction = '현재 사건 폴더에서 "' + fileName + '" 파일을 읽어줘. 상속세 신고에 필요한 피상속인 정보를 찾아서, ' +
-    '다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
+function runAiAutoFillInheritance(){
+  const instruction = '현재 사건 폴더 안의 모든 파일을 살펴봐줘(가족관계증명서·기본증명서·사망진단서 등 상속세 관련 증빙일 수 있는 파일 전부, 여러 개면 전부 종합해서). ' +
+    '상속세 신고에 필요한 피상속인 정보를 찾아서, 다른 설명 없이 아래 스키마의 JSON 코드블록 하나만 답해줘. 모르거나 문서에 없는 값은 null로 남겨줘.\n' +
     '```json\n{"deceasedName": "문자열 또는 null(피상속인)", "deceasedRegNo": "문자열 또는 null", "deathDate": "YYYY-MM-DD 또는 null(상속개시일=사망일)"}\n```';
-  return runAiAutoFillForm(fileName, 'aiStatus-inheritance', instruction, INHERITANCE_AI_FIELD_MAP, INHERITANCE_AI_FIELD_LABELS);
+  return runAiAutoFillForm('증빙 일괄조회', 'aiStatus-inheritance', instruction, INHERITANCE_AI_FIELD_MAP, INHERITANCE_AI_FIELD_LABELS);
 }
 
 // ---- 상속증여재산 평가(자산 목록) — 증여세·상속세 화면 공통 ----
@@ -1359,6 +1331,7 @@ function renderValuationAssetList(containerId, assets){
 
 // ---- 양도소득세 (다건 합산) ----
 let transferAssets = [{}]; // 각 원소는 입력값 객체(비어있는 채로 시작)
+let transferBulkAiState = {}; // 증빙 일괄 자동입력(사건폴더 전체 스캔) 진행상태 — 거래행이 아직 없을 때도 보여줄 상단 배지용
 
 // ---- 안분계산 도구(소득세법 시행령 §166④) ----
 let allocationAssets = [{}, {}];
@@ -1614,7 +1587,6 @@ function renderTransferPane(){
       '<div class="taxcalc-asset" data-idx="' + idx + '">' +
         '<div class="taxcalc-asset-head"><b>거래 ' + (idx+1) + '</b>' +
           '<span>' +
-            '<button type="button" class="taxcalc-ai-btn" data-action="open-evidence-transfer" data-idx="' + idx + '">📄 증빙에서 자동 입력</button>' +
             '<button type="button" class="taxcalc-calcbasis-btn" data-action="show-calc-basis" data-idx="' + idx + '">🧮 계산근거</button>' +
             (transferAssets.length > 1 ? '<button type="button" class="taxcalc-del-asset" data-action="del-asset" data-idx="' + idx + '">✕ 삭제</button>' : '') +
           '</span>' +
@@ -1728,12 +1700,14 @@ function renderTransferPane(){
 
   taxCalcTransferPane.innerHTML =
     '<div class="taxcalc-hint">여러 건을 추가하면 2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 자동으로 합산해서 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용합니다(확정신고 합산 개념). 단기양도·미등기양도는 건별로 따로 계산해서 더합니다. 다주택 중과는 조정대상지역 지정·한시배제 여부를 신고 시점 기준으로 직접 확인한 뒤 체크하세요.</div>' +
-    '<div class="taxcalc-asset"><div class="taxcalc-asset-head"><b>양도인 정보</b></div>' +
+    '<div class="taxcalc-asset"><div class="taxcalc-asset-head"><b>양도인 정보</b>' +
+        '<span><button type="button" class="taxcalc-ai-btn" data-action="open-evidence-transfer">📄 증빙에서 자동 입력(사건폴더 전체)</button></span>' +
+      '</div>' +
+      '<div class="taxcalc-ai-status" id="aiStatus-transfer-bulk">' + renderAiStatusHtml(transferBulkAiState) + '</div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>양도인 성명</label><input type="text" id="trTransferorName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>양도인 주민등록번호</label><input type="text" id="trTransferorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
-        '<div class="taxcalc-field"><label>양도인 주소(납세지)</label><input type="text" id="trTransferorAddress">' +
-          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="trTransferorAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+        '<div class="taxcalc-field"><label>양도인 주소(납세지)</label><div class="taxcalc-field-inline"><input type="text" id="trTransferorAddress"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="trTransferorAddress" title="주소 검색">🔍</button></div>' +
           '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="trTransferorAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
         '</div>' +
       '</div>' +
@@ -2639,16 +2613,13 @@ function renderGiftPane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>수증자 성명</label><input type="text" id="giftDoneeName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>수증자 주민등록번호</label><input type="text" id="giftDoneeRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
-        '<div class="taxcalc-field"><label>수증자 주소(납세지)</label><input type="text" id="giftDoneeAddress">' +
-          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDoneeAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+        '<div class="taxcalc-field"><label>수증자 주소(납세지)</label><div class="taxcalc-field-inline"><input type="text" id="giftDoneeAddress"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDoneeAddress" title="주소 검색">🔍</button></div>' +
           '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="giftDoneeAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
         '</div>' +
         '<div class="taxcalc-field"><span class="taxcalc-result-note" id="giftMinorHint" style="margin:0;">수증자 미성년 여부는 위 주민등록번호로 자동 판정됩니다</span></div>' +
         '<div class="taxcalc-field"><label>증여자 성명</label><input type="text" id="giftDonorName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>증여자 주민등록번호</label><input type="text" id="giftDonorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
-        '<div class="taxcalc-field"><label>증여자 주소</label><input type="text" id="giftDonorAddress">' +
-          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDonorAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
-        '</div>' +
+        '<div class="taxcalc-field"><label>증여자 주소</label><div class="taxcalc-field-inline"><input type="text" id="giftDonorAddress"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDonorAddress" title="주소 검색">🔍</button></div></div>' +
         '<div class="taxcalc-field"><label>증여일자</label><input type="date" id="giftDate" min="1900-01-01" max="2099-12-31"><span class="taxcalc-result-note" id="giftDateDeadlineHint" style="margin:2px 0 0;"></span></div>' +
         '<div class="taxcalc-field"><label>관계(수증자 기준)</label><select id="giftRelation">' +
           '<option value="배우자">배우자</option>' +
@@ -4212,8 +4183,7 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>피상속인 성명</label><input type="text" id="ihDeceasedName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>피상속인 주민등록번호</label><input type="text" id="ihDeceasedRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
         '<div class="taxcalc-field"><label>상속개시일</label><input type="date" id="ihDeathDate" min="1900-01-01" max="2099-12-31"><span class="taxcalc-result-note" id="ihDeathDateDeadlineHint" style="margin:2px 0 0;"></span></div>' +
-        '<div class="taxcalc-field"><label>피상속인 주소(사망 당시 주소지=납세지)</label><input type="text" id="ihDeceasedAddress">' +
-          '<button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="ihDeceasedAddress" style="margin-top:4px;">🔍 주소 검색</button>' +
+        '<div class="taxcalc-field"><label>피상속인 주소(사망 당시 주소지=납세지)</label><div class="taxcalc-field-inline"><input type="text" id="ihDeceasedAddress"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="ihDeceasedAddress" title="주소 검색">🔍</button></div>' +
           '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="ihDeceasedAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
         '</div>' +
         '<div class="taxcalc-field"><label>피상속인 거주구분(국내에 주소를 두거나 183일 이상 거소를 둔 사람=거주자)</label><select id="ihDecedentResident"><option value="resident" selected>거주자</option><option value="nonresident">비거주자</option></select><span class="taxcalc-result-note" style="margin:2px 0 0;">비거주자면 기초공제(2억원)만 적용되고 배우자공제·일괄공제·인적공제·금융재산공제·동거주택공제·장례비용공제·가업/영농상속공제는 적용되지 않습니다(§14②·§18~§23의2).</span></div>' +
@@ -5014,12 +4984,14 @@ taxCalcView.addEventListener('click', function(e){
       else renderTransferPane();
     });
   } else if (action === 'open-evidence-transfer'){
-    const idx = numVal(btn.dataset.idx);
-    openEvidencePicker(function(fileName){ runAiAutoFillTransfer(fileName, idx); });
+    if (!explorerPath.length){ alert('먼저 탐색기에서 고객/사건 폴더를 여세요.'); return; }
+    runAiAutoFillTransferBulk();
   } else if (action === 'open-evidence-gift'){
-    openEvidencePicker(function(fileName){ runAiAutoFillGift(fileName); });
+    if (!explorerPath.length){ alert('먼저 탐색기에서 고객/사건 폴더를 여세요.'); return; }
+    runAiAutoFillGift();
   } else if (action === 'open-evidence-inheritance'){
-    openEvidencePicker(function(fileName){ runAiAutoFillInheritance(fileName); });
+    if (!explorerPath.length){ alert('먼저 탐색기에서 고객/사건 폴더를 여세요.'); return; }
+    runAiAutoFillInheritance();
   } else if (action === 'show-calc-basis'){
     const idx = numVal(btn.dataset.idx);
     const box = document.getElementById('calcBasis-' + idx);

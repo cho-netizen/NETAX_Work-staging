@@ -910,6 +910,10 @@
   }
   .taxcalc-ai-btn:hover{ background:var(--taxcalc-info); color:#fff; }
   .taxcalc-ai-btn[disabled]{ opacity:0.5; cursor:not-allowed; }
+  /* 주소 검색처럼 입력칸 끝에 작게 붙는 버튼 — 큰 별도 줄이 아니라 입력칸과 한 줄로 붙인다 */
+  .taxcalc-field-inline{ display:flex; gap:4px; align-items:stretch; }
+  .taxcalc-field-inline input{ flex:1; min-width:0; }
+  .taxcalc-field-inline .taxcalc-ai-btn{ flex:none; margin-top:0 !important; padding:0 9px; }
   .taxcalc-ai-status{ margin-bottom:8px; }
   .taxcalc-ai-status .taxcalc-badge{ margin-right:6px; }
   .taxcalc-ai-fields{ font-size:11.5px; color:var(--taxcalc-hint); margin-top:4px; }
@@ -926,11 +930,6 @@
   }
   body.dark-mode .taxcalc-evidence-item button{ background:var(--gold); color:var(--navy-deep); }
   .taxcalc-evidence-empty{ font-size:12.5px; color:var(--taxcalc-hint); padding:14px 4px; text-align:center; }
-  .taxcalc-evidence-scan-btn{
-    width:100%; padding:9px; border:1px dashed var(--taxcalc-border-strong); border-radius:var(--taxcalc-radius-s);
-    background:var(--taxcalc-chip-bg); color:var(--ink); font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
-  }
-  .taxcalc-evidence-scan-btn:hover{ border-color:var(--gold); }
 
   /* 간편계산 / 정밀계산 전환 탭 */
   .taxcalc-tier-tabs{ display:inline-flex; border:1px solid var(--taxcalc-border-strong); border-radius:99px; padding:3px; gap:2px; background:var(--panel); }
@@ -944,8 +943,7 @@
   /* 간편계산 = 정밀계산과 완전히 같은 입력폼(별지 84호의4서식 수준의 전체 필드). 차이는 딱 하나,
      증빙을 올려 AI가 대신 채워주는 버튼·상태배지가 있느냐뿐이라 그것만 숨긴다. */
   .taxcalc-view-tier-simple .taxcalc-ai-btn,
-  .taxcalc-view-tier-simple .taxcalc-ai-status,
-  .taxcalc-view-tier-simple .taxcalc-evidence-scan-btn{ display:none; }
+  .taxcalc-view-tier-simple .taxcalc-ai-status{ display:none; }
 
   /* 세액계산기 새 창(고객모드) — 채팅·탐색기 없이 계산기만 전체화면으로 뜬다. 좁은 화면(모바일)에서
      열릴 걸 전제로, 여기서부터가 실질적인 반응형 대응 범위다(내부 도구 전체를 반응형으로 만들 필요는 없다). */
@@ -1657,8 +1655,8 @@ graph TD
           <span class="editor-filename">세액계산기</span>
           <div class="spacer"></div>
           <div class="taxcalc-tier-tabs" id="taxCalcTierTabs">
-            <button type="button" class="tier-on" data-tier="simple">입력계산</button>
-            <button type="button" data-tier="precise">증빙계산</button>
+            <button type="button" class="tier-on" data-tier="simple">간편계산</button>
+            <button type="button" data-tier="precise">정밀계산</button>
           </div>
         </div>
         <div class="taxcalc-tabs">
@@ -1670,21 +1668,6 @@ graph TD
           <div id="taxCalcTransferPane" class="taxcalc-pane"></div>
           <div id="taxCalcGiftPane" class="taxcalc-pane" style="display:none;"></div>
           <div id="taxCalcInheritancePane" class="taxcalc-pane" style="display:none;"></div>
-        </div>
-      </div>
-
-      <!-- 증빙에서 AI 자동입력 — 현재 사건 폴더의 파일을 골라 AI가 읽고 계산기 필드를 채운다 -->
-      <div class="modal-overlay" id="taxCalcEvidenceOverlay" style="display:none;">
-        <div class="modal-panel" style="width:min(440px, 92vw);">
-          <div class="modal-head">
-            <span>증빙에서 자동 입력</span>
-            <span class="modal-close" id="btnCloseTaxCalcEvidence" title="닫기">✕</span>
-          </div>
-          <div class="modal-body">
-            <div class="modal-hint" id="taxCalcEvidenceFolderLabel"></div>
-            <div id="taxCalcEvidenceList" class="taxcalc-evidence-list"></div>
-            <button type="button" class="taxcalc-evidence-scan-btn" id="btnTaxCalcEvidenceScan">📷 지금 스캔해서 추가하기</button>
-          </div>
         </div>
       </div>
 

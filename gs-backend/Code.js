@@ -396,6 +396,26 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_transfer_tax_multi',
+    description: '같은 과세기간(연도) 안에 2건 이상 양도가 있어 확정신고를 합산해야 할 때 쓴다. 2년 이상 보유하고 특례(비과세·미등기·분양권) 없는 거래는 소득금액을 합산해 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용하고, 단기양도(2년 미만)·미등기양도는 특성상 합산 대상이 아니라 건별로 개별세율로 계산해서 더한다. 각 거래의 입력 필드는 calculate_transfer_tax와 동일하다(양도가액·취득가액·보유기간·1세대1주택·다주택중과·8년자경 등 전부). 거래가 1건뿐이면 이 도구 대신 calculate_transfer_tax를 쓰는 게 더 간단하다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        transactions: {
+          type: 'array', description: '거래 목록(2건 이상 권장). 각 원소는 calculate_transfer_tax와 동일한 필드(transferPrice·acquisitionPrice·acquisitionDate·transferDate 등)를 갖는 객체.',
+          items: { type: 'object' }
+        },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: '전체 확정신고 기준 신고 상태. 생략하면 ontime.' },
+        isFraudulent: { type: 'boolean', description: '부정행위 여부(가산세율 40%로 상향)' },
+        underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 — 과소신고분 세액(원)' },
+        unpaidDays: { type: 'number', description: '납부지연일수' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준액을 산출세액 합계 대신 다른 값으로 쓰고 싶을 때만 입력(보통 생략)' },
+        isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지(2만원 세액공제)' }
+      },
+      required: ['transactions']
+    }
+  },
+  {
     name: 'calculate_transfer_tax_with_carryover',
     description: '이월과세(소득세법§97의2, 시행령§163의2) 적용 대상 양도소득세를 계산한다. 거주자가 배우자·직계존비속으로부터 증여받은 부동산·분양권·부동산과다보유법인주식을 증여일로부터 10년 이내에 양도하면, 수증자 본인의 취득가액이 아니라 증여자의 원취득가액·취득일·필요경비를 승계하고 수증자가 낸 증여세 상당액을 필요경비에 더한다. 다만 요건(관계·기간)을 충족 못하거나, 이월과세 적용시 1세대1주택 비과세가 되거나, 적용시 세액이 미적용시보다 적으면 이월과세를 적용하지 않고 수증자 본인 값(doneeOwnAcquisitionPrice 등)으로 계산한다 — 이 판정과 두 시나리오 비교를 이 도구가 전부 자동으로 한다. calculate_transfer_tax의 모든 입력 필드(assetType·isOneHouseOneFamily 등)를 그대로 받으며, 여기 추가되는 필드만 별도로 설명한다.',
     input_schema: {
@@ -1747,6 +1767,154 @@ const DRIVE_TOOLS = [
       },
       required: ['totalIssuedShares', 'ownedShares']
     }
+  },
+  {
+    name: 'calculate_land_value',
+    description: '토지의 상증세법§61 보충적평가액 = 개별공시지가 × 면적 × 지분율.',
+    input_schema: { type: 'object', properties: {
+      officialPricePerSqm: { type: 'number', description: '㎡당 개별공시지가(원)' },
+      areaSqm: { type: 'number', description: '면적(㎡)' },
+      shareRatioPercent: { type: 'number', description: '지분율(%, 0~100). 생략하면 100.' }
+    }, required: ['officialPricePerSqm', 'areaSqm'] }
+  },
+  {
+    name: 'calculate_house_value',
+    description: '단독·공동주택의 상증세법§61 보충적평가액 = 고시된 주택가격 × 지분율.',
+    input_schema: { type: 'object', properties: {
+      officialHousePrice: { type: 'number', description: '고시된 개별주택가격 또는 공동주택가격(원)' },
+      shareRatioPercent: { type: 'number', description: '지분율(%, 0~100). 생략하면 100.' }
+    }, required: ['officialHousePrice'] }
+  },
+  {
+    name: 'calculate_listed_stock_value',
+    description: '상장주식의 상증세법§63 평가액 = 평가기준일 전후 2개월 종가평균 × 주식수.',
+    input_schema: { type: 'object', properties: {
+      averageClosingPrice: { type: 'number', description: '평가기준일 전후 2개월 종가평균(원)' },
+      shares: { type: 'number', description: '평가대상 주식수' }
+    }, required: ['averageClosingPrice', 'shares'] }
+  },
+  {
+    name: 'calculate_rental_conversion_value',
+    description: '임대 중인 부동산의 임대료 등 환산가액(상증세법§61⑤, 시행령§50, 시행규칙§15) = 연간임대료÷12% + 임대보증금. 이 값과 기준시가(보충적평가액) 중 큰 금액을 그 자산의 가액으로 한다.',
+    input_schema: { type: 'object', properties: {
+      annualRent: { type: 'number', description: '연간 임대료(원)' },
+      deposit: { type: 'number', description: '임대보증금(원)' }
+    }, required: [] }
+  },
+  {
+    name: 'calculate_goodwill_value',
+    description: '영업권의 상증세법§64 평가액(시행령§59②, 시행규칙§17의3) — 최근 3년 순손익액 가중평균(1년전×3+2년전×2+3년전×1)/6의 50%가 자기자본의 정상수익률(10%)을 초과하는 부분을 5년 10% 연금현가계수(3.79079)로 현재가치화한다.',
+    input_schema: { type: 'object', properties: {
+      netProfit1YearAgo: { type: 'number', description: '평가기준일 직전 사업연도 순손익액(원)' },
+      netProfit2YearsAgo: { type: 'number', description: '2년 전 사업연도 순손익액(원)' },
+      netProfit3YearsAgo: { type: 'number', description: '3년 전 사업연도 순손익액(원)' },
+      selfCapital: { type: 'number', description: '자기자본(원)' }
+    }, required: [] }
+  },
+  {
+    name: 'calculate_ground_right_value',
+    description: '지상권의 상증세법§61③ 평가액(시행령§51①, 시행규칙§16①②) — 토지가액의 연 2%를 매년 수입금액으로 보고 잔존연수(민법§280·281)에 대한 10% 연금현가계수로 환산한다.',
+    input_schema: { type: 'object', properties: {
+      landValue: { type: 'number', description: '지상권이 설정된 토지가액(원)' },
+      remainingYears: { type: 'number', description: '잔존연수(년, 민법§280·281 준용)' }
+    }, required: ['landValue', 'remainingYears'] }
+  },
+  {
+    name: 'calculate_patent_right_value',
+    description: '특허권·실용신안권·상표권·디자인권·저작권 등의 상증세법§61③ 평가액(시행령§59⑤, 시행규칙§19②③④) — 각 연도 수입금액(미확정이면 평가기준일 전 3년 평균)을 잔존연수(최대 20년)에 대한 10% 연금현가계수로 환산한다.',
+    input_schema: { type: 'object', properties: {
+      annualIncomeAmount: { type: 'number', description: '연간 수입금액(원, 미확정이면 평가기준일 전 3년 평균 수입금액)' },
+      remainingYears: { type: 'number', description: '잔존연수(년, 최대 20년으로 자동 제한됨)' }
+    }, required: ['annualIncomeAmount', 'remainingYears'] }
+  },
+  {
+    name: 'calculate_mining_right_value',
+    description: '광업권·채석권등의 상증세법§61③ 평가액(시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이 없으면 예상순소득)을 채굴가능연수에 대한 10% 연금현가계수로 환산한다.',
+    input_schema: { type: 'object', properties: {
+      average3YearIncome: { type: 'number', description: '평가기준일 전 3년간 평균소득(또는 예상순소득, 원)' },
+      miningPossibleYears: { type: 'number', description: '채굴가능연수(년)' }
+    }, required: ['average3YearIncome', 'miningPossibleYears'] }
+  },
+  {
+    name: 'calculate_member_right_value',
+    description: '조합원입주권 등 부동산을 취득할 수 있는 권리(재개발·재건축 조합원권리가액)의 상증세법§61③ 평가액(시행령§51②, 시행규칙§16③).',
+    input_schema: { type: 'object', properties: {
+      formerLandBuildingValue: { type: 'number', description: '분양대상자(조합원)의 종전 토지·건축물 가격(원)' },
+      totalFormerValue: { type: 'number', description: '조합 전체 종전 토지 및 건축물의 총 가액(원, 필수)' },
+      expectedRevenueAfterCompletion: { type: 'number', description: '정비사업완료후 대지·건축물의 총 수입추산액(원)' },
+      totalProjectCost: { type: 'number', description: '총 소요사업비(원)' },
+      paidInstallments: { type: 'number', description: '평가기준일까지 납입한 계약금·중도금 등(원, 없으면 0)' },
+      premium: { type: 'number', description: '프리미엄상당액(원, 없으면 0)' }
+    }, required: ['formerLandBuildingValue', 'totalFormerValue'] }
+  },
+  {
+    name: 'calculate_dividend_difference',
+    description: '배당차액(시행령§57③, 시행규칙§18②) — 기업공개 준비중인 주식등(상장 전 발행 신주) 평가시 상장주식 평가액에서 차감할 배당차액.',
+    input_schema: { type: 'object', properties: {
+      parValuePerShare: { type: 'number', description: '1주당 액면가액(원)' },
+      priorFiscalYearDividendRate: { type: 'number', description: '직전 사업연도 배당률' },
+      daysFromFiscalYearStartToRecordDate: { type: 'number', description: '신주발행일이 속하는 사업연도 개시일부터 배당기산일 전일까지의 일수' }
+    }, required: [] }
+  },
+  {
+    name: 'calculate_adjusted_share_count',
+    description: '증자·감자 전 사업연도의 발행주식총수 환산(시행령§56③단서, 시행규칙§17의3⑤) — 비상장주식 순손익가치 계산시, 평가기준일 속한 사업연도 이전 3년 이내 증자·감자가 있었으면 그 이전 각 사업연도 발행주식총수를 이 비율로 환산해야 한다.',
+    input_schema: { type: 'object', properties: {
+      changeType: { type: 'string', enum: ['capital_increase', 'capital_decrease'], description: 'capital_increase=증자, capital_decrease=감자' },
+      sharesAtHistoricalFiscalYearEnd: { type: 'number', description: '환산 대상 과거 사업연도 말 발행주식총수' },
+      sharesJustBeforeChange: { type: 'number', description: '증자·감자 직전 발행주식총수' },
+      changedShares: { type: 'number', description: '증자 또는 감자한 주식수' }
+    }, required: ['changeType', 'sharesJustBeforeChange'] }
+  },
+  {
+    name: 'calculate_other_tangible_property_value',
+    description: '선박·항공기·차량·기계장비·입목·상품·제품 등 그 밖의 유형재산의 상증세법§62 평가액(시행령§52) — 재취득예상가액→장부가액→시가표준액(vessel_etc), 처분예상가액→장부가액(commodity) 순으로 적용. 서화·골동품(art_antique)은 전문감정기관 감정가액이 필요해 계산 불가.',
+    input_schema: { type: 'object', properties: {
+      itemType: { type: 'string', enum: ['vessel_etc', 'commodity', 'art_antique'], description: 'vessel_etc=선박·항공기·차량·기계장비·입목, commodity=상품·제품 등 동산, art_antique=서화·골동품 등' },
+      reacquisitionValue: { type: 'number', description: 'vessel_etc용 — 재취득예상가액(원)' },
+      bookValue: { type: 'number', description: '장부가액(취득가액-감가상각비, 원)' },
+      standardTaxValue: { type: 'number', description: 'vessel_etc용 — 지방세법시행령§4①의 시가표준액(원)' },
+      disposalValue: { type: 'number', description: 'commodity용 — 처분예상가액(원)' }
+    }, required: ['itemType'] }
+  },
+  {
+    name: 'calculate_trust_benefit_value',
+    description: '신탁의 이익을 받을 권리의 상증세법§65① 평가액(시행령§61①, 시행규칙§14①②) — 원본·수익 수익자가 같으면 신탁재산가액 그대로. 다르면 수익을 받을 권리는 각 연도 수익(원천징수세액상당액 차감)을 연 3%로 할인한 현재가치 합계, 원본을 받을 권리는 신탁재산가액에서 그 합계를 뺀 금액. 해지시 일시금이 더 크면 그 금액을 적용.',
+    input_schema: { type: 'object', properties: {
+      trustPropertyValue: { type: 'number', description: '신탁재산가액(원)' },
+      sameBeneficiary: { type: 'boolean', description: '원본을 받을 권리와 수익을 받을 권리의 수익자가 같은지' },
+      beneficiaryType: { type: 'string', enum: ['principal', 'income'], description: 'sameBeneficiary가 false일 때 — principal=원본을 받을 권리, income=수익을 받을 권리' },
+      annualBenefits: {
+        type: 'array', description: 'beneficiaryType이 income일 때 — 연도별 수익 내역',
+        items: { type: 'object', properties: {
+          yearsFromValuation: { type: 'number', description: '평가기준일로부터 그 수익을 받는 시점까지의 연수' },
+          annualBenefit: { type: 'number', description: '그 연도 수익금(원). isRateUndetermined가 true면 무시되고 신탁재산가액×3%로 자동 계산됨.' },
+          isRateUndetermined: { type: 'boolean', description: '수익률이 확정되지 않아 신탁재산가액×3%로 추산해야 하는지(시행규칙§14②)' },
+          withholdingTaxEquivalent: { type: 'number', description: '그 연도 원천징수세액상당액(원, 없으면 0)' }
+        } }
+      },
+      cancellationValue: { type: 'number', description: '신탁계약의 철회·해지·취소 등으로 받을 수 있는 일시금(원, 없으면 0) — 위 계산액보다 크면 이 값을 적용(§61①단서)' }
+    }, required: [] }
+  },
+  {
+    name: 'calculate_proportional_allocation',
+    description: '토지·건물 등을 함께 양도(취득)했는데 각 자산의 가액 구분이 불분명할 때, 소득세법시행령§166④에 따라 감정가액 또는 기준시가 비율로 안분한다. 2개 이상의 자산이 필요하다.',
+    input_schema: { type: 'object', properties: {
+      method: { type: 'string', enum: ['standard_price', 'standard_price_vat', 'area', 'acq_expense_together', 'acq_expense_separate'], description: 'standard_price=양도가액만 기준시가 비율로 안분, standard_price_vat=위와 같되 건물분 부가세(10/110)를 별도 계산, area=면적 비율로 안분, acq_expense_together=양도가액 비율을 취득가액·필요경비에도 동일 적용, acq_expense_separate=취득가액은 취득시점 기준시가 비율로 별도 안분. 생략하면 standard_price.' },
+      totalTransferPrice: { type: 'number', description: '전체 양도가액(원, 필수)' },
+      totalAcquisitionPrice: { type: 'number', description: '전체 취득가액(원) — method가 acq_expense_together/separate일 때 사용' },
+      totalNecessaryExpenses: { type: 'number', description: '전체 필요경비(원) — method가 acq_expense_together/separate일 때 사용' },
+      assets: {
+        type: 'array', description: '안분할 자산 목록(2개 이상 필수)',
+        items: { type: 'object', properties: {
+          label: { type: 'string', description: '자산 이름(예: "토지", "건물")' },
+          standardPriceTransfer: { type: 'number', description: '양도시점 기준시가 또는 감정가액(원) — method가 area가 아닐 때 필수' },
+          standardPriceAcquisition: { type: 'number', description: '취득시점 기준시가(원) — method가 acq_expense_separate일 때 필수' },
+          area: { type: 'number', description: '면적 — method가 area일 때 필수' },
+          isBuilding: { type: 'boolean', description: 'method가 standard_price_vat일 때 — 이 자산이 건물이라 부가세를 별도 계산해야 하는지' }
+        } }
+      }
+    }, required: ['totalTransferPrice', 'assets'] }
   },
   {
     name: 'manage_task_plan',
@@ -3856,6 +4024,568 @@ function toolCalculateUnlistedStockValue(p) {
   }, result, {
     안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. 최대주주 등 할증평가(20%)는 중소기업기본법상 중소기업이 발행한 주식이거나 직전 3개년 매출액 평균 5천억원 미만인 중견기업이 발행한 주식이면 배제되며(isSmallBusiness/isMediumBusinessUnder500B로 표시), 결손금 있는 법인·전부매각·신설법인 등 그 밖의 배제사유(상증령 §53⑥)는 이 도구가 검증하지 않으니 별도로 확인하세요.'
   });
+}
+
+// 상속증여재산 개별 평가 도구 모음 — tax-calc.js의 동명 calculateXxxJS와 1:1 대응.
+function toolCalculateLandValue(p) {
+  p = p || {};
+  const ratio = (Number(p.shareRatioPercent) || 100) / 100;
+  return { 토지가액: Math.round((Number(p.officialPricePerSqm) || 0) * (Number(p.areaSqm) || 0) * ratio) };
+}
+
+function toolCalculateHouseValue(p) {
+  p = p || {};
+  const ratio = (Number(p.shareRatioPercent) || 100) / 100;
+  return { 주택가액: Math.round((Number(p.officialHousePrice) || 0) * ratio) };
+}
+
+function toolCalculateListedStockValue(p) {
+  p = p || {};
+  return { 상장주식가액: Math.round((Number(p.averageClosingPrice) || 0) * (Number(p.shares) || 0)) };
+}
+
+function toolCalculateRentalConversionValue(p) {
+  p = p || {};
+  return { 임대료환산가액: Math.round((Number(p.annualRent) || 0) / 0.12 + (Number(p.deposit) || 0)) };
+}
+
+function toolCalculateGoodwillValue(p) {
+  p = p || {};
+  const weightedNetProfit = ((Number(p.netProfit1YearAgo) || 0) * 3 + (Number(p.netProfit2YearsAgo) || 0) * 2 + (Number(p.netProfit3YearsAgo) || 0) * 1) / 6;
+  const excessProfit = Math.max(0, weightedNetProfit * 0.5 - (Number(p.selfCapital) || 0) * 0.1);
+  return { 영업권평가액: Math.round(excessProfit * 3.79079) };
+}
+
+// 연 10% 할인율의 n년 연금현가계수 — 지상권·특허권·광업권 등 n이 자산마다 달라지는 항목에 공통으로 쓴다.
+function annuityPresentValueFactor10_(years) {
+  const n = Number(years) || 0;
+  if (n <= 0) return 0;
+  return (1 - Math.pow(1.1, -n)) / 0.1;
+}
+
+function toolCalculateGroundRightValue(p) {
+  p = p || {};
+  const annualIncome = Math.round((Number(p.landValue) || 0) * 0.02);
+  const value = Math.round(annualIncome * annuityPresentValueFactor10_(p.remainingYears));
+  return { 연간수입금액: annualIncome, 지상권가액: value };
+}
+
+function toolCalculatePatentRightValue(p) {
+  p = p || {};
+  const years = Math.min(Number(p.remainingYears) || 0, 20);
+  return { 특허권등가액: Math.round((Number(p.annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years)) };
+}
+
+function toolCalculateMiningRightValue(p) {
+  p = p || {};
+  return { 광업권등가액: Math.round((Number(p.average3YearIncome) || 0) * annuityPresentValueFactor10_(p.miningPossibleYears)) };
+}
+
+function toolCalculateMemberRightValue(p) {
+  p = p || {};
+  const formerValue = Number(p.formerLandBuildingValue) || 0;
+  const expectedRevenue = Number(p.expectedRevenueAfterCompletion) || 0;
+  const projectCost = Number(p.totalProjectCost) || 0;
+  const totalFormerValue = Number(p.totalFormerValue);
+  if (!totalFormerValue || totalFormerValue <= 0) return { error: '종전 토지 및 건축물의 총 가액(totalFormerValue)이 필요합니다.' };
+  const memberRightValue = Math.round(formerValue * (expectedRevenue - projectCost) / totalFormerValue);
+  const paidInstallments = Number(p.paidInstallments) || 0;
+  const premium = Number(p.premium) || 0;
+  return { 조합원권리가액: memberRightValue, 부동산취득권리_평가액: memberRightValue + paidInstallments + premium };
+}
+
+function toolCalculateDividendDifference(p) {
+  p = p || {};
+  const value = Math.round((Number(p.parValuePerShare) || 0) * (Number(p.priorFiscalYearDividendRate) || 0) * ((Number(p.daysFromFiscalYearStartToRecordDate) || 0) / 365));
+  return { 배당차액: value };
+}
+
+function toolCalculateAdjustedShareCount(p) {
+  p = p || {};
+  const base = Number(p.sharesJustBeforeChange);
+  if (!base || base <= 0) return { error: '증자·감자 직전 발행주식총수(sharesJustBeforeChange)가 필요합니다.' };
+  const changed = Number(p.changedShares) || 0;
+  const ratio = p.changeType === 'capital_decrease' ? (base - changed) / base : (base + changed) / base;
+  return { 환산발행주식총수: Math.round((Number(p.sharesAtHistoricalFiscalYearEnd) || 0) * ratio) };
+}
+
+function toolCalculateOtherTangiblePropertyValue(p) {
+  p = p || {};
+  const itemType = p.itemType;
+  if (['vessel_etc', 'commodity', 'art_antique'].indexOf(itemType) === -1) {
+    return { error: 'itemType을 vessel_etc(선박·항공기·차량·기계장비·입목)/commodity(상품·제품 등 동산)/art_antique(서화·골동품 등) 중에서 선택하세요.' };
+  }
+  if (itemType === 'art_antique') {
+    return { error: '서화·골동품 등 예술적 가치가 있는 유형재산은 전문분야별 2개 이상 전문감정기관의 감정가액 평균액(시행령§52②2호)이 필요해 이 계산기로 산정할 수 없습니다. 감정평가를 받아 직접 입력하세요.' };
+  }
+  let value, note;
+  if (itemType === 'vessel_etc') {
+    const reacquisitionValue = Number(p.reacquisitionValue) || 0;
+    const bookValue = Number(p.bookValue) || 0;
+    const standardTaxValue = Number(p.standardTaxValue) || 0;
+    if (reacquisitionValue > 0) { value = reacquisitionValue; note = '처분할 경우 다시 취득할 수 있다고 예상되는 가액(재취득예상가액)을 적용했습니다.'; }
+    else if (bookValue > 0) { value = bookValue; note = '재취득예상가액이 확인되지 않아 장부가액(취득가액-감가상각비)을 적용했습니다.'; }
+    else { value = standardTaxValue; note = '재취득예상가액·장부가액이 모두 확인되지 않아 지방세법시행령§4①의 시가표준액을 적용했습니다.'; }
+  } else {
+    const disposalValue = Number(p.disposalValue) || 0;
+    const bookValue = Number(p.bookValue) || 0;
+    if (disposalValue > 0) { value = disposalValue; note = '처분할 때에 취득할 수 있다고 예상되는 가액(처분예상가액)을 적용했습니다.'; }
+    else { value = bookValue; note = '처분예상가액이 확인되지 않아 장부가액을 적용했습니다.'; }
+  }
+  return { 평가액: Math.round(value), 안내: note };
+}
+
+function toolCalculateTrustBenefitValue(p) {
+  p = p || {};
+  const trustPropertyValue = Number(p.trustPropertyValue) || 0;
+  const cancellationValue = Number(p.cancellationValue) || 0;
+  if (p.sameBeneficiary) {
+    return { 평가방법: '원본·수익 수익자 동일(§61①1호)', 신탁재산가액: trustPropertyValue, 해지시일시금: cancellationValue, 평가액: Math.max(trustPropertyValue, cancellationValue) };
+  }
+  const beneficiaryType = p.beneficiaryType;
+  if (['principal', 'income'].indexOf(beneficiaryType) === -1) {
+    return { error: '원본을 받을 권리 또는 수익을 받을 권리 중에서 선택하세요.' };
+  }
+  const RATE = 0.03;
+  const annualBenefits = Array.isArray(p.annualBenefits) ? p.annualBenefits : [];
+  let incomeInterestValue = 0;
+  const yearlyDetail = annualBenefits.map(function (item) {
+    const n = Number(item.yearsFromValuation) || 0;
+    const benefit = item.isRateUndetermined ? trustPropertyValue * RATE : (Number(item.annualBenefit) || 0);
+    const withholding = Number(item.withholdingTaxEquivalent) || 0;
+    const pv = (benefit - withholding) / Math.pow(1 + RATE, n);
+    incomeInterestValue += pv;
+    return { 연수: n, 수익금: Math.round(benefit), 원천징수세액상당액: withholding, 현재가치: Math.round(pv) };
+  });
+  incomeInterestValue = Math.round(incomeInterestValue);
+  const principalInterestValue = Math.max(0, trustPropertyValue - incomeInterestValue);
+  const beforeCancellation = beneficiaryType === 'income' ? incomeInterestValue : principalInterestValue;
+  const value = Math.max(beforeCancellation, cancellationValue);
+  return {
+    평가방법: beneficiaryType === 'income' ? '수익을 받을 권리(§61①2호나목)' : '원본을 받을 권리(§61①2호가목)',
+    적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
+    수익권_평가액: incomeInterestValue, 원본권_평가액: principalInterestValue,
+    해지시일시금: cancellationValue, 평가액: value
+  };
+}
+
+// 토지·건물 등 일괄양도시 안분계산 (소득세법 시행령 §166④) — tax-calc.js의 calculateProportionalAllocationJS와 동일.
+function toolCalculateProportionalAllocation(p) {
+  p = p || {};
+  const assets = Array.isArray(p.assets) ? p.assets : [];
+  if (assets.length < 2) return { error: '안분계산은 2개 이상의 자산을 입력해야 합니다.' };
+  const totalTransferPrice = Number(p.totalTransferPrice) || 0;
+  if (totalTransferPrice <= 0) return { error: '총 양도가액이 필요합니다.' };
+  const totalAcquisitionPrice = Number(p.totalAcquisitionPrice) || 0;
+  const totalNecessaryExpenses = Number(p.totalNecessaryExpenses) || 0;
+  const method = p.method || 'standard_price';
+
+  function weightOf(a, useAcquisition) {
+    if (method === 'area') return Number(a.area) || 0;
+    return useAcquisition ? (Number(a.standardPriceAcquisition) || 0) : (Number(a.standardPriceTransfer) || 0);
+  }
+
+  const transferWeights = assets.map(function (a) { return weightOf(a, false); });
+  const transferWeightSum = transferWeights.reduce(function (s, w) { return s + w; }, 0);
+  if (transferWeightSum <= 0) return { error: (method === 'area' ? '면적' : '양도시점 기준시가(또는 감정가액)') + '을 자산마다 입력해야 합니다.' };
+
+  const acqWeights = assets.map(function (a) { return weightOf(a, true); });
+  const acqWeightSum = acqWeights.reduce(function (s, w) { return s + w; }, 0);
+
+  const results = assets.map(function (a, i) {
+    const transferRatio = transferWeights[i] / transferWeightSum;
+    const allocatedTransferPrice = Math.round(totalTransferPrice * transferRatio);
+
+    let allocatedAcquisitionPrice = 0, allocatedNecessaryExpenses = 0, acqRatio = transferRatio;
+    if (method === 'acq_expense_together') {
+      allocatedAcquisitionPrice = Math.round(totalAcquisitionPrice * transferRatio);
+      allocatedNecessaryExpenses = Math.round(totalNecessaryExpenses * transferRatio);
+    } else if (method === 'acq_expense_separate') {
+      if (acqWeightSum <= 0) return { error: (i + 1) + '번째 자산: 취득시점 기준시가가 필요합니다(취득/필요경비 각각 안분).' };
+      acqRatio = acqWeights[i] / acqWeightSum;
+      allocatedAcquisitionPrice = Math.round(totalAcquisitionPrice * acqRatio);
+      allocatedNecessaryExpenses = Math.round(totalNecessaryExpenses * transferRatio);
+    }
+
+    let vatAmount = 0, transferPriceExVat = allocatedTransferPrice;
+    if (method === 'standard_price_vat' && a.isBuilding) {
+      vatAmount = Math.round(allocatedTransferPrice * 10 / 110);
+      transferPriceExVat = allocatedTransferPrice - vatAmount;
+    }
+
+    return {
+      label: a.label || ('자산' + (i + 1)),
+      안분비율_양도: transferRatio,
+      안분비율_취득: method === 'acq_expense_separate' ? acqRatio : undefined,
+      양도가액_안분액: allocatedTransferPrice,
+      부가세: vatAmount || undefined,
+      양도가액_부가세제외: method === 'standard_price_vat' ? transferPriceExVat : undefined,
+      취득가액_안분액: (method === 'acq_expense_together' || method === 'acq_expense_separate') ? allocatedAcquisitionPrice : undefined,
+      필요경비_안분액: (method === 'acq_expense_together' || method === 'acq_expense_separate') ? allocatedNecessaryExpenses : undefined
+    };
+  });
+  const errorOne = results.find(function (r) { return r && r.error; });
+  if (errorOne) return { error: errorOne.error };
+
+  return {
+    방식: method, 총양도가액: totalTransferPrice, 자산별_안분결과: results,
+    안내: '소득세법 시행령 §166④에 따라, 토지와 건물 등을 함께 양도(취득)했는데 각각의 가액 구분이 불분명한 경우 감정가액이 있으면 감정가액 비율로, 없으면 기준시가 비율로 안분합니다(면적 비율 안분은 그 비율을 면적으로 대체한 실무상 방식이며, 계약서·감정가액 등으로 실제 구분이 가능하면 안분계산 자체가 필요 없으니 우선 그 가액을 그대로 쓰세요). "취득/필요경비 함께 안분"은 양도시점 비율을 취득가액·필요경비에도 동일하게 적용한 것이고, "각각 안분"은 취득가액에 취득시점 기준시가 비율을 별도로 적용한 것이니 사안에 맞는 방식을 선택하세요.'
+  };
+}
+
+// 거래(자산) 1건의 "소득금액 단계까지"만 계산하는 building block — toolCalculateTransferTaxMulti(다건 합산)
+// 전용. toolCalculateTransferTax(단일거래, 기본공제 전액 적용)와 별개 함수로 둔 것은 기존에 이미 검증된
+// 단일거래 계산 로직을 건드리지 않기 위해서다. tax-calc.js의 transferAssetCore와 1:1 대응.
+function transferAssetCore_(t) {
+  const transferPrice = Number(t.transferPrice);
+  let necessaryExpenses = Number(t.necessaryExpenses) || 0;
+  if (!transferPrice || transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
+
+  let acquisitionPrice = Number(t.acquisitionPrice) || 0;
+  let acquisitionPriceMethodNote = '';
+  let acquisitionPriceUsedAppraisalOrConversion = false;
+  const acquisitionStandardPriceForConversion = Number(t.acquisitionStandardPriceForConversion) || Number(t.acquisitionStandardPriceForExpense) || 0;
+  if (!t.acquisitionPrice && !t.isReconstructionRights) {
+    const comparableTransactionPrice = Number(t.comparableTransactionPrice) || 0;
+    const appraisalValue = Number(t.appraisalValue) || 0;
+    const transferStandardPriceForConversion = Number(t.transferStandardPriceForConversion) || 0;
+    if (comparableTransactionPrice > 0) {
+      acquisitionPrice = comparableTransactionPrice;
+      acquisitionPriceMethodNote = '취득가액은 매매사례가액(' + comparableTransactionPrice + '원, 시행령§176의2③1호)을 적용했습니다.';
+    } else if (appraisalValue > 0) {
+      acquisitionPrice = appraisalValue;
+      acquisitionPriceUsedAppraisalOrConversion = true;
+      acquisitionPriceMethodNote = '취득가액은 감정가액(' + appraisalValue + '원, 시행령§176의2③2호)을 적용했습니다.';
+    } else if (acquisitionStandardPriceForConversion > 0 && transferStandardPriceForConversion > 0) {
+      acquisitionPriceUsedAppraisalOrConversion = true;
+      acquisitionPrice = Math.round(transferPrice * acquisitionStandardPriceForConversion / transferStandardPriceForConversion);
+      acquisitionPriceMethodNote = '취득가액은 환산취득가액(시행령§176의2②2호·③3호) = 양도가액(' + transferPrice + '원)×[취득당시기준시가(' + acquisitionStandardPriceForConversion + '원)÷양도당시기준시가(' + transferStandardPriceForConversion + '원)] = ' + acquisitionPrice + '원으로 자동계산했습니다.';
+    } else if (acquisitionStandardPriceForConversion > 0) {
+      acquisitionPrice = acquisitionStandardPriceForConversion;
+      acquisitionPriceMethodNote = '취득가액은 취득당시 기준시가(' + acquisitionStandardPriceForConversion + '원, 시행령§176의2③4호)를 그대로 적용했습니다.';
+    }
+  }
+  const depreciationDeductedAsBusinessExpense = Number(t.depreciationDeductedAsBusinessExpense) || 0;
+  if (depreciationDeductedAsBusinessExpense > 0) {
+    acquisitionPrice = Math.max(0, acquisitionPrice - depreciationDeductedAsBusinessExpense);
+    acquisitionPriceMethodNote += (acquisitionPriceMethodNote ? ' ' : '') + '사업소득 필요경비로 산입한 감가상각비(' + depreciationDeductedAsBusinessExpense + '원, §97③)를 취득가액에서 차감했습니다.';
+  }
+  if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
+  if (!t.acquisitionDate || !t.transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+
+  const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(t.acquisitionDate), t.transferDate);
+  if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다.' };
+
+  if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && acquisitionStandardPriceForConversion > 0) {
+    const estimatedExpenseRate = t.isUnregisteredTransfer ? 0.003 : 0.03;
+    necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
+  }
+
+  const assetType = t.assetType === 'house' ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
+  const isPresaleRight = assetType === 'presale_right';
+  const isReconstruction = !!t.isReconstructionRights;
+  const isOneHouse = !isPresaleRight && !isReconstruction && !!t.isOneHouseOneFamily;
+  const isOneMemberRightOnly = isReconstruction && !t.isCompletedNewHousing && !!t.isOneMemberRightOneFamily;
+  const isUnregistered = !!t.isUnregisteredTransfer;
+  const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
+
+  if (isUnregistered) {
+    return { holdingYears, isUnregistered: true, gainBeforeDeduction, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
+  }
+  if (isOneHouse && transferPrice <= 1200000000) {
+    return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
+  }
+  if (isOneMemberRightOnly && transferPrice <= 1200000000) {
+    return { holdingYears, exempt: true, transferPrice, acquisitionPrice, necessaryExpenses, assetType, acquisitionPriceMethodNote, raw: t };
+  }
+
+  let taxableGain = gainBeforeDeduction;
+  let ltRate = 0;
+  let isRentalSpecial = false;
+  let isMultiHouseSurcharge = false;
+  const multiHouseCount = Number(t.multiHouseCount) || 0;
+  let incomeAmount, longTermDeductionAmount, reconstructionDetail = null;
+
+  if (isReconstruction) {
+    const rightsValue = Number(t.rightsValue) || 0;
+    const settlementPaid = Number(t.settlementPaid) || 0;
+    const managementDispositionDate = t.managementDispositionDate;
+    if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액)이 필요합니다.' };
+    if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일이 필요합니다.' };
+
+    let originalAcqPrice = Number(t.originalAssetAcquisitionPrice) || 0;
+    if (t.useConvertedRightsBaseAcquisitionPrice) {
+      const acqStd = Number(t.originalAcquisitionStandardPrice) || 0;
+      const apprStd = Number(t.approvalDateStandardPrice) || 0;
+      if (acqStd > 0 && apprStd > 0) originalAcqPrice = Math.round(rightsValue * acqStd / apprStd);
+    }
+    const originalNecessaryExpenses = Number(t.originalNecessaryExpenses) || 0;
+
+    const gainBeforeApproval = (rightsValue - originalAcqPrice) - originalNecessaryExpenses;
+    const gainAfterApproval = transferPrice - (rightsValue + settlementPaid) - necessaryExpenses;
+
+    const holdingYearsBeforeApproval = fullYearsElapsed_(deemedAcquisitionDate_(t.acquisitionDate), managementDispositionDate);
+    const holdingYearsSinceApproval = fullYearsElapsed_(managementDispositionDate, t.transferDate);
+
+    if (!t.isCompletedNewHousing) {
+      taxableGain = gainBeforeApproval + gainAfterApproval;
+      const ltRateBefore = longTermHoldingDeductionRate_(holdingYearsBeforeApproval);
+      longTermDeductionAmount = Math.round(Math.max(0, gainBeforeApproval) * ltRateBefore);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+      reconstructionDetail = { 구분: '조합원입주권(준공전) 양도 — §166①1호', 관리처분계획등인가전양도차익: Math.round(gainBeforeApproval), 관리처분계획등인가후양도차익: Math.round(gainAfterApproval), 인가전_보유기간_년: holdingYearsBeforeApproval, 인가전_장특공제율: ltRateBefore };
+      if (isOneMemberRightOnly && transferPrice > 1200000000) {
+        const highValueRatio = (transferPrice - 1200000000) / transferPrice;
+        taxableGain = taxableGain * highValueRatio;
+        longTermDeductionAmount = Math.round(longTermDeductionAmount * highValueRatio);
+        incomeAmount = taxableGain - longTermDeductionAmount;
+        reconstructionDetail.고가조합원입주권_12억초과비율 = highValueRatio;
+      }
+    } else {
+      const denom = rightsValue + settlementPaid;
+      const settlementPortionGain = denom > 0 ? gainAfterApproval * settlementPaid / denom : 0;
+      const existingPortionGain = (gainAfterApproval - settlementPortionGain) + gainBeforeApproval;
+      taxableGain = settlementPortionGain + existingPortionGain;
+      const ltRateSettlement = longTermHoldingDeductionRate_(holdingYearsSinceApproval);
+      const ltRateExisting = longTermHoldingDeductionRate_(holdingYears);
+      longTermDeductionAmount = Math.round(Math.max(0, settlementPortionGain) * ltRateSettlement) + Math.round(Math.max(0, existingPortionGain) * ltRateExisting);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+      reconstructionDetail = {
+        구분: '신축주택(준공후) 양도 — §166②1호', 청산금납부분양도차익: Math.round(settlementPortionGain), 기존건물분양도차익: Math.round(existingPortionGain),
+        청산금분_보유기간_년: holdingYearsSinceApproval, 청산금분_장특공제율: ltRateSettlement, 기존건물분_보유기간_년: holdingYears, 기존건물분_장특공제율: ltRateExisting
+      };
+      if (transferPrice > 1200000000) {
+        const highValueRatio = (transferPrice - 1200000000) / transferPrice;
+        taxableGain = taxableGain * highValueRatio;
+        longTermDeductionAmount = Math.round(longTermDeductionAmount * highValueRatio);
+        incomeAmount = taxableGain - longTermDeductionAmount;
+        reconstructionDetail.고가주택_12억초과비율 = highValueRatio;
+      }
+    }
+    ltRate = taxableGain !== 0 ? longTermDeductionAmount / taxableGain : 0;
+  } else if (isPresaleRight) {
+    ltRate = 0;
+  } else if (isOneHouse) {
+    taxableGain = gainBeforeDeduction * (transferPrice - 1200000000) / transferPrice;
+    ltRate = longTermHoldingDeductionRate1House_(holdingYears, Number(t.residenceYears) || 0);
+  } else {
+    ltRate = longTermHoldingDeductionRate_(holdingYears);
+  }
+
+  if (!isReconstruction && !isPresaleRight) {
+    const rentalRate = rentalLongTermHoldingDeductionRate_(t.rentalSpecialType, holdingYears, t.rentalYears);
+    isRentalSpecial = rentalRate !== null;
+    if (isRentalSpecial) ltRate = rentalRate;
+
+    const isMultiHouseSurchargeExcluded = !!t.transferDate && t.transferDate <= '2026-05-09';
+    isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
+    if (isMultiHouseSurcharge) ltRate = 0;
+  }
+
+  let rentalPeriodSplit = null;
+  if (!isReconstruction) {
+    const acqStd = Number(t.acquisitionStandardPrice) || 0;
+    const regStd = Number(t.registrationStandardPrice) || 0;
+    const trfStd = Number(t.transferStandardPrice) || 0;
+    const rentalGeneralNeedsSplit = isRentalSpecial && t.rentalSpecialType === 'rental_general' && ltRate > 0;
+    if (rentalGeneralNeedsSplit && !(acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd)) {
+      return { error: '등록임대주택 장특공제 특례(§97의3, 10년이상 70%/8년이상 50%)는 임대기간중 발생한 양도차익에만 적용되므로, 취득당시·등록일당시·양도당시 기준시가(acquisitionStandardPrice·registrationStandardPrice·transferStandardPrice) 3종을 모두 입력해야 합니다(취득당시=양도당시 기준시가는 안분 불가).' };
+    }
+    if (rentalGeneralNeedsSplit) {
+      const rentalPeriodGain = taxableGain * (trfStd - regStd) / (trfStd - acqStd);
+      const beforeRentalGain = taxableGain - rentalPeriodGain;
+      const normalRate = longTermHoldingDeductionRate_(holdingYears);
+      longTermDeductionAmount = Math.round(Math.max(0, rentalPeriodGain) * ltRate + Math.max(0, beforeRentalGain) * normalRate);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+      rentalPeriodSplit = { 임대기간중양도차익: Math.round(rentalPeriodGain), 임대전양도차익: Math.round(beforeRentalGain), 임대전적용공제율: normalRate };
+    } else {
+      longTermDeductionAmount = Math.round(taxableGain * ltRate);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+    }
+  }
+  const isPoolable = !isPresaleRight && holdingYears >= 2;
+
+  const convertedBuildingAcquisitionValueForPenalty = Number(t.convertedBuildingAcquisitionValueForPenalty) ||
+    (acquisitionPriceUsedAppraisalOrConversion ? acquisitionPrice : 0);
+  const conversionValuePenalty = (t.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
+    ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
+
+  return {
+    reconstructionDetail, rentalPeriodSplit, acquisitionPriceMethodNote,
+    holdingYears, exempt: false, isUnregistered: false, isPoolable,
+    transferPrice, acquisitionPrice, necessaryExpenses, assetType, isOneHouse, isRentalSpecial,
+    gainBeforeDeduction, taxableGain, longTermRate: ltRate, longTermDeductionAmount, incomeAmount,
+    isMultiHouseSurcharge, multiHouseCount, isNonBusinessLand: !!t.isNonBusinessLand, isEightYearFarmland: !!t.isEightYearFarmland,
+    isLivestockLandExempt: !!t.isLivestockLandExempt, isFisheryLandExempt: !!t.isFisheryLandExempt, isFarmlandSubstitutionExempt: !!t.isFarmlandSubstitutionExempt,
+    isForestManagementExempt: !!t.isForestManagementExempt,
+    forestManagementYears: t.acquisitionDate ? fullYearsElapsed_(t.acquisitionDate, t.transferDate) : 0,
+    conversionValuePenalty, pensionAccountContribution: Number(t.pensionAccountContribution) || 0,
+    raw: t
+  };
+}
+
+// 여러 건 양도 합산 — 2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 소득금액을
+// 합산해 기본공제 1회·누진세율을 함께 적용한다. 단기양도·미등기양도는 건별로 따로 계산해서 더한다.
+// tax-calc.js의 calculateTransferTaxMultiJS와 1:1 대응.
+function toolCalculateTransferTaxMulti(transactions, filingParams) {
+  if (!Array.isArray(transactions) || !transactions.length) return { error: '거래를 1건 이상 입력하세요.' };
+  filingParams = filingParams || {};
+  const cores = transactions.map(function (t, idx) {
+    const c = transferAssetCore_(t);
+    c.idx = idx;
+    return c;
+  });
+  const errorOne = cores.find(function (c) { return c.error; });
+  if (errorOne) return { error: (errorOne.idx + 1) + '번째 거래: ' + errorOne.error };
+
+  const exempt = cores.filter(function (c) { return c.exempt; });
+  const unregistered = cores.filter(function (c) { return c.isUnregistered; });
+  const active = cores.filter(function (c) { return !c.exempt && !c.isUnregistered; });
+  const pooled = active.filter(function (c) { return c.isPoolable; });
+  const shortTerm = active.filter(function (c) { return !c.isPoolable; });
+
+  const poolIncomeSum = pooled.reduce(function (s, c) { return s + c.incomeAmount; }, 0);
+  const basicDeductionUsedInPool = pooled.length > 0;
+  const poolTaxBase = Math.max(0, poolIncomeSum - (basicDeductionUsedInPool ? 2500000 : 0));
+  const poolBaseTax = calcProgressiveTax_(poolTaxBase, TRANSFER_TAX_BRACKETS);
+
+  let poolSurchargeTotal = 0;
+  const assetNotes = [];
+  cores.forEach(function (c) {
+    if (c.acquisitionPriceMethodNote) assetNotes.push({ idx: c.idx, 구분: '취득가액산정', 특례: c.acquisitionPriceMethodNote });
+  });
+  pooled.forEach(function (c) {
+    let rate = 0; const notes = [];
+    if (c.isMultiHouseSurcharge) { rate += (c.multiHouseCount >= 3 ? 0.30 : 0.20); notes.push('다주택중과'); }
+    if (c.isNonBusinessLand) { rate += 0.10; notes.push('비사업용토지'); }
+    if (rate > 0) {
+      const amt = Math.round(c.incomeAmount * rate);
+      poolSurchargeTotal += amt;
+      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: notes.join('+'), 가산액: amt });
+    }
+  });
+
+  let poolTaxWithSurcharge = poolBaseTax + poolSurchargeTotal;
+
+  let farmlandReductionTotal = 0;
+  const reductionByIdx_ = {};
+  pooled.forEach(function (c) {
+    const specialExemptLabel = c.isEightYearFarmland ? '8년자경농지감면(안분)'
+      : c.isLivestockLandExempt ? '축사용지감면(안분)'
+      : c.isFisheryLandExempt ? '어업용토지감면(안분)'
+      : c.isFarmlandSubstitutionExempt ? '농지대토감면(안분)' : null;
+    if (specialExemptLabel && poolIncomeSum > 0) {
+      const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
+      const reduction = Math.min(share, 100000000);
+      farmlandReductionTotal += reduction;
+      reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
+      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: specialExemptLabel, 감면액: reduction });
+    } else if (c.isForestManagementExempt && poolIncomeSum > 0) {
+      const yrs = c.forestManagementYears;
+      const forestRate = yrs >= 50 ? 0.50 : yrs >= 40 ? 0.40 : yrs >= 30 ? 0.30 : yrs >= 20 ? 0.20 : yrs >= 10 ? 0.10 : 0;
+      if (forestRate > 0) {
+        const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
+        const reduction = Math.min(Math.round(share * forestRate), 100000000);
+        farmlandReductionTotal += reduction;
+        reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
+        assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '자경산지감면(안분, ' + Math.round(forestRate * 100) + '%)', 감면액: reduction });
+      }
+    }
+  });
+  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal);
+
+  const COMPENSATION_REDUCTION_RATES_M = {
+    cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45,
+    land_replacement: 0.40,
+    restricted_zone_40: 0.40, restricted_zone_25: 0.25
+  };
+  let compensationReductionTotal = 0;
+  pooled.forEach(function (c) {
+    const rate = COMPENSATION_REDUCTION_RATES_M[c.raw.compensationType];
+    if (rate !== undefined && poolIncomeSum > 0) {
+      const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
+      const reduction = Math.min(Math.round(share * rate), 200000000);
+      compensationReductionTotal += reduction;
+      reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
+      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '수용감면(안분)', 감면액: reduction });
+    }
+  });
+  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal);
+
+  let downContractClawbackTotal = 0;
+  pooled.forEach(function (c) {
+    const diff = Number(c.raw.downContractPriceDifference) || 0;
+    const red = reductionByIdx_[c.idx] || 0;
+    if (diff > 0 && red > 0) {
+      const clawback = Math.min(red, diff);
+      downContractClawbackTotal += clawback;
+      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '다운계약서 감면배제', 추징액: clawback });
+    }
+  });
+  poolTaxWithSurcharge += downContractClawbackTotal;
+
+  let exemptClawbackTotal = 0;
+  exempt.forEach(function (c) {
+    const diff = Number(c.raw.downContractPriceDifference) || 0;
+    if (diff > 0) {
+      const wouldBe = toolCalculateTransferTax(Object.assign({}, c.raw, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
+      const wouldBeTax = (wouldBe && typeof wouldBe.납부세액_합계 === 'number') ? wouldBe.납부세액_합계 : 0;
+      const clawback = Math.min(wouldBeTax, diff);
+      exemptClawbackTotal += clawback;
+      assetNotes.push({ idx: c.idx, 구분: '비과세거래(개별)', 특례: '다운계약서 비과세배제', 추징액: clawback });
+    }
+  });
+
+  let usedBasicOnShort = !basicDeductionUsedInPool ? false : true;
+  const shortResults = shortTerm.map(function (c) {
+    const bd = (!usedBasicOnShort) ? 2500000 : 0;
+    if (bd) usedBasicOnShort = true;
+    const base = Math.max(0, c.incomeAmount - bd);
+    const rate = (c.assetType === 'house' || c.assetType === 'presale_right')
+      ? (c.holdingYears < 1 ? 0.70 : 0.60) : (c.holdingYears < 1 ? 0.50 : 0.40);
+    const tax = Math.round(base * rate);
+    assetNotes.push({ idx: c.idx, 구분: '단기양도(개별)', 소득금액: Math.round(c.incomeAmount), 기본공제적용: bd > 0, 세율: rate, 세액: tax });
+    return tax;
+  });
+  const shortTaxTotal = shortResults.reduce(function (s, v) { return s + v; }, 0);
+
+  const unregisteredResults = unregistered.map(function (c) {
+    const tax = Math.max(0, Math.round(c.gainBeforeDeduction * 0.7));
+    assetNotes.push({ idx: c.idx, 구분: '미등기양도(개별)', 양도차익: Math.round(c.gainBeforeDeduction), 세액: tax });
+    return tax;
+  });
+  const unregisteredTaxTotal = unregisteredResults.reduce(function (s, v) { return s + v; }, 0);
+
+  const conversionValuePenaltyTotal = active.reduce(function (s, c) { return s + (c.conversionValuePenalty || 0); }, 0);
+
+  const pensionAccountCreditRaw = active.reduce(function (s, c) {
+    return s + (c.pensionAccountContribution > 0 ? Math.round(Number(c.pensionAccountContribution) * 0.1) : 0);
+  }, 0);
+
+  const totalCalculatedTax = poolTaxWithSurcharge + shortTaxTotal + unregisteredTaxTotal;
+  const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
+  const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
+  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty));
+  const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
+  const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
+
+  return {
+    거래건수: transactions.length, 비과세건수: exempt.length,
+    합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
+    기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
+    합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
+    합산수용감면액: compensationReductionTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
+    합산그룹_산출세액: poolTaxWithSurcharge,
+    단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
+    산출세액_합계: totalCalculatedTax,
+    연금계좌세액공제_합계: pensionAccountCreditTotal, 전자신고세액공제: eFilingCredit,
+    환산취득가액가산세_합계: conversionValuePenaltyTotal,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    지방소득세: localIncomeTax, 납부세액_합계: grandTotal,
+    자산별_내역: assetNotes,
+    안내: '2년 이상 보유·특례 없는(또는 다주택중과·비사업용토지만 해당하는) 거래는 소득금액을 합산해 기본공제(250만원, 전체 1회)와 누진세율을 함께 적용했습니다. 단기양도(2년 미만)·미등기양도는 합산 누진세 대상이 아니라 건별로 따로 계산해 더했습니다. 다주택중과·비사업용토지 가산액과 8년자경농지 감면액은 자산별 소득금액 비중으로 계산한 근사치이니, 특례가 여러 건 섞인 복잡한 합산은 결과를 참고용으로만 쓰고 반드시 재검토하세요. 신고불성실·납부지연가산세는 전체 확정신고 기준(산출세액 합계)으로 한 번만 계산했습니다.'
+  };
 }
 
 function toolCalculateTransferTax(p) {
@@ -8471,6 +9201,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_building_standard_price' ||
         b.name === 'calculate_building_standard_price_multi' ||
         b.name === 'calculate_transfer_tax' ||
+        b.name === 'calculate_transfer_tax_multi' ||
         b.name === 'calculate_transfer_tax_with_carryover' ||
         b.name === 'calculate_gift_tax' ||
         b.name === 'calculate_inheritance_tax' ||
@@ -8528,6 +9259,20 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_interest_free_loan_gift_amount' ||
         b.name === 'calculate_stock_transfer_tax' ||
         b.name === 'calculate_unlisted_stock_value' ||
+        b.name === 'calculate_land_value' ||
+        b.name === 'calculate_house_value' ||
+        b.name === 'calculate_listed_stock_value' ||
+        b.name === 'calculate_rental_conversion_value' ||
+        b.name === 'calculate_goodwill_value' ||
+        b.name === 'calculate_ground_right_value' ||
+        b.name === 'calculate_patent_right_value' ||
+        b.name === 'calculate_mining_right_value' ||
+        b.name === 'calculate_member_right_value' ||
+        b.name === 'calculate_dividend_difference' ||
+        b.name === 'calculate_adjusted_share_count' ||
+        b.name === 'calculate_other_tangible_property_value' ||
+        b.name === 'calculate_trust_benefit_value' ||
+        b.name === 'calculate_proportional_allocation' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
         b.name === 'search_emails' ||
@@ -8647,6 +9392,15 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_transfer_tax') {
         const resultObj = toolCalculateTransferTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_transfer_tax_multi') {
+        const input = block.input || {};
+        const resultObj = toolCalculateTransferTaxMulti(input.transactions, {
+          filingStatus: input.filingStatus, isFraudulent: input.isFraudulent, underreportedTaxAmount: input.underreportedTaxAmount,
+          unpaidDays: input.unpaidDays, unpaidTaxForLatePenalty: input.unpaidTaxForLatePenalty, isSelfElectronicFiling: input.isSelfElectronicFiling
+        });
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
@@ -8934,6 +9688,49 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       if (block.name === 'calculate_unlisted_stock_value') {
         const resultObj = toolCalculateUnlistedStockValue(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_land_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateLandValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_house_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateHouseValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_listed_stock_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateListedStockValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_rental_conversion_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateRentalConversionValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_goodwill_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateGoodwillValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_ground_right_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateGroundRightValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_patent_right_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculatePatentRightValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_mining_right_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateMiningRightValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_member_right_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateMemberRightValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_dividend_difference') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateDividendDifference(block.input || {})) };
+      }
+      if (block.name === 'calculate_adjusted_share_count') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateAdjustedShareCount(block.input || {})) };
+      }
+      if (block.name === 'calculate_other_tangible_property_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateOtherTangiblePropertyValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_trust_benefit_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateTrustBenefitValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_proportional_allocation') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateProportionalAllocation(block.input || {})) };
       }
 
       if (block.name === 'manage_task_plan') {
