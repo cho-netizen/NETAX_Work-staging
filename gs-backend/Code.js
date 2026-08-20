@@ -313,6 +313,7 @@ const DRIVE_TOOLS = [
       properties: {
         transferPrice: { type: 'number', description: '양도가액(원)' },
         acquisitionPrice: { type: 'number', description: '취득가액(원, 실지거래가액). 생략하면 소득세법시행령§176의2③ 순차적용(매매사례가액→감정가액→환산취득가액→기준시가)으로 자동 산정한다 — comparableTransactionPrice(매매사례가액)/appraisalValue(감정가액)/acquisitionStandardPriceForConversion+transferStandardPriceForConversion(환산취득가액) 중 있는 것을 우선순위대로 쓴다.' },
+        depreciationDeductedAsBusinessExpense: { type: 'number', description: '사업용자산(예: 부동산임대업 건물)을 양도하는 경우 — 보유기간 중 사업소득금액 계산시 감가상각비로 필요경비에 산입했거나 산입할 금액(원, §97③). 있으면 취득가액에서 이 금액을 차감한다(이중공제 방지). 사업용이 아니면 생략.' },
         comparableTransactionPrice: { type: 'number', description: 'acquisitionPrice를 모를 때 — 양도일 또는 취득일 전후 3개월 이내 매매사례가액(원, §176의2③1호). 취득가액 결정에서 최우선으로 쓰인다.' },
         appraisalValue: { type: 'number', description: 'acquisitionPrice·comparableTransactionPrice를 모두 모를 때 — 감정가액(원, §176의2③2호).' },
         acquisitionStandardPriceForConversion: { type: 'number', description: 'acquisitionPrice·comparableTransactionPrice·appraisalValue를 모두 모를 때 — 환산취득가액 계산용 취득당시기준시가(원, §176의2②2호). transferStandardPriceForConversion과 함께 입력하면 [양도가액×(취득당시기준시가÷양도당시기준시가)]로 자동계산하고, 이것만 입력하면 이 기준시가를 그대로 취득가액으로 쓴다(§176의2③4호). rentalSpecialType 안분에 쓰는 acquisitionStandardPrice와는 다른 필드다.' },
@@ -3865,6 +3866,15 @@ function toolCalculateTransferTax(p) {
       acquisitionPrice = acquisitionStandardPriceForConversion;
       acquisitionPriceMethodNote = '취득가액은 취득당시 기준시가(' + acquisitionStandardPriceForConversion + '원, 시행령§176의2③4호)를 그대로 적용했습니다.';
     }
+  }
+  // §97③ — 보유기간 중 그 자산에 대한 감가상각비를 사업소득금액 계산시 필요경비에 산입했거나
+  // 산입할 금액이 있으면, 그 금액을 취득가액에서 공제한다(사업경비로 이미 공제받은 감가상각비를
+  // 취득가액에도 남겨두면 이중공제가 되기 때문). 실제 산입액은 과거 사업소득 신고내역에 따른
+  // 사실관계라 자동계산할 수 없으므로 직접 입력을 받는다.
+  const depreciationDeductedAsBusinessExpense = Number(p.depreciationDeductedAsBusinessExpense) || 0;
+  if (depreciationDeductedAsBusinessExpense > 0) {
+    acquisitionPrice = Math.max(0, acquisitionPrice - depreciationDeductedAsBusinessExpense);
+    acquisitionPriceMethodNote += (acquisitionPriceMethodNote ? ' ' : '') + '사업소득 필요경비로 산입한 감가상각비(' + depreciationDeductedAsBusinessExpense + '원, §97③)를 취득가액에서 차감했습니다.';
   }
   // 재건축·재개발 특례는 취득가액 대신 종전자산 취득가액(originalAssetAcquisitionPrice)·권리가액(rightsValue)을
   // 별도로 쓰므로, 이 경우에는 일반 취득가액 필수 검증을 적용하지 않는다(아래 재건축 분기에서 별도 검증).

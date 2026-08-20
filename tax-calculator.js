@@ -1647,6 +1647,7 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>[그마저 모를 때] 취득당시 기준시가</label><input type="number" data-field="acquisitionStandardPriceForExpense" placeholder="원 (환산취득가액·개산공제 계산용)"></div>' +
           '<div class="taxcalc-field"><label>[그마저 모를 때] 양도당시 기준시가</label><input type="number" data-field="transferStandardPriceForConversion" placeholder="원 (함께 입력하면 환산취득가액=양도가액×취득당시÷양도당시 기준시가 자동계산, 없으면 취득당시기준시가를 그대로 취득가액으로 사용)"></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="useEstimatedNecessaryExpense" id="estExp-' + idx + '"><label for="estExp-' + idx + '">취득가액은 알지만 필요경비 지출증빙이 없어 개산공제(3%, 미등기양도자산은 0.3%)만 사용(위 비용 내역을 입력하지 않았을 때만 적용)</label></div>' +
+          '<div class="taxcalc-field"><label>사업용자산 감가상각비(필요경비 산입분)</label><input type="number" data-field="depreciationDeductedAsBusinessExpense" placeholder="원 (사업소득 계산시 감가상각비를 필요경비로 공제했다면 그 금액, §97③ — 취득가액에서 차감됩니다. 해당 없으면 비움)"></div>' +
           (transferAssets[idx].acquisitionDate && transferAssets[idx].acquisitionDate < '1990-08-31' ?
             '<div class="taxcalc-field"><span class="taxcalc-result-note">⚠ 1990.8.31. 이전 취득분은 개별공시지가가 없어 국세청 고시 배율표에 따른 별도 환산방법이 적용될 수 있습니다 — 이 계산기는 그 배율표를 반영하지 않으니 취득당시 기준시가를 직접 확인해서 입력하세요.</span></div>' : '') +
         '</div>' +
@@ -2164,6 +2165,11 @@ function collectTransferInput(vals){
       necessaryExpenses += Math.round(acqStd * 0.03);
     }
   }
+  // §97③ — 보유기간 중 사업소득금액 계산시 감가상각비로 필요경비에 산입했거나 산입할 금액이 있으면
+  // 그 금액을 취득가액에서 공제한다(이중공제 방지). 실제 산입액은 과거 사업소득 신고내역에 따른
+  // 사실관계라 자동계산할 수 없으므로 직접 입력을 받는다.
+  const depreciationDeductedAsBusinessExpense = numVal(vals.depreciationDeductedAsBusinessExpense) || 0;
+  if (depreciationDeductedAsBusinessExpense > 0) acquisitionPrice = Math.max(0, acquisitionPrice - depreciationDeductedAsBusinessExpense);
   // 관리처분인가 이후 조합원입주권·신축주택 양도(소득세법시행령§166①②③) — 취득가액을 단순 대체하는
   // 대신, tax-calc.js의 transferAssetCore가 관리처분계획등인가전·인가후 양도차익을 나눠 각각 다른
   // 장기보유특별공제를 적용하도록 원시 데이터(권리가액·청산금·기존건물 관련 필드)를 그대로 넘긴다.
