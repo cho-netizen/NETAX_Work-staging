@@ -3319,6 +3319,38 @@ function renderGiftPane(){
       '<div id="taxCalcBusinessSuccessionDeferralClawbackResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>물납 적용 가능 여부 판정(상증세법§73 일반물납·§73의2 문화유산등물납) — 요건 충족 여부만 판정하며, 물납충당재산의 구체적 범위·수납가액 산정(시행령 사항)은 다루지 않습니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>물납 종류</label><select id="ikProvision">' +
+          '<option value="general">§73(일반물납)</option>' +
+          '<option value="cultural_heritage">§73의2(문화유산등물납)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>상속세 납부세액</label><input type="number" id="ikTaxPayable" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>금융재산가액</label><input type="number" id="ikFinancialAsset" placeholder="원 (§13 가산 증여재산가액 제외, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[일반물납만] 부동산·유가증권 가액</label><input type="number" id="ikRealEstateSecurities" placeholder="원 (물납충당가능재산으로 한정)"></div>' +
+        '<div class="taxcalc-field"><label>상속재산가액</label><input type="number" id="ikTotalValue" placeholder="원 (§13 가산 증여재산 포함, 일반물납은 필수)"></div>' +
+        '<div class="taxcalc-field"><label>[문화유산등물납만] 문화유산등 가액</label><input type="number" id="ikCulturalValue" placeholder="원 (물납신청가능세액 한도 계산용)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-property-in-kind-payment-eligibility">적용 가능 여부 판정하기</button>' +
+      '<div id="taxCalcPropertyInKindPaymentResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>지정문화유산 등에 대한 상속세·증여세 징수유예(상증세법§74·§75) — 문화유산자료등·박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 세액의 징수를 유예합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="cdTaxType"><option value="inheritance">상속세(§74)</option><option value="gift">증여세(§75)</option></select></div>' +
+        '<div class="taxcalc-field"><label>전체 납부세액</label><input type="number" id="cdTotalTax" placeholder="원 (징수유예 적용 전)"></div>' +
+        '<div class="taxcalc-field"><label>전체 재산가액</label><input type="number" id="cdTotalProperty" placeholder="원 (상속재산가액 또는 증여재산가액)"></div>' +
+        '<div class="taxcalc-field"><label>징수유예 대상 재산가액</label><input type="number" id="cdEligibleProperty" placeholder="원 (문화유산자료등·박물관자료등 등)"></div>' +
+        '<div class="taxcalc-field"><label>사후관리 사유</label><select id="cdTriggerEvent">' +
+          '<option value="none">없음(계속 유예)</option>' +
+          '<option value="transferred_or_withdrawn">유상양도 또는 인출(즉시징수)</option>' +
+          '<option value="reinheritance_death">[상속세만] 소유자 사망으로 재상속(부과철회)</option>' +
+        '</select></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-cultural-heritage-tax-deferral">징수유예세액 계산하기</button>' +
+      '<div id="taxCalcCulturalHeritageTaxDeferralResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>저가양수·고가양도에 따른 이익의 증여의제(§35) — 특수관계인 간 시가보다 낮게(높게) 거래했을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>시가</label><input type="number" id="lpFairValue" placeholder="원"></div>' +
@@ -3917,6 +3949,31 @@ function renderBusinessSuccessionDeferralClawbackResult(r){
   html += taxCalcResultRow('납부유예세액', won(r.납부유예세액));
   if (r.사용비율 !== null && r.사용비율 !== undefined) html += taxCalcResultRow('적용비율', (r.사용비율 * 100).toFixed(1) + '%');
   html += taxCalcResultRow('추징세액', won(r.추징세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderPropertyInKindPaymentResult(r){
+  const box = document.getElementById('taxCalcPropertyInKindPaymentResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용 가능 여부', r.적용가능여부 ? '가능' : '불가능', { total: true });
+  if (r.부동산유가증권비율 !== null && r.부동산유가증권비율 !== undefined) html += taxCalcResultRow('부동산·유가증권 비율', (r.부동산유가증권비율 * 100).toFixed(1) + '%');
+  if (r.물납신청가능세액_한도 !== undefined) html += taxCalcResultRow('물납신청가능세액 한도', won(r.물납신청가능세액_한도));
+  (r.미충족사유 || []).forEach(function(reason){ html += '<div class="taxcalc-result-note">- ' + reason + '</div>'; });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderCulturalHeritageTaxDeferralResult(r){
+  const box = document.getElementById('taxCalcCulturalHeritageTaxDeferralResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('상태', r.상태);
+  html += taxCalcResultRow('징수유예세액', won(r.징수유예세액));
+  html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -5576,6 +5633,25 @@ taxCalcView.addEventListener('click', function(e){
       equityDecreaseRatio: numVal(document.getElementById('bcEquityDecreaseRatio').value) || 0
     };
     renderBusinessSuccessionDeferralClawbackResult(calculateBusinessSuccessionDeferralClawbackJS(input));
+  } else if (action === 'run-property-in-kind-payment-eligibility'){
+    const input = {
+      provision: document.getElementById('ikProvision').value,
+      inheritanceTaxPayable: numVal(document.getElementById('ikTaxPayable').value) || 0,
+      financialAssetValue: numVal(document.getElementById('ikFinancialAsset').value) || 0,
+      realEstateSecuritiesValue: numVal(document.getElementById('ikRealEstateSecurities').value) || 0,
+      totalInheritanceValue: numVal(document.getElementById('ikTotalValue').value) || 0,
+      culturalHeritageValue: numVal(document.getElementById('ikCulturalValue').value) || 0
+    };
+    renderPropertyInKindPaymentResult(calculatePropertyInKindPaymentEligibilityJS(input));
+  } else if (action === 'run-cultural-heritage-tax-deferral'){
+    const input = {
+      taxType: document.getElementById('cdTaxType').value,
+      totalTaxPayable: numVal(document.getElementById('cdTotalTax').value) || 0,
+      totalPropertyValue: numVal(document.getElementById('cdTotalProperty').value) || 0,
+      eligiblePropertyValue: numVal(document.getElementById('cdEligibleProperty').value) || 0,
+      triggerEvent: document.getElementById('cdTriggerEvent').value
+    };
+    renderCulturalHeritageTaxDeferralResult(calculateCulturalHeritageTaxDeferralJS(input));
   } else if (action === 'run-low-price-transfer'){
     const input = {
       fairMarketValue: numVal(document.getElementById('lpFairValue').value) || 0,

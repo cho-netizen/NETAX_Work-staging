@@ -3630,6 +3630,92 @@
     };
   };
 
+  // 물납 적용 가능 여부 판정 (상속세및증여세법§73 일반물납, §73의2 문화유산등물납) — 세액 자체가 아니라
+  // 요건 충족 여부를 판정한다(물납충당재산의 "수납가액" 산정은 시행령 세부공식이 원문 이미지로 확인되지
+  // 않아 다루지 않는다). §73①은 3요건 모두 충족해야 하고(관리·처분부적당시 그래도 불허가 가능),
+  // §73의2①은 2요건만 있으며 부동산·유가증권 비율 요건이 없다. §73의2⑤(물납신청가능세액 한도)는
+  // "문화유산등의 가액에 대한 상속세납부세액"을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로
+  // 근사 계산한다(정확한 시행령 산식 미확인).
+  window.calculatePropertyInKindPaymentEligibilityJS = function (p) {
+    p = p || {};
+    const provision = p.provision;
+    if (['general', 'cultural_heritage'].indexOf(provision) === -1) return { error: 'provision을 general(§73 일반물납)/cultural_heritage(§73의2 문화유산등물납) 중에서 선택하세요.' };
+    const inheritanceTaxPayable = Number(p.inheritanceTaxPayable) || 0;
+    const financialAssetValue = Number(p.financialAssetValue) || 0;
+    if (inheritanceTaxPayable <= 0) return { error: '상속세 납부세액이 필요합니다.' };
+
+    const reasons = [];
+    let eligible = true;
+    if (inheritanceTaxPayable <= 20000000) { eligible = false; reasons.push('상속세 납부세액(' + inheritanceTaxPayable + '원)이 2천만원을 초과하지 않습니다.'); }
+    if (inheritanceTaxPayable <= financialAssetValue) { eligible = false; reasons.push('상속세 납부세액이 금융재산가액(' + financialAssetValue + '원)을 초과하지 않습니다.'); }
+
+    let ratioDetail = null;
+    if (provision === 'general') {
+      const realEstateSecuritiesValue = Number(p.realEstateSecuritiesValue) || 0;
+      const totalInheritanceValue = Number(p.totalInheritanceValue) || 0;
+      if (totalInheritanceValue <= 0) return { error: 'provision이 general일 때는 상속재산가액(§13 가산 증여재산 포함)이 필요합니다.' };
+      const ratio = realEstateSecuritiesValue / totalInheritanceValue;
+      ratioDetail = ratio;
+      if (ratio <= 0.5) { eligible = false; reasons.push('부동산·유가증권 가액 비율(' + (ratio * 100).toFixed(1) + '%)이 상속재산가액의 2분의 1을 초과하지 않습니다.'); }
+    }
+
+    const result = {
+      적용가능여부: eligible,
+      부동산유가증권비율: ratioDetail,
+      미충족사유: reasons,
+      안내: eligible
+        ? (provision === 'general' ? '§73①의 3가지 요건을 모두 충족합니다. 다만 물납을 신청한 재산의 관리·처분이 적당하지 않다고 인정되면 세무서장이 불허가할 수 있습니다(§73①단서). 물납충당재산의 구체적 범위·수납가액 산정은 시행령 사항이라 이 계산기가 다루지 않습니다.' : '§73의2①의 2가지 요건을 모두 충족해 문화유산등에 대한 물납을 신청할 수 있습니다. 다만 문화체육관광부장관의 물납 필요성 인정(③) 및 국고손실위험 판단(④)을 거쳐야 최종 허가됩니다.')
+        : '요건을 충족하지 못해 ' + (provision === 'general' ? '§73' : '§73의2') + ' 물납을 신청할 수 없습니다.'
+    };
+
+    if (provision === 'cultural_heritage' && eligible) {
+      const culturalHeritageValue = Number(p.culturalHeritageValue) || 0;
+      const totalInheritanceValue = Number(p.totalInheritanceValue) || 0;
+      if (culturalHeritageValue > 0 && totalInheritanceValue > 0) {
+        const maxRequestable = Math.round(inheritanceTaxPayable * culturalHeritageValue / totalInheritanceValue);
+        result.물납신청가능세액_한도 = maxRequestable;
+        result.안내 += ' 물납신청가능세액 한도는 "문화유산등의 가액에 대한 상속세 납부세액"(§73의2⑤)을 상속세납부세액×(문화유산등가액÷상속재산가액) 비율로 근사 계산해 ' + maxRequestable + '원입니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+      }
+    }
+    return result;
+  };
+
+  // 지정문화유산 등에 대한 상속세 징수유예 (상속세및증여세법§74, 증여세는 §75가 준용) — 문화유산자료등·
+  // 박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 상속세(증여세)액의 징수를 유예한다.
+  // "그 재산가액에 상당하는 상속세액"을 상속세납부세액×(해당재산가액÷상속재산가액) 비율로 근사 계산한다
+  // (정확한 시행령 산식 미확인). 유상양도 또는 인출(박물관자료등만)시 즉시 징수하며(②), 이 징수에는
+  // 법문상 별도 이자상당가산액 규정이 없다(§74②는 "즉시 그 징수유예한 상속세를 징수" 라고만 함).
+  window.calculateCulturalHeritageTaxDeferralJS = function (p) {
+    p = p || {};
+    const taxType = p.taxType === 'gift' ? 'gift' : 'inheritance';
+    const totalTaxPayable = Number(p.totalTaxPayable) || 0;
+    const totalPropertyValue = Number(p.totalPropertyValue) || 0;
+    const eligiblePropertyValue = Number(p.eligiblePropertyValue) || 0;
+    if (totalTaxPayable <= 0 || totalPropertyValue <= 0 || eligiblePropertyValue <= 0) {
+      return { error: (taxType === 'gift' ? '증여세' : '상속세') + ' 납부세액, ' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ', 징수유예대상 재산가액이 필요합니다.' };
+    }
+    const deferredTaxAmount = Math.round(totalTaxPayable * eligiblePropertyValue / totalPropertyValue);
+
+    const triggerEvent = p.triggerEvent;
+    if (triggerEvent === 'transferred_or_withdrawn') {
+      return {
+        상태: '즉시징수대상', 징수유예세액: deferredTaxAmount, 납부세액: deferredTaxAmount,
+        안내: '해당 재산을 유상으로 양도하거나(박물관자료등의 경우 대통령령으로 정하는 사유로 인출하여) ' + (taxType === 'gift' ? '§75(§74②준용)' : '§74②') + ' 사유가 발생해, 징수유예했던 세액 전부를 즉시 징수합니다. 이 징수에는 법문상 별도 이자상당가산액 규정이 없습니다.'
+      };
+    }
+    if (triggerEvent === 'reinheritance_death') {
+      if (taxType === 'gift') return { error: '재상속으로 인한 징수유예세액 철회(§74③)는 상속세(taxType=inheritance)에만 적용됩니다.' };
+      return {
+        상태: '부과철회', 징수유예세액: deferredTaxAmount, 납부세액: 0,
+        안내: '징수유예 기간 중 상속인·수유자가 사망하여 다시 상속이 개시되어, 징수유예한 상속세액의 부과 결정을 철회하고 다시 부과하지 않습니다(§74③).'
+      };
+    }
+    return {
+      상태: '징수유예_적용중', 징수유예세액: deferredTaxAmount, 납부세액: 0,
+      안내: '해당 재산가액에 상당하는 ' + (taxType === 'gift' ? '증여세' : '상속세') + '액(' + deferredTaxAmount + '원 — 납부세액×해당재산가액÷' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ' 비율 근사치, 정확한 시행령 산식은 별도 확인 필요)의 징수를 유예합니다. 유상양도·인출시 즉시 징수되고(사유 transferred_or_withdrawn), 상속의 경우 소유자 사망으로 재상속되면 부과가 철회됩니다(사유 reinheritance_death, 상속세만). 징수유예를 받으려면 그 세액에 상당하는 담보를 제공해야 합니다(§74④, 국가지정문화유산등·천연기념물등은 담보 면제 가능 — ⑤).'
+    };
+  };
+
   // 합병에 따른 이익의 증여 (상증세법§38, 시행령§28) — 특수관계 법인간 합병에서 대주주등이 합병대가를
   // 주식등으로 교부받는 경우(가장 흔한 유형만 구현, 주식등 외 재산으로 받는 경우는 별도 계산 필요),
   // (합병후 신설·존속법인 1주당평가액 - 과대평가법인 1주당평가액×(과대평가법인 합병전주식수÷과대평가법인
