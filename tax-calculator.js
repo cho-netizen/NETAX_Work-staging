@@ -3153,6 +3153,41 @@ function renderGiftPane(){
       '<div id="taxCalcCharityDonationExclusionResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>공익법인등에 대한 가산세(§78) — 유형을 고른 뒤 해당하는 입력란만 채우세요. "기준금액"·전용계좌 미개설시 계산식 등 일부는 시행령·원문이미지 문제로 다루지 않습니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>가산세 유형</label><select id="poPenaltyType">' +
+          '<option value="report_not_filed">§78③ 출연재산 사용계획보고서 미제출·불분명</option>' +
+          '<option value="stock_holding_exceeded_5pct">§78④(§49①) 주식등 5%보유기준 초과</option>' +
+          '<option value="management_violation">§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행</option>' +
+          '<option value="director_excess">§78⑥ 이사정원(5분의1) 초과</option>' +
+          '<option value="stock_holding_exceeded_related">§78⑦(§48⑨) 특수관계법인주식 30%/50%한도 초과</option>' +
+          '<option value="advertising">§78⑧(§48⑩) 특수관계법인 무상 광고·홍보</option>' +
+          '<option value="income_underused">§78⑨(§48②5·7호) 운용소득·매각대금·기준금액 미달사용</option>' +
+          '<option value="dedicated_account_unused">§78⑩1호 전용계좌 미사용</option>' +
+          '<option value="disclosure_violation">§78⑪ 결산서류등 공시의무 위반</option>' +
+          '<option value="report_not_filed_5pct">§78⑭(§48⑬) 의무이행여부 신고 미이행</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[보고서미제출만] 상당 상속세·증여세액</label><input type="number" id="poBaseTaxAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[5%보유초과만] 초과주식 시가</label><input type="number" id="poExcessStockValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[세무확인등만] 수입금액+출연재산가액</label><input type="number" id="poRevenueAndDonation" placeholder="원 (해당 과세기간·사업연도)"></div>' +
+        '<div class="taxcalc-field"><label>[세무확인등만] 위반 세부유형</label><select id="poViolationSubType">' +
+          '<option value="tax_confirmation">세무확인 보고의무 불이행(최소100만원)</option>' +
+          '<option value="bookkeeping">장부작성·비치의무 불이행</option>' +
+          '<option value="audit">회계감사의무 불이행</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>[이사초과만] 관련 직접·간접경비</label><input type="number" id="poRelatedExpense" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[30/50%초과만] 보유 중인 특수관계법인 주식가액</label><input type="number" id="poStockValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[30/50%초과·공시위반·미신고만] 총재산가액(자산총액)</label><input type="number" id="poTotalAssetValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="poMeetsCompliance"><label for="poMeetsCompliance">[30/50%초과만] 회계감사·전용계좌·결산공시 의무 모두 이행(한도 50%)</label></div>' +
+        '<div class="taxcalc-field"><label>[광고홍보만] 직접 지출경비</label><input type="number" id="poDirectExpense" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[미달사용만] 기준금액 미달사용액</label><input type="number" id="poUnderusedAmount" placeholder="원 (기준금액 자체는 별도 산정 후 입력)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="poHighHoldingType"><label for="poHighHoldingType">[미달사용만] §48②7호가목 유형(10%초과보유, 가산율 200%)</label></div>' +
+        '<div class="taxcalc-field"><label>[전용계좌미사용만] 미사용 거래금액</label><input type="number" id="poUnusedTransaction" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-public-interest-org-penalty">가산세액 계산하기</button>' +
+      '<div id="taxCalcPublicInterestOrgPenaltyResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>장애인이 증여받은 재산의 과세가액 불산입(§52의2) — 장애인 본인 수익 자익신탁 또는 타인이 장애인 수익으로 설정한 타익신탁, 생애 5억원 한도</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="dtMeetsRequirements"><label for="dtMeetsRequirements">신탁업자 신탁·장애인 전부수익자 등 §52의2①·②요건 충족</label></div>' +
@@ -3337,11 +3372,11 @@ function renderGiftPane(){
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>지정문화유산 등에 대한 상속세·증여세 징수유예(상증세법§74·§75) — 문화유산자료등·박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 세액의 징수를 유예합니다</b></div>' +
       '<div class="taxcalc-grid">' +
-        '<div class="taxcalc-field"><label>세목</label><select id="cdTaxType"><option value="inheritance">상속세(§74)</option><option value="gift">증여세(§75)</option></select></div>' +
-        '<div class="taxcalc-field"><label>전체 납부세액</label><input type="number" id="cdTotalTax" placeholder="원 (징수유예 적용 전)"></div>' +
-        '<div class="taxcalc-field"><label>전체 재산가액</label><input type="number" id="cdTotalProperty" placeholder="원 (상속재산가액 또는 증여재산가액)"></div>' +
-        '<div class="taxcalc-field"><label>징수유예 대상 재산가액</label><input type="number" id="cdEligibleProperty" placeholder="원 (문화유산자료등·박물관자료등 등)"></div>' +
-        '<div class="taxcalc-field"><label>사후관리 사유</label><select id="cdTriggerEvent">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="chTaxType"><option value="inheritance">상속세(§74)</option><option value="gift">증여세(§75)</option></select></div>' +
+        '<div class="taxcalc-field"><label>전체 납부세액</label><input type="number" id="chTotalTax" placeholder="원 (징수유예 적용 전)"></div>' +
+        '<div class="taxcalc-field"><label>전체 재산가액</label><input type="number" id="chTotalProperty" placeholder="원 (상속재산가액 또는 증여재산가액)"></div>' +
+        '<div class="taxcalc-field"><label>징수유예 대상 재산가액</label><input type="number" id="chEligibleProperty" placeholder="원 (문화유산자료등·박물관자료등 등)"></div>' +
+        '<div class="taxcalc-field"><label>사후관리 사유</label><select id="chTriggerEvent">' +
           '<option value="none">없음(계속 유예)</option>' +
           '<option value="transferred_or_withdrawn">유상양도 또는 인출(즉시징수)</option>' +
           '<option value="reinheritance_death">[상속세만] 소유자 사망으로 재상속(부과철회)</option>' +
@@ -3833,6 +3868,16 @@ function renderCharityDonationExclusionResult(r){
   }
   html += taxCalcResultRow('과세가액불산입액', won(r.과세가액불산입액));
   html += taxCalcResultRow('과세가액산입액', won(r.과세가액산입액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderPublicInterestOrgPenaltyResult(r){
+  const box = document.getElementById('taxCalcPublicInterestOrgPenaltyResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('가산세액', won(r.가산세액), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -5505,6 +5550,23 @@ taxCalcView.addEventListener('click', function(e){
       priorRelatedShares: numVal(document.getElementById('cdPriorRelatedShares').value) || 0
     };
     renderCharityDonationExclusionResult(calculateCharityDonationTaxExclusionJS(input));
+  } else if (action === 'run-public-interest-org-penalty'){
+    const input = {
+      penaltyType: document.getElementById('poPenaltyType').value,
+      baseTaxAmount: numVal(document.getElementById('poBaseTaxAmount').value) || 0,
+      excessStockValue: numVal(document.getElementById('poExcessStockValue').value) || 0,
+      revenueAndDonationAmount: numVal(document.getElementById('poRevenueAndDonation').value) || 0,
+      violationSubType: document.getElementById('poViolationSubType').value,
+      relatedExpenseAmount: numVal(document.getElementById('poRelatedExpense').value) || 0,
+      stockValue: numVal(document.getElementById('poStockValue').value) || 0,
+      totalAssetValue: numVal(document.getElementById('poTotalAssetValue').value) || 0,
+      meetsComplianceRequirements: document.getElementById('poMeetsCompliance').checked,
+      directExpenseAmount: numVal(document.getElementById('poDirectExpense').value) || 0,
+      underusedAmount: numVal(document.getElementById('poUnderusedAmount').value) || 0,
+      isSect48_2_7HighHoldingType: document.getElementById('poHighHoldingType').checked,
+      unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0
+    };
+    renderPublicInterestOrgPenaltyResult(calculatePublicInterestOrgPenaltyJS(input));
   } else if (action === 'run-disabled-trust-exclusion'){
     const input = {
       meetsRequirements: document.getElementById('dtMeetsRequirements').checked,
@@ -5645,11 +5707,11 @@ taxCalcView.addEventListener('click', function(e){
     renderPropertyInKindPaymentResult(calculatePropertyInKindPaymentEligibilityJS(input));
   } else if (action === 'run-cultural-heritage-tax-deferral'){
     const input = {
-      taxType: document.getElementById('cdTaxType').value,
-      totalTaxPayable: numVal(document.getElementById('cdTotalTax').value) || 0,
-      totalPropertyValue: numVal(document.getElementById('cdTotalProperty').value) || 0,
-      eligiblePropertyValue: numVal(document.getElementById('cdEligibleProperty').value) || 0,
-      triggerEvent: document.getElementById('cdTriggerEvent').value
+      taxType: document.getElementById('chTaxType').value,
+      totalTaxPayable: numVal(document.getElementById('chTotalTax').value) || 0,
+      totalPropertyValue: numVal(document.getElementById('chTotalProperty').value) || 0,
+      eligiblePropertyValue: numVal(document.getElementById('chEligibleProperty').value) || 0,
+      triggerEvent: document.getElementById('chTriggerEvent').value
     };
     renderCulturalHeritageTaxDeferralResult(calculateCulturalHeritageTaxDeferralJS(input));
   } else if (action === 'run-low-price-transfer'){

@@ -1153,6 +1153,29 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_public_interest_org_penalty',
+    description: '공익법인등에 대한 가산세 등(상속세및증여세법§78)을 계산한다. 10가지 penaltyType: report_not_filed(§78③ 출연재산 사용계획보고서 미제출·불분명, 세액×1%), stock_holding_exceeded_5pct(§78④·§49① 5%보유기준 초과, 초과분시가×5%/년·10년한도), management_violation(§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행, (수입금액+출연재산가액)×0.07%, 세무확인유형은 최소100만원), director_excess(§78⑥ 이사정원초과, 관련경비 전액), stock_holding_exceeded_related(§78⑦·§48⑨ 특수관계법인주식 30%/50%한도초과, 초과분시가×5%), advertising(§78⑧·§48⑩ 무상광고홍보, 직접경비 전액), income_underused(§78⑨·§48②5호·7호 운용소득·매각대금·기준금액 미달사용, 미달액×10%(또는 특정유형 200%)), dedicated_account_unused(§78⑩1호 전용계좌미사용, 미사용거래금액×0.5%), disclosure_violation(§78⑪ 결산공시의무위반, 자산총액×0.5%), report_not_filed_5pct(§78⑭·§48⑬ 의무이행신고 미이행, 자산총액×0.5%). "기준금액"·전용계좌 미개설시 계산식 등 일부 세부항목은 시행령·원문이미지 문제로 직접입력값을 받거나 다루지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        penaltyType: { type: 'string', enum: ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess', 'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused', 'disclosure_violation', 'report_not_filed_5pct'], description: '가산세 유형.' },
+        baseTaxAmount: { type: 'number', description: 'penaltyType이 report_not_filed일 때 필수 — 미제출분·불분명분에 상당하는 상속세액(증여세액, 원).' },
+        excessStockValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_5pct일 때 필수 — §49①의 5% 보유기준을 초과하는 주식등의 시가(원).' },
+        revenueAndDonationAmount: { type: 'number', description: 'penaltyType이 management_violation일 때 필수 — 해당 과세기간(사업연도)의 수입금액과 그 기간에 출연받은 재산가액의 합계(원).' },
+        violationSubType: { type: 'string', enum: ['tax_confirmation', 'bookkeeping', 'audit'], description: 'penaltyType이 management_violation일 때 — tax_confirmation=세무확인 보고의무 불이행(최소100만원 적용), bookkeeping=장부작성·비치의무 불이행, audit=회계감사의무 불이행.' },
+        relatedExpenseAmount: { type: 'number', description: 'penaltyType이 director_excess일 때 필수 — §48⑧을 초과하는 이사·임직원과 관련해 지출된 직접·간접경비 금액(원).' },
+        stockValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_related일 때 필수 — 보유 중인 특수관계 내국법인 주식등의 가액(원).' },
+        totalAssetValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_related/disclosure_violation/report_not_filed_5pct일 때 필수 — 공익법인등의 총재산가액 또는 자산총액(원).' },
+        meetsComplianceRequirements: { type: 'boolean', description: 'penaltyType이 stock_holding_exceeded_related일 때 — 회계감사·전용계좌개설사용·결산서류공시 의무를 모두 이행하면 true(한도50%), 아니면 false(한도30%).' },
+        directExpenseAmount: { type: 'number', description: 'penaltyType이 advertising일 때 필수 — 특수관계 내국법인 이익증가를 위해 정당한 대가 없이 지출한 광고·홍보 직접경비(원).' },
+        underusedAmount: { type: 'number', description: 'penaltyType이 income_underused일 때 필수 — 기준금액에 미달하여 사용하지 않은 금액(원, 운용소득·매각대금 미달사용액 또는 §48②7호 기준금액에서 직접공익목적사업사용액을 차감한 금액 — 기준금액 자체의 시행령 산정식은 이 도구가 계산하지 않으므로 별도 산정 후 입력).' },
+        isSect48_2_7HighHoldingType: { type: 'boolean', description: 'penaltyType이 income_underused일 때 — §48②7호가목 유형(발행주식총수등의 5%초과 보유)의 공익법인등이 10%초과 보유중인 경우 true(가산율 200%), 아니면 false(10%).' },
+        unusedTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_unused일 때 필수 — 전용계좌를 사용하지 않은 거래금액(원).' }
+      },
+      required: ['penaltyType']
+    }
+  },
+  {
     name: 'calculate_national_forest_land_reduction',
     description: '국가에 양도하는 산지에 대한 양도소득세의 감면(조특법§85의10)을 계산한다. 2년 이상 보유한 산지(도시지역 소재 제외)를 2022.12.31 이전에 국유림의 경영 및 관리에 관한 법률§18에 따라 국가에 양도하면 그 양도소득세의 10%를 감면한다(신청기한 만료로 과거 거래에만 적용 가능).',
     input_schema: {
@@ -6872,6 +6895,84 @@ function toolCalculateCharityDonationTaxExclusion(p) {
   };
 }
 
+// 공익법인등에 대한 가산세 등 (상속세및증여세법§78) — §48②5호·7호(운용소득·매각대금 기준금액 미달사용,
+// 사후관리)의 "기준금액" 자체는 시행령 위임이라 정확한 산정식을 모르므로, 이미 산정된 미달사용액을
+// 직접 입력받는다. §78⑩2호가목("전용계좌 개설·신고를 하지 않은 경우"의 두 금액 중 큰 금액)은 가목
+// 계산식이 원문 이미지로 확인되지 않아 나목(거래금액합계×1000분의5)만 계산한다 — 실제로는 가목과
+// 비교해 더 큰 금액을 써야 하므로 이 결과가 최종 가산세액보다 작을 수 있다.
+function toolCalculatePublicInterestOrgPenalty(p) {
+  p = p || {};
+  const penaltyType = p.penaltyType;
+  const validTypes = ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess',
+    'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused',
+    'disclosure_violation', 'report_not_filed_5pct'];
+  if (validTypes.indexOf(penaltyType) === -1) return { error: 'penaltyType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
+
+  let penaltyAmount, note;
+  if (penaltyType === 'report_not_filed') {
+    const baseTaxAmount = Number(p.baseTaxAmount) || 0;
+    if (baseTaxAmount <= 0) return { error: '미제출분 또는 불분명한 부분의 금액에 상당하는 상속세액(증여세액)이 필요합니다.' };
+    penaltyAmount = Math.round(baseTaxAmount * 0.01);
+    note = '§48⑤에 따른 출연재산 사용계획·진도 보고서를 미제출하거나 그 내용이 불분명하여 §78③에 따라 해당 금액에 상당하는 세액의 100분의 1을 가산세로 징수합니다.';
+  } else if (penaltyType === 'stock_holding_exceeded_5pct') {
+    const excessStockValue = Number(p.excessStockValue) || 0;
+    if (excessStockValue <= 0) return { error: '§49① 보유기준(5%)을 초과하는 주식등의 시가가 필요합니다.' };
+    penaltyAmount = Math.round(excessStockValue * 0.05);
+    note = '§49① 주식등 보유기준(5%)을 초과 보유해 §78④에 따라 그 초과분 시가의 100분의 5를 매년 말 현재 기준으로 가산세로 부과합니다(부과기간 최대 10년 — 매년 별도로 계산해야 합니다).';
+  } else if (penaltyType === 'management_violation') {
+    const revenueAndDonationAmount = Number(p.revenueAndDonationAmount) || 0;
+    if (revenueAndDonationAmount <= 0) return { error: '해당 과세기간(사업연도)의 수입금액과 그 기간에 출연받은 재산가액의 합계가 필요합니다.' };
+    const violationSubType = p.violationSubType;
+    let raw = Math.round(revenueAndDonationAmount * 0.0007);
+    if (violationSubType === 'tax_confirmation') raw = Math.max(raw, 1000000);
+    penaltyAmount = raw;
+    note = '§78⑤에 따라 (해당 과세기간·사업연도의 수입금액+그 기간에 출연받은 재산가액)×1만분의7을 상속세(증여세)로 징수합니다' + (violationSubType === 'tax_confirmation' ? '(세무확인 보고의무 불이행의 경우 계산된 금액이 100만원 미만이면 100만원으로 합니다).' : '(장부작성·비치의무 또는 회계감사의무 불이행).');
+  } else if (penaltyType === 'director_excess') {
+    const relatedExpenseAmount = Number(p.relatedExpenseAmount) || 0;
+    if (relatedExpenseAmount <= 0) return { error: '§48⑧을 초과하는 이사·임직원과 관련하여 지출된 직접경비·간접경비 금액이 필요합니다.' };
+    penaltyAmount = relatedExpenseAmount;
+    note = '§48⑧에 따른 이사 정원(현재 이사 수의 5분의 1, 이사 수가 5명 미만이면 5명 기준)을 초과하는 이사가 있거나 출연자·특수관계인이 임직원이 되어, §78⑥에 따라 그와 관련해 지출된 직접·간접경비 전액을 매년 가산세로 부과합니다.';
+  } else if (penaltyType === 'stock_holding_exceeded_related') {
+    const stockValue = Number(p.stockValue) || 0;
+    const totalAssetValue = Number(p.totalAssetValue) || 0;
+    if (stockValue <= 0 || totalAssetValue <= 0) return { error: '보유 중인 특수관계 내국법인 주식등의 가액과 공익법인등의 총재산가액이 필요합니다.' };
+    const limitRatio = p.meetsComplianceRequirements ? 0.5 : 0.3;
+    const limitValue = totalAssetValue * limitRatio;
+    const excessValue = Math.max(0, stockValue - limitValue);
+    penaltyAmount = Math.round(excessValue * 0.05);
+    note = '§48⑨에 따른 특수관계 내국법인 주식등 보유한도(총재산가액의 ' + Math.round(limitRatio * 100) + '% — 회계감사·전용계좌·결산공시 의무를 모두 이행하면 50%, 아니면 30%)를 초과 보유해 §78⑦에 따라 그 초과분(' + excessValue + '원) 시가의 100분의 5를 매 사업연도 말 기준으로 가산세로 부과합니다.';
+  } else if (penaltyType === 'advertising') {
+    const directExpenseAmount = Number(p.directExpenseAmount) || 0;
+    if (directExpenseAmount <= 0) return { error: '특수관계 내국법인의 이익 증가를 위해 정당한 대가 없이 지출한 광고·홍보 직접경비가 필요합니다.' };
+    penaltyAmount = directExpenseAmount;
+    note = '§48⑩에 따라 특수관계에 있는 내국법인의 이익을 증가시키기 위해 정당한 대가를 받지 않고 광고·홍보를 하여, §78⑧에 따라 그 행위와 관련해 직접 지출된 경비 상당액을 가산세로 부과합니다.';
+  } else if (penaltyType === 'income_underused') {
+    const underusedAmount = Number(p.underusedAmount) || 0;
+    if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액(운용소득·매각대금 미달사용액, 또는 §48②7호 기준금액에서 직접공익목적사업사용액을 차감한 금액)이 필요합니다.' };
+    const isHighRateType = !!p.isSect48_2_7HighHoldingType;
+    const rate = isHighRateType ? 2.0 : 0.10;
+    penaltyAmount = Math.round(underusedAmount * rate);
+    note = '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
+  } else if (penaltyType === 'dedicated_account_unused') {
+    const unusedTransactionAmount = Number(p.unusedTransactionAmount) || 0;
+    if (unusedTransactionAmount <= 0) return { error: '전용계좌를 사용하지 않은 거래금액이 필요합니다.' };
+    penaltyAmount = Math.round(unusedTransactionAmount * 0.005);
+    note = '§50의2①에 해당하는 거래를 전용계좌로 하지 않아 §78⑩1호에 따라 그 미사용 거래금액의 1000분의 5를 가산세로 부과합니다. (전용계좌를 아예 개설·신고하지 않은 경우의 가산세는 §78⑩2호로 별도이며, 그 중 가목 계산식은 원문 이미지라 이 계산기가 다루지 않습니다 — 나목만 필요하면 penaltyType을 이 값으로 그대로 쓰되 "미사용 거래금액"에 §50의2①1~4호 거래금액 합계를 넣어 근사치로 활용할 수 있습니다.)';
+  } else if (penaltyType === 'disclosure_violation') {
+    const totalAssetValue = Number(p.totalAssetValue) || 0;
+    if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
+    penaltyAmount = Math.round(totalAssetValue * 0.005);
+    note = '§50의3에 따른 결산서류등을 공시하지 않거나 공시 내용에 오류가 있는데도 공시·시정 요구를 지정기한까지 이행하지 않아, §78⑪에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5를 가산세로 부과합니다.';
+  } else {
+    const totalAssetValue = Number(p.totalAssetValue) || 0;
+    if (totalAssetValue <= 0) return { error: '신고해야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
+    penaltyAmount = Math.round(totalAssetValue * 0.005);
+    note = '§48⑬에 따라 내국법인 발행주식총수등의 5%를 초과해 주식등을 출연받은 공익법인등 등이 의무이행 여부를 신고하지 않아, §78⑭에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5(대통령령으로 정하는 한도 내)를 가산세로 부과합니다.';
+  }
+
+  return { 가산세액: penaltyAmount, 안내: note };
+}
+
 // 국가에 양도하는 산지에 대한 양도소득세의 감면 (조특법§85의10) — 2년 이상 보유한 산지를 2022.12.31
 // 이전에 국유림법§18에 따라 국가에 양도하면 그 양도소득세의 10%를 감면한다.
 function toolCalculateNationalForestLandReduction(p) {
@@ -8009,6 +8110,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_capital_reduction_gift_tax' ||
         b.name === 'calculate_disabled_person_trust_exclusion' ||
         b.name === 'calculate_charity_donation_tax_exclusion' ||
+        b.name === 'calculate_public_interest_org_penalty' ||
         b.name === 'calculate_national_forest_land_reduction' ||
         b.name === 'calculate_industrial_complex_relocation_lot_rate' ||
         b.name === 'calculate_museum_relocation_installment' ||
@@ -8292,6 +8394,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_charity_donation_tax_exclusion') {
         const resultObj = toolCalculateCharityDonationTaxExclusion(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_public_interest_org_penalty') {
+        const resultObj = toolCalculatePublicInterestOrgPenalty(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
