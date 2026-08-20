@@ -1669,6 +1669,9 @@ function renderTransferPane(){
             '<option value="rental_long">장기임대주택(조특법§97의4, 일반공제+임대기간별 추가공제)</option>' +
           '</select></div>' +
           '<div class="taxcalc-field"><label>임대기간</label><input type="number" data-field="rentalYears" placeholder="년 (위 특례 선택 시)" maxlength="2"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3만] 취득 당시 기준시가</label><input type="number" data-field="acquisitionStandardPrice" placeholder="원 (임대기간중 양도차익 정확히 안분시)"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3만] 등록일 당시 기준시가</label><input type="number" data-field="registrationStandardPrice" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>[§97의3만] 양도 당시 기준시가</label><input type="number" data-field="transferStandardPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의14, 양도대금 중 6개월 내 납입액 — 기초연금수급자·1주택 또는 무주택 세대구성원만 해당)"></div>' +
           '<div class="taxcalc-field"><label>공익사업용토지 수용감면</label><select data-field="compensationType">' +
             '<option value="">해당없음</option>' +
@@ -1766,6 +1769,18 @@ function renderTransferPane(){
       '<div id="taxCalcBusinessTransferCarryoverResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>부담부증여시 양도로 보는 부분의 취득가액·양도가액(소득세법시행령§159) — 수증자가 인수한 채무액에 상당하는 부분은 양도로 봅니다. 결과의 양도가액·취득가액·필요경비를 위 일반 양도세 계산기에 그대로 넣어 나머지 세액을 계산하세요</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>자산 취득가액</label><input type="number" id="bgAcquisitionPrice" placeholder="원 (실지거래가액)"></div>' +
+        '<div class="taxcalc-field"><label>자산 증여재산가액</label><input type="number" id="bgGiftValue" placeholder="원 (상증세법상 평가액, 부담부증여 전체 자산가액)"></div>' +
+        '<div class="taxcalc-field"><label>수증자가 인수한 채무액</label><input type="number" id="bgDebtAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>함께 증여한 다른 재산의 증여재산가액 합계</label><input type="number" id="bgOtherAssetsValue" placeholder="원 (양도세 비과세대상 재산과 함께 부담부증여한 경우만, §159②)"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="bgNecessaryExpenses" placeholder="원 (자본적지출액·양도비 등, 없으면 0)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-burdened-gift-transfer">양도가액·취득가액 계산하기</button>' +
+      '<div id="taxCalcBurdenedGiftTransferResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>양도소득의 부당행위계산 - 증여 후 우회양도 부인(소득세법§101②) — 배우자·직계존비속이 아닌 특수관계인(형제자매 등)에게 증여 후 수증자가 10년 이내 재양도할 때. 증여세·양도세는 각각 별도로 계산한 뒤 그 결과를 아래에 입력해 비교합니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="ddSpouseLineal"><label for="ddSpouseLineal">배우자·직계존비속으로서 이월과세(§97의2) 적용대상임(체크시 §101②는 적용대상 제외)</label></div>' +
@@ -1793,7 +1808,10 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="nhAcquisitionPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="nhTransferPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="nhNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
-        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="nhFiveYearMarkValue" placeholder="원 (없으면 전체 양도차익을 보유기간에 선형 안분해 추정)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유, 근사치용)</label><input type="number" id="nhFiveYearMarkValue" placeholder="원 (아래 기준시가 3종이 없을 때만 사용)"></div>' +
+        '<div class="taxcalc-field"><label>취득 당시 기준시가(5년 초과보유, 정확한 계산용)</label><input type="number" id="nhAcquisitionStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>5년 시점 기준시가</label><input type="number" id="nhFiveYearStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도 당시 기준시가</label><input type="number" id="nhTransferStandardPrice" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-new-house-reduction">감면대상 양도소득금액 계산하기</button>' +
       '<div id="taxCalcNewHouseReductionResult"></div>' +
@@ -1816,7 +1834,10 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="uhAcquisitionPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="uhTransferPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="uhNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
-        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="uhFiveYearMarkValue" placeholder="원 (없으면 선형 안분 추정)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유, 근사치용)</label><input type="number" id="uhFiveYearMarkValue" placeholder="원 (아래 기준시가 3종이 없을 때만 사용)"></div>' +
+        '<div class="taxcalc-field"><label>취득 당시 기준시가(5년 초과보유, 정확한 계산용)</label><input type="number" id="uhAcquisitionStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>5년 시점 기준시가</label><input type="number" id="uhFiveYearStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도 당시 기준시가</label><input type="number" id="uhTransferStandardPrice" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-unsold-house-reduction">감면대상 양도소득금액 계산하기</button>' +
       '<div id="taxCalcUnsoldHouseReductionResult"></div>' +
@@ -1840,7 +1861,10 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="rpAcquisitionPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="rpTransferPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="rpNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
-        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유일 때만)</label><input type="number" id="rpFiveYearMarkValue" placeholder="원 (없으면 선형 안분 추정)"></div>' +
+        '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유, 근사치용)</label><input type="number" id="rpFiveYearMarkValue" placeholder="원 (아래 기준시가 3종이 없을 때만 사용)"></div>' +
+        '<div class="taxcalc-field"><label>취득 당시 기준시가(5년 초과보유, 정확한 계산용)</label><input type="number" id="rpAcquisitionStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>5년 시점 기준시가</label><input type="number" id="rpFiveYearStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도 당시 기준시가</label><input type="number" id="rpTransferStandardPrice" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-restructuring-property-reduction">감면대상 양도소득금액 계산하기</button>' +
       '<div id="taxCalcRestructuringPropertyReductionResult"></div>' +
@@ -1890,7 +1914,10 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="lrTransferPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="lrAcquisitionPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="lrNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
-        '<div class="taxcalc-field"><label>[§97의5만] 등록일 현재 평가액</label><input type="number" id="lrRegistrationValue" placeholder="원 (임대기간중 발생분 산정용)"></div>' +
+        '<div class="taxcalc-field"><label>[§97의5만] 등록일 현재 평가액(근사치용)</label><input type="number" id="lrRegistrationValue" placeholder="원 (아래 기준시가 3종이 없을 때만 사용)"></div>' +
+        '<div class="taxcalc-field"><label>[§97의5만] 취득 당시 기준시가(정확한 계산용)</label><input type="number" id="lrAcquisitionStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[§97의5만] 등록일 당시 기준시가</label><input type="number" id="lrRegistrationStandardPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[§97의5만] 양도 당시 기준시가</label><input type="number" id="lrTransferStandardPrice" placeholder="원"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-long-term-rental-house">감면대상 양도소득금액 계산하기</button>' +
       '<div id="taxCalcLongTermRentalHouseResult"></div>' +
@@ -1984,6 +2011,7 @@ function renderTransferPane(){
           '<option value="expense">필요경비산입방법(위 취득가액 등에 이미 포함해 입력)</option>' +
         '</select></div>' +
         '<div class="taxcalc-field"><label>[세액공제방법만] 외국에 납부한 세액</label><input type="number" id="oaForeignTaxPaid" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>같은 과세기간 국내자산 양도소득금액(있으면)</label><input type="number" id="oaDomesticIncome" placeholder="원 (없으면 국외자산만 있다고 보아 공제한도=산출세액)"></div>' +
       '</div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>신고 상태</label><select id="oaFilingStatus">' +
@@ -2131,6 +2159,9 @@ function collectTransferInput(vals){
     convertedBuildingAcquisitionValueForPenalty: numVal(vals.convertedBuildingAcquisitionValueForPenalty) || 0,
     rentalSpecialType: vals.rentalSpecialType || '',
     rentalYears: numVal(vals.rentalYears) || 0,
+    acquisitionStandardPrice: numVal(vals.acquisitionStandardPrice) || 0,
+    registrationStandardPrice: numVal(vals.registrationStandardPrice) || 0,
+    transferStandardPrice: numVal(vals.transferStandardPrice) || 0,
     pensionAccountContribution: numVal(vals.pensionAccountContribution) || 0,
     compensationType: vals.compensationType || '',
     downContractPriceDifference: numVal(vals.downContractPriceDifference) || 0,
@@ -2271,6 +2302,21 @@ function renderBusinessTransferCarryoverResult(r){
   html += taxCalcResultRow('이월과세액', won(r.이월과세액));
   if (r.법인기납부세액 !== undefined) html += taxCalcResultRow('법인 기납부세액', '-' + won(r.법인기납부세액));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderBurdenedGiftTransferResult(r){
+  const box = document.getElementById('taxCalcBurdenedGiftTransferResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('안분채무액(=양도가액)', won(r.안분채무액));
+  html += taxCalcResultRow('채무액비율', (r.채무액비율 * 100).toFixed(2) + '%');
+  html += taxCalcResultRow('양도로보는부분 양도가액', won(r.양도로보는부분_양도가액));
+  html += taxCalcResultRow('양도로보는부분 취득가액', won(r.양도로보는부분_취득가액));
+  html += taxCalcResultRow('필요경비', won(r.필요경비));
+  html += taxCalcResultRow('양도차익', won(r.양도차익), { total: true });
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -2514,6 +2560,7 @@ function renderOverseasAssetTransferResult(r){
   html += taxCalcResultRow('기본공제', won(r.기본공제));
   html += taxCalcResultRow('과세표준', won(r.과세표준));
   html += taxCalcResultRow('산출세액', won(r.산출세액));
+  if (r.외국납부세액공제한도 !== undefined) html += taxCalcResultRow('외국납부세액공제 한도', won(r.외국납부세액공제한도));
   if (r.외국납부세액공제) html += taxCalcResultRow('외국납부세액공제', '-' + won(r.외국납부세액공제));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
@@ -4815,6 +4862,15 @@ taxCalcView.addEventListener('click', function(e){
       alreadyPaidByCorp: numVal(document.getElementById('btAlreadyPaid').value) || 0
     };
     renderBusinessTransferCarryoverResult(calculateBusinessTransferCarryoverJS(input));
+  } else if (action === 'run-burdened-gift-transfer'){
+    const input = {
+      assetAcquisitionPrice: numVal(document.getElementById('bgAcquisitionPrice').value) || 0,
+      assetGiftValue: numVal(document.getElementById('bgGiftValue').value) || 0,
+      totalDebtAmount: numVal(document.getElementById('bgDebtAmount').value) || 0,
+      otherAssetsGiftValueSum: numVal(document.getElementById('bgOtherAssetsValue').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('bgNecessaryExpenses').value) || 0
+    };
+    renderBurdenedGiftTransferResult(calculateBurdenedGiftTransferJS(input));
   } else if (action === 'run-donor-direct-transfer'){
     const input = {
       isSpouseOrLinealCarryoverApplies: document.getElementById('ddSpouseLineal').checked,
@@ -4835,7 +4891,10 @@ taxCalcView.addEventListener('click', function(e){
       acquisitionPrice: numVal(document.getElementById('nhAcquisitionPrice').value) || 0,
       transferPrice: numVal(document.getElementById('nhTransferPrice').value) || 0,
       necessaryExpenses: numVal(document.getElementById('nhNecessaryExpenses').value) || 0,
-      fiveYearMarkValue: numVal(document.getElementById('nhFiveYearMarkValue').value) || 0
+      fiveYearMarkValue: numVal(document.getElementById('nhFiveYearMarkValue').value) || 0,
+      acquisitionStandardPrice: numVal(document.getElementById('nhAcquisitionStandardPrice').value) || 0,
+      fiveYearStandardPrice: numVal(document.getElementById('nhFiveYearStandardPrice').value) || 0,
+      transferStandardPrice: numVal(document.getElementById('nhTransferStandardPrice').value) || 0
     };
     renderNewHouseReductionResult(calculateNewHouseAcquisitionReductionJS(input));
   } else if (action === 'run-unsold-house-reduction'){
@@ -4848,7 +4907,10 @@ taxCalcView.addEventListener('click', function(e){
       acquisitionPrice: numVal(document.getElementById('uhAcquisitionPrice').value) || 0,
       transferPrice: numVal(document.getElementById('uhTransferPrice').value) || 0,
       necessaryExpenses: numVal(document.getElementById('uhNecessaryExpenses').value) || 0,
-      fiveYearMarkValue: numVal(document.getElementById('uhFiveYearMarkValue').value) || 0
+      fiveYearMarkValue: numVal(document.getElementById('uhFiveYearMarkValue').value) || 0,
+      acquisitionStandardPrice: numVal(document.getElementById('uhAcquisitionStandardPrice').value) || 0,
+      fiveYearStandardPrice: numVal(document.getElementById('uhFiveYearStandardPrice').value) || 0,
+      transferStandardPrice: numVal(document.getElementById('uhTransferStandardPrice').value) || 0
     };
     renderUnsoldHouseReductionResult(calculateUnsoldHouseAcquisitionReductionJS(input));
   } else if (action === 'run-unsold-house-one-house'){
@@ -4866,7 +4928,10 @@ taxCalcView.addEventListener('click', function(e){
       acquisitionPrice: numVal(document.getElementById('rpAcquisitionPrice').value) || 0,
       transferPrice: numVal(document.getElementById('rpTransferPrice').value) || 0,
       necessaryExpenses: numVal(document.getElementById('rpNecessaryExpenses').value) || 0,
-      fiveYearMarkValue: numVal(document.getElementById('rpFiveYearMarkValue').value) || 0
+      fiveYearMarkValue: numVal(document.getElementById('rpFiveYearMarkValue').value) || 0,
+      acquisitionStandardPrice: numVal(document.getElementById('rpAcquisitionStandardPrice').value) || 0,
+      fiveYearStandardPrice: numVal(document.getElementById('rpFiveYearStandardPrice').value) || 0,
+      transferStandardPrice: numVal(document.getElementById('rpTransferStandardPrice').value) || 0
     };
     renderRestructuringPropertyReductionResult(calculateRestructuringPropertyReductionJS(input));
   } else if (action === 'run-population-decline-house'){
@@ -4884,7 +4949,10 @@ taxCalcView.addEventListener('click', function(e){
       transferPrice: numVal(document.getElementById('lrTransferPrice').value) || 0,
       acquisitionPrice: numVal(document.getElementById('lrAcquisitionPrice').value) || 0,
       necessaryExpenses: numVal(document.getElementById('lrNecessaryExpenses').value) || 0,
-      registrationDateValue: numVal(document.getElementById('lrRegistrationValue').value) || 0
+      registrationDateValue: numVal(document.getElementById('lrRegistrationValue').value) || 0,
+      acquisitionStandardPrice: numVal(document.getElementById('lrAcquisitionStandardPrice').value) || 0,
+      registrationStandardPrice: numVal(document.getElementById('lrRegistrationStandardPrice').value) || 0,
+      transferStandardPrice: numVal(document.getElementById('lrTransferStandardPrice').value) || 0
     };
     renderLongTermRentalHouseResult(calculateLongTermRentalHouseReductionJS(input));
   } else if (action === 'run-national-forest-land'){
@@ -4945,6 +5013,7 @@ taxCalcView.addEventListener('click', function(e){
       transferExpenses: numVal(document.getElementById('oaTransferExpenses').value) || 0,
       foreignTaxCreditMethod: document.getElementById('oaForeignTaxMethod').value,
       foreignTaxPaidAmount: numVal(document.getElementById('oaForeignTaxPaid').value) || 0,
+      domesticTransferIncomeAmount: numVal(document.getElementById('oaDomesticIncome').value) || 0,
       filingStatus: document.getElementById('oaFilingStatus').value,
       isFraudulent: document.getElementById('oaFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('oaUnderreportedTax').value) || 0,

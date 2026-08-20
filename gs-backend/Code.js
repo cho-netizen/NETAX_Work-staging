@@ -334,6 +334,9 @@ const DRIVE_TOOLS = [
         convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 취득가액으로 사용한 감정가액 또는 환산취득가액 중 건물분 가액(원, 증축이면 증축부분만). 가산세 = 이 금액×5%.' },
         rentalSpecialType: { type: 'string', enum: ['rental_general', 'rental_long'], description: '등록임대주택 장기보유특별공제 특례([별지 제84호서식] 코드04·05) — rental_general=장기일반민간임대주택(조특법§97의3, 10년이상임대 70%/8년이상 50% 정액), rental_long=장기임대주택(조특법§97의4, 일반 장특공제율에 임대기간별 2~10%p 추가). 지정하면 위 일반/1세대1주택 장특공제율을 대체하고, 다주택중과도 배제된다. 등록임대주택 요건(국민주택규모·임대료5%상한준수 등) 자체는 검증하지 않는다.' },
         rentalYears: { type: 'number', description: 'rentalSpecialType 지정 시 임대기간(년).' },
+        acquisitionStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 조특법시행령§97의3⑤ 원문대로 "임대기간중 발생한 양도차익"을 기준시가 비율로 정확히 안분해 70%를 그 부분에만 적용한다(없으면 70%를 전체 양도차익에 적용하는 근사치를 씀).' },
+        registrationStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때만 — 양도 당시 기준시가(원).' },
         pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의13 연금계좌세액공제. MIN(납입액, 양도차익, 1억원)×10%를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
         compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
@@ -838,7 +841,10 @@ const DRIVE_TOOLS = [
         transferPrice: { type: 'number', description: '양도가액(원).' },
         acquisitionPrice: { type: 'number', description: '취득가액(원).' },
         necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
-        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(감정가액 등, 원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다(부정확할 수 있음).' }
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(감정가액 등, 원). acquisitionStandardPrice·fiveYearStandardPrice·transferStandardPrice가 없을 때의 근사치 계산에만 쓰인다.' },
+        acquisitionStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득 당시 기준시가(원). fiveYearStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 원문대로(기준시가 비율) 5년간 발생분을 정확히 계산한다(없으면 fiveYearMarkValue 등으로 근사치 계산).' },
+        fiveYearStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 양도 당시 기준시가(원).' }
       },
       required: ['provision']
     }
@@ -857,7 +863,10 @@ const DRIVE_TOOLS = [
         transferPrice: { type: 'number', description: '양도가액(원).' },
         acquisitionPrice: { type: 'number', description: '취득가액(원).' },
         necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
-        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다.' }
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). acquisitionStandardPrice·fiveYearStandardPrice·transferStandardPrice가 없을 때의 근사치 계산에만 쓰인다.' },
+        acquisitionStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득 당시 기준시가(원). fiveYearStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 원문대로(기준시가 비율) 5년간 발생분을 정확히 계산한다(없으면 fiveYearMarkValue 등으로 근사치 계산).' },
+        fiveYearStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 양도 당시 기준시가(원).' }
       },
       required: ['provision']
     }
@@ -1071,6 +1080,7 @@ const DRIVE_TOOLS = [
         transferExpenses: { type: 'number', description: '양도비(원). 없으면 생략.' },
         foreignTaxCreditMethod: { type: 'string', enum: ['credit', 'expense'], description: 'credit=외국납부세액공제(산출세액 한도로 세액공제, 기본값), expense=필요경비산입방법(이미 필요경비에 포함해 입력했다면 이 값을 선택).' },
         foreignTaxPaidAmount: { type: 'number', description: 'foreignTaxCreditMethod가 credit일 때 — 해당 양도소득에 대해 외국에 납부한 세액(원). 없으면 생략.' },
+        domesticTransferIncomeAmount: { type: 'number', description: '같은 과세기간에 국내자산 양도소득금액도 함께 있는 경우 그 금액(원, §118의6① 세액공제한도 계산용). 외국납부세액공제 한도 = 산출세액 × (국외자산양도소득금액÷해당과세기간양도소득금액합계액)인데, 이 계산기가 다루는 국외자산양도소득 외에 같은 과세기간 국내 양도소득이 없다면 생략(비율=1로 계산).' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1205,7 +1215,10 @@ const DRIVE_TOOLS = [
         transferPrice: { type: 'number', description: '양도가액(원).' },
         acquisitionPrice: { type: 'number', description: '취득가액(원).' },
         necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
-        registrationDateValue: { type: 'number', description: 'provision이 sect97_5일 때 필수 — 장기일반민간임대주택등 등록일 현재의 평가액(원, 임대기간중 발생분 산정용).' }
+        registrationDateValue: { type: 'number', description: 'provision이 sect97_5일 때 — 장기일반민간임대주택등 등록일 현재의 평가액(원). acquisitionStandardPrice·registrationStandardPrice·transferStandardPrice가 없을 때의 근사치 계산에만 쓰인다.' },
+        acquisitionStandardPrice: { type: 'number', description: 'provision이 sect97_5일 때만 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 시행령§97의5② 원문대로 "임대기간중 발생한 양도소득금액"을 기준시가 비율로 정확히 계산한다(없으면 registrationDateValue로 근사치 계산).' },
+        registrationStandardPrice: { type: 'number', description: 'provision이 sect97_5일 때만 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: 'provision이 sect97_5일 때만 — 양도 당시 기준시가(원).' }
       },
       required: ['provision']
     }
@@ -1257,7 +1270,10 @@ const DRIVE_TOOLS = [
         transferPrice: { type: 'number', description: '양도가액(원).' },
         acquisitionPrice: { type: 'number', description: '취득가액(원).' },
         necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
-        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). 없으면 전체 양도차익을 보유기간에 선형 안분해 추정한다.' }
+        fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). acquisitionStandardPrice·fiveYearStandardPrice·transferStandardPrice가 없을 때의 근사치 계산에만 쓰인다.' },
+        acquisitionStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득 당시 기준시가(원). fiveYearStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 원문대로(기준시가 비율) 5년간 발생분을 정확히 계산한다(없으면 fiveYearMarkValue 등으로 근사치 계산).' },
+        fiveYearStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 기준시가(원).' },
+        transferStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 양도 당시 기준시가(원).' }
       },
       required: ['acquisitionDate', 'transferDate']
     }
@@ -1289,6 +1305,21 @@ const DRIVE_TOOLS = [
         alreadyPaidByCorp: { type: 'number', description: 'triggerEvent이 사후관리 위반일 때 — 통합법인·전환법인이 이미 납부한 세액(원). 없으면 0.' }
       },
       required: ['provision', 'deferredTaxAmount', 'triggerEvent']
+    }
+  },
+  {
+    name: 'calculate_burdened_gift_transfer',
+    description: '부담부증여시 양도로 보는 부분의 취득가액·양도가액을 계산한다(소득세법시행령§159). 부담부증여로 수증자가 인수한 채무액에 상당하는 부분은 양도로 보며, 취득가액·양도가액 모두 "자산가액×(채무액÷증여가액)" 비율로 안분한다. 양도세 과세대상 자산과 비과세대상 자산을 함께 부담부증여하는 경우에는 먼저 총채무액을 과세대상 자산가액 비율로 안분한다(§159②). 결과의 양도가액·취득가액·필요경비를 calculate_transfer_tax 등 일반 양도세 계산기에 넣어 나머지 세액을 계산한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        assetAcquisitionPrice: { type: 'number', description: '양도세 과세대상 자산의 취득가액(원, 실지거래가액).' },
+        assetGiftValue: { type: 'number', description: '양도세 과세대상 자산의 증여재산가액(원, 상증세법상 평가액 — 부담부증여 전체 자산가액).' },
+        totalDebtAmount: { type: 'number', description: '수증자가 인수한 채무액(원).' },
+        otherAssetsGiftValueSum: { type: 'number', description: '이 자산과 함께 부담부증여한 다른 재산(양도세 과세대상이 아닌 재산)의 증여재산가액 합계(원). 있으면 §159②에 따라 총채무액을 먼저 안분한다. 없으면 생략.' },
+        necessaryExpenses: { type: 'number', description: '자본적지출액·양도비 등 필요경비(원). 없으면 생략.' }
+      },
+      required: ['assetGiftValue', 'totalDebtAmount']
     }
   },
   {
@@ -3343,6 +3374,36 @@ function deemedAcquisitionDate_(dateStr) {
   return dateStr && dateStr < '1985-01-01' ? '1985-01-01' : dateStr;
 }
 
+// "취득일부터 5년간 발생한 양도소득금액" 산정 (조특법시행령§40①, §98의3③·§98의5③ 등에서 준용,
+// §99①1호·②2호, §99의3②2호 등) — 원칙은 기준시가 비율로 계산한다:
+//   5년간발생분 = 전체양도소득금액 × (5년시점기준시가－취득당시기준시가) ÷ (양도당시기준시가－취득당시기준시가)
+// 기준시가 3개 값이 모두 주어지면 이 원칙대로 계산하고, 주어지지 않으면 실거래가 기준 근사치로 대체한다.
+function fiveYearMarkGain_(totalGain, acquisitionPrice, opts) {
+  opts = opts || {};
+  const acqStd = Number(opts.acquisitionStandardPrice) || 0;
+  const fiveYrStd = Number(opts.fiveYearStandardPrice) || 0;
+  const trfStd = Number(opts.transferStandardPrice) || 0;
+  if (acqStd > 0 && fiveYrStd > 0 && trfStd > 0 && trfStd !== acqStd) {
+    return {
+      gain: totalGain * (fiveYrStd - acqStd) / (trfStd - acqStd),
+      note: '기준시가 비율로 정확히 계산했습니다: 전체양도소득금액 × (5년시점기준시가－취득당시기준시가) ÷ (양도당시기준시가－취득당시기준시가).'
+    };
+  }
+  const fiveYearMarkValue = Number(opts.fiveYearMarkValue) || 0;
+  if (fiveYearMarkValue > 0) {
+    return {
+      gain: fiveYearMarkValue - acquisitionPrice,
+      note: '기준시가 3종(취득당시·5년시점·양도당시)이 모두 입력되지 않아, 입력하신 5년 시점 실거래평가액을 기준으로 근사 계산했습니다(정확한 산정은 4개 기준시가 값을 모두 입력하세요).'
+    };
+  }
+  const yearsHeld = Number(opts.yearsHeld) || 0;
+  const cappedYears = Math.min(yearsHeld, 5);
+  return {
+    gain: yearsHeld > 0 ? totalGain * cappedYears / Math.max(yearsHeld, cappedYears) : totalGain,
+    note: '기준시가·5년시점 평가액이 모두 없어 전체 양도차익을 보유기간에 선형 안분한 근사치입니다(정확한 산정은 4개 기준시가 값을 모두 입력하세요).'
+  };
+}
+
 // 장기보유특별공제율 — 일반 자산 (소득세법 §95, 3년 이상 보유 시 연 2%, 최대 30%)
 function longTermHoldingDeductionRate_(years) {
   if (years < 3) return 0;
@@ -3824,9 +3885,24 @@ function toolCalculateTransferTax(p) {
     if (isMultiHouseSurcharge) longTermRate = 0;
   }
 
+  let rentalPeriodSplit = null;
   if (!isReconstruction) {
-    longTermDeductionAmount = Math.round(taxableGain * longTermRate);
-    incomeAmount = taxableGain - longTermDeductionAmount;
+    // 조특법시행령§97의3⑤ — rental_general(§97의3)은 "임대기간중 발생한 양도차익"에 한정해 70%를 적용하고
+    // 등록 전 기간분에는 일반 장특공제율을 적용한다(rental_long/§97의4는 법문상 전체 양도차익에 적용하므로 분리 안 함).
+    const acqStd = Number(p.acquisitionStandardPrice) || 0;
+    const regStd = Number(p.registrationStandardPrice) || 0;
+    const trfStd = Number(p.transferStandardPrice) || 0;
+    if (isRentalSpecial && p.rentalSpecialType === 'rental_general' && longTermRate > 0 && acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd) {
+      const rentalPeriodGain = taxableGain * (trfStd - regStd) / (trfStd - acqStd);
+      const beforeRentalGain = taxableGain - rentalPeriodGain;
+      const normalRate = longTermHoldingDeductionRate_(holdingYears);
+      longTermDeductionAmount = Math.round(Math.max(0, rentalPeriodGain) * longTermRate + Math.max(0, beforeRentalGain) * normalRate);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+      rentalPeriodSplit = { 임대기간중양도차익: Math.round(rentalPeriodGain), 임대전양도차익: Math.round(beforeRentalGain), 임대전적용공제율: normalRate };
+    } else {
+      longTermDeductionAmount = Math.round(taxableGain * longTermRate);
+      incomeAmount = taxableGain - longTermDeductionAmount;
+    }
   }
   const basicDeduction = 2500000;
   const taxBase = Math.max(0, incomeAmount - basicDeduction);
@@ -3971,7 +4047,7 @@ function toolCalculateTransferTax(p) {
     수용감면액: compensationReduction,
     수용감면_구분: compensationReductionLabel,
     다운계약서_감면배제_추징액: downContractClawback,
-    장기임대주택특례_적용여부: isRentalSpecial,
+    장기임대주택특례_적용여부: isRentalSpecial, 장기임대주택특례_임대기간중분리상세: rentalPeriodSplit,
     산출세액: calculatedTax,
     연금계좌세액공제: pensionAccountCredit,
     전자신고세액공제: eFilingCredit,
@@ -5361,16 +5437,12 @@ function toolCalculateNewHouseAcquisitionReduction(p) {
       ? '취득일로부터 5년 이내 양도이므로 그 양도소득세 전액(100%)을 감면합니다(조특법§99의2①).'
       : '취득일로부터 5년 이내 양도이므로 취득일부터 양도일까지 발생한 양도소득금액 전액을 과세대상소득금액에서 뺍니다.';
   } else {
-    let gainWithinFiveYears;
-    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
-    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
-      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
-      note = '취득일로부터 5년 초과 보유 후 양도 — 입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액을 계산해 과세대상소득금액에서 뺐습니다.';
-    } else {
-      gainWithinFiveYears = Math.round(totalGain * 5 / yearsHeld);
-      note = '취득일로부터 5년 초과 보유 후 양도 — 5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정했습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
-    }
-    exemptGain = Math.max(0, Math.min(gainWithinFiveYears, totalGain));
+    const fy = fiveYearMarkGain_(totalGain, acquisitionPrice, {
+      acquisitionStandardPrice: p.acquisitionStandardPrice, fiveYearStandardPrice: p.fiveYearStandardPrice, transferStandardPrice: p.transferStandardPrice,
+      fiveYearMarkValue: p.fiveYearMarkValue, yearsHeld: yearsHeld
+    });
+    note = '취득일로부터 5년 초과 보유 후 양도 — ' + fy.note;
+    exemptGain = Math.max(0, Math.min(fy.gain, totalGain));
   }
   const taxableGain = Math.max(0, totalGain - exemptGain);
   return {
@@ -5439,17 +5511,12 @@ function toolCalculateUnsoldHouseAcquisitionReduction(p) {
     exemptGain = Math.round(totalGain * rate / 100);
     note = '취득일로부터 5년 이내 양도이므로 그 양도소득세의 ' + rate + '%에 상당하는 세액을 감면합니다(소득금액의 ' + rate + '%를 과세대상에서 제외한 것과 동일한 효과).';
   } else {
-    let gainWithinFiveYears;
-    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
-    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
-      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
-      note = (provision === 'sect98_8' ? '' : '취득일로부터 5년 초과 보유 후 양도 — ') + '입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액의 ' + rate + '%를 과세대상소득금액에서 뺐습니다.';
-    } else {
-      const cappedYears = Math.min(yearsHeld, 5);
-      gainWithinFiveYears = Math.round(totalGain * cappedYears / Math.max(yearsHeld, cappedYears));
-      note = (provision === 'sect98_8' ? '' : '취득일로부터 5년 초과 보유 후 양도 — ') + '5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정한 뒤 ' + rate + '%를 과세대상소득금액에서 뺐습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
-    }
-    exemptGain = Math.round(gainWithinFiveYears * rate / 100);
+    const fy = fiveYearMarkGain_(totalGain, acquisitionPrice, {
+      acquisitionStandardPrice: p.acquisitionStandardPrice, fiveYearStandardPrice: p.fiveYearStandardPrice, transferStandardPrice: p.transferStandardPrice,
+      fiveYearMarkValue: p.fiveYearMarkValue, yearsHeld: yearsHeld
+    });
+    note = (provision === 'sect98_8' ? '' : '취득일로부터 5년 초과 보유 후 양도 — ') + fy.note + ' (감면율 ' + rate + '% 적용)';
+    exemptGain = Math.round(fy.gain * rate / 100);
   }
   exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
   const taxableGain = Math.max(0, totalGain - exemptGain);
@@ -5855,6 +5922,45 @@ function toolCalculateBusinessTransferCarryover(p) {
   };
 }
 
+// 부담부증여시 양도로 보는 부분의 취득가액·양도가액 (소득세법시행령§159) — 부담부증여로 수증자가 인수한
+// 채무액에 상당하는 부분은 양도로 본다(소득세법§88①1호 각목외 부분 후단). 취득가액·양도가액 모두
+// "자산가액×(채무액÷증여가액)" 비율을 적용해 안분한다(양도가액 계산식은 결과적으로 채무액과 같아진다).
+// §159②는 양도소득세 과세대상 자산과 비과세대상 자산을 함께 부담부증여하는 경우, 전체 증여재산가액 중
+// 과세대상 자산가액이 차지하는 비율로 총채무액을 먼저 안분한 뒤 위 계산식을 적용하도록 한다.
+function toolCalculateBurdenedGiftTransfer(p) {
+  p = p || {};
+  const assetAcquisitionPrice = Number(p.assetAcquisitionPrice) || 0;
+  const assetGiftValue = Number(p.assetGiftValue) || 0;
+  if (assetGiftValue <= 0) return { error: '양도세 과세대상 자산의 증여재산가액(상증세법상 평가액)이 필요합니다.' };
+  const totalDebtAmount = Number(p.totalDebtAmount) || 0;
+  if (totalDebtAmount <= 0) return { error: '수증자가 인수한 채무액이 필요합니다.' };
+  const otherAssetsGiftValueSum = Number(p.otherAssetsGiftValueSum) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+
+  let allocatedDebtToAsset;
+  let note;
+  if (otherAssetsGiftValueSum > 0) {
+    const totalGiftValue = assetGiftValue + otherAssetsGiftValueSum;
+    allocatedDebtToAsset = Math.min(totalDebtAmount, Math.round(totalDebtAmount * assetGiftValue / totalGiftValue));
+    note = '§159②에 따라 총채무액을 양도세 과세대상 자산가액 비율로 먼저 안분한 채무액(' + allocatedDebtToAsset + '원)을 기준으로 계산했습니다. ';
+  } else {
+    allocatedDebtToAsset = Math.min(totalDebtAmount, assetGiftValue);
+    note = '';
+  }
+
+  const debtRatio = assetGiftValue > 0 ? allocatedDebtToAsset / assetGiftValue : 0;
+  const transferPortionAcquisitionPrice = Math.round(assetAcquisitionPrice * debtRatio);
+  const transferPortionTransferPrice = Math.round(assetGiftValue * debtRatio);
+  const gain = transferPortionTransferPrice - transferPortionAcquisitionPrice - necessaryExpenses;
+
+  return {
+    안분채무액: allocatedDebtToAsset, 채무액비율: debtRatio,
+    양도로보는부분_양도가액: transferPortionTransferPrice, 양도로보는부분_취득가액: transferPortionAcquisitionPrice,
+    필요경비: necessaryExpenses, 양도차익: Math.round(gain),
+    안내: note + '이 양도가액(' + transferPortionTransferPrice + '원)·취득가액(' + transferPortionAcquisitionPrice + '원)·필요경비를 위 일반 양도세 계산기에 그대로 넣어 나머지 세액(장기보유특별공제·기본공제·세율 등)을 계산하세요. 배우자·직계존비속간 부담부증여는 채무 인수를 객관적으로 입증하지 못하면 양도로 보지 않습니다(소득세법§101②·상증세법§47③과 같은 취지 — 이 계산기는 인수 사실이 입증됐다는 전제입니다).'
+  };
+}
+
 // 구조조정대상 부동산 취득자에 대한 양도소득세의 감면 (조특법§43) — 1999.12.31 이전 취득분에 한해 5년
 // 이내 양도시 50% 세액감면, 5년 초과 후 양도시 5년간발생분의 50% 소득공제.
 function toolCalculateRestructuringPropertyReduction(p) {
@@ -5877,16 +5983,12 @@ function toolCalculateRestructuringPropertyReduction(p) {
     exemptGain = Math.round(totalGain * 0.5);
     note = '취득일로부터 5년 이내 양도이므로 그 양도소득세의 50%에 상당하는 세액을 감면합니다.';
   } else {
-    let gainWithinFiveYears;
-    const fiveYearMarkValue = Number(p.fiveYearMarkValue);
-    if (Number.isFinite(fiveYearMarkValue) && fiveYearMarkValue > 0) {
-      gainWithinFiveYears = fiveYearMarkValue - acquisitionPrice;
-      note = '취득일로부터 5년 초과 보유 후 양도 — 입력하신 5년 시점 평가액을 기준으로 5년간 발생한 양도소득금액의 50%를 과세대상소득금액에서 뺐습니다.';
-    } else {
-      gainWithinFiveYears = Math.round(totalGain * 5 / yearsHeld);
-      note = '취득일로부터 5년 초과 보유 후 양도 — 5년 시점 평가액이 없어 전체 양도차익을 보유기간에 선형 안분하여 5년간 발생분을 추정한 뒤 50%를 과세대상소득금액에서 뺐습니다(실제로는 5년 시점 감정평가액 등으로 재계산해야 정확합니다).';
-    }
-    exemptGain = Math.round(gainWithinFiveYears * 0.5);
+    const fy = fiveYearMarkGain_(totalGain, acquisitionPrice, {
+      acquisitionStandardPrice: p.acquisitionStandardPrice, fiveYearStandardPrice: p.fiveYearStandardPrice, transferStandardPrice: p.transferStandardPrice,
+      fiveYearMarkValue: p.fiveYearMarkValue, yearsHeld: yearsHeld
+    });
+    note = '취득일로부터 5년 초과 보유 후 양도 — ' + fy.note + ' (50% 적용)';
+    exemptGain = Math.round(fy.gain * 0.5);
   }
   exemptGain = Math.max(0, Math.min(exemptGain, totalGain));
   const taxableGain = Math.max(0, totalGain - exemptGain);
@@ -6049,10 +6151,23 @@ function toolCalculateLongTermRentalHouseReduction(p) {
 
   let exemptGain;
   if (provision === 'sect97_5') {
-    const registrationDateValue = Number(p.registrationDateValue) || 0;
-    if (registrationDateValue <= 0) return { error: '장기일반민간임대주택등 등록일 현재의 평가액(임대기간중 발생분 산정용)이 필요합니다.' };
-    const rentalPeriodGain = Math.max(0, transferPrice - registrationDateValue);
-    exemptGain = Math.round(Math.min(rentalPeriodGain, totalGain) * rate / 100);
+    // 시행령§97의5② — 임대기간중 양도소득금액 = 전체양도소득금액 × (양도당시기준시가－등록일당시기준시가)
+    // ÷ (양도당시기준시가－취득당시기준시가). 기준시가 3종이 모두 있으면 원문대로 계산하고, 없으면
+    // "등록일 현재 평가액(실거래가 상당)"을 이용한 근사치로 대체한다.
+    const acqStd = Number(p.acquisitionStandardPrice) || 0;
+    const regStd = Number(p.registrationStandardPrice) || 0;
+    const trfStd = Number(p.transferStandardPrice) || 0;
+    let rentalPeriodGain;
+    if (acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd) {
+      rentalPeriodGain = totalGain * (trfStd - regStd) / (trfStd - acqStd);
+      note += ' 기준시가 비율로 정확히 계산했습니다: 전체양도소득금액 × (양도당시기준시가－등록일당시기준시가) ÷ (양도당시기준시가－취득당시기준시가).';
+    } else {
+      const registrationDateValue = Number(p.registrationDateValue) || 0;
+      if (registrationDateValue <= 0) return { error: '기준시가 3종(취득당시·등록일당시·양도당시)을 모두 입력하거나, 그것이 없으면 최소한 등록일 현재의 평가액을 입력하세요(임대기간중 발생분 산정용).' };
+      rentalPeriodGain = Math.max(0, transferPrice - registrationDateValue);
+      note += ' 기준시가 3종이 입력되지 않아, 입력하신 등록일 현재 평가액을 기준으로 근사 계산했습니다(정확한 산정은 기준시가 3종을 모두 입력하세요).';
+    }
+    exemptGain = Math.round(Math.max(0, Math.min(rentalPeriodGain, totalGain)) * rate / 100);
   } else {
     exemptGain = Math.round(totalGain * rate / 100);
   }
@@ -6387,7 +6502,14 @@ function toolCalculateOverseasAssetTransferTax(p) {
 
   const foreignTaxCreditMethod = p.foreignTaxCreditMethod === 'expense' ? 'expense' : 'credit';
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const foreignTaxCredit = foreignTaxCreditMethod === 'credit' ? Math.min(foreignTaxPaidAmount, calculatedTax) : 0;
+  // §118의6①·시행령§178의7 — 공제한도 = 산출세액 × (국외자산양도소득금액 ÷ 해당 과세기간 양도소득금액 합계액).
+  // domesticTransferIncomeAmount(같은 과세기간 국내자산 양도소득금액)를 입력하면 정확한 비율로 한도를 계산하고,
+  // 입력하지 않으면(국외자산양도소득만 있는 경우) 비율이 1이 되어 한도=산출세액이 된다.
+  const domesticTransferIncomeAmount = Math.max(0, Number(p.domesticTransferIncomeAmount) || 0);
+  const totalIncomeAmountForRatio = Math.max(0, gain) + domesticTransferIncomeAmount;
+  const creditRatio = totalIncomeAmountForRatio > 0 ? Math.max(0, gain) / totalIncomeAmountForRatio : 1;
+  const foreignTaxCreditLimit = Math.round(calculatedTax * creditRatio);
+  const foreignTaxCredit = foreignTaxCreditMethod === 'credit' ? Math.min(foreignTaxPaidAmount, foreignTaxCreditLimit) : 0;
   const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
@@ -6398,7 +6520,7 @@ function toolCalculateOverseasAssetTransferTax(p) {
   return {
     적용여부: true,
     양도차익: Math.round(gain), 기본공제: basicDeduction, 과세표준: taxBase,
-    산출세액: calculatedTax, 외국납부세액공제: foreignTaxCredit,
+    산출세액: calculatedTax, 외국납부세액공제한도: foreignTaxCreditLimit, 외국납부세액공제: foreignTaxCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     지방소득세: localIncomeTax, 납부세액_합계: totalTax,
     안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다.'
@@ -7691,6 +7813,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_restructuring_property_reduction' ||
         b.name === 'calculate_population_decline_area_house_exclusion' ||
         b.name === 'calculate_business_transfer_carryover' ||
+        b.name === 'calculate_burdened_gift_transfer' ||
         b.name === 'calculate_merger_benefit_gift_tax' ||
         b.name === 'calculate_property_use_service_gift_tax' ||
         b.name === 'calculate_org_change_gift_tax' ||
@@ -8006,6 +8129,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_business_transfer_carryover') {
         const resultObj = toolCalculateBusinessTransferCarryover(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_burdened_gift_transfer') {
+        const resultObj = toolCalculateBurdenedGiftTransfer(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
