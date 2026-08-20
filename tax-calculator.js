@@ -3166,8 +3166,11 @@ function renderGiftPane(){
           '<option value="dedicated_account_unused">§78⑩1호 전용계좌 미사용</option>' +
           '<option value="disclosure_violation">§78⑪ 결산서류등 공시의무 위반</option>' +
           '<option value="report_not_filed_5pct">§78⑭(§48⑬) 의무이행여부 신고 미이행</option>' +
+          '<option value="cultural_heritage_status_not_filed">§78⑮1호(§74⑤⑥) 문화유산 보유현황자료 미제출</option>' +
+          '<option value="cultural_heritage_transfer_not_filed">§78⑮2호(§74⑤⑦) 문화유산 양도사실 미신고</option>' +
         '</select></div>' +
         '<div class="taxcalc-field"><label>[보고서미제출만] 상당 상속세·증여세액</label><input type="number" id="poBaseTaxAmount" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[문화유산자료미제출·미신고만] 징수유예 받은 상속세액</label><input type="number" id="poDeferredTaxAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[5%보유초과만] 초과주식 시가</label><input type="number" id="poExcessStockValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[세무확인등만] 수입금액+출연재산가액</label><input type="number" id="poRevenueAndDonation" placeholder="원 (해당 과세기간·사업연도)"></div>' +
         '<div class="taxcalc-field"><label>[세무확인등만] 위반 세부유형</label><select id="poViolationSubType">' +
@@ -5564,7 +5567,8 @@ taxCalcView.addEventListener('click', function(e){
       directExpenseAmount: numVal(document.getElementById('poDirectExpense').value) || 0,
       underusedAmount: numVal(document.getElementById('poUnderusedAmount').value) || 0,
       isSect48_2_7HighHoldingType: document.getElementById('poHighHoldingType').checked,
-      unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0
+      unusedTransactionAmount: numVal(document.getElementById('poUnusedTransaction').value) || 0,
+      deferredTaxAmount: numVal(document.getElementById('poDeferredTaxAmount').value) || 0
     };
     renderPublicInterestOrgPenaltyResult(calculatePublicInterestOrgPenaltyJS(input));
   } else if (action === 'run-disabled-trust-exclusion'){

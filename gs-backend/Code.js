@@ -1154,11 +1154,12 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_public_interest_org_penalty',
-    description: '공익법인등에 대한 가산세 등(상속세및증여세법§78)을 계산한다. 10가지 penaltyType: report_not_filed(§78③ 출연재산 사용계획보고서 미제출·불분명, 세액×1%), stock_holding_exceeded_5pct(§78④·§49① 5%보유기준 초과, 초과분시가×5%/년·10년한도), management_violation(§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행, (수입금액+출연재산가액)×0.07%, 세무확인유형은 최소100만원), director_excess(§78⑥ 이사정원초과, 관련경비 전액), stock_holding_exceeded_related(§78⑦·§48⑨ 특수관계법인주식 30%/50%한도초과, 초과분시가×5%), advertising(§78⑧·§48⑩ 무상광고홍보, 직접경비 전액), income_underused(§78⑨·§48②5호·7호 운용소득·매각대금·기준금액 미달사용, 미달액×10%(또는 특정유형 200%)), dedicated_account_unused(§78⑩1호 전용계좌미사용, 미사용거래금액×0.5%), disclosure_violation(§78⑪ 결산공시의무위반, 자산총액×0.5%), report_not_filed_5pct(§78⑭·§48⑬ 의무이행신고 미이행, 자산총액×0.5%). "기준금액"·전용계좌 미개설시 계산식 등 일부 세부항목은 시행령·원문이미지 문제로 직접입력값을 받거나 다루지 않는다.',
+    description: '공익법인등에 대한 가산세 등(상속세및증여세법§78)을 계산한다. 12가지 penaltyType: report_not_filed(§78③ 출연재산 사용계획보고서 미제출·불분명, 세액×1%), stock_holding_exceeded_5pct(§78④·§49① 5%보유기준 초과, 초과분시가×5%/년·10년한도), management_violation(§78⑤ 세무확인·장부작성비치·회계감사 의무 불이행, (수입금액+출연재산가액)×0.07%, 세무확인유형은 최소100만원), director_excess(§78⑥ 이사정원초과, 관련경비 전액), stock_holding_exceeded_related(§78⑦·§48⑨ 특수관계법인주식 30%/50%한도초과, 초과분시가×5%), advertising(§78⑧·§48⑩ 무상광고홍보, 직접경비 전액), income_underused(§78⑨·§48②5호·7호 운용소득·매각대금·기준금액 미달사용, 미달액×10%(또는 특정유형 200%)), dedicated_account_unused(§78⑩1호 전용계좌미사용, 미사용거래금액×0.5%), disclosure_violation(§78⑪ 결산공시의무위반, 자산총액×0.5%), report_not_filed_5pct(§78⑭·§48⑬ 의무이행신고 미이행, 자산총액×0.5%), cultural_heritage_status_not_filed(§78⑮1호·§74⑤⑥ 문화유산등 징수유예 담보미제공자의 보유현황자료 미제출, 징수유예세액×1%), cultural_heritage_transfer_not_filed(§78⑮2호·§74⑤⑦ 담보미제공자의 양도사실 미신고, 징수유예세액×20%). "기준금액"·전용계좌 미개설시 계산식 등 일부 세부항목은 시행령·원문이미지 문제로 직접입력값을 받거나 다루지 않는다.',
     input_schema: {
       type: 'object',
       properties: {
-        penaltyType: { type: 'string', enum: ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess', 'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused', 'disclosure_violation', 'report_not_filed_5pct'], description: '가산세 유형.' },
+        penaltyType: { type: 'string', enum: ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess', 'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused', 'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'], description: '가산세 유형.' },
+        deferredTaxAmount: { type: 'number', description: 'penaltyType이 cultural_heritage_status_not_filed/cultural_heritage_transfer_not_filed일 때 필수 — §74에 따라 징수유예 받은 상속세액(원).' },
         baseTaxAmount: { type: 'number', description: 'penaltyType이 report_not_filed일 때 필수 — 미제출분·불분명분에 상당하는 상속세액(증여세액, 원).' },
         excessStockValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_5pct일 때 필수 — §49①의 5% 보유기준을 초과하는 주식등의 시가(원).' },
         revenueAndDonationAmount: { type: 'number', description: 'penaltyType이 management_violation일 때 필수 — 해당 과세기간(사업연도)의 수입금액과 그 기간에 출연받은 재산가액의 합계(원).' },
@@ -6905,7 +6906,7 @@ function toolCalculatePublicInterestOrgPenalty(p) {
   const penaltyType = p.penaltyType;
   const validTypes = ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess',
     'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused',
-    'disclosure_violation', 'report_not_filed_5pct'];
+    'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'];
   if (validTypes.indexOf(penaltyType) === -1) return { error: 'penaltyType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
 
   let penaltyAmount, note;
@@ -6963,11 +6964,21 @@ function toolCalculatePublicInterestOrgPenalty(p) {
     if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
     penaltyAmount = Math.round(totalAssetValue * 0.005);
     note = '§50의3에 따른 결산서류등을 공시하지 않거나 공시 내용에 오류가 있는데도 공시·시정 요구를 지정기한까지 이행하지 않아, §78⑪에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5를 가산세로 부과합니다.';
-  } else {
+  } else if (penaltyType === 'report_not_filed_5pct') {
     const totalAssetValue = Number(p.totalAssetValue) || 0;
     if (totalAssetValue <= 0) return { error: '신고해야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
     penaltyAmount = Math.round(totalAssetValue * 0.005);
     note = '§48⑬에 따라 내국법인 발행주식총수등의 5%를 초과해 주식등을 출연받은 공익법인등 등이 의무이행 여부를 신고하지 않아, §78⑭에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5(대통령령으로 정하는 한도 내)를 가산세로 부과합니다.';
+  } else if (penaltyType === 'cultural_heritage_status_not_filed') {
+    const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+    if (deferredTaxAmount <= 0) return { error: '징수유예 받은 상속세액이 필요합니다.' };
+    penaltyAmount = Math.round(deferredTaxAmount * 0.01);
+    note = '§74⑤에 따라 납세담보를 제공하지 않은 자가 §74⑥의 국가지정문화유산등·천연기념물등 보유현황 자료를 제출하지 않아, §78⑮1호에 따라 징수유예 받은 상속세액의 100분의 1을 징수합니다.';
+  } else {
+    const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+    if (deferredTaxAmount <= 0) return { error: '징수유예 받은 상속세액이 필요합니다.' };
+    penaltyAmount = Math.round(deferredTaxAmount * 0.20);
+    note = '§74⑤에 따라 납세담보를 제공하지 않은 자가 §74⑦에 따른 국가지정문화유산등·천연기념물등의 양도 사실을 신고하지 않아, §78⑮2호에 따라 징수유예 받은 상속세액의 100분의 20을 징수합니다.';
   }
 
   return { 가산세액: penaltyAmount, 안내: note };

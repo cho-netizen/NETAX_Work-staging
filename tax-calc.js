@@ -3133,7 +3133,7 @@
     const penaltyType = p.penaltyType;
     const validTypes = ['report_not_filed', 'stock_holding_exceeded_5pct', 'management_violation', 'director_excess',
       'stock_holding_exceeded_related', 'advertising', 'income_underused', 'dedicated_account_unused',
-      'disclosure_violation', 'report_not_filed_5pct'];
+      'disclosure_violation', 'report_not_filed_5pct', 'cultural_heritage_status_not_filed', 'cultural_heritage_transfer_not_filed'];
     if (validTypes.indexOf(penaltyType) === -1) return { error: 'penaltyType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
 
     let penaltyAmount, note;
@@ -3200,12 +3200,24 @@
       if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
       penaltyAmount = Math.round(totalAssetValue * 0.005);
       note = '§50의3에 따른 결산서류등을 공시하지 않거나 공시 내용에 오류가 있는데도 공시·시정 요구를 지정기한까지 이행하지 않아, §78⑪에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5를 가산세로 부과합니다.';
-    } else { // report_not_filed_5pct
+    } else if (penaltyType === 'report_not_filed_5pct') {
       // §78⑭ — §48⑬ 의무이행 여부 신고 미이행
       const totalAssetValue = Number(p.totalAssetValue) || 0;
       if (totalAssetValue <= 0) return { error: '신고해야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
       penaltyAmount = Math.round(totalAssetValue * 0.005);
       note = '§48⑬에 따라 내국법인 발행주식총수등의 5%를 초과해 주식등을 출연받은 공익법인등 등이 의무이행 여부를 신고하지 않아, §78⑭에 따라 그 과세기간(사업연도) 종료일 현재 자산총액의 1000분의 5(대통령령으로 정하는 한도 내)를 가산세로 부과합니다.';
+    } else if (penaltyType === 'cultural_heritage_status_not_filed') {
+      // §78⑮1호 — §74⑤ 납세담보 미제공자가 §74⑥ 보유현황 자료를 미제출
+      const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+      if (deferredTaxAmount <= 0) return { error: '징수유예 받은 상속세액이 필요합니다.' };
+      penaltyAmount = Math.round(deferredTaxAmount * 0.01);
+      note = '§74⑤에 따라 납세담보를 제공하지 않은 자가 §74⑥의 국가지정문화유산등·천연기념물등 보유현황 자료를 제출하지 않아, §78⑮1호에 따라 징수유예 받은 상속세액의 100분의 1을 징수합니다.';
+    } else { // cultural_heritage_transfer_not_filed
+      // §78⑮2호 — §74⑤ 납세담보 미제공자가 §74⑦ 양도 사실을 미신고
+      const deferredTaxAmount = Number(p.deferredTaxAmount) || 0;
+      if (deferredTaxAmount <= 0) return { error: '징수유예 받은 상속세액이 필요합니다.' };
+      penaltyAmount = Math.round(deferredTaxAmount * 0.20);
+      note = '§74⑤에 따라 납세담보를 제공하지 않은 자가 §74⑦에 따른 국가지정문화유산등·천연기념물등의 양도 사실을 신고하지 않아, §78⑮2호에 따라 징수유예 받은 상속세액의 100분의 20을 징수합니다.';
     }
 
     return { 가산세액: penaltyAmount, 안내: note };
