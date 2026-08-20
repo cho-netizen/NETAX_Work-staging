@@ -3106,7 +3106,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>특수관계인이 실제 받은 배당등의 금액</label><input type="number" id="edBaseAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>최대주주등의 과소배당금액이 차지하는 비율</label><input type="number" step="0.01" min="0" max="1" id="edShortfallRatio" placeholder="0~1 (시행령§31의2②2호)"></div>' +
         '<div class="taxcalc-field"><label>[최초신고만] 추정 소득세상당액(선택)</label><input type="number" id="edEstimatedTax" placeholder="비워두면 시행규칙§10의3① 추정율표로 자동계산"></div>' +
-        '<div class="taxcalc-field"><label>[정산신고만] 실제 소득세액</label><input type="number" id="edActualTax" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[정산신고·종합과세만] 종합소득과세표준</label><input type="number" id="edComprehensiveBase" placeholder="원 (초과배당금액발생연도, 초과배당금액 포함된 값 — 입력시 자동계산)"></div>' +
+        '<div class="taxcalc-field"><label>[정산신고·비과세/분리과세만] 실제 소득세액 직접입력</label><input type="number" id="edActualTax" placeholder="원 (종합과세면 위 종합소득과세표준을 입력하세요)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="edRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="edAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -5490,6 +5491,7 @@ taxCalcView.addEventListener('click', function(e){
       disproportionateShortfallRatio: numVal(document.getElementById('edShortfallRatio').value) || 0,
       estimatedIncomeTaxEquivalent: numVal(document.getElementById('edEstimatedTax').value) || 0,
       actualIncomeTax: numVal(document.getElementById('edActualTax').value) || 0,
+      comprehensiveIncomeTaxBase: numVal(document.getElementById('edComprehensiveBase').value) || 0,
       relationDeductionLimit: numVal(document.getElementById('edRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('edAppraisalFee').value) || 0,
       filingStatus: document.getElementById('edFilingStatus').value,

@@ -2626,7 +2626,9 @@
   // 뺀 금액을 증여재산가액으로 한다. 이후 실제 소득세 신고시 정산증여재산가액(=초과배당금액-실제소득세액)
   // 기준으로 재계산해 차액을 추가납부하거나 환급받는다(②③). 신고기한 전 소득세상당액은 시행규칙§10의3①의
   // 추정율표(EXCESS_DIVIDEND_INCOME_TAX_ESTIMATE_BRACKETS)로 자동계산하며, estimatedIncomeTaxEquivalent를
-  // 직접 입력하면 그 값을 그대로 우선 사용한다.
+  // 직접 입력하면 그 값을 그대로 우선 사용한다. 정산시(isFinalSettlement) 종합과세되는 경우의 실제소득세액은
+  // 시행규칙§10의3②3호(comprehensiveIncomeTaxBase 입력시 자동계산)로, 비과세·분리과세인 경우는
+  // actualIncomeTax 직접 입력으로 처리한다.
   window.calculateExcessDividendGiftTaxJS = function (p) {
     p = p || {};
     const isFinalSettlement = !!p.isFinalSettlement;
@@ -2637,8 +2639,24 @@
 
     let incomeTaxEquivalent, note;
     if (isFinalSettlement) {
-      incomeTaxEquivalent = Number(p.actualIncomeTax) || 0;
-      note = '정산증여재산가액 = 초과배당금액 - 실제소득세액(§41의2②·④)으로 계산했습니다. 정산 신고기한은 초과배당금액이 발생한 연도의 다음 연도 5.1~5.31(성실신고확인대상사업자는 6.30)입니다.';
+      // 시행규칙§10의3②3호(종합과세되는 경우) — 가목[초과배당금액이 발생한 연도의 종합소득과세표준에
+      // 소득세법§55①세율(=TRANSFER_TAX_BRACKETS)을 적용한 세액－그 과세표준에서 초과배당금액을 뺀
+      // 금액에 같은 세율을 적용한 세액(0미만이면0)]과 나목[초과배당금액×14%] 중 큰 금액이 실제소득세액이다.
+      // 분리과세(2호)면 그 분리과세된 세액, 비과세·과세제외(1호)면 0이며, 둘 다 사용자가 actualIncomeTax로
+      // 직접 입력해야 한다(분리과세·비과세 여부는 이 계산기가 판정하지 않음).
+      const comprehensiveIncomeTaxBase = Number(p.comprehensiveIncomeTaxBase);
+      if (Number.isFinite(comprehensiveIncomeTaxBase) && comprehensiveIncomeTaxBase > 0) {
+        const taxWithExcess = progressiveTax(comprehensiveIncomeTaxBase, TRANSFER_TAX_BRACKETS);
+        const taxWithoutExcess = progressiveTax(Math.max(0, comprehensiveIncomeTaxBase - excessDividendAmount), TRANSFER_TAX_BRACKETS);
+        const incrementalTax = Math.max(0, taxWithExcess - taxWithoutExcess);
+        const flatRateTax = Math.round(excessDividendAmount * 0.14);
+        incomeTaxEquivalent = Math.max(incrementalTax, flatRateTax);
+        note = '시행규칙§10의3②3호(종합과세되는 경우)에 따라 가목[종합소득과세표준(' + comprehensiveIncomeTaxBase + '원) 기준 세액(' + taxWithExcess + '원)－초과배당금액을 뺀 과세표준 기준 세액(' + taxWithoutExcess + '원)=' + incrementalTax + '원]과 나목[초과배당금액×14%=' + flatRateTax + '원] 중 큰 금액(' + incomeTaxEquivalent + '원)을 실제소득세액으로 계산했습니다. 초과배당금액이 비과세·과세제외(1호)이거나 분리과세(2호)된 경우에는 이 계산이 아니라 actualIncomeTax를 직접 입력하세요.';
+      } else {
+        incomeTaxEquivalent = Number(p.actualIncomeTax) || 0;
+        note = '정산증여재산가액 = 초과배당금액 - 실제소득세액(§41의2②·④)으로 계산했습니다. 종합과세되는 경우 종합소득과세표준(comprehensiveIncomeTaxBase)을 입력하면 시행규칙§10의3②3호 산식으로 자동계산합니다.';
+      }
+      note += ' 정산 신고기한은 초과배당금액이 발생한 연도의 다음 연도 5.1~5.31(성실신고확인대상사업자는 6.30)입니다.';
     } else if (Number(p.estimatedIncomeTaxEquivalent) > 0) {
       incomeTaxEquivalent = Number(p.estimatedIncomeTaxEquivalent);
       note = '직접 입력한 소득세상당액 추정치를 그대로 사용했습니다. 이후 실제 소득세를 납부할 때 정산증여재산가액(실제소득세액 기준)으로 다시 계산해 차액을 추가납부하거나 환급받아야 합니다(§41의2②).';
