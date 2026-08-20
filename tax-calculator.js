@@ -2665,7 +2665,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>10년내 동일인 기증여합산액</label><input type="number" id="giftPriorAmount" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>위 기증여분 기납부세액</label><input type="number" id="giftPriorPaidTax" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>위 기증여분에서 이미 받은 증여재산공제(§53)</label><input type="number" id="giftPriorRelationDeductionUsed" placeholder="원 (없으면 비움 — 관계별 공제도 10년 합산 한도)"></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkipOver2B"><label for="giftGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="giftGenSkipOver2B"><label for="giftGenSkipOver2B">세대생략증여재산가액 20억 초과(수증자 미성년 여부는 위 주민등록번호로 자동판정 — 둘 다 충족해야 할증 40%, 아니면 30%)</label></div>' +
         '<div class="taxcalc-field"><label>세대생략(조부모 등)분 증여재산가액</label><input type="number" id="giftGenSkipAmount" placeholder="원 (증여재산가액·기증여합산액 중 조부모 등 분, 전액이면 비움)"></div>' +
         '<div class="taxcalc-field"><label>기증여분 중 이미 납부한 세대생략 할증과세액</label><input type="number" id="giftGenSkipPriorPaid" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3072,7 +3072,9 @@ function renderGiftPane(){
         '</select></div>' +
         '<div class="taxcalc-field"><label>사업기회로 인한 수혜법인 이익</label><input type="number" id="jtProfit" placeholder="원 (개시: 해당연도분 / 정산: 누적 합계)"></div>' +
         '<div class="taxcalc-field"><label>지배주주+친족 주식보유비율</label><input type="number" step="0.01" id="jtShareRatio" placeholder="% (30% 이상이어야 과세)"></div>' +
-        '<div class="taxcalc-field"><label>법인세 납부세액 중 상당액</label><input type="number" id="jtCorporateTax" placeholder="원 (개시: 해당연도분 / 정산: 누적 합계)"></div>' +
+        '<div class="taxcalc-field"><label>법인세 납부세액 중 상당액(직접 입력시 아래 자동계산값보다 우선)</label><input type="number" id="jtCorporateTax" placeholder="원 (개시: 해당연도분 / 정산: 누적 합계, 비우면 자동계산)"></div>' +
+        '<div class="taxcalc-field"><label>수혜법인의 법인세 산출세액(공제·감면 차감후)</label><input type="number" id="jtCorpTaxAfterCredit" placeholder="원 (법인세 납부세액 중 상당액 자동계산용)"></div>' +
+        '<div class="taxcalc-field"><label>수혜법인의 해당 사업연도 소득금액</label><input type="number" id="jtCorpTaxableIncome" placeholder="원 (법인세법§14, 자동계산용)"></div>' +
         '<div class="taxcalc-field"><label>(개시사업연도만) 개시사업연도 월수</label><input type="number" id="jtMonths" placeholder="보통 12" maxlength="2"></div>' +
         '<div class="taxcalc-field"><label>(정산사업연도만) 배당소득공제액</label><input type="number" id="jtDividendDeduction" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>해당 사업연도 종료일</label><input type="date" id="jtFiscalYearEnd" min="1900-01-01" max="2099-12-31"></div>' +
@@ -4286,7 +4288,8 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>상속포기로 다음순위가 받은 재산가액</label><input type="number" id="ihDisclaimedRedistributed" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>세대생략 상속인이 받는 재산가액(자동, 명부에서 "세대생략" 체크된 행 합계)</label><input type="number" id="ihGenSkipAmount" placeholder="0" readonly></div>' +
         '<div class="taxcalc-field"><label>세대생략 상속인이 받는 재산 비율(자동계산: 위 금액÷총상속재산가액)</label><input type="number" step="0.0001" id="ihGenSkipRatio" placeholder="0" readonly><span class="taxcalc-result-note" id="ihGenSkipRatioHint" style="margin:2px 0 0;"></span></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihGenSkipOver2B"><label for="ihGenSkipOver2B">세대생략+미성년자 20억 초과(할증 40%, 아니면 30%)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihGenSkipOver2B"><label for="ihGenSkipOver2B">세대생략 상속재산가액 20억 초과</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ihGenSkipMinorHeir"><label for="ihGenSkipMinorHeir">세대생략 상속인·수유자(자녀 제외 직계비속)가 미성년자(위 둘 다 충족해야 할증 40%, 아니면 30%)</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>세액공제</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5822,6 +5825,8 @@ taxCalcView.addEventListener('click', function(e){
       profitFromOpportunity: numVal(document.getElementById('jtProfit').value) || 0,
       shareholderOwnershipRatio: numVal(document.getElementById('jtShareRatio').value) || 0,
       corporateTaxPortion: numVal(document.getElementById('jtCorporateTax').value) || 0,
+      corporateTaxAfterCredit: numVal(document.getElementById('jtCorpTaxAfterCredit').value) || 0,
+      corporateTaxableIncome: numVal(document.getElementById('jtCorpTaxableIncome').value) || 0,
       monthsInInitialYear: numVal(document.getElementById('jtMonths').value) || 0,
       dividendDeduction: numVal(document.getElementById('jtDividendDeduction').value) || 0,
       filingStatus: document.getElementById('jtFilingStatus').value,
@@ -6003,6 +6008,7 @@ taxCalcView.addEventListener('click', function(e){
       disclaimedShareRedistributedAmount: numVal(document.getElementById('ihDisclaimedRedistributed').value) || 0,
       generationSkipHeirRatio: numVal(document.getElementById('ihGenSkipRatio').value) || 0,
       generationSkipOver2Billion: document.getElementById('ihGenSkipOver2B').checked,
+      generationSkipMinorHeir: document.getElementById('ihGenSkipMinorHeir').checked,
       foreignTaxPaidAmount: numVal(document.getElementById('ihForeignTax').value) || 0,
       priorInheritanceTax: numVal(document.getElementById('ihPriorInheritanceTax').value) || 0,
       reinheritedPropertyValue: numVal(document.getElementById('ihReinheritedPropertyValue').value) || 0,

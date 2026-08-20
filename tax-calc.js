@@ -1413,7 +1413,9 @@
         ? Math.min(1, Math.max(0, Number(p.generationSkipGiftAmount) || 0) / totalGiftAmountForSkipRatio)
         : 1)
       : 0;
-    const premiumRate = isGenerationSkip ? (p.generationSkipOver2Billion ? 0.4 : 0.3) : 0;
+    // §57① 괄호 — 40%는 "직계비속이면서 미성년자인 수증자가 20억원 초과분을 받은 경우"에 한정.
+    // 미성년 요건 없이 20억 초과만으로 40%를 적용하면 과다할증이므로 반드시 isMinor를 함께 확인한다.
+    const premiumRate = isGenerationSkip ? ((p.generationSkipOver2Billion && p.isMinor) ? 0.4 : 0.3) : 0;
     const priorPaidGenerationSkipPremium = Number(p.priorPaidGenerationSkipPremium) || 0;
     const premiumAmount = Math.max(0, Math.round(taxBeforePremium * generationSkipRatio * premiumRate) - priorPaidGenerationSkipPremium);
     const taxAfterPremium = taxBeforePremium + premiumAmount;
@@ -1546,7 +1548,10 @@
     let calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
     const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
-    const generationSkipPremiumRate = p.generationSkipOver2Billion ? 0.4 : 0.3;
+    // §27① 괄호 — 40%는 "피상속인의 자녀를 제외한 직계비속이면서 미성년자인 상속인·수유자가 20억원
+    // 초과분을 받은 경우"에 한정. 미성년 요건 없이 20억 초과만으로 40%를 적용하면 과다할증이 되므로
+    // generationSkipMinorHeir(세대생략 상속인 중 미성년자 여부)도 함께 확인한다(미입력 시 30%로 보수적 적용).
+    const generationSkipPremiumRate = (p.generationSkipOver2Billion && p.generationSkipMinorHeir) ? 0.4 : 0.3;
     const generationSkipPremium = Math.round(calculatedTax * generationSkipHeirRatio * generationSkipPremiumRate);
     calculatedTax += generationSkipPremium;
 
@@ -1829,7 +1834,15 @@
     }
     const profitFromOpportunity = Number(p.profitFromOpportunity) || 0;
     const shareRatio = Number(p.shareholderOwnershipRatio) || 0;
-    const corporateTaxPortion = Number(p.corporateTaxPortion) || 0;
+    // 법인세 납부세액 중 상당액(시행령§34의4④) = [수혜법인 산출세액(법인세법§55, 토지등양도소득분 제외)에서
+    // 공제·감면액을 뺀 세액] × [사업기회제공이익이 수혜법인 각사업연도소득금액에서 차지하는 비율(1초과시1)].
+    // corporateTaxAfterCredit·corporateTaxableIncome을 입력하면 자동계산하며, corporateTaxPortion 직접입력이
+    // 있으면 그 값을 우선한다(§45의5 특정법인 거래 함수의 동일 산식과 일관).
+    const corporateTaxAfterCredit = Number(p.corporateTaxAfterCredit) || 0;
+    const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
+    const corporateTaxPortion = Number(p.corporateTaxPortion) > 0
+      ? Number(p.corporateTaxPortion)
+      : Math.round(corporateTaxAfterCredit * (corporateTaxableIncome > 0 ? Math.min(1, profitFromOpportunity / corporateTaxableIncome) : 0));
 
     const meetsGate = profitFromOpportunity > 0 && shareRatio >= 30;
     if (!meetsGate) {

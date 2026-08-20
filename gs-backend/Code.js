@@ -409,7 +409,7 @@ const DRIVE_TOOLS = [
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산 합산액(원). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '위 기증여분에 대해 이미 납부한 증여세액(원). 없으면 생략.' },
         isGenerationSkip: { type: 'boolean', description: '세대를 건너뛴 증여(예: 조부모→손자녀)인지 여부' },
-        generationSkipOver2Billion: { type: 'boolean', description: '세대생략 증여이면서 미성년자가 20억원을 초과해서 증여받는 경우(할증률 40%). 아니면 30%.' },
+        generationSkipOver2Billion: { type: 'boolean', description: '세대생략 증여재산가액이 20억원을 초과하는 경우. isMinor와 함께 true여야 할증률 40%(§57① 괄호), 아니면 30%.' },
         generationSkipGiftAmount: { type: 'number', description: '시행령§46의3② — 수증자의 부모를 제외한 직계존속(조부모 등 세대생략 증여자)으로부터 증여받은 재산가액(원). giftAmount·priorGiftAmount에 부모분과 조부모분이 섞여 있을 때, 할증세액을 (이 값/총증여재산가액) 비율만큼만 매기기 위한 값이다. 생략하면 증여재산 전액이 세대생략분이라고 보아 비율 100%로 계산한다.' },
         priorPaidGenerationSkipPremium: { type: 'number', description: '시행령§46의3② — 10년 합산 대상 기증여분에 대해 이미 납부한 세대생략 할증과세액(원). 이번 할증세액에서 차감한다. 없으면 생략.' },
         isMarriageGift: { type: 'boolean', description: '혼인일 전후 2년 이내의 증여(혼인증여재산공제 대상)인지' },
@@ -538,7 +538,8 @@ const DRIVE_TOOLS = [
         yearsSincePriorInheritance: { type: 'integer', description: '단기재상속세액공제용 — 전의 상속개시일로부터 이번 상속개시일까지 경과연수(1~10, 1년마다 공제율 10%p씩 감소).' },
         otherCreditsAmount: { type: 'number', description: '그 밖에 별도로 계산한 세액공제(원). 이 도구는 세액 자체를 계산하지 않으므로 미리 계산해서 넣어야 한다. 없으면 생략.' },
         generationSkipHeirRatio: { type: 'number', description: '세대생략가산액(§27)용 — 상속인이 아닌 직계비속(예: 손자녀, 대습상속 제외)이 받는 상속재산이 전체에서 차지하는 비율(0~1). 없으면 세대생략가산액은 0.' },
-        generationSkipOver2Billion: { type: 'boolean', description: '세대생략 상속이면서 미성년자가 20억원을 초과해서 상속받는 경우(할증률 40%). 아니면 30%.' },
+        generationSkipOver2Billion: { type: 'boolean', description: '세대생략 상속재산가액이 20억원을 초과하는 경우. generationSkipMinorHeir와 함께 true여야 할증률 40%(§27① 괄호), 아니면 30%.' },
+        generationSkipMinorHeir: { type: 'boolean', description: '세대생략 상속인·수유자(직계비속, 자녀 제외)가 미성년자인 경우. generationSkipOver2Billion과 함께 true여야 할증률 40%, 아니면 30%.' },
         interestAmount: { type: 'number', description: '각종 사후관리 위반에 따른 추징 시 붙는 이자상당액(원). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
         forProfitBequestAmount: { type: 'number', description: '영리법인 상속세 면제(§3의2)용 — 영리법인이 유증받은 재산가액(원). 영리법인 자체의 상속세는 면제되지만, 상속인·직계비속이 그 법인의 최대주주 등인 경우 지분 상당액만큼 상속인에게 별도 납부의무가 생긴다. 없으면 생략.' },
         forProfitExemptedTaxAmount: { type: 'number', description: '영리법인이 유증받아 면제된 상속세액(원). (면제세액 - 유증재산가액×10%)×상속인 지분비율만큼을 상속인이 납부해야 한다. 없으면 생략.' },
@@ -656,7 +657,9 @@ const DRIVE_TOOLS = [
         phase: { type: 'string', enum: ['initial', 'settlement'], description: 'initial=개시사업연도(사업기회를 제공받은 날이 속하는 사업연도 종료일 이후 신고), settlement=정산사업연도(사업기회제공일로부터 2년이 경과한 날이 속하는 사업연도 종료일 이후 신고, 반드시 필요).' },
         profitFromOpportunity: { type: 'number', description: 'initial이면 제공받은 사업기회로 인하여 발생한 개시사업연도 수혜법인의 이익(원), settlement이면 개시사업연도부터 정산사업연도까지 발생한 수혜법인의 이익 합계액(원).' },
         shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족의 수혜법인에 대한 직·간접 주식보유비율(%, 0~100). 30% 이상이어야 과세대상이다.' },
-        corporateTaxPortion: { type: 'number', description: 'initial이면 개시사업연도분의 법인세 납부세액 중 상당액(원), settlement이면 개시사업연도부터 정산사업연도분까지의 법인세 납부세액 중 상당액 합계(원).' },
+        corporateTaxPortion: { type: 'number', description: 'initial이면 개시사업연도분의 법인세 납부세액 중 상당액(원), settlement이면 개시사업연도부터 정산사업연도분까지의 법인세 납부세액 중 상당액 합계(원). 생략하면 corporateTaxAfterCredit·corporateTaxableIncome으로 자동계산한다(시행령§34의4④).' },
+        corporateTaxAfterCredit: { type: 'number', description: 'corporateTaxPortion 자동계산용 — 수혜법인의 해당 사업연도 법인세 산출세액(법인세법§55, 토지등양도소득에 대한 법인세 제외)에서 공제·감면세액을 뺀 금액(원). corporateTaxPortion을 직접 입력하면 이 값은 무시된다.' },
+        corporateTaxableIncome: { type: 'number', description: 'corporateTaxPortion 자동계산용 — 수혜법인의 해당 사업연도 각사업연도소득금액(원). corporateTaxPortion을 직접 입력하면 이 값은 무시된다.' },
         monthsInInitialYear: { type: 'integer', description: 'phase가 initial일 때만 — 개시사업연도의 월수(보통 12, 사업연도가 짧으면 그 미만).' },
         dividendDeduction: { type: 'number', description: 'phase가 settlement일 때만 — 신고기한까지 수혜법인으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
         doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
@@ -4399,7 +4402,9 @@ function toolCalculateGiftTax(p) {
       ? Math.min(1, Math.max(0, Number(p.generationSkipGiftAmount) || 0) / totalGiftAmountForSkipRatio)
       : 1)
     : 0;
-  const premiumRate = isGenerationSkip ? (generationSkipOver2Billion ? 0.4 : 0.3) : 0;
+  // §57① 괄호 — 40%는 "직계비속이면서 미성년자인 수증자가 20억원 초과분을 받은 경우"에 한정.
+  // 미성년 요건 없이 20억 초과만으로 40%를 적용하면 과다할증이므로 반드시 isMinor를 함께 확인한다.
+  const premiumRate = isGenerationSkip ? ((generationSkipOver2Billion && p.isMinor) ? 0.4 : 0.3) : 0;
   const priorPaidGenerationSkipPremium = Number(p.priorPaidGenerationSkipPremium) || 0;
   const premiumAmount = Math.max(0, Math.round(taxBeforePremium * generationSkipRatio * premiumRate) - priorPaidGenerationSkipPremium);
   const taxAfterPremium = taxBeforePremium + premiumAmount;
@@ -4572,7 +4577,10 @@ function toolCalculateInheritanceTax(p) {
   // 세대생략가산액 (상증세법 §27) — 상속인이 아닌 직계비속(예: 손자녀)이 상속·유증받는 경우,
   // 그 상속인이 받는 재산 비율에 해당하는 산출세액에 할증(30%, 미성년자 20억 초과분은 40%)한다.
   const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
-  const generationSkipPremiumRate = p.generationSkipOver2Billion ? 0.4 : 0.3;
+  // §27① 괄호 — 40%는 "피상속인의 자녀를 제외한 직계비속이면서 미성년자인 상속인·수유자가 20억원
+  // 초과분을 받은 경우"에 한정. 미성년 요건 없이 20억 초과만으로 40%를 적용하면 과다할증이 되므로
+  // generationSkipMinorHeir(세대생략 상속인 중 미성년자 여부)도 함께 확인한다(미입력 시 30%로 보수적 적용).
+  const generationSkipPremiumRate = (p.generationSkipOver2Billion && p.generationSkipMinorHeir) ? 0.4 : 0.3;
   const generationSkipPremium = Math.round(calculatedTax * generationSkipHeirRatio * generationSkipPremiumRate);
   calculatedTax += generationSkipPremium;
 
@@ -4922,7 +4930,15 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
   }
   const profitFromOpportunity = Number(p.profitFromOpportunity) || 0;
   const shareRatio = Number(p.shareholderOwnershipRatio) || 0; // %
-  const corporateTaxPortion = Number(p.corporateTaxPortion) || 0;
+  // 법인세 납부세액 중 상당액(시행령§34의4④) = [수혜법인 산출세액(법인세법§55, 토지등양도소득분 제외)에서
+  // 공제·감면액을 뺀 세액] × [사업기회제공이익이 수혜법인 각사업연도소득금액에서 차지하는 비율(1초과시1)].
+  // corporateTaxAfterCredit·corporateTaxableIncome을 입력하면 자동계산하며, corporateTaxPortion 직접입력이
+  // 있으면 그 값을 우선한다(§45의5 특정법인 거래 함수의 동일 산식과 일관).
+  const corporateTaxAfterCredit = Number(p.corporateTaxAfterCredit) || 0;
+  const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
+  const corporateTaxPortion = Number(p.corporateTaxPortion) > 0
+    ? Number(p.corporateTaxPortion)
+    : Math.round(corporateTaxAfterCredit * (corporateTaxableIncome > 0 ? Math.min(1, profitFromOpportunity / corporateTaxableIncome) : 0));
 
   const meetsGate = profitFromOpportunity > 0 && shareRatio >= 30;
   if (!meetsGate) {
