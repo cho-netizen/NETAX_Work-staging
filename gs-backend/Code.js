@@ -217,6 +217,35 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'search_address',
+    description: '도로명주소 안내시스템(juso.go.kr)으로 건물명·도로명·지번 등 검색어에 매칭되는 주소 후보 목록을 조회한다. 결과의 admCd(법정동코드10)·mtYn(산여부)·lnbrMnnm/lnbrSlno(지번 본번·부번)는 lookup_official_price(공시가격 자동조회)에 그대로 넘기면 된다. 후보가 여러 개면 건물명·시군구명으로 사용자와 확인하고 확정하라(임의로 하나를 골라 진행하지 말 것).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string', description: '검색어(건물명·도로명주소·지번주소 등, 예: "안흥맨션", "서울 강남구 테헤란로 123")' }
+      },
+      required: ['keyword']
+    }
+  },
+  {
+    name: 'lookup_official_price',
+    description: '국토교통부 부동산공시가격알리미(vworld.kr) 공시가격을 자동조회한다 — 개별공시지가(land)·공동주택가격(apartment)·개별주택가격(house). 먼저 search_address로 얻은 admCd·mtYn·lnbrMnnm·lnbrSlno를 그대로 넘기면 서버가 PNU를 조립해서 조회한다(직접 PNU를 조립하지 마라). priceKind가 apartment 또는 house면 그 필지에 여러 세대가 같이 조회될 수 있어 ho(호수)가 반드시 필요하다(동이 있으면 dong도 함께) — 없으면 세대를 특정할 수 없어 조회하지 않는다. 절대 dong·ho 없이 아무 세대의 가격이나 추측해서 쓰지 마라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        priceKind: { type: 'string', enum: ['land', 'apartment', 'house'], description: 'land=개별공시지가(토지), apartment=공동주택가격(아파트 등), house=개별주택가격(단독·다가구주택).' },
+        admCd: { type: 'string', description: 'search_address 결과의 법정동코드(10자리).' },
+        mtYn: { type: 'string', description: 'search_address 결과의 산여부("0" 또는 "1").' },
+        lnbrMnnm: { type: 'string', description: 'search_address 결과의 지번 본번.' },
+        lnbrSlno: { type: 'string', description: 'search_address 결과의 지번 부번(없으면 생략).' },
+        dong: { type: 'string', description: 'priceKind가 apartment/house일 때 — 동(예: "101"). 단독건물로 동 구분이 없으면 생략.' },
+        ho: { type: 'string', description: 'priceKind가 apartment/house일 때 필수 — 호수(예: "1502").' },
+        stdrYear: { type: 'string', description: '기준연도(YYYY, 생략하면 올해).' }
+      },
+      required: ['priceKind', 'admCd', 'mtYn', 'lnbrMnnm']
+    }
+  },
+  {
     name: 'lookup_business_status',
     description: '국세청 사업자등록 상태조회로 사업자등록번호의 현재 상태(계속사업자/휴업자/폐업자)와 과세유형(일반과세자/간이과세자/면세사업자 등)을 확인한다. 거래상대방·매도인 등의 사업자 상태를 빠르게 확인할 때 쓴다.',
     input_schema: {
@@ -7967,6 +7996,18 @@ function xmlFieldsToRows_(fieldsElement) {
     return row;
   });
 }
+// 19자리 PNU = 법정동코드10 + 산여부1(mtYn==='1'이면 산='2', 아니면 '1') + 지번본번4 + 지번부번4.
+// tax-calculator.js의 buildPnu_(클라이언트, 주소검색 UI 흐름용)와 동일 로직 — AI 도구 흐름(search_address→
+// lookup_official_price)에서는 서버가 이 조립을 대신해서 AI가 PNU 자릿수를 직접 계산하지 않게 한다.
+function assemblePnu_(admCd, mtYn, lnbrMnnm, lnbrSlno) {
+  admCd = String(admCd || '').trim();
+  lnbrMnnm = String(lnbrMnnm || '').trim();
+  if (!admCd || !lnbrMnnm) return '';
+  const san = String(mtYn) === '1' ? '2' : '1';
+  const mnnm = ('0000' + lnbrMnnm).slice(-4);
+  const slno = ('0000' + (lnbrSlno || '0')).slice(-4);
+  return admCd + san + mnnm + slno;
+}
 function handleLookupOfficialPrice(body) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('VWORLD_API_KEY');
   if (!apiKey) {
@@ -8422,6 +8463,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'register_report_to_rpt' ||
         b.name === 'lookup_real_estate_price' ||
         b.name === 'lookup_building_register' ||
+        b.name === 'search_address' ||
+        b.name === 'lookup_official_price' ||
         b.name === 'lookup_business_status' ||
         b.name === 'verify_business_registration' ||
         b.name === 'get_building_price_index_tables' ||
@@ -8556,6 +8599,21 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       if (block.name === 'lookup_building_register') {
         const input = block.input || {};
         const resultObj = toolLookupBuildingRegister(input.ledgerType, input.sigunguCd, input.bjdongCd, input.platGbCd, input.bun, input.ji);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'search_address') {
+        const input = block.input || {};
+        const resultObj = handleSearchAddress({ keyword: input.keyword });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'lookup_official_price') {
+        const input = block.input || {};
+        const pnu = assemblePnu_(input.admCd, input.mtYn, input.lnbrMnnm, input.lnbrSlno);
+        const resultObj = pnu
+          ? handleLookupOfficialPrice({ pnu: pnu, priceKind: input.priceKind, dong: input.dong || '', ho: input.ho || '', stdrYear: input.stdrYear || '' })
+          : { error: 'admCd·mtYn·lnbrMnnm이 필요합니다(search_address 결과를 그대로 넘기세요).' };
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
