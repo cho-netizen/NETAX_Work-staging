@@ -1361,8 +1361,37 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_business_succession_deferral_amount',
+    description: '가업상속납부유예금액(상증세법§72의2①, 시행령§69의3①)을 계산한다. 납부유예금액 = 상속세납부세액×(가업상속재산가액÷총상속재산가액).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        inheritanceTaxPayable: { type: 'number', description: '상속세 납부세액(원).' },
+        businessSuccessionPropertyValue: { type: 'number', description: '가업상속재산가액(원, 시행령§15⑤ 기준 — 가업상속공제 대상 재산가액).' },
+        totalInheritanceValue: { type: 'number', description: '총 상속재산가액(원).' }
+      },
+      required: ['inheritanceTaxPayable', 'businessSuccessionPropertyValue', 'totalInheritanceValue']
+    }
+  },
+  {
+    name: 'calculate_property_in_kind_stock_receipt_value',
+    description: '물납충당재산(주식)의 수납가액을, 상속개시일부터 수납할 때까지 신주발행·감자가 있었던 경우(시행령§75①1호, 시행규칙§20의2)의 산식으로 계산한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        changeType: { type: 'string', enum: ['free_increase', 'paid_increase', 'free_decrease', 'paid_decrease'], description: 'free_increase=무상증자, paid_increase=유상증자, free_decrease=무상감자, paid_decrease=유상감자.' },
+        oldSharePreChangeValue: { type: 'number', description: '신주발행·감자 전 구주 1주당 과세가액(원).' },
+        newSharesPerOldShare: { type: 'number', description: 'changeType이 free_increase/paid_increase일 때 필수 — 구주 1주당 신주배정수.' },
+        paymentPerNewShare: { type: 'number', description: 'changeType이 paid_increase일 때 — 신주 1주당 주금납입액(원). 없으면 0.' },
+        decreasedSharesPerOldShare: { type: 'number', description: 'changeType이 free_decrease/paid_decrease일 때 필수 — 구주 1주당 감자주식수(1 미만).' },
+        paymentPerDecreasedShare: { type: 'number', description: 'changeType이 paid_decrease일 때 — 감자시 1주당 지급금액(원). 없으면 0.' }
+      },
+      required: ['changeType', 'oldSharePreChangeValue']
+    }
+  },
+  {
     name: 'calculate_business_succession_deferral_clawback',
-    description: '가업상속납부유예(상증세법§72의2)·가업승계증여세납부유예(조특법§30의7)의 사후관리 위반시 추징세액을 판정한다. 두 조문 모두 정당한 사유 없이 사후관리 위반 사유가 생기면 허가를 취소하고 추징세액과 이자상당액을 징수한다. inheritance(§72의2)는 가업용자산40%이상처분/가업미종사/지분감소/고용유지요건미달/상속인사망 5가지, gift(§30의7)는 가업미종사/지분감소/고용유지요건미달/수증자사망 4가지 사유가 있다(§30의7은 자산처분 사유가 없음). 가업미종사·고용유지요건미달·사망과 5년이내 지분감소는 유예세액 전부를 추징하고, 자산처분비율·5년후 지분감소비율은 그 비율에 비례한 근사치로 계산한다(정확한 시행령 산식은 별도 확인 필요). 추징세액이 확정되면 calculate_clawback_interest 도구로 이자상당액을 별도 계산해야 한다.',
+    description: '가업상속납부유예(상증세법§72의2)·가업승계증여세납부유예(조특법§30의7)의 사후관리 위반시 추징세액을 판정한다. 두 조문 모두 정당한 사유 없이 사후관리 위반 사유가 생기면 허가를 취소하고 추징세액과 이자상당액을 징수한다. inheritance(§72의2)는 가업용자산40%이상처분/가업미종사/지분감소/고용유지요건미달/상속인사망 5가지, gift(§30의7)는 가업미종사/지분감소/고용유지요건미달/수증자사망 4가지 사유가 있다(§30의7은 자산처분 사유가 없음). 가업미종사·고용유지요건미달·사망과 5년이내 지분감소는 유예세액 전부를 추징하고, 자산처분비율(시행령§69의3③)·5년후 지분감소비율(시행령§69의3⑥·조특법시행령§27의7⑩)은 각 산식으로 정확히 계산한다. 추징세액이 확정되면 calculate_clawback_interest 도구로 이자상당액을 별도 계산해야 한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1371,7 +1400,9 @@ const DRIVE_TOOLS = [
         triggerEvent: { type: 'string', enum: ['none', 'asset_disposed_40pct', 'not_engaged', 'equity_decreased', 'employment_failed', 'heir_death', 'donee_death'], description: 'none=사후관리 위반 없음, asset_disposed_40pct=가업용자산 40%이상 처분(inheritance만), not_engaged=가업 미종사, equity_decreased=지분 감소, employment_failed=고용유지요건(70%기준) 미달, heir_death=상속인 사망(inheritance만), donee_death=수증자 사망(gift만).' },
         disposalRatio: { type: 'number', description: 'triggerEvent가 asset_disposed_40pct일 때 필수 — 가업용자산 처분비율(0~1).' },
         yearsSinceBase: { type: 'number', description: 'triggerEvent가 equity_decreased일 때 필수 — 상속개시일(inheritance) 또는 증여일(gift)부터 지분 감소일까지의 경과연수.' },
-        equityDecreaseRatio: { type: 'number', description: 'triggerEvent가 equity_decreased이고 yearsSinceBase가 5 초과일 때 필수 — 지분 감소 비율(0~1).' }
+        equityDecreaseRatio: { type: 'number', description: 'triggerEvent가 equity_decreased이고 yearsSinceBase가 5 초과일 때 — 이미 계산된 지분감소비율(B÷C, 0~1)을 직접 입력. equityRatioAtBase·currentEquityRatio를 입력하면 자동계산되므로 그 경우 생략 가능.' },
+        equityRatioAtBase: { type: 'number', description: 'triggerEvent가 equity_decreased이고 yearsSinceBase가 5 초과일 때 — 기준일(상속개시일·증여일) 현재 지분율(0~1). currentEquityRatio와 함께 입력하면 시행령§69의3⑥·조특법시행령§27의7⑩ 산식으로 자동계산.' },
+        currentEquityRatio: { type: 'number', description: 'triggerEvent가 equity_decreased이고 yearsSinceBase가 5 초과일 때 — 지분감소사유 발생일 현재(감소 후) 지분율(0~1).' }
       },
       required: ['provision', 'deferredTaxAmount', 'triggerEvent']
     }
@@ -6059,6 +6090,59 @@ function toolCalculateBurdenedGiftTransfer(p) {
   };
 }
 
+// 가업상속납부유예금액 계산 (상증세법§72의2①, 시행령§69의3①) — 납부유예금액 = 상속세납부세액×
+// (가업상속재산가액÷총상속재산가액). 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)이다.
+function toolCalculateBusinessSuccessionDeferralAmount(p) {
+  p = p || {};
+  const taxPayable = Number(p.inheritanceTaxPayable) || 0;
+  const businessValue = Number(p.businessSuccessionPropertyValue) || 0;
+  const totalValue = Number(p.totalInheritanceValue);
+  if (!totalValue || totalValue <= 0) return { error: '총 상속재산가액이 필요합니다.' };
+  const deferralAmount = Math.round(taxPayable * businessValue / totalValue);
+  return {
+    납부유예금액: deferralAmount,
+    안내: '시행령§69의3①에 따라 상속세 납부세액(' + taxPayable + '원)×(가업상속재산가액(' + businessValue + '원)÷총상속재산가액(' + totalValue + '원))로 계산했습니다. 가업상속재산가액은 시행령§15⑤ 기준(가업상속공제 대상 재산가액)입니다.'
+  };
+}
+
+// 물납충당재산(주식)의 수납가액 — 상속개시일부터 수납할 때까지 신주발행·감자가 있었던 경우
+// (시행령§75①1호, 시행규칙§20의2) — 신주발행·감자 전 구주 1주당 과세가액을, 신주배정수 또는
+// 감자주식수를 반영해 조정한 값이 구주 1주당 수납가액이 된다.
+function toolCalculatePropertyInKindStockReceiptValue(p) {
+  p = p || {};
+  const changeType = p.changeType;
+  const validTypes = ['free_increase', 'paid_increase', 'free_decrease', 'paid_decrease'];
+  if (validTypes.indexOf(changeType) === -1) return { error: 'changeType을 free_increase(무상증자)/paid_increase(유상증자)/free_decrease(무상감자)/paid_decrease(유상감자) 중에서 선택하세요.' };
+  const oldSharePreChangeValue = Number(p.oldSharePreChangeValue);
+  if (!oldSharePreChangeValue) return { error: '구주 1주당 과세가액(oldSharePreChangeValue)이 필요합니다.' };
+  let receiptValuePerShare, formulaNote;
+  if (changeType === 'free_increase') {
+    const newSharesPerOldShare = Number(p.newSharesPerOldShare) || 0;
+    receiptValuePerShare = oldSharePreChangeValue / (1 + newSharesPerOldShare);
+    formulaNote = '구주1주당과세가액÷(1+구주1주당신주배정수)';
+  } else if (changeType === 'paid_increase') {
+    const newSharesPerOldShare = Number(p.newSharesPerOldShare) || 0;
+    const paymentPerNewShare = Number(p.paymentPerNewShare) || 0;
+    receiptValuePerShare = (oldSharePreChangeValue + paymentPerNewShare * newSharesPerOldShare) / (1 + newSharesPerOldShare);
+    formulaNote = '[구주1주당과세가액+(신주1주당주금납입액×구주1주당신주배정수)]÷(1+구주1주당신주배정수)';
+  } else if (changeType === 'free_decrease') {
+    const decreasedSharesPerOldShare = Number(p.decreasedSharesPerOldShare) || 0;
+    if (decreasedSharesPerOldShare >= 1) return { error: '구주 1주당 감자주식수는 1 미만이어야 합니다.' };
+    receiptValuePerShare = oldSharePreChangeValue / (1 - decreasedSharesPerOldShare);
+    formulaNote = '구주1주당과세가액÷(1-구주1주당감자주식수)';
+  } else {
+    const decreasedSharesPerOldShare = Number(p.decreasedSharesPerOldShare) || 0;
+    if (decreasedSharesPerOldShare >= 1) return { error: '구주 1주당 감자주식수는 1 미만이어야 합니다.' };
+    const paymentPerDecreasedShare = Number(p.paymentPerDecreasedShare) || 0;
+    receiptValuePerShare = (oldSharePreChangeValue - paymentPerDecreasedShare * decreasedSharesPerOldShare) / (1 - decreasedSharesPerOldShare);
+    formulaNote = '[구주1주당과세가액-(1주당지급금액×구주1주당감자주식수)]÷(1-구주1주당감자주식수)';
+  }
+  return {
+    구주1주당수납가액: Math.round(receiptValuePerShare),
+    안내: '시행규칙§20의2에 따라 [' + formulaNote + ']로 계산했습니다.'
+  };
+}
+
 // 가업상속납부유예(상증세법§72의2)·가업승계증여세납부유예(조특법§30의7) 사후관리 위반시 추징 판정 —
 // 두 조문 모두 "정당한 사유 없이" 다음 사유가 생기면 허가를 취소하고 대통령령으로 정하는 이자상당액과
 // 함께 징수한다(이자상당액은 calculate_clawback_interest 도구로 별도 계산 — 두 조문 모두 그 도구가
@@ -6067,10 +6151,9 @@ function toolCalculateBurdenedGiftTransfer(p) {
 //   3호 지분감소(5년내 전부, 5년후 비율계산) 4호 §18조의2⑤4호 고용유지요건(70%기준) 미달(전부) 5호 상속인사망(전부)
 // 조특법§30의7③: 1호 가업미종사(전부) 2호 지분감소(5년내 전부, 5년후 비율계산) 3호 고용유지요건(전부) 4호 수증자사망(전부)
 //   — §72의2의 "가업용자산40%처분" 사유(개인가업만 해당)가 없다(§30의7은 법인 주식등 증여만 다루므로).
-// "처분비율·지분감소비율을 고려하여 대통령령으로 정하는 바에 따라 계산한 세액"의 정확한 산식은
-// 상속세및증여세법시행령§69의3③(처분비율, 상속만)·⑥(지분감소비율, 상속) 및 조세특례제한법시행령
-// §27의7⑩(지분감소비율, 증여)에 있으나 모두 원문이 이미지로 되어 있어 이 도구가 다루지 못하고,
-// 유예세액에 해당 비율을 단순 비례한 근사치를 쓴다(정확한 산식은 위 조문 원문 확인 후 재계산 필요).
+// "처분비율을 고려하여 계산한 세액"(시행령§69의3③, 상속만)은 [납부유예세액×가업용자산의처분비율]이고,
+// "지분감소비율을 고려하여 계산한 세액"(시행령§69의3⑥ 상속·조특법시행령§27의7⑩ 증여)은
+// [납부유예세액×(감소한지분율÷기준일(상속개시일·증여일)현재지분율)]이다(둘 다 원문 확인).
 function toolCalculateBusinessSuccessionDeferralClawback(p) {
   p = p || {};
   const provision = p.provision;
@@ -6102,7 +6185,7 @@ function toolCalculateBusinessSuccessionDeferralClawback(p) {
     if (disposalRatio <= 0) return { error: '가업용자산 처분비율(0~1)이 필요합니다.' };
     ratioUsed = disposalRatio;
     clawbackAmount = Math.round(deferredTaxAmount * disposalRatio);
-    note = '「소득세법」을 적용받는 가업의 가업용 자산을 100분의 40 이상 처분하여 ' + provisionLabel + '③1호 사유가 발생했습니다. 처분비율(' + Math.round(disposalRatio * 100) + '%)에 비례한 근사치로 추징세액을 계산했습니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+    note = '「소득세법」을 적용받는 가업의 가업용 자산을 100분의 40 이상 처분하여 ' + provisionLabel + '③1호 사유가 발생했습니다. 시행령§69의3③에 따라 납부유예세액×처분비율(' + Math.round(disposalRatio * 100) + '%)로 추징세액을 계산했습니다.';
   } else if (triggerEvent === 'not_engaged') {
     clawbackAmount = deferredTaxAmount;
     note = personSubj + ' 가업에 종사하지 아니하게 되어 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
@@ -6113,11 +6196,26 @@ function toolCalculateBusinessSuccessionDeferralClawback(p) {
       clawbackAmount = deferredTaxAmount;
       note = baseDateLabel + '부터 5년 이내에 지분이 감소하여 ' + provisionLabel + '③ 사유가 발생했습니다. 납부유예된 세액 전부를 추징합니다.';
     } else {
-      const equityDecreaseRatio = Math.max(0, Math.min(1, Number(p.equityDecreaseRatio) || 0));
-      if (equityDecreaseRatio <= 0) return { error: baseDateLabel + '부터 5년 후 지분감소이므로 지분 감소 비율(0~1)이 필요합니다.' };
-      ratioUsed = equityDecreaseRatio;
-      clawbackAmount = Math.round(deferredTaxAmount * equityDecreaseRatio);
-      note = baseDateLabel + '부터 5년 후에 지분이 감소하여 ' + provisionLabel + '③ 사유가 발생했습니다. 지분감소비율(' + Math.round(equityDecreaseRatio * 100) + '%)에 비례한 근사치로 추징세액을 계산했습니다 — 정확한 시행령 산식은 별도 확인이 필요합니다.';
+      const provisionCite = provision === 'inheritance' ? '시행령§69의3⑥' : '조특법시행령§27의7⑩';
+      const equityRatioAtBase = Number(p.equityRatioAtBase);
+      const currentEquityRatio = Number(p.currentEquityRatio);
+      let ratioBC = null;
+      let baseNote = '';
+      if (Number.isFinite(equityRatioAtBase) && equityRatioAtBase > 0 && Number.isFinite(currentEquityRatio) && currentEquityRatio >= 0 && currentEquityRatio < equityRatioAtBase) {
+        const decreasedRatio = equityRatioAtBase - currentEquityRatio;
+        ratioBC = decreasedRatio / equityRatioAtBase;
+        baseNote = provisionCite + '에 따라 [감소한 지분율(' + (decreasedRatio * 100).toFixed(2) + '%p) ÷ ' + baseDateLabel + ' 현재 지분율(' + (equityRatioAtBase * 100).toFixed(2) + '%)]=' + (ratioBC * 100).toFixed(2) + '%로 계산했습니다. ';
+      } else {
+        const directRatio = Number(p.equityDecreaseRatio);
+        if (Number.isFinite(directRatio) && directRatio > 0) {
+          ratioBC = Math.min(1, directRatio);
+          baseNote = '직접 입력한 지분감소비율(B÷C)을 그대로 사용했습니다. ';
+        }
+      }
+      if (!ratioBC || ratioBC <= 0) return { error: baseDateLabel + '부터 5년 후 지분감소이므로 ' + baseDateLabel + ' 현재 지분율(equityRatioAtBase)과 감소 후 현재 지분율(currentEquityRatio)을 입력하거나, 이미 계산된 지분감소비율(equityDecreaseRatio, B÷C)을 직접 입력하세요.' };
+      ratioUsed = ratioBC;
+      clawbackAmount = Math.round(deferredTaxAmount * ratioBC);
+      note = baseNote + baseDateLabel + '부터 5년 후에 지분이 감소하여 ' + provisionLabel + '③ 사유가 발생했습니다. ' + provisionCite + '에 따라 납부유예세액×(감소한지분율÷' + baseDateLabel + '현재지분율)로 추징세액을 계산했습니다.';
     }
   } else if (triggerEvent === 'employment_failed') {
     clawbackAmount = deferredTaxAmount;
@@ -8216,6 +8314,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_population_decline_area_house_exclusion' ||
         b.name === 'calculate_business_transfer_carryover' ||
         b.name === 'calculate_burdened_gift_transfer' ||
+        b.name === 'calculate_business_succession_deferral_amount' ||
+        b.name === 'calculate_property_in_kind_stock_receipt_value' ||
         b.name === 'calculate_business_succession_deferral_clawback' ||
         b.name === 'calculate_property_in_kind_payment_eligibility' ||
         b.name === 'calculate_cultural_heritage_tax_deferral' ||
@@ -8544,6 +8644,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_burdened_gift_transfer') {
         const resultObj = toolCalculateBurdenedGiftTransfer(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_business_succession_deferral_amount') {
+        const resultObj = toolCalculateBusinessSuccessionDeferralAmount(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_property_in_kind_stock_receipt_value') {
+        const resultObj = toolCalculatePropertyInKindStockReceiptValue(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

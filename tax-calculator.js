@@ -3406,7 +3406,9 @@ function renderGiftPane(){
         '</select></div>' +
         '<div class="taxcalc-field"><label>[가업용자산처분만] 처분비율</label><input type="number" step="0.01" id="bcDisposalRatio" placeholder="0~1 (근사치 계산용)"></div>' +
         '<div class="taxcalc-field"><label>[지분감소만] 상속개시일·증여일부터 경과연수</label><input type="number" id="bcYearsSinceBase" placeholder="년"></div>' +
-        '<div class="taxcalc-field"><label>[지분감소·5년후만] 지분 감소 비율</label><input type="number" step="0.01" id="bcEquityDecreaseRatio" placeholder="0~1 (근사치 계산용)"></div>' +
+        '<div class="taxcalc-field"><label>[지분감소·5년후만] 기준일 현재 지분율</label><input type="number" step="0.01" id="bcEquityRatioAtBase" placeholder="0~1 (상속개시일·증여일 현재)"></div>' +
+        '<div class="taxcalc-field"><label>[지분감소·5년후만] 감소 후 현재 지분율</label><input type="number" step="0.01" id="bcCurrentEquityRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>[지분감소·5년후만] 지분감소비율 직접입력(선택)</label><input type="number" step="0.01" id="bcEquityDecreaseRatio" placeholder="0~1 (위 2개 필드 대신 이미 계산된 B÷C값을 직접 입력할 때만)"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-business-succession-deferral-clawback">추징세액 판정하기</button>' +
       '<div id="taxCalcBusinessSuccessionDeferralClawbackResult"></div>' +
@@ -5766,7 +5768,9 @@ taxCalcView.addEventListener('click', function(e){
       triggerEvent: document.getElementById('bcTriggerEvent').value,
       disposalRatio: numVal(document.getElementById('bcDisposalRatio').value) || 0,
       yearsSinceBase: numVal(document.getElementById('bcYearsSinceBase').value) || 0,
-      equityDecreaseRatio: numVal(document.getElementById('bcEquityDecreaseRatio').value) || 0
+      equityDecreaseRatio: numVal(document.getElementById('bcEquityDecreaseRatio').value) || 0,
+      equityRatioAtBase: numVal(document.getElementById('bcEquityRatioAtBase').value) || 0,
+      currentEquityRatio: numVal(document.getElementById('bcCurrentEquityRatio').value) || 0
     };
     renderBusinessSuccessionDeferralClawbackResult(calculateBusinessSuccessionDeferralClawbackJS(input));
   } else if (action === 'run-property-in-kind-payment-eligibility'){
