@@ -1019,7 +1019,10 @@ const DRIVE_TOOLS = [
         preConversionShares: { type: 'number', description: 'conversion/conversion_reverse일 때 — 전환등 전 발행주식총수.' },
         conversionPricePerShare: { type: 'number', description: 'conversion/conversion_reverse일 때 — 주식 1주당 전환·교환 또는 인수 가액(전환가액등, 원).' },
         increasedShares: { type: 'number', description: 'conversion/conversion_reverse일 때 — 전환등에 의하여 증가한(교부받은) 주식수.' },
-        interestLossAmount: { type: 'number', description: 'conversion일 때 — 이자손실분(원, 시행규칙§10의2, 사채발행이율 기준 현재가치-적정할인율 기준 현재가치의 차액을 별도로 계산해서 입력). 없으면 0.' },
+        interestLossAmount: { type: 'number', description: 'conversion일 때 — 이자손실분(원, 시행규칙§10의2). 직접 입력하면 그 값을 우선 사용하고, 비워두고 bondFaceValueAtMaturity·bondIssueRate·yearsToMaturityAtAcquisition을 입력하면 자동계산한다.' },
+        bondFaceValueAtMaturity: { type: 'number', description: 'conversion이고 interestLossAmount를 자동계산할 때 — 전환사채등의 만기상환금액(원).' },
+        bondIssueRate: { type: 'number', description: 'conversion이고 interestLossAmount를 자동계산할 때 — 사채발행이율(연 이자율, 소수. 예: 2%는 0.02).' },
+        yearsToMaturityAtAcquisition: { type: 'number', description: 'conversion이고 interestLossAmount를 자동계산할 때 — 취득일부터 만기일까지의 기간(년).' },
         priorAcquisitionGiftAmount: { type: 'number', description: 'conversion일 때 — 같은 전환사채등에 대해 이미 acquisition(법§40①1호)으로 과세된 증여의제이익(원, 중복과세 방지용 차감). 없으면 0.' },
         isBondTransferred: { type: 'boolean', description: 'conversion일 때 — 전환사채등을 양도한 경우인지(이 경우 이익 상한이 적용됨).' },
         bondTransferPrice: { type: 'number', description: 'isBondTransferred가 true일 때 — 전환사채등의 양도가액(원).' },
@@ -6805,6 +6808,10 @@ function toolCalculateRuralHouseOneHouseExclusion(p) {
 // 전환사채등의 주식전환등에 따른 이익의 증여 (상증세법§40, 시행령§30) — 4가지 세부 케이스.
 // conversion·conversion_reverse·transfer(법§40①2·3호)는 §47①에 열거된 합산배제증여재산이므로 §55①3호에
 // 따라 이익에서 3천만원을 공제한 금액이 과세표준이며, acquisition(법§40①1호)은 일반 증여세 산식을 따른다.
+// 이자손실분(시행규칙§10의2) = [만기상환금액을 사채발행이율로 취득당시 현재가치할인한 금액] － [만기
+// 상환금액을 적정할인율(시행규칙§18의3 — 연 8%)로 취득당시 현재가치할인한 금액]. bondFaceValueAtMaturity·
+// bondIssueRate·yearsToMaturityAtAcquisition을 입력하면 자동계산하며, interestLossAmount 직접입력이
+// 있으면 그 값을 우선한다.
 function toolCalculateConvertibleBondGiftTax(p) {
   p = p || {};
   const caseType = p.caseType;
@@ -6835,7 +6842,20 @@ function toolCalculateConvertibleBondGiftTax(p) {
     const receivedSharesValue = (preConversionValuePerShare * preConversionShares + conversionPricePerShare * increasedShares) / (preConversionShares + increasedShares);
 
     if (caseType === 'conversion') {
-      const interestLossAmount = Number(p.interestLossAmount) || 0;
+      // 이자손실분(시행규칙§10의2) — 직접입력이 없으면 [1호: 만기상환금액을 사채발행이율로 취득당시
+      // 현재가치할인한 금액] － [2호: 만기상환금액을 적정할인율(시행규칙§18의3 — 연 100분의 8)로
+      // 취득당시 현재가치할인한 금액]으로 자동계산한다(원문 확인).
+      let interestLossAmount = Number(p.interestLossAmount) || 0;
+      if (!p.interestLossAmount) {
+        const bondFaceValueAtMaturity = Number(p.bondFaceValueAtMaturity) || 0;
+        const bondIssueRate = Number(p.bondIssueRate);
+        const yearsToMaturityAtAcquisition = Number(p.yearsToMaturityAtAcquisition);
+        if (bondFaceValueAtMaturity > 0 && Number.isFinite(bondIssueRate) && bondIssueRate >= 0 && Number.isFinite(yearsToMaturityAtAcquisition) && yearsToMaturityAtAcquisition > 0) {
+          const pvAtBondRate = bondFaceValueAtMaturity / Math.pow(1 + bondIssueRate, yearsToMaturityAtAcquisition);
+          const pvAtAppropriateRate = bondFaceValueAtMaturity / Math.pow(1.08, yearsToMaturityAtAcquisition);
+          interestLossAmount = Math.max(0, Math.round(pvAtBondRate - pvAtAppropriateRate));
+        }
+      }
       const priorAcquisitionGiftAmount = Number(p.priorAcquisitionGiftAmount) || 0;
       giftAmount = Math.max(0, Math.round((receivedSharesValue - conversionPricePerShare) * increasedShares - interestLossAmount - priorAcquisitionGiftAmount));
       if (p.isBondTransferred) {
@@ -6887,7 +6907,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
     안내: isAggregationExcluded
-      ? '합산배제증여재산이므로(§47①) 관계별 증여재산공제(§53)는 적용하지 않고 이익에서 3천만원을 공제해 과세표준을 계산합니다(§55①3호). 이자손실분·조정공제 등 세부 계산은 시행규칙§10의2를 별도로 확인해서 반영하세요.'
+      ? '합산배제증여재산이므로(§47①) 관계별 증여재산공제(§53)는 적용하지 않고 이익에서 3천만원을 공제해 과세표준을 계산합니다(§55①3호).'
       : '증여일은 전환사채등을 인수·취득한 날입니다(시행령§30①1호).'
   };
   if (!isAggregationExcluded) {

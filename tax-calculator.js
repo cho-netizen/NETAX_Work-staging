@@ -2920,7 +2920,10 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[전환시만] 전환등 전 발행주식총수</label><input type="number" id="cbPreShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[전환시만] 전환가액등(1주당 전환·교환·인수가액)</label><input type="number" id="cbConversionPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[전환시만] 전환등으로 증가한(교부받은) 주식수</label><input type="number" id="cbIncreasedShares" placeholder="주"></div>' +
-        '<div class="taxcalc-field"><label>[전환시(정방향)만] 이자손실분</label><input type="number" id="cbInterestLoss" placeholder="원 (시행규칙§10의2, 별도 계산해 입력, 없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 이자손실분 직접입력(선택)</label><input type="number" id="cbInterestLoss" placeholder="원 (비워두면 아래 3개 필드로 자동계산)"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 전환사채등 만기상환금액</label><input type="number" id="cbFaceValueAtMaturity" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 사채발행이율</label><input type="number" step="0.001" id="cbIssueRate" placeholder="연 이자율(소수, 예: 2%는 0.02)"></div>' +
+        '<div class="taxcalc-field"><label>[전환시(정방향)만] 취득일부터 만기까지 기간</label><input type="number" step="0.1" id="cbYearsToMaturity" placeholder="년"></div>' +
         '<div class="taxcalc-field"><label>[전환시(정방향)만] 기과세된 취득시 이익</label><input type="number" id="cbPriorAcquisitionGift" placeholder="원 (같은 건 법1호로 이미 과세된 금액, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>[전환시 반대편만] 그 특수관계인의 전환등전 보유지분비율</label><input type="number" step="0.01" min="0" max="1" id="cbRelatedRatio" placeholder="0~1"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액(취득시만)</label><input type="number" id="cbRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
@@ -5545,6 +5548,9 @@ taxCalcView.addEventListener('click', function(e){
       conversionPricePerShare: numVal(document.getElementById('cbConversionPrice').value) || 0,
       increasedShares: numVal(document.getElementById('cbIncreasedShares').value) || 0,
       interestLossAmount: numVal(document.getElementById('cbInterestLoss').value) || 0,
+      bondFaceValueAtMaturity: numVal(document.getElementById('cbFaceValueAtMaturity').value) || 0,
+      bondIssueRate: numVal(document.getElementById('cbIssueRate').value) || 0,
+      yearsToMaturityAtAcquisition: numVal(document.getElementById('cbYearsToMaturity').value) || 0,
       priorAcquisitionGiftAmount: numVal(document.getElementById('cbPriorAcquisitionGift').value) || 0,
       relatedPriorOwnershipRatio: numVal(document.getElementById('cbRelatedRatio').value) || 0,
       relationDeductionLimit: numVal(document.getElementById('cbRelationDeduction').value) || 0,
