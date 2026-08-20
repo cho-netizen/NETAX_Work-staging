@@ -3433,8 +3433,14 @@ function renderGiftPane(){
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>지정문화유산 등에 대한 상속세·증여세 징수유예(상증세법§74·§75) — 문화유산자료등·박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 세액의 징수를 유예합니다</b></div>' +
       '<div class="taxcalc-grid">' +
-        '<div class="taxcalc-field"><label>세목</label><select id="chTaxType"><option value="inheritance">상속세(§74)</option><option value="gift">증여세(§75)</option></select></div>' +
-        '<div class="taxcalc-field"><label>전체 납부세액</label><input type="number" id="chTotalTax" placeholder="원 (징수유예 적용 전)"></div>' +
+        '<div class="taxcalc-field"><label>세목</label><select id="chTaxType"><option value="inheritance">상속세(§74)</option><option value="gift">증여세(§75, 박물관자료등만 가능)</option></select></div>' +
+        '<div class="taxcalc-field"><label>재산 종류</label><select id="chItemType">' +
+          '<option value="cultural_property">문화유산자료등</option>' +
+          '<option value="museum_material">박물관자료등</option>' +
+          '<option value="national_heritage">국가지정문화유산등</option>' +
+          '<option value="natural_monument">천연기념물등</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>전체 산출세액</label><input type="number" id="chTotalTax" placeholder="원 (징수유예 적용 전)"></div>' +
         '<div class="taxcalc-field"><label>전체 재산가액</label><input type="number" id="chTotalProperty" placeholder="원 (상속재산가액 또는 증여재산가액)"></div>' +
         '<div class="taxcalc-field"><label>징수유예 대상 재산가액</label><input type="number" id="chEligibleProperty" placeholder="원 (문화유산자료등·박물관자료등 등)"></div>' +
         '<div class="taxcalc-field"><label>사후관리 사유</label><select id="chTriggerEvent">' +
@@ -5787,6 +5793,7 @@ taxCalcView.addEventListener('click', function(e){
   } else if (action === 'run-cultural-heritage-tax-deferral'){
     const input = {
       taxType: document.getElementById('chTaxType').value,
+      itemType: document.getElementById('chItemType').value,
       totalTaxPayable: numVal(document.getElementById('chTotalTax').value) || 0,
       totalPropertyValue: numVal(document.getElementById('chTotalProperty').value) || 0,
       eligiblePropertyValue: numVal(document.getElementById('chEligibleProperty').value) || 0,

@@ -3935,17 +3935,26 @@
 
   // 지정문화유산 등에 대한 상속세 징수유예 (상속세및증여세법§74, 증여세는 §75가 준용) — 문화유산자료등·
   // 박물관자료등·국가지정문화유산등·천연기념물등에 상당하는 상속세(증여세)액의 징수를 유예한다.
-  // "그 재산가액에 상당하는 상속세액"을 상속세납부세액×(해당재산가액÷상속재산가액) 비율로 근사 계산한다
-  // (정확한 시행령 산식 미확인). 유상양도 또는 인출(박물관자료등만)시 즉시 징수하며(②), 이 징수에는
-  // 법문상 별도 이자상당가산액 규정이 없다(§74②는 "즉시 그 징수유예한 상속세를 징수" 라고만 함).
+  // 원문 확인 결과 증여세 징수유예는 §75(§74①중 1·3·4호는 제외한다)에 따라 박물관자료등(2호)에만
+  // 적용된다 — 문화유산자료등·국가지정문화유산등·천연기념물등은 증여세 징수유예 대상이 아니다.
+  // "그 재산가액에 상당하는 세액"은 시행령§76①(상속)·§77(증여, 위 §76①을 준용)에 따라
+  // [산출세액×(해당재산가액÷전체재산가액)]로 계산한다(원문 확인). 유상양도 또는 인출(박물관자료등만)시
+  // 즉시 징수하며(②), 이 징수에는 법문상 별도 이자상당가산액 규정이 없다(§74②는 "즉시 그 징수유예한
+  // 상속세를 징수" 라고만 함).
   window.calculateCulturalHeritageTaxDeferralJS = function (p) {
     p = p || {};
     const taxType = p.taxType === 'gift' ? 'gift' : 'inheritance';
+    const itemType = p.itemType;
+    const validItemTypes = ['cultural_property', 'museum_material', 'national_heritage', 'natural_monument'];
+    if (validItemTypes.indexOf(itemType) === -1) return { error: 'itemType을 cultural_property(문화유산자료등)/museum_material(박물관자료등)/national_heritage(국가지정문화유산등)/natural_monument(천연기념물등) 중에서 선택하세요.' };
+    if (taxType === 'gift' && itemType !== 'museum_material') {
+      return { error: '증여세 징수유예(§75)는 박물관자료등(museum_material)에만 적용됩니다 — §74①1·3·4호(문화유산자료등·국가지정문화유산등·천연기념물등)는 증여세 징수유예 대상에서 제외됩니다(법§75).' };
+    }
     const totalTaxPayable = Number(p.totalTaxPayable) || 0;
     const totalPropertyValue = Number(p.totalPropertyValue) || 0;
     const eligiblePropertyValue = Number(p.eligiblePropertyValue) || 0;
     if (totalTaxPayable <= 0 || totalPropertyValue <= 0 || eligiblePropertyValue <= 0) {
-      return { error: (taxType === 'gift' ? '증여세' : '상속세') + ' 납부세액, ' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ', 징수유예대상 재산가액이 필요합니다.' };
+      return { error: (taxType === 'gift' ? '증여세' : '상속세') + ' 산출세액, ' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ', 징수유예대상 재산가액이 필요합니다.' };
     }
     const deferredTaxAmount = Math.round(totalTaxPayable * eligiblePropertyValue / totalPropertyValue);
 
@@ -3965,7 +3974,7 @@
     }
     return {
       상태: '징수유예_적용중', 징수유예세액: deferredTaxAmount, 납부세액: 0,
-      안내: '해당 재산가액에 상당하는 ' + (taxType === 'gift' ? '증여세' : '상속세') + '액(' + deferredTaxAmount + '원 — 납부세액×해당재산가액÷' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ' 비율 근사치, 정확한 시행령 산식은 별도 확인 필요)의 징수를 유예합니다. 유상양도·인출시 즉시 징수되고(사유 transferred_or_withdrawn), 상속의 경우 소유자 사망으로 재상속되면 부과가 철회됩니다(사유 reinheritance_death, 상속세만). 징수유예를 받으려면 그 세액에 상당하는 담보를 제공해야 합니다(§74④, 국가지정문화유산등·천연기념물등은 담보 면제 가능 — ⑤).'
+      안내: (taxType === 'gift' ? '시행령§77(§76①준용)' : '시행령§76①') + '에 따라 해당 재산가액에 상당하는 ' + (taxType === 'gift' ? '증여세' : '상속세') + '액(' + deferredTaxAmount + '원 = 산출세액×해당재산가액÷' + (taxType === 'gift' ? '증여재산가액' : '상속재산가액') + ')의 징수를 유예합니다. 유상양도·인출시 즉시 징수되고(사유 transferred_or_withdrawn), 상속의 경우 소유자 사망으로 재상속되면 부과가 철회됩니다(사유 reinheritance_death, 상속세만). 징수유예를 받으려면 그 세액에 상당하는 담보를 제공해야 합니다(§74④, 국가지정문화유산등·천연기념물등은 담보 면제 가능 — ⑤).'
     };
   };
 
