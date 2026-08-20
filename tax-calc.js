@@ -4275,6 +4275,80 @@
     return Math.round(excessProfit * 3.79079);
   };
 
+  // 연 10% 할인율의 n년 연금현가계수 — 영업권(§59②, n=5 고정 3.79079)과 같은 방식을
+  // 지상권·특허권·광업권 등 n이 자산마다 달라지는 항목에 공통으로 쓴다.
+  function annuityPresentValueFactor10_(years) {
+    const n = Number(years) || 0;
+    if (n <= 0) return 0;
+    return (1 - Math.pow(1.1, -n)) / 0.1;
+  }
+
+  // 지상권의 평가 (§61③, 시행령§51①, 시행규칙§16①②) — 지상권이 설정된 토지가액의 연 2%를
+  // 매년의 수입금액으로 보고, 잔존연수(민법§280·281 준용)에 대한 10% 연금현가계수로 환산한다.
+  window.calculateGroundRightValueJS = function (landValue, remainingYears) {
+    const annualIncome = Math.round((Number(landValue) || 0) * 0.02);
+    const value = Math.round(annualIncome * annuityPresentValueFactor10_(remainingYears));
+    return { 연간수입금액: annualIncome, 지상권가액: value };
+  };
+
+  // 특허권·실용신안권·상표권·디자인권·저작권 등의 평가 (§61③, 시행령§59⑤, 시행규칙§19②③) — 권리로
+  // 장래에 받을 각 연도 수입금액을, 평가기준일부터의 잔존(경과)연수(최대 20년)에 대한 10% 연금현가계수로
+  // 환산한다. 각 연도 수입금액이 확정되지 않은 경우 평가기준일 전 3년간 평균 수입금액을 쓴다(시행규칙§19④).
+  window.calculatePatentRightValueJS = function (annualIncomeAmount, remainingYears) {
+    const years = Math.min(Number(remainingYears) || 0, 20);
+    const value = Math.round((Number(annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years));
+    return { 특허권등가액: value };
+  };
+
+  // 광업권·채석권등의 평가 (§61③, 시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이
+  // 없으면 예상순소득)을, 평가기준일 이후의 채굴가능연수에 대한 10% 연금현가계수로 환산한다.
+  window.calculateMiningRightValueJS = function (average3YearIncome, miningPossibleYears) {
+    const value = Math.round((Number(average3YearIncome) || 0) * annuityPresentValueFactor10_(miningPossibleYears));
+    return { 광업권등가액: value };
+  };
+
+  // 조합원입주권 등 부동산을 취득할 수 있는 권리의 평가 (§61③, 시행령§51②, 시행규칙§16③) — 재개발·
+  // 재건축 조합원권리가액은 분양대상자의 종전 토지·건축물 가격에 (정비사업완료후 대지·건축물의 총
+  // 수입추산액－총소요사업비)÷종전토지·건축물의 총가액 비율을 곱해 계산하며(도시및주거환경정비법§74①
+  // 관리처분계획 기준), 여기에 평가기준일까지 납입한 계약금·중도금 등과 프리미엄상당액을 더하면
+  // 부동산취득권리 전체의 평가액이 된다(시행령§51②본문).
+  window.calculateMemberRightValueJS = function (p) {
+    p = p || {};
+    const formerValue = Number(p.formerLandBuildingValue) || 0;
+    const expectedRevenue = Number(p.expectedRevenueAfterCompletion) || 0;
+    const projectCost = Number(p.totalProjectCost) || 0;
+    const totalFormerValue = Number(p.totalFormerValue);
+    if (!totalFormerValue || totalFormerValue <= 0) return { error: '종전 토지 및 건축물의 총 가액(totalFormerValue)이 필요합니다.' };
+    const memberRightValue = Math.round(formerValue * (expectedRevenue - projectCost) / totalFormerValue);
+    const paidInstallments = Number(p.paidInstallments) || 0;
+    const premium = Number(p.premium) || 0;
+    const totalValue = memberRightValue + paidInstallments + premium;
+    return { 조합원권리가액: memberRightValue, 부동산취득권리_평가액: totalValue };
+  };
+
+  // 배당차액 (시행령§57③, 시행규칙§18②) — 기업공개 준비중인 주식등(거래소 상장법인이 유가증권신고
+  // 직전 6개월(증여세는 3개월)부터 상장 전까지 발행한 신주) 평가시, 상장주식 평가액에서 이 배당차액을
+  // 뺀다. 신주발행일이 속하는 사업연도 개시일부터 배당기산일 전일까지의 일수만큼 직전기 배당률을
+  // 일할 계산한 금액이다.
+  window.calculateDividendDifferenceJS = function (parValuePerShare, priorFiscalYearDividendRate, daysFromFiscalYearStartToRecordDate) {
+    const value = Math.round((Number(parValuePerShare) || 0) * (Number(priorFiscalYearDividendRate) || 0) * ((Number(daysFromFiscalYearStartToRecordDate) || 0) / 365));
+    return { 배당차액: value };
+  };
+
+  // 증자·감자 전 사업연도의 발행주식총수 환산 (시행령§56③단서, 시행규칙§17의3⑤) — 비상장주식의
+  // 순손익가치를 계산할 때, 평가기준일이 속하는 사업연도 이전 3년 이내에 증자·감자가 있었으면
+  // 그 이전 각 사업연도의 발행주식총수를 이 비율로 환산해서 써야 한다(단순히 현재 발행주식총수를
+  // 그대로 3개년에 적용하면 안 됨). changeType이 'capital_increase'(증자)면 (기준시점직전주식수+
+  // 증자주식수)/기준시점직전주식수를, 'capital_decrease'(감자)면 (기준시점직전주식수－감자주식수)/
+  // 기준시점직전주식수를 비율로 곱한다.
+  window.calculateAdjustedShareCountJS = function (changeType, sharesAtHistoricalFiscalYearEnd, sharesJustBeforeChange, changedShares) {
+    const base = Number(sharesJustBeforeChange);
+    if (!base || base <= 0) return null;
+    const changed = Number(changedShares) || 0;
+    const ratio = changeType === 'capital_decrease' ? (base - changed) / base : (base + changed) / base;
+    return Math.round((Number(sharesAtHistoricalFiscalYearEnd) || 0) * ratio);
+  };
+
   // 선박 등 그 밖의 유형재산의 평가 (상증세법§62, 시행령§52) — 선박·항공기·차량·기계장비·입목은
   // 처분시 재취득예상가액 → (확인 안 되면) 장부가액(취득가액-감가상각비) → (그래도 없으면) 지방세법
   // 시행령상 시가표준액을 순차 적용한다(§62①). 상품·제품 등 동산은 처분예상가액 → 장부가액 순으로

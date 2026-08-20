@@ -981,7 +981,11 @@ const VALUATION_METHOD_LABELS = {
   rental: '임대 중인 부동산(임대료환산가액)',
   goodwill: '영업권(§64, 초과이익의 5년 현재가치)',
   trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)',
-  otherTangible: '선박·항공기·차량·기계장비·입목/상품·제품 등(§62, 재취득가액→장부가액→시가표준액)'
+  otherTangible: '선박·항공기·차량·기계장비·입목/상품·제품 등(§62, 재취득가액→장부가액→시가표준액)',
+  groundRight: '지상권(§61③, 토지가액×2%를 잔존연수 현재가치화)',
+  patentRight: '특허권·상표권·저작권등(§61③, 연도별수입금액을 잔존연수(최대20년) 현재가치화)',
+  miningRight: '광업권·채석권등(§61③, 3년평균소득을 채굴가능연수 현재가치화)',
+  memberRight: '조합원입주권(재개발·재건축 조합원권리가액, §61③)'
 };
 // 지분은 평가방법과 무관하게 모든 자산에 공통으로 적용되는 별도 항목이다(예: 확인된 시가가 그 자체로
 // 100% 평가액인 자산도 있고, 매매실례가액 등에 피상속인 지분을 곱해야 하는 자산도 있다 — 그 구분은
@@ -1022,6 +1026,18 @@ function computeValuationAssetValue(a){
       break;
     }
     case 'goodwill': value = calculateGoodwillValueJS(a.gwProfit1, a.gwProfit2, a.gwProfit3, a.gwSelfCapital); break;
+    case 'groundRight': value = calculateGroundRightValueJS(a.grLandValue, a.grRemainingYears).지상권가액; break;
+    case 'patentRight': value = calculatePatentRightValueJS(a.prAnnualIncome, a.prRemainingYears).특허권등가액; break;
+    case 'miningRight': value = calculateMiningRightValueJS(a.mrAverageIncome, a.mrMiningYears).광업권등가액; break;
+    case 'memberRight': {
+      const r = calculateMemberRightValueJS({
+        formerLandBuildingValue: a.mbFormerValue, expectedRevenueAfterCompletion: a.mbExpectedRevenue,
+        totalProjectCost: a.mbProjectCost, totalFormerValue: a.mbTotalFormerValue,
+        paidInstallments: a.mbPaidInstallments, premium: a.mbPremium
+      });
+      value = r.error ? 0 : r.부동산취득권리_평가액;
+      break;
+    }
     case 'otherTangible': {
       const r = calculateOtherTangiblePropertyValueJS({
         itemType: a.otTangibleType, reacquisitionValue: a.otReacquisitionValue, bookValue: a.otBookValue,
@@ -1137,6 +1153,26 @@ function valuationAssetMethodFieldsHtml(m, a){
       '</select></div>') +
     '<div class="taxcalc-field"><label>해지시 받을 일시금(있으면)</label><input type="number" data-field="tbCancellationValue" placeholder="원 (신탁 철회·해지·취소로 받을 수 있는 일시금 — 이보다 크면 이 금액을 그대로 평가액으로 씀)" value="' + (a.tbCancellationValue || '') + '"></div>' +
     '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연 이자율 1,000분의 30(상증세법시행규칙§14①)으로 각 연도 수익의 현재가치를 할인합니다. 아래 "신탁 수익 내역"에서 연도별로 입력하세요</label></div>';
+  if (m === 'groundRight') return '' +
+    '<div class="taxcalc-field"><label>지상권이 설정된 토지가액</label><input type="number" data-field="grLandValue" value="' + (a.grLandValue || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>잔존연수</label><input type="number" data-field="grRemainingYears" value="' + (a.grRemainingYears || '') + '" placeholder="년 (민법§280·281 준용)"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 토지가액의 연 2%를 매년 수입금액으로 보고, 잔존연수만큼 연 10% 할인율로 현재가치화합니다(시행규칙§16①②)</label></div>';
+  if (m === 'patentRight') return '' +
+    '<div class="taxcalc-field"><label>각 연도 수입금액</label><input type="number" data-field="prAnnualIncome" value="' + (a.prAnnualIncome || '') + '" placeholder="확정되지 않았으면 평가기준일 전 3년 평균 수입금액"></div>' +
+    '<div class="taxcalc-field"><label>평가기준일부터의 잔존(경과)연수</label><input type="number" data-field="prRemainingYears" value="' + (a.prRemainingYears || '') + '" placeholder="년 (20년 초과시 20년)"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연도별 수입금액을 잔존연수만큼 연 10% 할인율로 현재가치화합니다(시행규칙§19②③④)</label></div>';
+  if (m === 'miningRight') return '' +
+    '<div class="taxcalc-field"><label>평가기준일전 3년간 평균소득</label><input type="number" data-field="mrAverageIncome" value="' + (a.mrAverageIncome || '') + '" placeholder="실적 없으면 예상순소득"></div>' +
+    '<div class="taxcalc-field"><label>채굴가능연수</label><input type="number" data-field="mrMiningYears" value="' + (a.mrMiningYears || '') + '" placeholder="년"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 3년평균소득을 채굴가능연수만큼 연 10% 할인율로 현재가치화합니다(시행규칙§19⑤)</label></div>';
+  if (m === 'memberRight') return '' +
+    '<div class="taxcalc-field"><label>분양대상자의 종전 토지·건축물 가격</label><input type="number" data-field="mbFormerValue" value="' + (a.mbFormerValue || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>정비사업완료후 대지·건축물의 총 수입추산액</label><input type="number" data-field="mbExpectedRevenue" value="' + (a.mbExpectedRevenue || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>총 소요사업비</label><input type="number" data-field="mbProjectCost" value="' + (a.mbProjectCost || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>종전 토지·건축물의 총 가액</label><input type="number" data-field="mbTotalFormerValue" value="' + (a.mbTotalFormerValue || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>평가기준일까지 납입한 계약금·중도금 등</label><input type="number" data-field="mbPaidInstallments" value="' + (a.mbPaidInstallments || '') + '"></div>' +
+    '<div class="taxcalc-field"><label>평가기준일 현재 프리미엄상당액</label><input type="number" data-field="mbPremium" value="' + (a.mbPremium || '') + '"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 도시및주거환경정비법§74① 관리처분계획 기준 조합원권리가액(시행령§51②, 시행규칙§16③)에 납입금·프리미엄을 더한 금액입니다</label></div>';
   return '<div class="taxcalc-field"><label>평가액</label><input type="number" data-field="directValue" value="' + (a.directValue || '') + '"><button type="button" class="taxcalc-ai-btn" data-action="lookup-real-price" style="margin-top:4px;">🔍 아파트 실거래가 조회(참고)</button></div>';
 }
 
