@@ -2710,6 +2710,15 @@
     const necessaryExpenses = Number(p.necessaryExpenses) || 0;
     const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
 
+    // §98의6① — "취득일부터 5년 이내 양도시 50% 세액감면"은 "제1호의 요건을 갖춘 주택에 한정한다"는
+    // 단서가 있다. 1호(2011.12.31까지 임대계약체결+2년이상임대)만 5년이내 감면 대상이고, 2호(5년이상
+    // 임대유형)는 5년이내 양도시 이 조문상 감면 자체가 없다(5년초과보유 후 양도한 경우의 소득공제만 적용).
+    if (provision === 'sect98_6' && yearsHeld <= 5 && p.sect98_6ItemType === 'item2') {
+      return {
+        적용여부: false, 감면율: 0, 감면소득금액: 0,
+        안내: '조특법§98의6① 단서 — 취득일로부터 5년 이내 양도시 50% 세액감면은 "제1호 요건을 갖춘 주택"(2011.12.31까지 임대계약체결+2년이상임대)에 한정됩니다. 2호 유형(5년이상임대)은 5년 이내 양도에 대한 감면이 없고, 취득일로부터 5년 초과 보유한 뒤 양도한 경우에만 그 5년간 발생한 양도소득금액의 50% 소득공제가 적용됩니다.'
+      };
+    }
     let exemptGain, note;
     if (yearsHeld <= 5 && provision !== 'sect98_8') {
       exemptGain = Math.round(totalGain * rate / 100);
@@ -3500,7 +3509,11 @@
       penaltyAmount = Math.round(unusedTransactionAmount * 0.005);
       note = '§50의2①에 해당하는 거래를 전용계좌로 하지 않아 §78⑩1호에 따라 그 미사용 거래금액의 1000분의 5를 가산세로 부과합니다. (전용계좌를 아예 개설·신고하지 않은 경우의 가산세는 §78⑩2호로 별도이며, penaltyType을 dedicated_account_not_opened로 선택하면 계산할 수 있습니다.)';
     } else if (penaltyType === 'disclosure_violation') {
-      // §78⑪ — §50의3 결산서류등 공시의무 위반(시정요구 불이행)
+      // §78⑪ — §50의3 결산서류등 공시의무 위반(시정요구 불이행). 단서: §50의3①단서에 따른 공익법인등
+      // (소규모 등 간이공시 대상)의 2022.12.31 이전에 개시하는 과세기간·사업연도분 공시는 가산세를 부과하지 않는다.
+      if (p.isExemptSmallOrgPreFY2023) {
+        return { 가산세액: 0, 안내: '§78⑪단서 — §50의3①단서에 따른 공익법인등(소규모 등 간이공시 대상)의 2022.12.31 이전에 개시하는 과세기간·사업연도분 공시에는 가산세를 부과하지 않습니다.' };
+      }
       const totalAssetValue = Number(p.totalAssetValue) || 0;
       if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
       penaltyAmount = Math.round(totalAssetValue * 0.005);

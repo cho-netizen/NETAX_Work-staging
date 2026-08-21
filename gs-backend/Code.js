@@ -918,6 +918,7 @@ const DRIVE_TOOLS = [
         provision: { type: 'string', enum: ['sect98_3', 'sect98_4', 'sect98_5', 'sect98_6', 'sect98_7', 'sect98_8'], description: '적용할 조문.' },
         isOverconcentrationZone: { type: 'boolean', description: 'provision이 sect98_3일 때만 — 수도권과밀억제권역 소재 여부(true면 감면율 60%, false면 100%).' },
         priceDiscountRate: { type: 'number', description: 'provision이 sect98_5일 때만 — 분양가격 인하율(%, 입주자모집공고안 공시 분양가격 대비).' },
+        sect98_6ItemType: { type: 'string', enum: ['item1', 'item2'], description: 'provision이 sect98_6일 때 — item1=1호(2011.12.31까지 임대계약체결+2년이상임대), item2=2호(5년이상임대). 5년 이내 양도시 50% 세액감면은 1호에만 적용되고(§98의6①단서), 2호는 5년 초과보유 후 양도시의 소득공제만 적용된다. 생략하면 1호로 간주.' },
         acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD). sect98_4는 불필요.' },
         transferDate: { type: 'string', description: '양도일(YYYY-MM-DD). sect98_4는 불필요.' },
         transferPrice: { type: 'number', description: '양도가액(원).' },
@@ -1233,6 +1234,7 @@ const DRIVE_TOOLS = [
         relatedExpenseAmount: { type: 'number', description: 'penaltyType이 director_excess일 때 필수 — §48⑧을 초과하는 이사·임직원과 관련해 지출된 직접·간접경비 금액(원).' },
         stockValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_related일 때 필수 — 보유 중인 특수관계 내국법인 주식등의 가액(원).' },
         totalAssetValue: { type: 'number', description: 'penaltyType이 stock_holding_exceeded_related/disclosure_violation/report_not_filed_5pct일 때 필수 — 공익법인등의 총재산가액 또는 자산총액(원).' },
+        isExemptSmallOrgPreFY2023: { type: 'boolean', description: 'penaltyType이 disclosure_violation일 때 — §50의3①단서에 따른 공익법인등(소규모 등 간이공시 대상)이고 공시대상 과세기간·사업연도가 2022.12.31 이전에 개시했는지. true면 가산세를 부과하지 않는다(§78⑪단서).' },
         meetsComplianceRequirements: { type: 'boolean', description: 'penaltyType이 stock_holding_exceeded_related일 때 — 회계감사·전용계좌개설사용·결산서류공시 의무를 모두 이행하면 true(한도50%), 아니면 false(한도30%).' },
         directExpenseAmount: { type: 'number', description: 'penaltyType이 advertising일 때 필수 — 특수관계 내국법인 이익증가를 위해 정당한 대가 없이 지출한 광고·홍보 직접경비(원).' },
         underusedAmount: { type: 'number', description: 'penaltyType이 income_underused일 때 — 기준금액에 미달하여 사용하지 않은 금액(원)을 이미 알고 있으면 직접 입력(§48②5호 운용소득·매각대금 미달사용액은 이 도구가 기준금액을 계산하지 않으므로 이 값을 반드시 직접 입력). §48②7호의 경우 이 값 대신 totalAssetValue·liabilityValue·netIncomeValue·actualDirectUseAmount를 입력하면 시행령§38⑱ 산식으로 자동 계산한다.' },
@@ -6541,6 +6543,15 @@ function toolCalculateUnsoldHouseAcquisitionReduction(p) {
   const necessaryExpenses = Number(p.necessaryExpenses) || 0;
   const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
 
+  // §98의6① — "취득일부터 5년 이내 양도시 50% 세액감면"은 "제1호의 요건을 갖춘 주택에 한정한다"는
+  // 단서가 있다. 1호(2011.12.31까지 임대계약체결+2년이상임대)만 5년이내 감면 대상이고, 2호(5년이상
+  // 임대유형)는 5년이내 양도시 이 조문상 감면 자체가 없다(5년초과보유 후 양도한 경우의 소득공제만 적용).
+  if (provision === 'sect98_6' && yearsHeld <= 5 && p.sect98_6ItemType === 'item2') {
+    return {
+      적용여부: false, 감면율: 0, 감면소득금액: 0,
+      안내: '조특법§98의6① 단서 — 취득일로부터 5년 이내 양도시 50% 세액감면은 "제1호 요건을 갖춘 주택"(2011.12.31까지 임대계약체결+2년이상임대)에 한정됩니다. 2호 유형(5년이상임대)은 5년 이내 양도에 대한 감면이 없고, 취득일로부터 5년 초과 보유한 뒤 양도한 경우에만 그 5년간 발생한 양도소득금액의 50% 소득공제가 적용됩니다.'
+    };
+  }
   let exemptGain, note;
   if (yearsHeld <= 5 && provision !== 'sect98_8') {
     exemptGain = Math.round(totalGain * rate / 100);
@@ -8130,6 +8141,11 @@ function toolCalculatePublicInterestOrgPenalty(p) {
     penaltyAmount = Math.round(unusedTransactionAmount * 0.005);
     note = '§50의2①에 해당하는 거래를 전용계좌로 하지 않아 §78⑩1호에 따라 그 미사용 거래금액의 1000분의 5를 가산세로 부과합니다. (전용계좌를 아예 개설·신고하지 않은 경우의 가산세는 §78⑩2호로 별도이며, penaltyType을 dedicated_account_not_opened로 선택하면 계산할 수 있습니다.)';
   } else if (penaltyType === 'disclosure_violation') {
+    // §78⑪단서 — §50의3①단서에 따른 공익법인등(소규모 등 간이공시 대상)의 2022.12.31 이전에 개시하는
+    // 과세기간·사업연도분 공시는 가산세를 부과하지 않는다.
+    if (p.isExemptSmallOrgPreFY2023) {
+      return { 가산세액: 0, 안내: '§78⑪단서 — §50의3①단서에 따른 공익법인등(소규모 등 간이공시 대상)의 2022.12.31 이전에 개시하는 과세기간·사업연도분 공시에는 가산세를 부과하지 않습니다.' };
+    }
     const totalAssetValue = Number(p.totalAssetValue) || 0;
     if (totalAssetValue <= 0) return { error: '공시하여야 할 과세기간(사업연도) 종료일 현재 공익법인등의 자산총액이 필요합니다.' };
     penaltyAmount = Math.round(totalAssetValue * 0.005);
