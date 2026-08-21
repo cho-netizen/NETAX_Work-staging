@@ -583,7 +583,8 @@ const DRIVE_TOOLS = [
         },
         disclaimedShareRedistributedAmount: { type: 'number', description: '상속공제 종합한도(§24) 계산용 — 선순위 상속인의 상속포기로 다음 순위 상속인이 받은 재산가액(원). 없으면 생략.' },
         specialGiftTaxCredit: { type: 'number', description: '조특법§30의5·6(창업자금·가업승계 증여세 과세특례)에 따라 이미 납부한 증여세액공제(원). 세액 자체는 이 도구가 계산하지 않으므로 별도로 계산해서 입력한다. 없으면 생략.' },
-        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 상속세액(원, 외국납부세액공제 §29).' },
+        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 상속세액(원, 외국납부세액공제 §29) — 공제 한도(실제 납부액 초과 불가).' },
+        foreignEstateTaxBase: { type: 'number', description: '외국의 법령에 따라 상속세가 부과된 상속재산의 과세표준(해당 외국 법령 기준, 원, 시행령§21①). 입력하면 공제액 = 상속세산출세액×(이 값÷전체 상속세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         priorInheritanceTax: { type: 'number', description: '단기재상속세액공제(§30②)용 — 전의 상속세 산출세액(원, 재상속되는 재산이 포함된 전의 상속 전체에 대한 산출세액).' },
         reinheritedPropertyValue: { type: 'number', description: '단기재상속세액공제용 — 재상속분의 재산가액(원, 전의 상속재산 중 이번에 다시 상속되는 부분의 가액).' },
         priorInheritanceTotalPropertyValue: { type: 'number', description: '단기재상속세액공제용 — 전의 상속재산가액(원, 전의 상속 전체 재산가액).' },
@@ -5416,8 +5417,16 @@ function toolCalculateInheritanceTax(p) {
   const giftCreditExcludedBySmallEstate = priorGiftCreditResult.excludedBySmallEstate;
   // 특례증여세액공제(조특법§30의5·6, 창업자금·가업승계 증여세 과세특례분) — 세액 자체는 이 도구가 계산하지 않으므로 별도로 계산한 값을 입력한다.
   const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
-  // 외국납부세액공제 (상증세법 §29) — 국외재산에 대해 외국에서 이미 낸 상속세.
-  const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
+  // §29·시행령§21① — 외국납부세액공제 = 상속세산출세액 × (외국법령에 따라 상속세가 부과된 상속재산의
+  // 과세표준(해당 외국 법령 기준) ÷ 법§25①에 따른 상속세의 과세표준). 다만 이 금액이 외국법령에 따라
+  // 부과된 상속세액(실제 납부액)을 초과하면 그 상속세액을 한도로 한다. foreignEstateTaxBase(외국 과세표준)를
+  // 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을 잔여세액 한도로 그대로 쓴다.
+  const foreignEstateTaxBase = Number(p.foreignEstateTaxBase) || 0;
+  const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const foreignTaxCreditByFormula = (foreignEstateTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignEstateTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
   // 단기재상속세액공제 (상증세법 §30) — 10년 이내 재상속 시 전의 상속세 중 이번 상속재산 해당분에 경과연수별 공제율 적용.
   const shortTermReinheritanceCredit = Math.min(
     shortTermReinheritanceCredit_(p.priorInheritanceTax, p.reinheritedPropertyValue, p.priorInheritanceTotalPropertyValue, p.priorInheritanceTaxableBase, p.yearsSincePriorInheritance),

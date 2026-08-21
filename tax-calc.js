@@ -1624,7 +1624,16 @@
     const priorGiftTaxCredit = priorGiftCreditResult.totalCredit;
     const giftCreditExcludedBySmallEstate = priorGiftCreditResult.excludedBySmallEstate;
     const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
-    const foreignTaxCredit = Math.min(Number(p.foreignTaxPaidAmount) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
+    // §29·시행령§21① — 외국납부세액공제 = 상속세산출세액 × (외국법령에 따라 상속세가 부과된 상속재산의
+    // 과세표준(해당 외국 법령 기준) ÷ 법§25①에 따른 상속세의 과세표준). 다만 이 금액이 외국법령에 따라
+    // 부과된 상속세액(실제 납부액)을 초과하면 그 상속세액을 한도로 한다. foreignEstateTaxBase(외국 과세표준)를
+    // 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을 잔여세액 한도로 그대로 쓴다.
+    const foreignEstateTaxBase = Number(p.foreignEstateTaxBase) || 0;
+    const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const foreignTaxCreditByFormula = (foreignEstateTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignEstateTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
     const shortTermCredit = Math.min(
       shortTermReinheritanceCredit(p.priorInheritanceTax, p.reinheritedPropertyValue, p.priorInheritanceTotalPropertyValue, p.priorInheritanceTaxableBase, p.yearsSincePriorInheritance),
       Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit)
