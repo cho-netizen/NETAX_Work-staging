@@ -761,11 +761,14 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_nominee_trust_gift_tax',
-    description: '명의신탁재산의 증여 의제(상증세법§45의2)를 계산한다. 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 — 대표적으로 비상장·상장주식등)의 실제소유자와 명의자가 다르면, 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한 것으로 본다. §55①1호에 따라 증여재산공제(§53) 없이 명의신탁재산의 금액 전액(감정평가수수료만 차감)이 과세표준이 된다. 조세회피 목적 유무·적용 제외 사유(§45의2①각호)·추정 번복 사유(§45의2③단서) 판정은 이 도구가 하지 않으므로 별도로 확인해야 한다.',
+    description: '명의신탁재산의 증여 의제(상증세법§45의2)를 계산한다. 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 — 대표적으로 비상장·상장주식등)의 실제소유자와 명의자가 다르면, 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한 것으로 본다. §55①1호에 따라 증여재산공제(§53) 없이 명의신탁재산의 금액 전액(감정평가수수료만 차감)이 과세표준이 된다. §45의2①단서 적용배제 사유(isNoTaxAvoidancePurpose 등)를 확인해서 넣지 않으면 그 사유가 없다고 전제하고(=과세대상으로) 계산하므로 반드시 확인해서 입력해야 한다.',
     input_schema: {
       type: 'object',
       properties: {
         nomineeTrustPropertyValue: { type: 'number', description: '명의신탁재산의 가액(원) — 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날) 현재 평가액.' },
+        isNoTaxAvoidancePurpose: { type: 'boolean', description: '§45의2①1호 — 조세회피 목적 없이 타인 명의로 등기등을 하거나(또는 소유권취득 후 실제소유자 명의로 명의개서를 하지 않은) 경우인지. true면 증여의제 적용 자체가 배제된다(과세대상 아님).' },
+        isTrustPropertyRegistration: { type: 'boolean', description: '§45의2①3호 — 자본시장과 금융투자업에 관한 법률에 따른 신탁재산인 사실의 등기등을 한 경우인지. true면 적용 배제.' },
+        isNonResidentAgentRegistration: { type: 'boolean', description: '§45의2①4호 — 비거주자가 법정대리인 또는 재산관리인의 명의로 등기등을 한 경우인지. true면 적용 배제.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산의 감정평가 수수료(원, §55①). 없으면 생략.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
@@ -1749,7 +1752,7 @@ const DRIVE_TOOLS = [
         taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속세, gift=증여세.' },
         totalTaxAmount: { type: 'number', description: '연부연납 전 총 납부세액(원). 2천만원 이하면 연부연납 자체가 불가능하다.' },
         initialPaymentAmount: { type: 'number', description: '신고·납부기한까지 먼저 납부하는 금액(원, 최초납부세액). 생략하면 0(전액을 연부연납대상금액으로 처리).' },
-        installmentPeriodYears: { type: 'integer', description: '연부연납기간(년). 한도: 상속세 일반재산 10년, 가업상속재산은 가업상속재산 비율 50% 미만이면 10년(3년 거치 가능)·50% 이상이면 20년(5년 거치 가능), 증여세 일반재산 5년, 조특법§30의6 특례재산 15년(한도 준수 여부는 검증하지 않으며, 거치기간이 있는 경우 이 도구의 균등분할 모델과는 상환구조가 다르다).' },
+        installmentPeriodYears: { type: 'integer', description: '연부연납기간(년). §71②1호 한도 — 상속세: 나목(일반 상속재산) 10년, 가목(가업상속공제를 받았거나 시행령§68③이 정하는 요건에 따라 중소·중견기업을 상속받은 경우의 대통령령이 정하는 상속재산) 20년 또는 (연부연납 허가 후 10년이 되는 날부터) 10년 중 선택 — "50% 비율" 기준이 아니라 별도의 지분·경영기간·상속인 요건(시행령§68③)을 충족하는지로 판정되며, 그 판정과 해당 재산분 세액 산정(시행령§68②, 원문이 수식 이미지라 이 도구가 확보하지 못함)은 검증하지 않는다. 증여세: 나목(일반) 5년, 가목(조특법§30의6 특례 적용 증여재산) 15년. 거치기간이 있는 경우 이 도구의 균등분할 모델과는 상환구조가 다르다.' },
         annualInterestRatePercent: { type: 'number', description: '연부연납 가산금 연이자율(%, 예: 3.5). 생략하면 referenceDate(또는 오늘) 기준 국세기본법시행령§43의3② 고시 이자율로 자동계산한다.' },
         referenceDate: { type: 'string', description: 'annualInterestRatePercent 자동계산 기준일(YYYY-MM-DD, 보통 연부연납 허가일·신고일). 생략하면 오늘.' }
       },
@@ -6153,16 +6156,29 @@ function toolCalculateNomineeTrustGiftTax(p) {
   const propertyValue = Number(p.nomineeTrustPropertyValue) || 0;
   if (propertyValue <= 0) return { error: '명의신탁재산의 가액(nomineeTrustPropertyValue)이 필요합니다.' };
 
+  // §45의2①단서 — 다음 중 하나에 해당하면 증여의제 적용 자체가 배제된다(과세대상 아님).
+  const exclusionReasons = [];
+  if (p.isNoTaxAvoidancePurpose) exclusionReasons.push('조세회피 목적 없음(§45의2①1호)');
+  if (p.isTrustPropertyRegistration) exclusionReasons.push('자본시장법상 신탁재산 등기(§45의2①3호)');
+  if (p.isNonResidentAgentRegistration) exclusionReasons.push('비거주자의 법정대리인·재산관리인 명의 등기(§45의2①4호)');
+  if (exclusionReasons.length > 0) {
+    return {
+      과세대상여부: false, 명의신탁재산가액: propertyValue, 납부세액: 0,
+      안내: '§45의2①단서의 적용배제 사유(' + exclusionReasons.join(', ') + ')에 해당하여 명의신탁재산의 증여의제가 적용되지 않습니다.'
+    };
+  }
+
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
 
   return {
+    과세대상여부: true,
     명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, propertyValue),
     과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
     무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
     납부세액: r.finalTax,
-    안내: '증여재산공제(§53)는 적용되지 않습니다(§55①1호 — 명의신탁재산의 금액 전액이 과세표준, 감정평가수수료만 차감). 조세회피 목적이 없었음(§45의2①1호) 등 적용 제외 사유에 해당하는지, 조세회피목적 추정을 뒤집을 사유(§45의2③단서)가 있는지는 이 도구가 판정하지 않으므로 별도로 확인해야 합니다. 실제소유자와 명의자 사이의 증여세는 실제소유자가 납부의무를 진다(§4의2②).'
+    안내: '증여재산공제(§53)는 적용되지 않습니다(§55①1호 — 명의신탁재산의 금액 전액이 과세표준, 감정평가수수료만 차감). isNoTaxAvoidancePurpose·isTrustPropertyRegistration·isNonResidentAgentRegistration을 확인해서 명시적으로 넣지 않으면 이 배제사유를 검토하지 않은 채(과세대상으로 전제하고) 계산한 것이니 반드시 확인하세요. 실제소유자와 명의자 사이의 증여세는 실제소유자가 납부의무를 진다(§4의2②).'
   };
 }
 
@@ -6537,6 +6553,16 @@ function toolCalculateInstallmentPaymentSchedule(p) {
   }
   const installmentPeriodYears = Number(p.installmentPeriodYears);
   if (!installmentPeriodYears || installmentPeriodYears <= 0) return { error: '연부연납기간(installmentPeriodYears, 년)이 필요합니다.' };
+  // §71②1호 — 상속세는 가업상속재산 특례(가목, 최대 20년)를 받는 경우가 아니면 최대 10년(나목),
+  // 증여세는 조특법§30의6 특례재산(가목, 최대 15년)이 아니면 최대 5년(나목)이다. 어느 쪽이든 이
+  // 절대 상한(상속 20년/증여 15년)은 넘을 수 없으므로 최소한의 안전장치로 막는다 — 다만 일반재산인데
+  // 특례 상한(20년/15년)까지 입력하는 경우는 이 도구가 구분하지 못하니 taxType에 맞는 정확한 한도인지
+  // 별도로 확인해야 한다(가업상속재산 특례 대상 여부 판정은 시행령§68③의 복잡한 요건이라 이 도구가
+  // 자동판정하지 않음).
+  const absoluteMaxYears = taxType === 'inheritance' ? 20 : 15;
+  if (installmentPeriodYears > absoluteMaxYears) {
+    return { error: '연부연납기간(' + installmentPeriodYears + '년)이 ' + (taxType === 'inheritance' ? '상속세' : '증여세') + '의 절대 상한(' + absoluteMaxYears + '년, §71②1호)을 초과합니다. 일반재산이면 상속세 10년·증여세 5년이 한도이며, 가업상속재산·조특법§30의6 특례재산에 해당하는지는 별도로 확인하세요.' };
+  }
   // §72①·시행령§69①·국세기본법시행령§43의3② — 각 회분 분할납부세액의 "납부일 현재" 이자율을 적용한다.
   // 향후 회차의 이자율은 아직 정해지지 않았으므로, referenceDate(기준일, 보통 연부연납 허가일·신고일 —
   // 없으면 오늘) 시점에 적용되는 최신 고시 이자율(REFUND_INTEREST_RATE_HISTORY, toolCalculateClawbackInterest와
@@ -6573,7 +6599,7 @@ function toolCalculateInstallmentPaymentSchedule(p) {
     각회분_1천만원미만_경고: belowMinimumWarning,
     안내: '각 회분의 납부예정 세액(가산금 제외한 원금)은 1천만원을 초과해야 합니다 — 미만이면 연부연납기간을 줄이세요. ' +
       (belowMinimumWarning ? '⚠ 현재 입력으로는 회당 원금이 1천만원 미만입니다. ' : '') +
-      '연부연납기간 한도: 상속세 일반재산은 10년(거치기간 없음), 가업상속재산은 상속재산 중 가업상속재산 비율이 50% 미만이면 10년(3년까지 거치 가능)·50% 이상이면 20년(5년까지 거치 가능), 증여세는 일반재산 5년(거치기간 없음)·조특법§30의6 특례를 적용받은 증여재산은 15년입니다(거치기간 동안은 이자상당액만 내고 원금 상환은 미루는 방식이라 이 도구의 균등분할 모델과 다르며, 거치기간을 쓸 경우 홈택스 모의계산으로 별도 재계산하세요. 기간 한도 준수 여부는 이 도구가 검증하지 않음). ' +
+      '연부연납기간 한도(§71②1호): 상속세는 나목(일반 상속재산) 10년, 가목(가업상속공제를 받았거나 시행령§68③ 요건에 따라 중소·중견기업을 상속받은 경우의 대통령령이 정하는 상속재산) 20년 또는 (연부연납 허가 후 10년이 되는 날부터) 10년 중 선택 — "50% 비율" 기준이 아니라 별도의 지분·경영기간·상속인 요건(시행령§68③, 지분40%(상장20%)이상 5년보유+5년경영 등)을 충족하는지로 판정되며 그 판정과 해당 재산분 세액 산정(시행령§68②, 원문이 수식 이미지라 확보 못함)은 이 도구가 검증하지 않습니다. 증여세는 나목(일반) 5년, 가목(조특법§30의6 특례 적용 증여재산) 15년입니다(거치기간 동안은 이자상당액만 내고 원금 상환은 미루는 방식이라 이 도구의 균등분할 모델과 다르며, 거치기간을 쓸 경우 홈택스 모의계산으로 별도 재계산하세요). ' +
       '가산금 계산은 잔여 미납액에 연이자율을 적용하는 근사 모델입니다 — 정확한 이자율(국세기본법 시행령§43의3②, 수시 변경)과 실제 납부예정일을 반영해 홈택스 모의계산으로 재검증하세요. 가업상속재산에 해당하는 부분과 그 외 부분의 연부연납기간이 다른 경우(예: 상속세) 각 부분을 별도로 이 도구를 호출해 계산한 뒤 합산하세요.'
   };
 }
