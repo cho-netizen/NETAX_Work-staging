@@ -1675,7 +1675,7 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>감정가액·환산취득가액 중 건물분</label><input type="number" data-field="convertedBuildingAcquisitionValueForPenalty" placeholder="원 (위 체크 시, 가산세 5%, 소득세법§114의2)"></div>' +
           '<div class="taxcalc-field"><label>등록임대주택 장특공제 특례</label><select data-field="rentalSpecialType">' +
             '<option value="">해당없음</option>' +
-            '<option value="rental_general">장기일반민간임대주택(조특법§97의3, 10년↑70%/8년↑50%)</option>' +
+            '<option value="rental_general">장기일반민간임대주택(조특법§97의3, 10년↑70%)</option>' +
             '<option value="rental_long">장기임대주택(조특법§97의4, 일반공제+임대기간별 추가공제)</option>' +
           '</select></div>' +
           '<div class="taxcalc-field"><label>임대기간</label><input type="number" data-field="rentalYears" placeholder="년 (위 특례 선택 시)" maxlength="2"></div>' +
