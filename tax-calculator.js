@@ -4210,6 +4210,7 @@ function renderInheritancePane(){
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>배우자상속공제 (부표3의2 한도액 계산)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>배우자 실제 상속액(자동, 명부의 배우자 행 기준)</label><input type="number" id="ihSpouseActual" placeholder="0 (5억 미만/미입력이면 최소 5억 자동 적용)" readonly></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isSpousePropertyDivided" id="ihSpouseDivided" checked><label for="ihSpouseDivided">배우자상속재산분할기한(신고기한 다음날부터 9개월)까지 배우자 상속재산을 분할·등기하고 신고함 (§19②③ — 체크 해제시 실제상속액과 무관하게 최소 5억원만 공제)</label></div>' +
         '<div class="taxcalc-field"><label>배우자 외 같은 순위 공동상속인 수(자동, 명부에 자녀·손자녀가 있으면 그 수, 없으면 부모 수)</label><input type="number" id="ihOtherHeirsCount" placeholder="0" readonly></div>' +
         '<div class="taxcalc-field"><label>배우자 법정상속분 비율(자동계산: 위 공동상속인 수 기준, 민법§1009②)</label><input type="number" step="0.0001" id="ihSpouseRatio" placeholder="0" readonly><span class="taxcalc-result-note" id="ihSpouseRatioHint" style="margin:2px 0 0;"></span></div>' +
         '<div class="taxcalc-field"><label>상속인 아닌 자 유증재산가액</label><input type="number" id="ihNonHeirBequest" placeholder="원 (없으면 비움)"></div>' +
@@ -4223,6 +4224,12 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>동거주택가액(자동, 명부에서 "동거주택 상속" 체크된 행 합계, 6억 한도)</label><input type="number" id="ihCohabitValue" placeholder="0" readonly><span class="taxcalc-result-note" id="ihCohabitValueHint" style="margin:2px 0 0;"></span></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ihAppraisalFee" placeholder="원 (500만원 한도)"><span class="taxcalc-result-note" id="ihAppraisalFeeHint" style="margin:2px 0 0;"></span></div>' +
         '<div class="taxcalc-field"><label>재해손실공제액</label><input type="number" id="ihDisasterLoss" placeholder="원 (신고기한 내 재난 멸실분)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>동거주택상속공제 자격요건(§23의2①) — 동거주택가액을 입력했다면, 하나라도 체크 해제하면 이 공제가 전액 배제됩니다.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="tenYearCohabitationRequirementMet" id="ihCohabitReq1" checked><label for="ihCohabitReq1">상속개시일부터 소급 10년 이상(상속인 미성년자기간 제외) 계속 한 주택에서 동거(1호)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="tenYearOneHouseholdRequirementMet" id="ihCohabitReq2" checked><label for="ihCohabitReq2">10년 이상 계속 1세대를 구성하며 1세대1주택 해당(무주택기간 포함)(2호)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="noHouseOrJointHeirRequirementMet" id="ihCohabitReq3" checked><label for="ihCohabitReq3">상속개시일 현재 무주택자이거나 피상속인과 공동1주택 보유한 동거상속인이 상속받은 주택(3호)</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>장례비용 내역(§14①3호) — 지급처별로 입력하면 일반분·봉안시설분을 자동 구분·합산합니다(일반분 없으면 자동 500만원 공제, 봉안시설분은 별도 500만원 한도)</b></div>' +
       '<div id="ihFuneralItemsList"></div>' +
@@ -4239,6 +4246,15 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>[법인] 과다보유현금</label><input type="number" id="ihBusinessExcessCash" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[법인] 영업무관 주식·채권·금융상품</label><input type="number" id="ihBusinessNonBizStock" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>총 상속재산가액(가업상속납부유예 참고계산용)</label><input type="number" id="ihTotalGrossEstate" placeholder="원 (§72의2 납부유예 가능세액을 참고로 보려면 입력)"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>가업상속공제 자격요건(시행령§15③) — 하나라도 체크 해제하면 가업상속공제가 전액 배제됩니다. 반드시 확인 후 체크하세요.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="decedentOwnershipRequirementMet" id="ihBizReqOwnership" checked><label for="ihBizReqOwnership">피상속인+특수관계인 지분이 40%(상장 20%) 이상을 10년 이상 계속 보유(③1호가목)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="decedentCeoTenureRequirementMet" id="ihBizReqCeoTenure" checked><label for="ihBizReqCeoTenure">피상속인 대표이사 재직요건 충족(가업영위기간 50%이상, 또는 10년이상 승계재직, 또는 소급10년중5년이상)(③1호나목)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="heirAge18OrOlder" id="ihBizReqAge18" checked><label for="ihBizReqAge18">상속인이 상속개시일 현재 18세 이상(③2호가목)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="heirEngagedInBusiness2YearsOrExempt" id="ihBizReqEngaged" checked><label for="ihBizReqEngaged">상속인 2년 이상 직접 가업종사(또는 피상속인 65세이전사망 등으로 면제)(③2호나목)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="heirBecameOfficerByFilingDeadline" id="ihBizReqOfficer" checked><label for="ihBizReqOfficer">상속인 신고기한까지 임원 취임(③2호다목)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="heirBecameCeoWithin2Years" id="ihBizReqCeo2yr" checked><label for="ihBizReqCeo2yr">상속인 신고기한부터 2년 이내 대표이사등 취임(③2호라목)</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>중견기업 게이트(§18의2②, 시행령§15⑥⑦) — 가업이 중견기업일 때만 해당. 가업상속인의 "가업상속재산 외 상속재산가액"이 "가업상속공제 미적용시 그 상속인 납부세액×200%"를 초과하면 공제가 전액 배제됩니다. 두 금액 모두 전체 상속세 계산 이후에나 확정되는 값이라 직접 계산해서 입력해야 합니다.</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -4257,6 +4273,11 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>[법인] 사업무관자산 - 시행령§61①2호</label><input type="number" id="ihFarmingNonBiz61" placeholder="원 (대여금)"></div>' +
         '<div class="taxcalc-field"><label>[법인] 과다보유현금</label><input type="number" id="ihFarmingExcessCash" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[법인] 영업무관 주식·채권·금융상품</label><input type="number" id="ihFarmingNonBizStock" placeholder="원"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>영농상속공제 자격요건(시행령§16②③) — 하나라도 체크 해제하면 영농상속공제가 전액 배제됩니다.</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="decedentFarmingRequirementMet" id="ihFarmReqDecedent" checked><label for="ihFarmReqDecedent">피상속인 8년 이상 계속 직접 영농종사(+거주요건), 또는 법인영농이면 8년경영+지분50%이상(②)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="heirFarmingRequirementMet" id="ihFarmReqHeir" checked><label for="ihFarmReqHeir">상속인 18세이상+2년이상 영농종사(+거주요건, 또는 부득이한사유로 면제) 또는 영농·영어·임업후계자(③)</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>상속공제 종합한도(§24) · 세대생략가산액(§27)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5936,6 +5957,7 @@ taxCalcView.addEventListener('click', function(e){
       isDecedentResident: document.getElementById('ihDecedentResident').value !== 'nonresident',
       hasSpouse: taxCalcHeirRegistryHasSpouse,
       spouseActualInheritedAmount: numVal(document.getElementById('ihSpouseActual').value) || 0,
+      isSpousePropertyDivided: document.getElementById('ihSpouseDivided').checked,
       spouseLegalShareRatio: numVal(document.getElementById('ihSpouseRatio').value) || 0,
       nonHeirBequestAmount: numVal(document.getElementById('ihNonHeirBequest').value) || 0,
       giftToHeirsWithin10Years: numVal(document.getElementById('ihGiftToHeirs').value) || 0,
@@ -5947,6 +5969,9 @@ taxCalcView.addEventListener('click', function(e){
       disabledHeirRemainingYears: numVal(document.getElementById('ihDisabledYears').value) || 0,
       netFinancialAssets: numVal(document.getElementById('ihNetFinancial').value) || 0,
       hasCohabitingHouseDeduction: taxCalcHeirRegistryHasCohabit,
+      tenYearCohabitationRequirementMet: document.getElementById('ihCohabitReq1').checked,
+      tenYearOneHouseholdRequirementMet: document.getElementById('ihCohabitReq2').checked,
+      noHouseOrJointHeirRequirementMet: document.getElementById('ihCohabitReq3').checked,
       cohabitingHouseValue: numVal(document.getElementById('ihCohabitValue').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('ihAppraisalFee').value) || 0,
       disasterLossAmount: numVal(document.getElementById('ihDisasterLoss').value) || 0,
@@ -5962,6 +5987,12 @@ taxCalcView.addEventListener('click', function(e){
       businessInheritanceNonBizAsset61: numVal(document.getElementById('ihBusinessNonBiz61').value) || 0,
       businessInheritanceExcessCash: numVal(document.getElementById('ihBusinessExcessCash').value) || 0,
       businessInheritanceNonBizStock: numVal(document.getElementById('ihBusinessNonBizStock').value) || 0,
+      decedentOwnershipRequirementMet: document.getElementById('ihBizReqOwnership').checked,
+      decedentCeoTenureRequirementMet: document.getElementById('ihBizReqCeoTenure').checked,
+      heirAge18OrOlder: document.getElementById('ihBizReqAge18').checked,
+      heirEngagedInBusiness2YearsOrExempt: document.getElementById('ihBizReqEngaged').checked,
+      heirBecameOfficerByFilingDeadline: document.getElementById('ihBizReqOfficer').checked,
+      heirBecameCeoWithin2Years: document.getElementById('ihBizReqCeo2yr').checked,
       isMediumSizedBusiness: document.getElementById('ihBusinessMediumSized').checked,
       businessHeirNonBusinessAssetValue: numVal(document.getElementById('ihBusinessHeirNonBizAsset').value) || 0,
       businessHeirTaxWithoutDeduction: numVal(document.getElementById('ihBusinessHeirTaxWithoutDeduction').value) || 0,
@@ -5974,6 +6005,8 @@ taxCalcView.addEventListener('click', function(e){
       farmingNonBizAsset61: numVal(document.getElementById('ihFarmingNonBiz61').value) || 0,
       farmingExcessCash: numVal(document.getElementById('ihFarmingExcessCash').value) || 0,
       farmingNonBizStock: numVal(document.getElementById('ihFarmingNonBizStock').value) || 0,
+      decedentFarmingRequirementMet: document.getElementById('ihFarmReqDecedent').checked,
+      heirFarmingRequirementMet: document.getElementById('ihFarmReqHeir').checked,
       priorGiftHeirs: inheritanceHeirs.map(function(h, idx){
         return {
           name: h.name || '',

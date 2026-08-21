@@ -103,10 +103,18 @@
     return Math.max(0, base * spouseLegalShareRatio - (Number(spouseTaxableBaseOfPriorGift) || 0));
   }
 
-  // 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값
-  function spouseInheritanceDeduction(actualAmount, limitAmount) {
+  // 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값.
+  // §19② — "①에 따른" 한도기준 공제(실제상속액까지 인정)는 배우자상속재산분할기한(신고기한 다음날부터
+  // 9개월, ③의 부득이한 사유 연장 포함)까지 배우자의 상속재산을 분할(등기·등록·명의개서 등 포함)하고
+  // 그 사실을 신고한 경우에만 적용된다. ④는 "제2항에도 불구하고"(=분할 여부와 무관하게) 실제상속액이
+  // 없거나 5억원 미만이면 5억원을 공제한다고 규정 — 즉 5억원은 분할 여부와 무관한 최소보장이지만, 실제
+  // 상속액이 5억원 이상인데 기한까지 미분할(신고도 안 함)이면 ①의 한도기준 공제 자체가 적용되지 않아
+  // 최소보장액 5억원만 인정되는 것이 실무 해석이다. isDivided를 명시적으로 false로 넘기면 이를 반영해
+  // 5억원으로 제한한다(미지정시 기존 동작대로 분할된 것으로 간주 — 하위호환).
+  function spouseInheritanceDeduction(actualAmount, limitAmount, isDivided) {
     const actual = Number(actualAmount) || 0;
     if (actual < 500000000) return 500000000; // 실제 상속액이 없거나 5억 미만이어도 최소 5억은 공제
+    if (isDivided === false) return 500000000; // §19②③ 분할기한까지 미분할·미신고 — 최소보장액만 인정
     const limit = Number.isFinite(limitAmount) ? limitAmount : Infinity;
     return Math.min(actual, limit, 3000000000);
   }
@@ -230,6 +238,21 @@
 
   // 가업상속공제 ([별지 제1호서식] 기준) — 소득세법 적용가업(순자산액 합계) 또는 법인세법 적용가업(주식등가액×사업관련자산비율).
   // 가업영위기간별 한도(10~20년 300억/20~30년 400억/30년이상 600억).
+  //
+  // 시행령§15③ — 가업상속은 "피상속인 및 상속인이 다음 각 호의 요건을 모두 갖춘 경우에만" 적용된다.
+  // 이 계산기는 다음 6개 요건을 boolean으로 명시 확인받아 게이트로 적용한다(단 하나라도 false면 공제
+  // 전액 배제). 값을 하나라도 넘기지 않으면(undefined) "요건 미확인" 상태로 표시해 반환하되, 하위호환을
+  // 위해 계산 자체는 종전처럼 진행한다 — 다만 이 경우 결과에 requirementsUnverified:true가 붙으므로
+  // 호출측(UI·AI)은 반드시 이 플래그를 사용자에게 노출해 요건을 실제로 확인하도록 안내해야 한다.
+  //   1. decedentOwnershipRequirementMet — ③1호가목: 피상속인+특수관계인 지분 40%(상장 20%) 이상을
+  //      10년 이상 계속 보유
+  //   2. decedentCeoTenureRequirementMet — ③1호나목: 대표이사 재직기간이 (가업영위기간의 50%이상)
+  //      또는 (10년이상, 상속인이 승계해 계속재직) 또는 (상속개시일 소급 10년중 5년이상) 중 하나
+  //   3. heirAge18OrOlder — ③2호가목: 상속인이 상속개시일 현재 18세 이상(배우자로 대체 가능)
+  //   4. heirEngagedInBusiness2YearsOrExempt — ③2호나목: 상속인이 2년 이상 직접 가업종사했거나,
+  //      피상속인이 65세 이전 사망 또는 천재지변·인재 등 부득이한 사유로 사망해 이 요건 자체가 면제됨
+  //   5. heirBecameOfficerByFilingDeadline — ③2호다목: 상속세과세표준 신고기한까지 임원 취임
+  //   6. heirBecameCeoWithin2Years — ③2호라목: 신고기한부터 2년 이내 대표이사등 취임
   function businessInheritanceDeductionDetailed(p) {
     const years = Number(p.businessOwnershipYears) || 0;
     const individualNet = Number(p.businessInheritanceIndividualNetAssetValue) || 0;
@@ -247,6 +270,23 @@
     const limitAmount = years < 10 ? 0 : (years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000));
     let deductionAmount = Math.min(targetAmount, limitAmount);
 
+    const eligibilityFlags = {
+      decedentOwnershipRequirementMet: p.decedentOwnershipRequirementMet,
+      decedentCeoTenureRequirementMet: p.decedentCeoTenureRequirementMet,
+      heirAge18OrOlder: p.heirAge18OrOlder,
+      heirEngagedInBusiness2YearsOrExempt: p.heirEngagedInBusiness2YearsOrExempt,
+      heirBecameOfficerByFilingDeadline: p.heirBecameOfficerByFilingDeadline,
+      heirBecameCeoWithin2Years: p.heirBecameCeoWithin2Years
+    };
+    const keys = Object.keys(eligibilityFlags);
+    const requirementsUnverified = keys.some(function (k) { return eligibilityFlags[k] !== true && eligibilityFlags[k] !== false; });
+    const failedRequirements = keys.filter(function (k) { return eligibilityFlags[k] === false; });
+    let eligibilityGateApplied = false;
+    if (failedRequirements.length > 0) {
+      eligibilityGateApplied = true;
+      deductionAmount = 0;
+    }
+
     // 중견기업 게이트(상증세법§18의2②, 시행령§15⑥⑦) — 가업이 중견기업이고, 가업상속인의
     // "가업상속재산 외의 상속재산의 가액"(=가업상속인이 받거나 받을 상속재산가액-그가 부담하는 증명된
     // 채무-가업상속재산가액, 시행령§15⑥)이 "가업상속공제를 받지 않았을 경우 그 상속인이 납부할
@@ -262,10 +302,23 @@
         deductionAmount = 0;
       }
     }
-    return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo, mediumSizedGateApplied };
+    return {
+      targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo, mediumSizedGateApplied,
+      requirementsUnverified, eligibilityGateApplied, failedRequirements
+    };
   }
 
   // 영농상속공제 ([별지 제2호서식] 기준) — 소득세법 적용영농(①합계) + 법인세법 적용영농(주식등가액×사업관련자산비율), 30억원 고정한도.
+  //
+  // 시행령§16②③ — 피상속인·상속인 모두 요건을 갖춘 경우에만 적용된다. 4개 요건을 boolean으로 명시
+  // 확인받아 게이트로 적용한다(하나라도 false면 공제 전액 배제). 값을 하나라도 넘기지 않으면(undefined)
+  // "요건 미확인" 상태로 표시해 반환하되, 하위호환을 위해 계산 자체는 종전처럼 진행한다.
+  //   1. decedentFarmingRequirementMet — ②1호: 상속개시일 8년전부터 계속 직접 영농종사+거주요건, 또는
+  //      ②2호: 8년전부터 계속 경영+본인·특수관계인 지분 50%이상 계속보유(법인세법 적용영농)
+  //   2. heirAge18OrOlder — ③본문: 상속인이 상속개시일 현재 18세 이상
+  //   3. heirFarmingRequirementMet — ③1호: 2년전부터 계속 직접 영농종사(피상속인 65세 이전 사망 또는
+  //      부득이한 사유 사망시 면제)+거주요건, 또는 ③2호: 2년전부터 계속 종사+신고기한까지 임원취임+
+  //      2년내 대표이사등 취임(법인세법 적용영농), 또는 영농·영어·임업후계자
   function farmingInheritanceDeductionDetailed(p) {
     const individualTotal = Number(p.farmingIndividualAssetValue) || 0;
     const stockValue = Number(p.farmingStockValue) || 0;
@@ -279,8 +332,22 @@
     const targetAmount = individualTotal + targetCorporate;
 
     const limitAmount = 3000000000;
-    const deductionAmount = Math.min(targetAmount, limitAmount);
-    return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo };
+    let deductionAmount = Math.min(targetAmount, limitAmount);
+
+    const eligibilityFlags = {
+      decedentFarmingRequirementMet: p.decedentFarmingRequirementMet,
+      heirAge18OrOlder: p.heirAge18OrOlder,
+      heirFarmingRequirementMet: p.heirFarmingRequirementMet
+    };
+    const keys = Object.keys(eligibilityFlags);
+    const requirementsUnverified = keys.some(function (k) { return eligibilityFlags[k] !== true && eligibilityFlags[k] !== false; });
+    const failedRequirements = keys.filter(function (k) { return eligibilityFlags[k] === false; });
+    let eligibilityGateApplied = false;
+    if (failedRequirements.length > 0) {
+      eligibilityGateApplied = true;
+      deductionAmount = 0;
+    }
+    return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo, requirementsUnverified, eligibilityGateApplied, failedRequirements };
   }
 
   const TAX_FUNCS = {
@@ -1543,9 +1610,19 @@
       ? Math.round(taxAfterPremium * Math.min(1, priorGiftTaxableBase / taxBase))
       : taxAfterPremium;
     const priorGiftTaxCredit = Math.min(priorPaidTax, taxAfterPremium, priorGiftCreditLimit);
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액 × (외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준(해당 외국 법령 기준) ÷ 법§55①에 따른 증여세의 과세표준). 이 금액이 외국법령에
+    // 따라 부과된 증여세액(실제 납부액)을 초과하면 그 증여세액을 한도로 한다. foreignGiftTaxBase(외국
+    // 과세표준)를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을 잔여세액
+    // 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(taxAfterPremium * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxAfterPremium - priorGiftTaxCredit));
     const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
-    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxPaidAmount - otherCreditsAmount);
+    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
     const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
@@ -1571,7 +1648,7 @@
       합산배제증여재산공제: aggregationExclusionDeduction, 감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
       과세표준: taxBase, 산출세액_할증전: taxBeforePremium, 세대생략할증_적용비율: isGenerationSkip ? generationSkipRatio : null, 세대생략할증액: premiumAmount,
       산출세액_할증후: taxAfterPremium, 기납부세액공제: priorGiftTaxCredit, 기납부세액공제_비율한도: priorGiftCreditLimit,
-      외국납부세액공제: foreignTaxPaidAmount, 그밖의공제감면세액: otherCreditsAmount,
+      외국납부세액공제: foreignTaxCredit, 외국납부세액공제_비율한도: foreignTaxCreditByFormula, 그밖의공제감면세액: otherCreditsAmount,
       신고세액공제: reportCredit, 이자상당액: interestAmount, 공익법인등관련가산세: publicInterestOrgPenalty,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty,
       납부지연가산세: penalties.latePenalty,
@@ -1625,10 +1702,28 @@
 
     const estateValueForSpouseLimit = effectiveEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
     const spouseLimit = spouseInheritanceLimit(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
-    const spouseDeduction = (isDecedentResident && p.hasSpouse) ? spouseInheritanceDeduction(p.spouseActualInheritedAmount, spouseLimit) : 0;
+    const spouseDeduction = (isDecedentResident && p.hasSpouse) ? spouseInheritanceDeduction(p.spouseActualInheritedAmount, spouseLimit, p.isSpousePropertyDivided) : 0;
 
     const financialDeduction = isDecedentResident ? financialAssetInheritanceDeduction(p.netFinancialAssets) : 0;
-    const cohabitingHouseDeduction = (isDecedentResident && p.hasCohabitingHouseDeduction) ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
+    // §23의2①1~3호 — 동거주택상속공제는 3개 요건을 모두 갖춘 경우에만 적용된다. 세부요건 플래그를
+    // 하나라도 제공하면 그 3개(AND)로 판정하고, 하나도 안 주면(구버전 호환) hasCohabitingHouseDeduction
+    // 단일 플래그를 그대로 쓴다. 세부요건 중 일부만 지정되면 요건미확인으로 취급(안내에 반영).
+    const cohabitReqFlags = {
+      tenYearCohabitationMet: p.tenYearCohabitationRequirementMet, // 1호: 10년이상(미성년자기간 제외) 동거
+      tenYearOneHouseholdMet: p.tenYearOneHouseholdRequirementMet, // 2호: 10년이상 1세대1주택
+      noHouseOrJointHeirMet: p.noHouseOrJointHeirRequirementMet    // 3호: 무주택자 또는 피상속인과 공동1주택 보유 동거상속인
+    };
+    const cohabitKeys = Object.keys(cohabitReqFlags);
+    const cohabitAnySpecified = cohabitKeys.some(function (k) { return cohabitReqFlags[k] === true || cohabitReqFlags[k] === false; });
+    let cohabitEligible, cohabitRequirementsUnverified = false, cohabitFailedRequirements = [];
+    if (cohabitAnySpecified) {
+      cohabitRequirementsUnverified = cohabitKeys.some(function (k) { return cohabitReqFlags[k] !== true && cohabitReqFlags[k] !== false; });
+      cohabitFailedRequirements = cohabitKeys.filter(function (k) { return cohabitReqFlags[k] === false; });
+      cohabitEligible = cohabitFailedRequirements.length === 0;
+    } else {
+      cohabitEligible = !!p.hasCohabitingHouseDeduction;
+    }
+    const cohabitingHouseDeduction = (isDecedentResident && cohabitEligible) ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
     // 시행령§20의3③ — 일반 감정평가법인·유형재산 감정수수료(1호·3호)는 500만원 한도이나, 비상장주식
     // 신용평가전문기관 평가수수료(2호, §49의2⑨)는 평가대상 법인수×의뢰기관수별로 각각 1천만원 한도로
     // 별개 규정된다(단일 500만원 한도에 합산하면 안 됨). unlistedStockAppraisalFeeAmount는 그 합계액을
@@ -1746,6 +1841,7 @@
       인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
+      동거주택상속공제_요건미확인: cohabitRequirementsUnverified, 동거주택상속공제_미충족요건목록: cohabitFailedRequirements,
       감정평가수수료공제: appraisalFeeDeduction, 재해손실공제: disasterLossDeduction,
       장례비용공제: funeralDeduction, 장례비용공제_일반분: funeralGeneralDeduction, 장례비용공제_봉안시설분: funeralNicheDeduction,
       가업상속공제: businessInheritanceDeduction,
@@ -1753,13 +1849,19 @@
         대상금액: businessInheritanceDetail.targetAmount, 한도액: businessInheritanceDetail.limitAmount,
         소득세법적용분: businessInheritanceDetail.targetIndividual, 법인세법적용분: businessInheritanceDetail.targetCorporate,
         사업관련자산가액비율: businessInheritanceDetail.ratioInfo ? businessInheritanceDetail.ratioInfo.ratio : null,
-        중견기업게이트_적용여부: businessInheritanceDetail.mediumSizedGateApplied
+        중견기업게이트_적용여부: businessInheritanceDetail.mediumSizedGateApplied,
+        요건미확인: businessInheritanceDetail.requirementsUnverified,
+        요건미충족으로_공제배제: businessInheritanceDetail.eligibilityGateApplied,
+        미충족요건목록: businessInheritanceDetail.failedRequirements
       } : null,
       영농상속공제: farmingInheritanceDeduction,
       영농상속공제_계산내역: farmingInheritanceDetail ? {
         대상금액: farmingInheritanceDetail.targetAmount, 한도액: farmingInheritanceDetail.limitAmount,
         소득세법적용분: farmingInheritanceDetail.individualTotal, 법인세법적용분: farmingInheritanceDetail.targetCorporate,
-        사업관련자산가액비율: farmingInheritanceDetail.ratioInfo ? farmingInheritanceDetail.ratioInfo.ratio : null
+        사업관련자산가액비율: farmingInheritanceDetail.ratioInfo ? farmingInheritanceDetail.ratioInfo.ratio : null,
+        요건미확인: farmingInheritanceDetail.requirementsUnverified,
+        요건미충족으로_공제배제: farmingInheritanceDetail.eligibilityGateApplied,
+        미충족요건목록: farmingInheritanceDetail.failedRequirements
       } : null,
       상속공제_합계: totalDeduction, 상속공제종합한도_적용여부: overallLimitApplied, 과세표준: taxBase,
       산출세액: calculatedTax, 세대생략가산액: generationSkipPremium,
@@ -1887,7 +1989,13 @@
     if (specialType === 'startup') {
       totalLimit = p.jobsCreated10Plus ? 10000000000 : 5000000000;
     } else {
+      // 조특법§30의6①본문 — "가업"의 정의 자체가 "부모가 10년 이상 계속하여 경영한 기업"이다.
+      // 10년 미만이면 애초에 "가업"에 해당하지 않아 이 특례를 전혀 적용받을 수 없다(1~3호도
+      // 전부 "10년 이상"을 전제로 300억/400억/600억을 구분할 뿐, 10년 미만 구간 자체가 없음).
       const years = Number(p.businessOwnershipYearsOfParent) || 0;
+      if (years < 10) {
+        return { error: '부모의 가업 계속경영기간이 10년 미만이면 조특법§30의6상 "가업"에 해당하지 않아 이 특례를 적용받을 수 없습니다(businessOwnershipYearsOfParent를 10년 이상으로 입력하거나, 요건을 다시 확인하세요).' };
+      }
       totalLimit = years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000);
     }
     const remainingLimit = Math.max(0, totalLimit - priorSpecialGiftAmount);
@@ -1907,8 +2015,17 @@
       : Math.round(Math.min(taxBase, 12000000000) * 0.10 + Math.max(0, taxBase - 12000000000) * 0.20);
 
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
 
     const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
@@ -1920,7 +2037,7 @@
       과세특례적용대상_증여세과세가액: specialRateApplicableAmount, 기본세율적용대상_증여재산가액: baseRateApplicableAmount,
       증여재산공제: propertyDeduction, 재해손실공제: disasterLossDeduction, 감정평가수수료공제: appraisalFeeDeduction,
       과세표준: taxBase, 세율: specialType === 'startup' ? '10%' : '10%(120억 초과분 20%)', 산출세액: calculatedTax,
-      납부세액공제: priorPaidTax, 외국납부세액공제: foreignTaxPaidAmount,
+      납부세액공제: priorPaidTax, 외국납부세액공제: foreignTaxCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax
     };
@@ -2138,8 +2255,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -2197,8 +2323,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -2260,8 +2395,17 @@
     }
 
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -2342,8 +2486,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -2384,8 +2537,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -2948,8 +3110,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -3016,8 +3187,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -3178,7 +3358,13 @@
       taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
     }
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 비례산식(foreignGiftTaxBase 입력시 자동계산).
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
@@ -3186,6 +3372,7 @@
     const result = {
       과세대상여부: true, 증여의제이익: giftAmount,
       감정평가수수료공제: appraisalFeeAmount,
+      외국납부세액공제: foreignTaxCredit,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
@@ -3241,8 +3428,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -3364,8 +3560,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -3923,8 +4128,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -4390,8 +4604,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -4445,8 +4668,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -4504,8 +4736,17 @@
     const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -4544,8 +4785,17 @@
     const taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -4638,8 +4888,17 @@
     }
 
     const priorPaidTax = Number(p.priorPaidTax) || 0;
+    // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+    // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+    // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+    // 잔여세액 한도로 그대로 쓴다.
+    const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+    const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+      ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+      : foreignTaxPaidAmount;
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+    const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;

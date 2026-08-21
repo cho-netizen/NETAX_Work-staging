@@ -340,6 +340,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         transferPrice: { type: 'number', description: '양도가액(원)' },
         acquisitionPrice: { type: 'number', description: '취득가액(원, 실지거래가액). 생략하면 소득세법시행령§176의2③ 순차적용(매매사례가액→감정가액→환산취득가액→기준시가)으로 자동 산정한다 — comparableTransactionPrice(매매사례가액)/appraisalValue(감정가액)/acquisitionStandardPriceForConversion+transferStandardPriceForConversion(환산취득가액) 중 있는 것을 우선순위대로 쓴다.' },
         depreciationDeductedAsBusinessExpense: { type: 'number', description: '사업용자산(예: 부동산임대업 건물)을 양도하는 경우 — 보유기간 중 사업소득금액 계산시 감가상각비로 필요경비에 산입했거나 산입할 금액(원, §97③). 있으면 취득가액에서 이 금액을 차감한다(이중공제 방지). 사업용이 아니면 생략.' },
@@ -451,6 +452,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         giftAmount: { type: 'number', description: '이번 증여재산가액(원, 채무인수분 포함 총액 — 부담부증여면 debtAssumedAmount로 채무액을 따로 알려줄 것). 이 금액을 정할 때는 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 지금 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 이 중 어느 것도 확인할 수 없는 값(공시지가 자체, 감정평가액 등)은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         relation: { type: 'string', enum: ['배우자', '직계존속', '직계비속', '기타친족', '기타'], description: '증여자와 수증자의 관계 (수증자 기준)' },
         isMinor: { type: 'boolean', description: '수증자가 미성년자인지 (relation이 직계존속일 때 공제액에 영향)' },
@@ -458,6 +460,7 @@ const DRIVE_TOOLS = [
         isDebtObjectivelyProven: { type: 'boolean', description: 'relation이 배우자·직계존속·직계비속일 때만 의미 있음 — 인수한 채무가 국가·지방자치단체에 대한 채무 등 객관적으로 인수 사실이 인정되는지(§47③ 단서). true가 아니면 debtAssumedAmount는 공제되지 않는다.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산 합산액(원). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '위 기증여분에 대해 이미 납부한 증여세액(원). 없으면 생략.' },
+        priorGiftTaxableBase: { type: 'number', description: '위 기증여분의 증여세 과세표준(원, §58②). 기납부세액공제는 무제한이 아니라 "이번 산출세액×(이 값÷이번 과세표준)"을 한도로 하므로, 입력하지 않으면 이 한도가 적용되지 않아 공제가 과다산정될 수 있다.' },
         isGenerationSkip: { type: 'boolean', description: '세대를 건너뛴 증여(예: 조부모→손자녀)인지 여부' },
         isSubstituteGiftDueToDeath: { type: 'boolean', description: '§57① 단서 — 증여자의 최근친인 직계비속이 사망하여 그 사망자의 최근친인 직계비속이 대신 증여받은 경우(대습증여에 준함). true면 세대생략할증을 적용하지 않는다.' },
         generationSkipOver2Billion: { type: 'boolean', description: '세대생략 증여재산가액이 20억원을 초과하는 경우. isMinor와 함께 true여야 할증률 40%(§57① 괄호), 아니면 30%.' },
@@ -475,7 +478,8 @@ const DRIVE_TOOLS = [
         publicInterestOrgAmount: { type: 'number', description: '공익법인등에 출연한 재산가액(원, §48 — 과세가액 불산입). 없으면 생략.' },
         publicTrustAmount: { type: 'number', description: '공익신탁을 통해 공익법인등에 출연한 재산가액(원, §52 — 과세가액 불산입). 없으면 생략.' },
         disabledTrustAmount: { type: 'number', description: '장애인이 증여받아 신탁한 재산가액(원, §52의2 — 과세가액 불산입, 5억원 한도). 없으면 생략.' },
-        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59). 없으면 생략.' },
+        foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59) — 공제 한도(실제 납부액 초과 불가).' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         otherCreditsAmount: { type: 'number', description: '그 밖에 별도로 계산한 공제·감면세액(원). 이 도구는 세액 자체를 계산하지 않으므로 미리 계산해서 넣어야 한다. 없으면 생략.' },
         interestAmount: { type: 'number', description: '각종 사후관리 위반에 따른 추징 시 붙는 이자상당액(원). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
         publicInterestOrgPenalty: { type: 'number', description: '공익법인등 관련 가산세(§78, 출연재산 미사용 등). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
@@ -501,10 +505,11 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_inheritance_tax',
-    description: '상속세를 정확히 계산한다([별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 기준 — 기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제 한도액 정밀공식, 금융재산·동거주택·감정평가수수료·재해손실·가업상속·영농상속공제, 상속공제 종합한도, 세대생략가산액, 기납부증여세액·특례증여세액·외국납부세액·단기재상속세액공제, 누진세율, 신고세액공제, 이자상당액, 영리법인 상속세 면제, 각종 징수유예·납부유예, 무신고·과소신고·납부지연가산세, 신고인·피상속인 인적사항 포함). 가업상속공제·영농상속공제·특례증여세액공제·영리법인 면제세액의 자격요건 판정과 세액 산출 자체는 이 도구가 하지 않으므로 별도로 계산한 값을 입력받는다.',
+    description: '상속세를 정확히 계산한다([별지 제9호서식] 상속세과세표준신고 및 자진납부계산서 기준 — 기초공제·인적공제·일괄공제 중 유리한 선택, 배우자공제 한도액 정밀공식(배우자상속재산분할기한 미준수시 5억원 제한 포함), 금융재산·동거주택·감정평가수수료·재해손실·가업상속·영농상속공제, 상속공제 종합한도, 세대생략가산액(대습상속 배제 포함), 기납부증여세액·특례증여세액·외국납부세액·단기재상속세액공제, 누진세율, 신고세액공제, 이자상당액, 영리법인 상속세 면제, 각종 징수유예·납부유예, 무신고·과소신고·납부지연가산세, 신고인·피상속인 인적사항 포함). 가업상속공제·영농상속공제는 피상속인·상속인 자격요건을 boolean 플래그로 명시 확인받아 게이트로 적용한다(하나라도 false면 공제 배제, 미입력시 요건미확인으로 표시됨 — 반드시 확인해서 입력할 것). 특례증여세액공제·영리법인 면제세액의 세액 산출 자체는 이 도구가 하지 않으므로 별도로 계산한 값을 입력받는다.',
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·장례비용·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다(조특법§30의5·6 특례증여재산은 증여시기와 무관하게 항상 가산해야 함에 유의). 비과세재산가액·과세가액불산입재산가액은 여기 포함하지 말 것(nonTaxableAmount 등으로 별도 입력하면 자동으로 차감된다). 상속개시전 처분재산 추정액(disposalPresumptionItems)도 여기 포함하지 말 것 — 자동으로 더해진다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         nonTaxableAmount: { type: 'number', description: '비과세되는 상속재산가액(원, §12) — 국가·지방자치단체·공공단체 유증재산, 문화재보호구역 토지, 금양임야·묘토인 농지(한도 2억원), 족보·제구(한도 1천만원), 정당 유증재산, 사내근로복지기금 등 유증재산, 이재구호금품 등. 없으면 생략.' },
         publicInterestOrgAmount: { type: 'number', description: '상속세 과세표준 신고기한 이내에 공익법인등에 출연한 재산가액(원, §16 — 과세가액 불산입). 없으면 생략.' },
@@ -530,6 +535,7 @@ const DRIVE_TOOLS = [
         hasSpouse: { type: 'boolean', description: '배우자가 상속인에 포함되는지' },
         isSpouseOnlyHeir: { type: 'boolean', description: '배우자가 단독으로 상속받는지(§21②) — true면 5억원 일괄공제(및 무신고시 5억원 고정)를 적용하지 않고 기초공제(2억원)+그 밖의 인적공제 실액만 공제한다.' },
         spouseActualInheritedAmount: { type: 'number', description: '배우자가 실제 상속받은 금액(원). 생략하거나 5억 미만이면 자동으로 최소 5억이 공제된다.' },
+        isSpousePropertyDivided: { type: 'boolean', description: '§19②③ — 배우자상속재산분할기한(신고기한 다음날부터 9개월, 부득이한 사유시 연장)까지 배우자의 상속재산을 실제로 분할(등기·등록·명의개서 포함)하고 신고했는지. false로 명시하면 실제상속액과 무관하게 최소보장액 5억원으로 제한한다(§19④). 생략하면 분할된 것으로 간주(기존 동작 유지) — 실제로는 분할 여부를 반드시 확인해서 넣어야 한다.' },
         spouseLegalShareRatio: { type: 'number', description: '배우자의 법정상속분 비율(0~1, 예: 배우자+자녀2명이면 1.5/3.5≈0.4286). 이 값과 taxableEstateAmount 등으로 배우자공제 한도액을 정밀 계산한다. 생략하면 30억 한도만 적용된다.' },
         nonHeirBequestAmount: { type: 'number', description: '상속인이 아닌 자(수유자)가 유증 등으로 받은 재산가액(원). 배우자공제 한도액과 상속공제 종합한도 계산에 쓰인다.' },
         giftToHeirsWithin10Years: { type: 'number', description: '상속개시일 전 10년 이내에 피상속인이 상속인에게 증여한 재산가액 합계(원). 배우자공제 한도액 계산에 쓰인다.' },
@@ -540,7 +546,10 @@ const DRIVE_TOOLS = [
         elderlyHeirCount: { type: 'integer', description: '65세 이상 상속인 수 (1인당 5천만원 공제)' },
         disabledHeirRemainingYears: { type: 'number', description: '장애인 상속인들의 기대여명 잔여연수 합계 (1년당 1천만원 공제)' },
         netFinancialAssets: { type: 'number', description: '순금융재산가액(금융재산-금융채무, 원). 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)이 공제된다.' },
-        hasCohabitingHouseDeduction: { type: 'boolean', description: '동거주택상속공제(10년 이상 동거·무주택 등 요건 충족 전제, 요건 자체는 검증하지 않음) 대상인지' },
+        hasCohabitingHouseDeduction: { type: 'boolean', description: '동거주택상속공제 구버전 단일 플래그 — 아래 3개 세부요건 플래그를 하나라도 넣으면 이 값 대신 그 3개(AND)로 정확히 판정한다. 세부요건을 모른다면 이 값 대신 반드시 아래 3개를 개별 확인해서 넣을 것을 권장한다.' },
+        tenYearCohabitationRequirementMet: { type: 'boolean', description: '§23의2①1호 — 피상속인과 상속인(직계비속 등)이 상속개시일부터 소급 10년 이상(상속인이 미성년자였던 기간은 제외) 계속하여 한 주택에서 동거했는지. false면 동거주택상속공제 전액 배제.' },
+        tenYearOneHouseholdRequirementMet: { type: 'boolean', description: '§23의2①2호 — 피상속인과 상속인이 상속개시일부터 소급 10년 이상 계속하여 1세대를 구성하면서 1세대1주택에 해당했는지(무주택기간도 1세대1주택 기간에 포함). false면 공제 전액 배제.' },
+        noHouseOrJointHeirRequirementMet: { type: 'boolean', description: '§23의2①3호 — 상속개시일 현재 상속인이 무주택자이거나, 피상속인과 공동으로 1세대1주택을 보유한 자로서 피상속인과 동거한 상속인이 그 주택을 상속받는지. false면 공제 전액 배제.' },
         cohabitingHouseValue: { type: 'number', description: 'hasCohabitingHouseDeduction이 true일 때, 상속주택가액(원). 6억원 한도로 전액 공제.' },
         appraisalFeeAmount: { type: 'number', description: '상속재산 감정평가수수료(원, 일반 감정평가법인·유형재산). 500만원 한도로 공제.' },
         unlistedStockAppraisalFeeAmount: { type: 'number', description: '비상장주식 신용평가전문기관 평가수수료(원, §49의2⑨). 위 appraisalFeeAmount의 500만원 한도와 별개로 1천만원 한도로 공제된다(시행령§20의3③).' },
@@ -560,7 +569,15 @@ const DRIVE_TOOLS = [
         isMediumSizedBusiness: { type: 'boolean', description: '가업상속공제용 — 가업이 중견기업에 해당하는지(§18의2②, 시행령§15②). true면 businessHeirNonBusinessAssetValue·businessHeirTaxWithoutDeduction을 함께 넣어 중견기업 게이트를 판정한다.' },
         businessHeirNonBusinessAssetValue: { type: 'number', description: 'isMediumSizedBusiness가 true일 때 — 가업상속인의 "가업상속재산 외의 상속재산의 가액"(원, 시행령§15⑥ = 그 상속인이 받거나 받을 상속재산가액-그가 부담하는 증명된 채무-가업상속재산가액). 이 값이 businessHeirTaxWithoutDeduction×200%를 초과하면 가업상속공제가 전액 배제된다.' },
         businessHeirTaxWithoutDeduction: { type: 'number', description: 'isMediumSizedBusiness가 true일 때 — 가업상속인이 가업상속공제를 받지 않았을 경우 상증세법§3조의2①②에 따라 계산한 그 상속인이 납부할 의무가 있는 상속세액(원, 시행령§15⑦). 전체 상속세를 가업상속공제 없이 계산한 뒤 상속인별로 안분해서 별도로 구해야 한다.' },
-        farmingInheritanceDeduction: { type: 'number', description: '영농상속공제 최종 공제액(§18의3, 원, 30억한도) — 아래 상세 자산내역([별지 제2호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다. 자격요건(8년 이상 영농 등) 판정은 이 도구가 하지 않는다.' },
+        decedentOwnershipRequirementMet: { type: 'boolean', description: '가업상속공제용 — 시행령§15③1호가목: 피상속인+특수관계인 지분이 발행주식총수등의 40%(상장법인 20%) 이상을 10년 이상 계속 보유했는지. false면 가업상속공제 전액 배제. 미지정시 요건미확인으로 표시되며(계산은 종전대로 진행), 반드시 확인해서 넣어야 한다.' },
+        decedentCeoTenureRequirementMet: { type: 'boolean', description: '가업상속공제용 — 시행령§15③1호나목: 피상속인의 대표이사 재직기간이 (가업영위기간의 50%이상) 또는 (10년이상, 상속인이 승계해 계속재직) 또는 (상속개시일 소급 10년중 5년이상) 중 하나를 충족했는지. false면 공제 전액 배제.' },
+        heirAge18OrOlder: { type: 'boolean', description: '가업상속공제·영농상속공제 공통 — 상속인이 상속개시일 현재 18세 이상인지(배우자로 대체 가능). false면 해당 공제 전액 배제.' },
+        heirEngagedInBusiness2YearsOrExempt: { type: 'boolean', description: '가업상속공제용 — 시행령§15③2호나목: 상속인이 가업영위기간 중 2년 이상 직접 가업에 종사했는지, 또는 피상속인이 65세 이전 사망하거나 천재지변·인재 등 부득이한 사유로 사망해 이 요건 자체가 면제되는지. false면 공제 전액 배제.' },
+        heirBecameOfficerByFilingDeadline: { type: 'boolean', description: '가업상속공제용 — 시행령§15③2호다목: 상속인이 상속세과세표준 신고기한까지 임원으로 취임했는지(또는 취임할 예정인지). false면 공제 전액 배제.' },
+        heirBecameCeoWithin2Years: { type: 'boolean', description: '가업상속공제용 — 시행령§15③2호라목: 상속인이 신고기한부터 2년 이내에 대표이사등으로 취임했는지(또는 취임할 예정인지). false면 공제 전액 배제.' },
+        decedentFarmingRequirementMet: { type: 'boolean', description: '영농상속공제용 — 시행령§16②: 피상속인이 상속개시일 8년 전부터 계속 직접 영농에 종사(+거주요건), 또는 법인영농이면 8년 이상 경영+지분 50%이상 계속보유 요건을 충족했는지. false면 영농상속공제 전액 배제.' },
+        heirFarmingRequirementMet: { type: 'boolean', description: '영농상속공제용 — 시행령§16③: 상속인이 2년전부터 계속 직접 영농종사(+거주요건, 피상속인 65세이전사망 등이면 종사기간 요건 면제)하거나, 법인영농이면 2년 종사+신고기한까지 임원취임+2년내 대표이사취임 요건을, 또는 영농·영어·임업후계자에 해당하는지. false면 공제 전액 배제.' },
+        farmingInheritanceDeduction: { type: 'number', description: '영농상속공제 최종 공제액(§18의3, 원, 30억한도) — 아래 상세 자산내역([별지 제2호서식] 기준) 파라미터를 채우면 이 도구가 직접 계산하므로 이 값은 생략해도 된다.' },
         farmingIndividualAssetValue: { type: 'number', description: '영농상속공제용 — 소득세법을 적용받는 영농재산(농지·초지·산림지·어선·어업권 등)가액 합계([별지 제2호서식] ①합계).' },
         farmingStockValue: { type: 'number', description: '영농상속공제용 — 법인세법을 적용받는 영농(영농법인)인 경우, 상속재산 중 해당 법인 주식등 가액([별지 제2호서식] ③=②합계).' },
         farmingTotalAssetValue: { type: 'number', description: '영농상속공제용(법인) — 상속개시일 현재 해당 법인의 총자산가액.' },
@@ -655,12 +672,13 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         specialType: { type: 'string', enum: ['startup', 'business_succession'], description: 'startup=조특법§30의5 창업자금 특례, business_succession=조특법§30의6 가업승계 주식등 특례.' },
         giftAmount: { type: 'number', description: '해당 증여재산가액(원) — 창업자금이면 증여받은 현금·자산 총액, 가업승계면 증여받은 가업법인 주식등의 가액(시가). 시가 확인은 calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
         debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원, 창업자금 특례에서만 의미가 있음). 없으면 생략.' },
         priorSpecialGiftAmount: { type: 'number', description: '이전에 이미 같은 특례(§30의5 또는 §30의6)를 적용받은 증여재산에 대한 과세가액(원, 동일인 합산). 없으면 생략.' },
         jobsCreated10Plus: { type: 'boolean', description: 'specialType이 startup일 때만 — 창업을 통하여 10명 이상을 신규 고용했는지. true면 총한도 100억원, 아니면 50억원.' },
-        businessOwnershipYearsOfParent: { type: 'number', description: 'specialType이 business_succession일 때만 — 증여자(부모)의 가업영위기간(년). 20년미만 300억/20~30년 400억/30년이상 600억원 한도가 자동 적용된다.' },
+        businessOwnershipYearsOfParent: { type: 'number', description: 'specialType이 business_succession일 때만 — 증여자(부모)의 가업영위기간(년). 조특법§30의6①은 "가업"을 "부모가 10년 이상 계속하여 경영한 기업"으로 정의하므로 10년 미만이면 특례 자체가 적용되지 않아 오류를 반환한다. 10~20년미만 300억/20~30년 400억/30년이상 600억원 한도가 자동 적용된다.' },
         totalAssetValue: { type: 'number', description: 'specialType이 business_succession이고 법인 자산내역으로 가업자산상당액을 계산하려는 경우 — 증여일 현재 해당 법인의 총자산가액. 생략하면 주식등 가액 전체를 가업자산으로 간주한다.' },
         nonBizAsset55: { type: 'number', description: '사업무관자산 중 법인세법§55의2 해당자산가액.' },
         nonBizAsset49: { type: 'number', description: '사업무관자산 중 법인세법시행령§49 해당자산 및 임대용부동산가액.' },
@@ -671,6 +689,7 @@ const DRIVE_TOOLS = [
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가수수료(원). 500만원 한도로 공제.' },
         priorPaidTax: { type: 'number', description: '조특법§30의5①후단(§30의6도 동일하게 적용)에 따라 priorSpecialGiftAmount로 합산한 이전 특례증여분에 대해 그 당시 실제 납부한 산출세액(원). 상증세법§58 납부세액공제와는 무관하다 — §58은 §47조②(10년 내 일반 증여재산 합산)에 따라 합산된 경우에만 적용되는데, §30의5⑪(§30의6⑤이 준용)이 일반 증여재산의 §47조② 합산 자체를 배제하므로 §58이 적용될 여지가 없다. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '국외재산에 대해 외국에서 이미 납부한 증여세액(원, 외국납부세액공제 §59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
@@ -691,6 +710,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         companySize: { type: 'string', enum: ['general', 'medium', 'small'], description: '수혜법인의 기업규모. general=일반(중견·중소기업 아님), medium=중견기업, small=중소기업(조특법§6① 각 호 외 부분에 따른 중소기업).' },
         afterTaxOperatingIncome: { type: 'number', description: '수혜법인의 세후영업이익(원) — companySize가 medium(중견) 또는 general(일반)일 때 사용된다(§45의3①2호나·다목). small(중소기업)이면 이 값 대신 afterTaxNetIncome이 사용된다.' },
         afterTaxNetIncome: { type: 'number', description: '수혜법인의 세후순이익(원) — companySize가 small(중소기업)일 때만 사용된다(§45의3①2호가목). 중견·일반기업이면 무시된다.' },
@@ -698,6 +718,7 @@ const DRIVE_TOOLS = [
         relatedPartySalesAmount: { type: 'number', description: '수혜법인이 companySize가 general(일반기업)일 때만 — 특수관계법인에 대한 매출액(원, 과세제외매출액 반영 후). 거래비율이 정상거래비율(30%)의 3분의2인 20%를 초과하면서 이 금액이 1천억원을 초과하면, 거래비율이 30%를 넘지 않아도 §45의3①1호나목2)의 대체 과세요건을 충족한다.' },
         shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족(배우자, 6촌 이내 혈족, 4촌 이내 인척)의 수혜법인에 대한 직접 또는 간접 주식보유비율(%, 0~100). 직접출자와 간접출자를 모두 하고 있는 경우, 출자관계별로 세후영업이익·거래비율이 달라질 수 있으므로 이 도구를 출자관계별로 각각 호출해 증여의제이익을 따로 계산한 뒤 합산해야 한다(하나의 합계 비율로 한 번에 계산하지 말 것).' },
         dividendDeduction: { type: 'number', description: '지배주주등이 수혜법인의 직전 사업연도 증여세 과세표준 신고기한 다음날부터 이번 사업연도 신고기한까지 수혜법인(또는 간접출자법인)으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산의 감정평가 수수료(원, §55①). 500만원 한도로 과세표준에서 차감된다. 없으면 생략.' },
         doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
         doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime. 법정신고기한은 수혜법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월이 되는 날.' },
@@ -716,6 +737,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         phase: { type: 'string', enum: ['initial', 'settlement'], description: 'initial=개시사업연도(사업기회를 제공받은 날이 속하는 사업연도 종료일 이후 신고), settlement=정산사업연도(사업기회제공일로부터 2년이 경과한 날이 속하는 사업연도 종료일 이후 신고, 반드시 필요).' },
         profitFromOpportunity: { type: 'number', description: 'initial이면 제공받은 사업기회로 인하여 발생한 개시사업연도 수혜법인의 이익(원), settlement이면 개시사업연도부터 정산사업연도까지 발생한 수혜법인의 이익 합계액(원).' },
         shareholderOwnershipRatio: { type: 'number', description: '지배주주와 그 친족의 수혜법인에 대한 직·간접 주식보유비율(%, 0~100). 30% 이상이어야 과세대상이다.' },
@@ -724,6 +746,7 @@ const DRIVE_TOOLS = [
         corporateTaxableIncome: { type: 'number', description: 'corporateTaxPortion 자동계산용 — 수혜법인의 해당 사업연도 각사업연도소득금액(원). corporateTaxPortion을 직접 입력하면 이 값은 무시된다.' },
         monthsInInitialYear: { type: 'integer', description: 'phase가 initial일 때만 — 개시사업연도의 월수(보통 12, 사업연도가 짧으면 그 미만).' },
         dividendDeduction: { type: 'number', description: 'phase가 settlement일 때만 — 신고기한까지 수혜법인으로부터 받은 배당소득에 대한 공제액(원). 별도로 계산해서 입력한다. 없으면 생략.' },
+        appraisalFeeAmount: { type: 'number', description: '증여재산의 감정평가 수수료(원, §55①). 500만원 한도로 과세표준에서 차감된다. 없으면 생략.' },
         doneeName: { type: 'string', description: '수증자(지배주주 또는 그 친족) 성명. list_drive_folder/read_drive_file로 사건 폴더 문서를 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
         doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
@@ -779,6 +802,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         debtAmount: { type: 'number', description: '면제·인수·변제받은 채무액(원).' },
         compensationPaid: { type: 'number', description: '그 대가로 지급한 보상액(원). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액(원) — 10년간 합산 사용액을 감안해 직접 계산해서 넣는다.' },
@@ -788,6 +812,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, §54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제 — §47② 합산시 이미 납부한 증여세액. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 과소신고분 세액.' },
@@ -804,6 +829,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         useType: { type: 'string', enum: ['occupancy', 'collateral'], description: 'occupancy=부동산 무상사용(§37①), collateral=부동산 무상담보 이용(§37②).' },
         propertyValue: { type: 'number', description: 'useType이 occupancy일 때 필수 — 무상사용하는 부동산의 가액(원).' },
         loanAmount: { type: 'number', description: 'useType이 collateral일 때 필수 — 담보를 이용해 차입한 금전 등의 금액(원).' },
@@ -815,6 +841,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -831,6 +858,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         transferType: { type: 'string', enum: ['direct', 'bypass'], description: 'direct=배우자·직계존비속에게 직접 양도(§44①), bypass=특수관계인에게 양도 후 3년 이내 배우자등에게 재양도(§44②).' },
         assetValue: { type: 'number', description: '증여추정 대상 재산가액(direct는 최초 양도가액, bypass는 재양도 당시 재산가액).' },
         isExcluded: { type: 'boolean', description: '§44③ 적용배제 사유(경매·파산선고·공매·증권시장을 통한 처분·대가받고 양도한 사실이 명백히 인정되는 경우) 중 하나에 해당하는지.' },
@@ -843,6 +871,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -859,6 +888,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         insuranceProceeds: { type: 'number', description: '수령한 보험금(원).' },
         totalPremiumPaid: { type: 'number', description: '납부된 총 보험료(원).' },
         premiumPaidByOthers: { type: 'number', description: '보험금 수령인이 아닌 자가 납부한 보험료(원, §34①1호). 없으면 0.' },
@@ -870,6 +900,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -961,6 +992,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         benefitToCorpAmount: { type: 'number', description: '특정법인이 얻는 이익(원) — 증여재산가액, 채무면제·인수·변제로 인한 이익, 자본거래(§38·39·39의2·39의3·40·41의2·42의2 준용) 이익, 또는 시가와 대가의 차액 등 거래유형별로 계산한 금액.' },
         corporateTaxAfterCredit: { type: 'number', description: '특정법인의 법인세법§55① 산출세액에서 공제·감면세액을 뺀 금액(원, 토지등양도소득 법인세는 제외).' },
         corporateTaxableIncome: { type: 'number', description: '특정법인의 법인세법§14에 따른 해당 사업연도 각 사업연도의 소득금액(원).' },
@@ -973,6 +1005,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1001,6 +1034,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         isFinalSettlement: { type: 'boolean', description: 'false=최초 신고(추정 소득세상당액 사용), true=정산 신고(실제 소득세액 사용).' },
         giftTaxDeadlineOnOrAfterJune1: { type: 'boolean', description: '시행령§31의2③1호(2026.2.27 개정) — 증여세 과세표준 신고기한이 초과배당금액 발생연도의 다음 연도 6월 1일(성실신고확인대상사업자는 7월 1일) 이후라면 true. true면 최초신고부터 실제소득세액 산정법을 적용하고 이후 정산신고가 불필요해진다.' },
         excessDividendBaseAmount: { type: 'number', description: '최대주주등의 특수관계인이 실제 받은 배당등의 금액(원, 초과배당금액 산정의 기초).' },
@@ -1015,6 +1049,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1031,6 +1066,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         provision: { type: 'string', enum: ['listing', 'merger'], description: 'listing=§41의3(상장), merger=§41의5(합병). 기본값 listing.' },
         settlementValuePerShare: { type: 'number', description: '정산기준일 현재 1주당 평가가액(원, §63에 따라 평가).' },
         originalValuePerShare: { type: 'number', description: '주식등을 증여받은 날 현재의 1주당 증여세 과세가액(취득의 경우 취득일 현재 1주당 취득가액, 원).' },
@@ -1044,6 +1080,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1078,6 +1115,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         caseType: { type: 'string', enum: ['acquisition', 'conversion', 'conversion_reverse', 'transfer'], description: '4가지 세부 케이스 중 하나.' },
         fairValue: { type: 'number', description: 'acquisition/transfer일 때 — 전환사채등의 시가(원).' },
         acquisitionCost: { type: 'number', description: 'acquisition일 때 — 전환사채등의 인수·취득가액(원).' },
@@ -1102,6 +1140,7 @@ const DRIVE_TOOLS = [
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1118,6 +1157,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         caseType: { type: 'string', enum: ['low_price', 'high_price'], description: 'low_price=저가발행, high_price=고가발행.' },
         preValuePerShare: { type: 'number', description: '현물출자전 1주당 평가가액(원).' },
         preShares: { type: 'number', description: '현물출자전 발행주식총수.' },
@@ -1133,6 +1173,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1149,6 +1190,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         wasResidentFiveYearsContinuously: { type: 'boolean', description: '양도일까지 계속 5년 이상 국내에 주소 또는 거소를 둔 거주자인지(§118의2 적용요건).' },
         transferPrice: { type: 'number', description: '양도가액(원, 실지거래가액 원칙).' },
         acquisitionPrice: { type: 'number', description: '취득가액(원, 실지거래가액 원칙).' },
@@ -1172,6 +1214,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         caseType: { type: 'string', enum: ['low_price', 'high_price'], description: 'low_price=저가소각, high_price=고가소각.' },
         valuePerShare: { type: 'number', description: '감자한 주식등의 1주당 평가액(원).' },
         paymentPerShare: { type: 'number', description: '주식등 소각시 지급한 1주당 금액(원).' },
@@ -1187,6 +1230,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1346,6 +1390,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         caseType: { type: 'string', enum: ['low_allocated', 'low_unallocated', 'high_allocated', 'high_unallocated', 'high_nonshareholder'], description: '5가지 세부 케이스 중 하나.' },
         preValuePerShare: { type: 'number', description: '증자전 1주당 평가가액(원).' },
         preShares: { type: 'number', description: '증자전 발행주식총수.' },
@@ -1366,6 +1411,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1526,6 +1572,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         postMergerValuePerShare: { type: 'number', description: '합병 후 신설 또는 존속하는 법인의 1주당 평가가액(원).' },
         overvaluedPreMergerValuePerShare: { type: 'number', description: '주가가 과대평가된 합병당사법인의 합병 전 1주당 평가가액(원).' },
         overvaluedPreMergerShareCount: { type: 'number', description: '주가가 과대평가된 합병당사법인의 합병 전 주식등의 수.' },
@@ -1538,6 +1585,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1554,6 +1602,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         useType: { type: 'string', enum: ['free', 'low_or_high'], description: 'free=무상사용·무상용역제공·무상담보차입, low_or_high=시가보다 낮거나 높은 대가로 사용·제공.' },
         isCollateralLoan: { type: 'boolean', description: 'useType이 free일 때만 — 타인의 재산을 무상으로 담보제공받아 금전을 차입한 경우인지.' },
         loanAmount: { type: 'number', description: 'isCollateralLoan이 true일 때 — 차입금(원).' },
@@ -1568,6 +1617,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1584,6 +1634,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         subType: { type: 'string', enum: ['share_change', 'value_change'], description: 'share_change=소유지분이 변동된 경우, value_change=평가액이 변동된 경우.' },
         beforeShares: { type: 'number', description: 'subType이 share_change일 때 — 변동 전 지분(주식수 등).' },
         afterShares: { type: 'number', description: 'subType이 share_change일 때 — 변동 후 지분(주식수 등).' },
@@ -1599,6 +1650,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1615,6 +1667,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         propertyValueAtIncreaseEvent: { type: 'number', description: '재산가치증가사유 발생일 현재의 재산가액(원).' },
         acquisitionCost: { type: 'number', description: '해당 재산의 취득가액(원, 증여받은 재산이면 그 증여세 과세가액).' },
         normalAppreciationAmount: { type: 'number', description: '통상적인 가치상승분(원) — 기업가치 실질증가·지가상승률 등을 고려한 정상적인 가치상승분.' },
@@ -1622,6 +1675,7 @@ const DRIVE_TOOLS = [
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1666,6 +1720,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         giftAmount: { type: 'number', description: '신탁이익(원본 또는 수익의 가액, 원). 여러 차례 나눠 받는 경우 calculate_trust_benefit_value 도구의 평가액을 사용.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
         marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
@@ -1674,6 +1729,7 @@ const DRIVE_TOOLS = [
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
         foreignTaxPaidAmount: { type: 'number', description: '외국납부세액공제(§59). 없으면 생략.' },
+        foreignGiftTaxBase: { type: 'number', description: '외국의 법령에 따라 증여세가 부과된 증여재산의 과세표준(해당 외국 법령 기준, 원, 시행령§48이 §21을 준용). 입력하면 공제액 = 증여세산출세액×(이 값÷전체 증여세과세표준)으로 정확히 자동계산한다(단 foreignTaxPaidAmount가 한도). 없으면 foreignTaxPaidAmount를 잔여세액 한도로 그대로 공제한다.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
@@ -1745,6 +1801,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         assetCategory: { type: 'string', enum: ['domestic_stock', 'foreign_stock', 'derivative', 'other_asset', 'trust_beneficiary'], description: 'domestic_stock=국내 상장·비상장주식등, foreign_stock=국외주식등(5년 이상 계속 거주자만 과세대상), derivative=파생상품등, other_asset=특정주식·부동산과다보유법인 주식등(기타자산 취급, 소득세법 §94①4), trust_beneficiary=신탁 수익권(소득세법 §94①6, §104①14 — 3억 이하 20%·3억 초과분 25%).' },
         isMajorityNonBusinessLandCorp: { type: 'boolean', description: 'assetCategory가 other_asset(§94①4호다목·라목 주식등)일 때만 — 그 법인의 자산총액 중 법인세법§55조의2②에 따른 비사업용토지가 차지하는 비율이 100분의 50 이상인지(소득세법§104①9호, 시행령§167조의7). true면 기본세율(누진 6~45%)에 10%p를 가산한다(8호 비사업용토지 세율표와 동일 구조).' },
         transferPrice: { type: 'number', description: '양도가액(원). 상장주식은 원칙적으로 실제 거래가액.' },
@@ -1781,8 +1838,21 @@ const DRIVE_TOOLS = [
         netAssetValue: { type: 'number', description: '평가기준일 현재 법인의 순자산가액(자산총액-부채총액, 상증세법 기준 재평가액, 원)' },
         isRealEstateHeavy: { type: 'boolean', description: '자산총액 중 부동산 등의 비율이 50% 이상인 부동산과다보유법인인지 (가중치가 순손익2:순자산3으로 바뀜, 기본은 순손익3:순자산2)' },
         isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨)' },
-        isSmallBusiness: { type: 'boolean', description: '평가대상 법인이 중소기업기본법상 중소기업인지 — true면 최대주주 할증평가가 항상 배제된다(상증세법§63③, 시행령§53⑥9호).' },
-        isMediumBusinessUnder500B: { type: 'boolean', description: '평가대상 법인이 중견기업이면서 직전 3개 사업연도 매출액 평균이 5천억원 미만인지 — true면 최대주주 할증평가가 배제된다(상증세법§63③).' }
+        isSmallBusiness: { type: 'boolean', description: '평가대상 법인이 중소기업기본법상 중소기업인지 — true면 최대주주 할증평가가 항상 배제된다(§53⑧9호).' },
+        isMediumBusinessUnder500B: { type: 'boolean', description: '평가대상 법인이 중견기업이면서 직전 3개 사업연도 매출액 평균이 5천억원 미만인지 — true면 최대주주 할증평가가 배제된다(§53⑧9호).' },
+        hasContinuousLossFor3Years: { type: 'boolean', description: '§53⑧1호 — 평가기준일 전 3년 이내 계속하여 결손금이 있는 법인인지. true면 최대주주 할증평가가 배제된다.' },
+        allMajorShareholderSharesSoldWithin6Months: { type: 'boolean', description: '§53⑧2호 — 평가기준일 이전·이후 6개월(증여는 3개월) 이내에 최대주주등이 보유한 주식등 전부를 매각한 경우인지.' },
+        isDeemedProfitCalculationArticle28to30: { type: 'boolean', description: '§53⑧3호 — 합병·증자·감자(§38·§39·§39의2) 등에 따른 이익을 계산할 때 그 이익 계산에 사용되는 평가인지.' },
+        isParentCompanyOfAnotherMajorShareholderValuation: { type: 'boolean', description: '§53⑧4호 — 다른 최대주주등이 보유한 주식등을 평가할 때 그 다른 최대주주등이 지배하는 법인의 주식등을 평가하는 경우인지(순환출자 이중할증 방지).' },
+        newBusinessOperatingLossAllYears: { type: 'boolean', description: '§53⑧5호 — 사업개시 후 3년 미만이거나 사업개시 전인 법인으로서, 평가기준일이 속하는 사업연도 전 3년 이내 각 사업연도에 계속하여 영업상 결손금이 있는 경우인지.' },
+        isLiquidationConfirmedByFilingDeadline: { type: 'boolean', description: '§53⑧6호 — 상속세·증여세 과세표준 신고기한까지 청산이 확정된 경우인지.' },
+        lostMajorShareholderStatusByInheritanceOrGift: { type: 'boolean', description: '§53⑧7호 — 상속 또는 증여로 인해 최대주주등의 지분이 감소해 더 이상 최대주주등에 해당하지 않게 된 경우인지.' },
+        isNomineeTrustDeemedGift: { type: 'boolean', description: '§53⑧8호 — 상증세법§45의2(명의신탁재산의 증여의제)에 따라 증여로 의제되는 경우인지.' },
+        isLiquidationOrBusinessDifficult: { type: 'boolean', description: '§54④ 순자산가치 100% 적용(무조건) — 사업개시 전 법인, 사업개시 후 3년 미만인 법인, 휴업·폐업 중인 법인, 또는 법인의 자산 대부분이 청산 등으로 인해 순자산가치로만 평가하는 것이 타당한 경우.' },
+        isNewOrDormantOrClosedBusiness: { type: 'boolean', description: '§54④ 순자산가치 100% 적용(무조건) — 법인의 계속사업이 어려워 순자산가치가 사실상 유일한 평가기준인 경우.' },
+        hasFixedDissolutionWithin3Years: { type: 'boolean', description: '§54④ 순자산가치 100% 적용(무조건) — 정관상 존속기한이 평가기준일부터 3년 이내로 확정된 경우.' },
+        isRealEstateAssetRatio80Plus: { type: 'boolean', description: '§54④단서 순자산가치 100% 적용(조건부) — 자산총액 중 부동산등 비율이 80% 이상인 경우. 가중평균값이 순자산가치보다 작을 때만 적용된다.' },
+        isStockAssetRatio80Plus: { type: 'boolean', description: '§54④단서 순자산가치 100% 적용(조건부) — 자산총액 중 주식등 비율이 80% 이상인 경우. 가중평균값이 순자산가치보다 작을 때만 적용된다.' }
       },
       required: ['totalIssuedShares', 'ownedShares']
     }
@@ -3825,10 +3895,18 @@ function spouseInheritanceLimit_(estateValueForLimit, nonHeirBequestAmount, gift
   return Math.max(0, base * spouseLegalShareRatio - (Number(spouseTaxableBaseOfPriorGift) || 0));
 }
 
-// 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값
-function spouseInheritanceDeduction_(actualAmount, limitAmount) {
+// 배우자 상속공제 (상증세법 §19) — 최소 5억, 최대 30억이며 (실제 상속액, 한도액) 중 작은 값.
+// §19② — "①에 따른" 한도기준 공제(실제상속액까지 인정)는 배우자상속재산분할기한(신고기한 다음날부터
+// 9개월, ③의 부득이한 사유 연장 포함)까지 배우자의 상속재산을 분할(등기·등록·명의개서 등 포함)하고
+// 그 사실을 신고한 경우에만 적용된다. ④는 "제2항에도 불구하고"(=분할 여부와 무관하게) 실제상속액이
+// 없거나 5억원 미만이면 5억원을 공제한다고 규정 — 즉 5억원은 분할 여부와 무관한 최소보장이지만, 실제
+// 상속액이 5억원 이상인데 기한까지 미분할(신고도 안 함)이면 ①의 한도기준 공제 자체가 적용되지 않아
+// 최소보장액 5억원만 인정되는 것이 실무 해석이다. isDivided를 명시적으로 false로 넘기면 이를 반영해
+// 5억원으로 제한한다(미지정시 기존 동작대로 분할된 것으로 간주 — 하위호환).
+function spouseInheritanceDeduction_(actualAmount, limitAmount, isDivided) {
   const actual = Number(actualAmount) || 0;
   if (actual < 500000000) return 500000000; // 실제 상속액이 없거나 5억 미만이어도 최소 5억은 공제
+  if (isDivided === false) return 500000000; // §19②③ 분할기한까지 미분할·미신고 — 최소보장액만 인정
   const limit = Number.isFinite(limitAmount) ? limitAmount : Infinity;
   return Math.min(actual, limit, 3000000000);
 }
@@ -3962,6 +4040,10 @@ function businessRelatedAssetRatio_(totalAssetValue, nonBiz) {
 // 가업상속공제 (§18의2, [별지 제1호서식]) — 소득세법 적용가업(순자산액 합계) 또는 법인세법 적용가업(주식등가액×사업관련자산비율) 중
 // 해당하는 방식으로 대상금액을 계산하고, 가업영위기간별 한도(10~20년 300억/20~30년 400억/30년이상 600억)를 적용한다.
 // 상세 입력(법인 자산내역 등)이 없으면 businessInheritanceDeduction(직접 입력한 최종 공제액)을 그대로 쓴다.
+// 시행령§15③ — 가업상속은 "피상속인 및 상속인이 다음 각 호의 요건을 모두 갖춘 경우에만" 적용된다. 6개
+// 요건을 boolean으로 명시 확인받아 게이트로 적용한다(하나라도 false면 공제 전액 배제). 값을 하나라도
+// 넘기지 않으면(undefined) requirementsUnverified:true로 표시하되 계산 자체는 종전처럼 진행한다 — 호출측은
+// 반드시 이 플래그를 사용자에게 노출해 요건을 실제로 확인하도록 안내해야 한다.
 function businessInheritanceDeductionDetailed_(p) {
   const years = Number(p.businessOwnershipYears) || 0;
   const individualNet = Number(p.businessInheritanceIndividualNetAssetValue) || 0;
@@ -3979,6 +4061,23 @@ function businessInheritanceDeductionDetailed_(p) {
   const limitAmount = years < 10 ? 0 : (years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000));
   let deductionAmount = Math.min(targetAmount, limitAmount);
 
+  const eligibilityFlags = {
+    decedentOwnershipRequirementMet: p.decedentOwnershipRequirementMet,
+    decedentCeoTenureRequirementMet: p.decedentCeoTenureRequirementMet,
+    heirAge18OrOlder: p.heirAge18OrOlder,
+    heirEngagedInBusiness2YearsOrExempt: p.heirEngagedInBusiness2YearsOrExempt,
+    heirBecameOfficerByFilingDeadline: p.heirBecameOfficerByFilingDeadline,
+    heirBecameCeoWithin2Years: p.heirBecameCeoWithin2Years
+  };
+  const eligKeys = Object.keys(eligibilityFlags);
+  const requirementsUnverified = eligKeys.some(function (k) { return eligibilityFlags[k] !== true && eligibilityFlags[k] !== false; });
+  const failedRequirements = eligKeys.filter(function (k) { return eligibilityFlags[k] === false; });
+  let eligibilityGateApplied = false;
+  if (failedRequirements.length > 0) {
+    eligibilityGateApplied = true;
+    deductionAmount = 0;
+  }
+
   // 중견기업 게이트(상증세법§18의2②, 시행령§15⑥⑦) — 가업이 중견기업이고, 가업상속인의
   // "가업상속재산 외의 상속재산의 가액"(=가업상속인이 받거나 받을 상속재산가액-그가 부담하는 증명된
   // 채무-가업상속재산가액, 시행령§15⑥)이 "가업상속공제를 받지 않았을 경우 그 상속인이 납부할
@@ -3994,10 +4093,15 @@ function businessInheritanceDeductionDetailed_(p) {
       deductionAmount = 0;
     }
   }
-  return { targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo, mediumSizedGateApplied };
+  return {
+    targetAmount, limitAmount, deductionAmount, targetIndividual, targetCorporate, ratioInfo, mediumSizedGateApplied,
+    requirementsUnverified, eligibilityGateApplied, failedRequirements
+  };
 }
 
 // 영농상속공제 (§18의3, [별지 제2호서식]) — 소득세법 적용영농(①합계) + 법인세법 적용영농(주식등가액×사업관련자산비율), 30억원 고정한도.
+// 시행령§16②③ — 피상속인·상속인 모두 요건을 갖춘 경우에만 적용된다. 3개 요건을 boolean으로 명시
+// 확인받아 게이트로 적용한다(하나라도 false면 공제 전액 배제).
 function farmingInheritanceDeductionDetailed_(p) {
   const individualTotal = Number(p.farmingIndividualAssetValue) || 0;
   const stockValue = Number(p.farmingStockValue) || 0;
@@ -4011,8 +4115,22 @@ function farmingInheritanceDeductionDetailed_(p) {
   const targetAmount = individualTotal + targetCorporate;
 
   const limitAmount = 3000000000;
-  const deductionAmount = Math.min(targetAmount, limitAmount);
-  return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo };
+  let deductionAmount = Math.min(targetAmount, limitAmount);
+
+  const eligibilityFlags = {
+    decedentFarmingRequirementMet: p.decedentFarmingRequirementMet,
+    heirAge18OrOlder: p.heirAge18OrOlder,
+    heirFarmingRequirementMet: p.heirFarmingRequirementMet
+  };
+  const eligKeys = Object.keys(eligibilityFlags);
+  const requirementsUnverified = eligKeys.some(function (k) { return eligibilityFlags[k] !== true && eligibilityFlags[k] !== false; });
+  const failedRequirements = eligKeys.filter(function (k) { return eligibilityFlags[k] === false; });
+  let eligibilityGateApplied = false;
+  if (failedRequirements.length > 0) {
+    eligibilityGateApplied = true;
+    deductionAmount = 0;
+  }
+  return { targetAmount, limitAmount, deductionAmount, individualTotal, targetCorporate, ratioInfo, requirementsUnverified, eligibilityGateApplied, failedRequirements };
 }
 
 // ============================================================
@@ -4026,7 +4144,10 @@ function farmingInheritanceDeductionDetailed_(p) {
 // 비상장주식 평가 (상증세법 §63, 시행령 §54) — 1주당 순손익가치와 순자산가치의 가중평균
 // (일반법인 순손익3:순자산2, 부동산 등 보유비율 50% 이상인 부동산과다보유법인은 순손익2:순자산3).
 // 계산값이 순자산가치의 80%보다 작으면 순자산가치의 80%를 하한으로 한다.
-function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy) {
+// netAssetOnlyFlags — §54④ 순자산가치 100% 적용 특례. 청산·사업개시전(또는 휴폐업)·3년내해산예정 3개 사유는
+// 가중평균값과 무관하게 무조건 순자산가치만 적용하고(unconditionalForce), 부동산·주식보유비율 80%이상 2개
+// 사유는 가중평균값이 순자산가치보다 작을 때만 적용한다(conditionalForce, §54④단서).
+function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags) {
   const shares = Number(totalIssuedShares) || 0;
   if (shares <= 0) return null;
   const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
@@ -4035,10 +4156,19 @@ function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netP
   const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
   const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
   let valuePerShare = (profitValuePerShare * weights[0] + netAssetValuePerShare * weights[1]) / (weights[0] + weights[1]);
+
+  const f = netAssetOnlyFlags || {};
+  const unconditionalForce = !!f.isLiquidationOrBusinessDifficult || !!f.isNewOrDormantOrClosedBusiness || !!f.hasFixedDissolutionWithin3Years;
+  const conditionalForce = (!!f.isRealEstateAssetRatio80Plus || !!f.isStockAssetRatio80Plus) && valuePerShare < netAssetValuePerShare;
+  const netAssetOnlyApplied = unconditionalForce || conditionalForce;
+  if (netAssetOnlyApplied) {
+    valuePerShare = netAssetValuePerShare;
+    return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치100퍼센트_적용: true, 순자산가치80퍼센트_하한적용: false };
+  }
   const floor = netAssetValuePerShare * 0.8;
   const floorApplied = valuePerShare < floor;
   if (floorApplied) valuePerShare = floor;
-  return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치80퍼센트_하한적용: floorApplied };
+  return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치100퍼센트_적용: false, 순자산가치80퍼센트_하한적용: floorApplied };
 }
 
 function toolCalculateUnlistedStockValue(p) {
@@ -4046,16 +4176,31 @@ function toolCalculateUnlistedStockValue(p) {
   const totalIssuedShares = Number(p.totalIssuedShares);
   if (!totalIssuedShares || totalIssuedShares <= 0) return { error: '발행주식총수(totalIssuedShares)가 필요합니다.' };
   const ownedShares = Number(p.ownedShares) || 0;
-  const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
+  const netAssetOnlyFlags = {
+    isLiquidationOrBusinessDifficult: p.isLiquidationOrBusinessDifficult,
+    isNewOrDormantOrClosedBusiness: p.isNewOrDormantOrClosedBusiness,
+    isRealEstateAssetRatio80Plus: p.isRealEstateAssetRatio80Plus,
+    isStockAssetRatio80Plus: p.isStockAssetRatio80Plus,
+    hasFixedDissolutionWithin3Years: p.hasFixedDissolutionWithin3Years
+  };
+  const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags);
   let totalValue = Math.round(result.평가액_1주당 * ownedShares);
-  // 최대주주 등 할증평가(§63③, 원칙 20%) — 중소기업이 발행한 주식이거나, 직전 3개년 매출액 평균 5천억원 미만인 중견기업이 발행한 주식이면 할증평가를 배제한다.
-  const isPremiumExempt = !!p.isSmallBusiness || (!!p.isMediumBusinessUnder500B);
+  // §53⑧ — 최대주주등 할증평가(20%) 배제사유 9개.
+  const isPremiumExempt = !!p.hasContinuousLossFor3Years // 1호
+    || !!p.allMajorShareholderSharesSoldWithin6Months // 2호
+    || !!p.isDeemedProfitCalculationArticle28to30 // 3호(§28~§30 이익 계산시)
+    || !!p.isParentCompanyOfAnotherMajorShareholderValuation // 4호
+    || !!p.newBusinessOperatingLossAllYears // 5호
+    || !!p.isLiquidationConfirmedByFilingDeadline // 6호
+    || !!p.lostMajorShareholderStatusByInheritanceOrGift // 7호
+    || !!p.isNomineeTrustDeemedGift // 8호(§45의2)
+    || !!p.isSmallBusiness || !!p.isMediumBusinessUnder500B; // 9호
   const majorShareholderPremium = (p.isMajorShareholder && !isPremiumExempt) ? Math.round(totalValue * 0.2) : 0;
   totalValue += majorShareholderPremium;
   return Object.assign({
     발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 평가총액: totalValue
   }, result, {
-    안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. 최대주주 등 할증평가(20%)는 중소기업기본법상 중소기업이 발행한 주식이거나 직전 3개년 매출액 평균 5천억원 미만인 중견기업이 발행한 주식이면 배제되며(isSmallBusiness/isMediumBusinessUnder500B로 표시), 결손금 있는 법인·전부매각·신설법인 등 그 밖의 배제사유(상증령 §53⑥)는 이 도구가 검증하지 않으니 별도로 확인하세요.'
+    안내: '순손익가치·순자산가치 가중평균(일반법인 3:2, 부동산과다보유법인 2:3) 방식입니다. netProfit1~3YearsAgo는 이미 1주당으로 나눈 값이 아니라 법인 전체의 각 사업연도 순손익액(세무조정 반영 후) 합계를 넣으면 발행주식총수로 나눠 계산합니다. §54④(청산·사업개시전휴폐업·3년내해산예정은 무조건, 부동산·주식보유비율 80%이상은 가중평균값이 순자산가치보다 작을 때만) 순자산가치 100% 적용 특례는 해당 플래그를 넣으면 반영됩니다. 최대주주 등 할증평가(20%) 배제사유(§53⑧ 1~9호)도 해당 플래그를 넣으면 반영됩니다.'
   });
 }
 
@@ -5290,10 +5435,28 @@ function toolCalculateGiftTax(p) {
   const premiumAmount = Math.max(0, Math.round(taxBeforePremium * generationSkipRatio * premiumRate) - priorPaidGenerationSkipPremium);
   const taxAfterPremium = taxBeforePremium + premiumAmount;
 
-  // 외국납부세액공제(§59), 그 밖의 공제·감면세액(조특법상 각종 감면 등 — 세액 산출 자체는 별도로 계산해서 이 값에 넣어야 한다).
+  // §58② — 기납부세액공제(§58①)는 무제한이 아니라 "증여세산출세액 × (가산한 증여재산의 과세표준 ÷
+  // 이번 증여세 과세표준)"을 한도로 한다. priorGiftTaxableBase는 그 사전증여 당시 산정된 과세표준(가산한
+  // 증여재산의 과세표준)이며, 없으면(0) 한도가 사실상 적용되지 않는다(구 입력과의 호환).
+  const priorGiftTaxableBase = Number(p.priorGiftTaxableBase) || 0;
+  const priorGiftCreditLimit = (taxBase > 0 && priorGiftTaxableBase > 0)
+    ? Math.round(taxAfterPremium * Math.min(1, priorGiftTaxableBase / taxBase))
+    : taxAfterPremium;
+  const priorGiftTaxCredit = Math.min(priorPaidTax, taxAfterPremium, priorGiftCreditLimit);
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액 × (외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준(해당 외국 법령 기준) ÷ 법§55①에 따른 증여세의 과세표준). 이 금액이 외국법령에
+  // 따라 부과된 증여세액(실제 납부액)을 초과하면 그 증여세액을 한도로 한다. foreignGiftTaxBase(외국
+  // 과세표준)를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을 잔여세액
+  // 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(taxAfterPremium * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxAfterPremium - priorGiftTaxCredit));
+  // 그 밖의 공제·감면세액(조특법상 각종 감면 등 — 세액 산출 자체는 별도로 계산해서 이 값에 넣어야 한다).
   const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
-  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorPaidTax - foreignTaxPaidAmount - otherCreditsAmount);
+  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount);
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
   const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
@@ -5336,8 +5499,10 @@ function toolCalculateGiftTax(p) {
     세대생략할증_적용비율: isGenerationSkip ? generationSkipRatio : null,
     세대생략할증액: premiumAmount,
     산출세액_할증후: taxAfterPremium,
-    기납부세액공제: Math.min(priorPaidTax, taxAfterPremium),
-    외국납부세액공제: foreignTaxPaidAmount,
+    기납부세액공제: priorGiftTaxCredit,
+    기납부세액공제_비율한도: priorGiftCreditLimit,
+    외국납부세액공제: foreignTaxCredit,
+    외국납부세액공제_비율한도: foreignTaxCreditByFormula,
     그밖의공제감면세액: otherCreditsAmount,
     신고세액공제: reportCredit,
     이자상당액: interestAmount,
@@ -5406,13 +5571,31 @@ function toolCalculateInheritanceTax(p) {
   // 배우자상속공제 한도액 ([별지 제9호서식] 부표3의2): {(상속재산의 가액-유증재산가액+10년내 상속인증여재산)×배우자법정상속분비율} - 배우자의 사전증여 과세표준
   const estateValueForSpouseLimit = effectiveEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
   const spouseLimit = spouseInheritanceLimit_(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
-  const spouseDeduction = (isDecedentResident && hasSpouse) ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, spouseLimit) : 0;
+  const spouseDeduction = (isDecedentResident && hasSpouse) ? spouseInheritanceDeduction_(p.spouseActualInheritedAmount, spouseLimit, p.isSpousePropertyDivided) : 0;
 
   // 금융재산상속공제 (상증세법 §22)
   const financialDeduction = isDecedentResident ? financialAssetInheritanceDeduction_(p.netFinancialAssets) : 0;
 
   // 동거주택상속공제 (상증세법 §23-2) — 10년 이상 동거·무주택 등 요건 충족을 전제(요건 자체는 이 도구가 검증하지 않음). 상속주택가액의 100%, 6억원 한도.
-  const cohabitingHouseDeduction = (isDecedentResident && p.hasCohabitingHouseDeduction) ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
+  // §23의2①1~3호 — 동거주택상속공제는 3개 요건을 모두 갖춘 경우에만 적용된다. 세부요건 플래그를
+  // 하나라도 제공하면 그 3개(AND)로 판정하고, 하나도 안 주면(구버전 호환) hasCohabitingHouseDeduction
+  // 단일 플래그를 그대로 쓴다.
+  const cohabitReqFlags = {
+    tenYearCohabitationMet: p.tenYearCohabitationRequirementMet,
+    tenYearOneHouseholdMet: p.tenYearOneHouseholdRequirementMet,
+    noHouseOrJointHeirMet: p.noHouseOrJointHeirRequirementMet
+  };
+  const cohabitKeys = Object.keys(cohabitReqFlags);
+  const cohabitAnySpecified = cohabitKeys.some(function (k) { return cohabitReqFlags[k] === true || cohabitReqFlags[k] === false; });
+  let cohabitEligible, cohabitRequirementsUnverified = false, cohabitFailedRequirements = [];
+  if (cohabitAnySpecified) {
+    cohabitRequirementsUnverified = cohabitKeys.some(function (k) { return cohabitReqFlags[k] !== true && cohabitReqFlags[k] !== false; });
+    cohabitFailedRequirements = cohabitKeys.filter(function (k) { return cohabitReqFlags[k] === false; });
+    cohabitEligible = cohabitFailedRequirements.length === 0;
+  } else {
+    cohabitEligible = !!p.hasCohabitingHouseDeduction;
+  }
+  const cohabitingHouseDeduction = (isDecedentResident && cohabitEligible) ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
 
   // 감정평가수수료공제 (상증세법 §25, 시행령§20의3③) — 일반 감정평가법인·유형재산 감정수수료(1호·3호)는
   // 500만원 한도이나, 비상장주식 신용평가전문기관 평가수수료(2호, §49의2⑨)는 평가대상 법인수×의뢰기관수별로
@@ -5548,11 +5731,13 @@ function toolCalculateInheritanceTax(p) {
     상속개시전처분재산_추정합계: disposalPresumptionTotal,
     상속세과세가액_적용값: effectiveEstateAmount,
     인적공제: personalDeduction,
-    '기초공제+인적공제_또는_일괄공제5억_중_큰값': basicOrLumpSum,
+    '기초인적공제_또는_일괄공제': basicOrLumpSum,
     배우자공제: spouseDeduction,
     배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
     금융재산상속공제: financialDeduction,
     동거주택상속공제: cohabitingHouseDeduction,
+    동거주택상속공제_요건미확인: cohabitRequirementsUnverified,
+    동거주택상속공제_미충족요건목록: cohabitFailedRequirements,
     감정평가수수료공제: appraisalFeeDeduction,
     재해손실공제: disasterLossDeduction,
     장례비용공제: funeralDeduction,
@@ -5563,13 +5748,19 @@ function toolCalculateInheritanceTax(p) {
       대상금액: businessInheritanceDetail_.targetAmount, 한도액: businessInheritanceDetail_.limitAmount,
       소득세법적용분: businessInheritanceDetail_.targetIndividual, 법인세법적용분: businessInheritanceDetail_.targetCorporate,
       사업관련자산가액비율: businessInheritanceDetail_.ratioInfo ? businessInheritanceDetail_.ratioInfo.ratio : null,
-      중견기업게이트_적용여부: businessInheritanceDetail_.mediumSizedGateApplied
+      중견기업게이트_적용여부: businessInheritanceDetail_.mediumSizedGateApplied,
+      요건미확인: businessInheritanceDetail_.requirementsUnverified,
+      요건미충족으로_공제배제: businessInheritanceDetail_.eligibilityGateApplied,
+      미충족요건목록: businessInheritanceDetail_.failedRequirements
     } : null,
     영농상속공제: farmingInheritanceDeduction,
     영농상속공제_계산내역: farmingInheritanceDetail_ ? {
       대상금액: farmingInheritanceDetail_.targetAmount, 한도액: farmingInheritanceDetail_.limitAmount,
       소득세법적용분: farmingInheritanceDetail_.individualTotal, 법인세법적용분: farmingInheritanceDetail_.targetCorporate,
-      사업관련자산가액비율: farmingInheritanceDetail_.ratioInfo ? farmingInheritanceDetail_.ratioInfo.ratio : null
+      사업관련자산가액비율: farmingInheritanceDetail_.ratioInfo ? farmingInheritanceDetail_.ratioInfo.ratio : null,
+      요건미확인: farmingInheritanceDetail_.requirementsUnverified,
+      요건미충족으로_공제배제: farmingInheritanceDetail_.eligibilityGateApplied,
+      미충족요건목록: farmingInheritanceDetail_.failedRequirements
     } : null,
     상속공제_합계: totalDeduction,
     상속공제종합한도_적용여부: overallLimitApplied,
@@ -5593,7 +5784,19 @@ function toolCalculateInheritanceTax(p) {
     가업상속납부유예세액: businessInheritanceDeferredTaxAmount,
     가업상속납부유예_가능세액: businessInheritanceDeferralEligibleAmount,
     납부세액: finalTax,
-    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 가업상속공제·영농상속공제·특례증여세액공제는 자격요건 판정과 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.' +
+    안내: '배우자가 단독상속인인 경우 일괄공제(5억)를 선택할 수 없고 기초공제+인적공제만 적용됩니다 — 해당되면 이 결과를 그대로 쓰지 말고 재계산하세요. spouseLegalShareRatio(배우자 법정상속분 비율)를 넣지 않으면 배우자공제에 30억 한도만 적용되고 정확한 한도액이 반영되지 않습니다. 특례증여세액공제는 세액 자체를 이 도구가 계산하지 않으므로 별도로 계산해서 그 결과값만 입력해야 합니다. 동거주택상속공제는 10년 동거·무주택 등 요건 충족을 전제로 한 것이니 별도로 검증하세요. 납부지연가산세율(1일 10만분의22)은 시행령 개정으로 바뀔 수 있으니 신고 시점 기준으로 재확인하세요.' +
+      ((businessInheritanceDetail_ && businessInheritanceDetail_.requirementsUnverified)
+        ? ' ⚠️가업상속공제 자격요건(decedentOwnershipRequirementMet 등 6개 플래그)이 확인되지 않아 요건 충족을 전제로 계산했습니다 — 실제로 요건이 미충족이면 이 공제 전액이 부인됩니다. 반드시 확인해서 재계산하세요.'
+        : '') +
+      ((businessInheritanceDetail_ && businessInheritanceDetail_.eligibilityGateApplied)
+        ? ' 가업상속공제는 자격요건 미충족(' + businessInheritanceDetail_.failedRequirements.join(', ') + ')으로 전액 배제되었습니다.'
+        : '') +
+      ((farmingInheritanceDetail_ && farmingInheritanceDetail_.requirementsUnverified)
+        ? ' ⚠️영농상속공제 자격요건(decedentFarmingRequirementMet 등 3개 플래그)이 확인되지 않아 요건 충족을 전제로 계산했습니다 — 실제로 요건이 미충족이면 이 공제 전액이 부인됩니다. 반드시 확인해서 재계산하세요.'
+        : '') +
+      ((farmingInheritanceDetail_ && farmingInheritanceDetail_.eligibilityGateApplied)
+        ? ' 영농상속공제는 자격요건 미충족(' + farmingInheritanceDetail_.failedRequirements.join(', ') + ')으로 전액 배제되었습니다.'
+        : '') +
       (businessInheritanceDeferralEligibleAmount != null
         ? ' 가업상속납부유예_가능세액은 §72의2에 따라 유예 신청 가능한 최대 금액(참고용)이며, 가업상속공제와는 별개로 선택 가능한 제도입니다 — 실제로 유예받으려면 이 금액(또는 그 이하)을 businessInheritanceDeferredTaxAmount에 넣어야 최종 납부세액에서 차감됩니다.'
         : '')
@@ -5714,7 +5917,13 @@ function toolCalculateSpecialRateGiftTax(p) {
   if (specialType === 'startup') {
     totalLimit = p.jobsCreated10Plus ? 10000000000 : 5000000000;
   } else {
+    // 조특법§30의6①본문 — "가업"의 정의 자체가 "부모가 10년 이상 계속하여 경영한 기업"이다.
+    // 10년 미만이면 애초에 "가업"에 해당하지 않아 이 특례를 전혀 적용받을 수 없다(1~3호도
+    // 전부 "10년 이상"을 전제로 300억/400억/600억을 구분할 뿐, 10년 미만 구간 자체가 없음).
     const years = Number(p.businessOwnershipYearsOfParent) || 0;
+    if (years < 10) {
+      return { error: '부모의 가업 계속경영기간이 10년 미만이면 조특법§30의6상 "가업"에 해당하지 않아 이 특례를 적용받을 수 없습니다(businessOwnershipYearsOfParent를 10년 이상으로 입력하거나, 요건을 다시 확인하세요).' };
+    }
     totalLimit = years < 20 ? 30000000000 : (years < 30 ? 40000000000 : 60000000000);
   }
   const remainingLimit = Math.max(0, totalLimit - priorSpecialGiftAmount);
@@ -5734,8 +5943,17 @@ function toolCalculateSpecialRateGiftTax(p) {
     : Math.round(Math.min(taxBase, 12000000000) * 0.10 + Math.max(0, taxBase - 12000000000) * 0.20);
 
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
 
   const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
   const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
@@ -6001,8 +6219,17 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6060,8 +6287,17 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6124,8 +6360,17 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   }
 
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6167,8 +6412,17 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6241,8 +6495,17 @@ function toolCalculateTrustIncomeGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6823,8 +7086,17 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   }
 
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6896,8 +7168,17 @@ function toolCalculateMergerBenefitGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -6950,8 +7231,17 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7007,8 +7297,17 @@ function toolCalculateOrgChangeGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7045,8 +7344,17 @@ function toolCalculatePropertyValueIncreaseGiftTax(p) {
   const taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7547,8 +7855,17 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7712,8 +8029,17 @@ function toolCalculateExcessDividendGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7776,8 +8102,17 @@ function toolCalculateStockListingGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -7920,7 +8255,13 @@ function toolCalculateConvertibleBondGiftTax(p) {
     taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
   }
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 비례산식(foreignGiftTaxBase 입력시 자동계산).
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
   const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
@@ -7928,6 +8269,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
   const result = {
     과세대상여부: true, 증여의제이익: giftAmount,
     감정평가수수료공제: appraisalFeeAmount,
+    외국납부세액공제: foreignTaxCredit,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7979,8 +8321,17 @@ function toolCalculateInKindContributionGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
@@ -8093,8 +8444,17 @@ function toolCalculateCapitalReductionGiftTax(p) {
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
+  // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
+  // 증여재산의 과세표준÷법§55①에 따른 증여세의 과세표준), 실제 납부한 외국증여세액 한도.
+  // foreignGiftTaxBase를 입력하면 이 비례산식으로 자동계산하고, 없으면(구버전 호환) 실제 납부액을
+  // 잔여세액 한도로 그대로 쓴다.
+  const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
   const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
-  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
+  const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
+    ? Math.round(calculatedTax * Math.min(1, foreignGiftTaxBase / taxBase))
+    : foreignTaxPaidAmount;
+  const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
+  const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
