@@ -421,7 +421,11 @@
   // §21① — 원칙은 max(기초공제+그밖의인적공제, 5억원)이나, "다만, 제67조 또는 국세기본법§45의3에
   // 따른 신고가 없는 경우에는 5억원을 공제한다"는 단서가 있다 — 무신고시 인적공제 합계가 3억원을
   // 넘어도 5억원 고정이지 그 초과분까지 인정되는 것이 아니다.
-  function basicOrLumpSumDeduction(personalDeductionSum, isUnreported) {
+  // §21② — "제1항을 적용할 때 피상속인의 배우자가 단독으로 상속받는 경우에는 제18조와 제20조제1항에
+  // 따른 공제액을 합친 금액으로만 공제한다" — 이 경우 5억원 하한·무신고시 5억원 고정 모두 배제되고
+  // (기초공제+그 밖의 인적공제) 실액만 공제된다.
+  function basicOrLumpSumDeduction(personalDeductionSum, isUnreported, isSpouseOnlyHeir) {
+    if (isSpouseOnlyHeir) return 200000000 + (Number(personalDeductionSum) || 0);
     if (isUnreported) return 500000000;
     return Math.max(500000000, 200000000 + (Number(personalDeductionSum) || 0));
   }
@@ -738,11 +742,42 @@
     const taxBase = Math.max(0, core.incomeAmount - basicDeduction);
     let calculatedTax, appliedRateNote;
     const surchargeNotes = [];
+    // §104④후단·⑦후단 — 다주택중과·비사업용토지(지정지역) 가산 대상 부동산은 보유기간이 2년 미만이어도
+    // "[기본세율(누진)+가산율]로 계산한 산출세액"과 "단기양도세율(§104①2호·3호)로 계산한 산출세액" 중
+    // 큰 세액을 산출세액으로 한다 — 즉 단기세율이 무조건 적용되는 게 아니라 가산세율 쪽과 비교해야 한다.
+    function surchargeBasedTax_() {
+      let tax = progressiveTax(taxBase, TRANSFER_TAX_BRACKETS);
+      const notes = [];
+      if (core.isMultiHouseSurcharge) {
+        const rate = core.multiHouseCount >= 3 ? 0.30 : 0.20;
+        const amt = Math.round(taxBase * rate);
+        tax += amt;
+        notes.push('다주택자 중과(+' + (rate * 100) + '%p): +' + amt + '원');
+      }
+      if (core.isNonBusinessLand) {
+        const amt = Math.round(taxBase * 0.10);
+        tax += amt;
+        notes.push('비사업용토지 가산(+10%p): +' + amt + '원');
+      }
+      return { tax: tax, notes: notes };
+    }
     if (core.assetType === 'presale_right') {
       // §104①1호·2호·3호 — 분양권은 보유기간 1년 미만 70%, 1년 이상은 무조건 60%(기본세율 누진 적용 없음).
       const rate = core.holdingYears < 1 ? 0.70 : 0.60;
       calculatedTax = Math.round(taxBase * rate);
       appliedRateNote = '분양권 — ' + (core.holdingYears < 1 ? '보유기간 1년 미만 70%' : '60%') + ' 단일세율 적용(장기보유특별공제·기본세율누진 배제)';
+    } else if (core.holdingYears < 2 && (core.isMultiHouseSurcharge || core.isNonBusinessLand)) {
+      const rate = core.holdingYears < 1 ? (core.assetType === 'house' ? 0.70 : 0.50) : (core.assetType === 'house' ? 0.60 : 0.40);
+      const shortTermTax = Math.round(taxBase * rate);
+      const alt = surchargeBasedTax_();
+      if (alt.tax > shortTermTax) {
+        calculatedTax = alt.tax;
+        surchargeNotes.push.apply(surchargeNotes, alt.notes);
+        appliedRateNote = '보유기간 2년 미만이나 다주택중과·비사업용토지 가산세율 적용시 세액이 더 커서(§104④·⑦후단) 기본세율+가산율 적용 — 단기세율(' + (rate * 100) + '%) 적용시: ' + shortTermTax + '원';
+      } else {
+        calculatedTax = shortTermTax;
+        appliedRateNote = '보유기간 ' + (core.holdingYears < 1 ? '1년 미만' : '1년 이상 2년 미만') + ' 단기세율 ' + (rate * 100) + '% 적용(§104④·⑦후단 비교 결과 기본세율+가산율보다 큼)';
+      }
     } else if (core.holdingYears < 1) {
       const rate = core.assetType === 'house' ? 0.70 : 0.50;
       calculatedTax = Math.round(taxBase * rate);
@@ -752,19 +787,10 @@
       calculatedTax = Math.round(taxBase * rate);
       appliedRateNote = '보유기간 1년 이상 2년 미만 단기세율 ' + (rate * 100) + '% 적용';
     } else {
-      calculatedTax = progressiveTax(taxBase, TRANSFER_TAX_BRACKETS);
+      const r = surchargeBasedTax_();
+      calculatedTax = r.tax;
+      surchargeNotes.push.apply(surchargeNotes, r.notes);
       appliedRateNote = '보유기간 2년 이상 — 기본세율(누진 6~45%) 적용';
-      if (core.isMultiHouseSurcharge) {
-        const rate = core.multiHouseCount >= 3 ? 0.30 : 0.20;
-        const amt = Math.round(taxBase * rate);
-        calculatedTax += amt;
-        surchargeNotes.push('다주택자 중과(+' + (rate * 100) + '%p): +' + amt + '원');
-      }
-      if (core.isNonBusinessLand) {
-        const amt = Math.round(taxBase * 0.10);
-        calculatedTax += amt;
-        surchargeNotes.push('비사업용토지 가산(+10%p): +' + amt + '원');
-      }
     }
     let farmlandReduction = 0;
     let farmlandReductionLabel = '';
@@ -1048,7 +1074,16 @@
       const base = Math.max(0, c.incomeAmount - bd);
       const rate = (c.assetType === 'house' || c.assetType === 'presale_right')
         ? (c.holdingYears < 1 ? 0.70 : 0.60) : (c.holdingYears < 1 ? 0.50 : 0.40);
-      const tax = Math.round(base * rate);
+      const shortTermTax = Math.round(base * rate);
+      // §104④후단·⑦후단 — 분양권이 아닌 다주택중과·비사업용토지 대상 부동산은 단기세율과
+      // [기본세율(누진)+가산율] 중 큰 세액을 적용해야 한다(단기세율이 무조건 적용되는 게 아님).
+      let tax = shortTermTax;
+      if (c.assetType !== 'presale_right' && (c.isMultiHouseSurcharge || c.isNonBusinessLand)) {
+        let altTax = progressiveTax(base, TRANSFER_TAX_BRACKETS);
+        if (c.isMultiHouseSurcharge) altTax += Math.round(base * (c.multiHouseCount >= 3 ? 0.30 : 0.20));
+        if (c.isNonBusinessLand) altTax += Math.round(base * 0.10);
+        if (altTax > tax) tax = altTax;
+      }
       assetNotes.push({ idx: c.idx, 구분: '단기양도(개별)', 소득금액: Math.round(c.incomeAmount), 기본공제적용: bd > 0, 세율: rate, 세액: tax });
       return tax;
     });
@@ -1398,7 +1433,10 @@
     const disabledTrustAmount = Number(p.disabledTrustAmount) || 0;
     const netGiftAmount = Math.max(0, giftAmount - debtAssumedAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount - disabledTrustAmount);
 
-    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    // 시행령§46의2·§20의3③ — 비상장주식 신용평가전문기관 평가수수료(2호)는 일반 감정수수료(1호·3호,
+    // 500만원 한도)와 별개로 평가대상 법인수×의뢰기관수별 1천만원 한도가 적용된다.
+    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000)
+      + Math.min(Number(p.unlistedStockAppraisalFeeAmount) || 0, 10000000);
 
     // §55①3호 — 명의신탁재산 증여의제(1호)·일감몰아주기등 이익의 증여의제(2호)를 제외한
     // "합산배제증여재산"은 §53(관계별공제)·§53의2(혼인출산공제)·§54(재해손실공제)를 적용하지 않고
@@ -1523,7 +1561,7 @@
     const personalDeduction = isDecedentResident
       ? (childCount * 50000000 + minorHeirRemainingYears * 10000000 + elderlyHeirCount * 50000000 + disabledHeirRemainingYears * 10000000)
       : 0;
-    const basicOrLumpSum = isDecedentResident ? basicOrLumpSumDeduction(personalDeduction, filingStatus === 'unreported') : 200000000;
+    const basicOrLumpSum = isDecedentResident ? basicOrLumpSumDeduction(personalDeduction, filingStatus === 'unreported', !!p.isSpouseOnlyHeir) : 200000000;
 
     const estateValueForSpouseLimit = effectiveEstateAmount - (Number(p.priorGiftedAmountIncludedInEstate) || 0);
     const spouseLimit = spouseInheritanceLimit(estateValueForSpouseLimit, p.nonHeirBequestAmount, p.giftToHeirsWithin10Years, Number(p.spouseLegalShareRatio) || 0, p.spouseTaxableBaseOfPriorGift);
@@ -1531,7 +1569,13 @@
 
     const financialDeduction = isDecedentResident ? financialAssetInheritanceDeduction(p.netFinancialAssets) : 0;
     const cohabitingHouseDeduction = (isDecedentResident && p.hasCohabitingHouseDeduction) ? Math.min(Number(p.cohabitingHouseValue) || 0, 600000000) : 0;
-    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
+    // 시행령§20의3③ — 일반 감정평가법인·유형재산 감정수수료(1호·3호)는 500만원 한도이나, 비상장주식
+    // 신용평가전문기관 평가수수료(2호, §49의2⑨)는 평가대상 법인수×의뢰기관수별로 각각 1천만원 한도로
+    // 별개 규정된다(단일 500만원 한도에 합산하면 안 됨). unlistedStockAppraisalFeeAmount는 그 합계액을
+    // 1천만원 한도로 별도 공제한다(법인·기관이 여럿이면 한도도 그만큼 늘어나지만, 이 계산기는 가장
+    // 흔한 단일 한도로 근사한다 — 법인·기관이 다수면 직접 합산해서 한도 초과분을 조정하세요).
+    const appraisalFeeDeduction = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000)
+      + Math.min(Number(p.unlistedStockAppraisalFeeAmount) || 0, 10000000);
     const disasterLossDeduction = isDecedentResident ? (Number(p.disasterLossAmount) || 0) : 0;
     // 장례비용공제(§14①3호) — 실제 지출액 증빙이 없으면 500만원, 있으면 500만~1000만원 범위에서 인정.
     // 봉안시설·자연장지 사용금액은 별도로 500만원 한도까지 추가 공제. (비거주자는 위 안내대로 전액 불가)
@@ -1585,7 +1629,14 @@
     const otherCreditsAmount = Math.min(Number(p.otherCreditsAmount) || 0,
       Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit));
 
-    const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit - otherCreditsAmount);
+    // §69①1호 — 신고세액공제(3%) 기준액은 "산출세액에서 제74조에 따라 징수를 유예받은 금액(1호)과
+    // 그 밖의 세액공제·감면액(2호)을 뺀 금액"이다. 문화재등징수유예액(culturalPropertyDeferredTaxAmount,
+    // §74)을 3% 기준액에서 빼지 않으면 신고세액공제가 과다계산된다(유예액만큼 3%를 더 많이 깎아주는 셈).
+    // 가업상속납부유예(§72의2, businessInheritanceDeferredTaxAmount)는 §69①1호가 "제74조"만 명시하므로
+    // 이 기준액 계산에는 포함하지 않고, 아래 최종 납부세액 단계에서만 차감한다.
+    const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
+    const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
+    const taxAfterCredits = Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit - otherCreditsAmount - culturalPropertyDeferredTaxAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
     const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
@@ -1596,8 +1647,6 @@
     const forProfitExemptedTaxAmount = Number(p.forProfitExemptedTaxAmount) || 0;
     const forProfitHeirShareRatio = Math.max(0, Math.min(1, Number(p.forProfitHeirShareRatio) || 0));
     const forProfitPayableByHeirs = Math.max(0, Math.round((forProfitExemptedTaxAmount - forProfitBequestAmount * 0.10) * forProfitHeirShareRatio));
-    const culturalPropertyDeferredTaxAmount = Number(p.culturalPropertyDeferredTaxAmount) || 0;
-    const businessInheritanceDeferredTaxAmount = Number(p.businessInheritanceDeferredTaxAmount) || 0;
 
     const totalGrossEstateValue = Number(p.totalGrossEstateValue) || 0;
     let businessInheritanceDeferralEligibleAmount = null;
@@ -1605,9 +1654,11 @@
       businessInheritanceDeferralEligibleAmount = Math.round(taxAfterReportCredit * businessInheritanceDetail.targetAmount / totalGrossEstateValue);
     }
 
+    // culturalPropertyDeferredTaxAmount(§74)는 위 taxAfterCredits 단계에서 이미 뺐으므로 여기서 다시
+    // 빼지 않는다(이중차감 방지) — businessInheritanceDeferredTaxAmount(§72의2)만 최종 단계에서 차감.
     const finalTax = Math.max(0, taxAfterReportCredit + interestAmount + forProfitPayableByHeirs
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
-      - culturalPropertyDeferredTaxAmount - businessInheritanceDeferredTaxAmount);
+      - businessInheritanceDeferredTaxAmount);
 
     return {
       상속세과세가액_입력값: taxableEstateAmount,
@@ -2249,8 +2300,14 @@
     }
     const installmentPeriodYears = Number(p.installmentPeriodYears);
     if (!installmentPeriodYears || installmentPeriodYears <= 0) return { error: '연부연납기간(년)이 필요합니다.' };
-    const annualInterestRatePercent = Number(p.annualInterestRatePercent);
-    if (!(annualInterestRatePercent >= 0)) return { error: '연부연납 가산금 연이자율(%)이 필요합니다 — 신고 시점 기준 이자율을 직접 확인해서 넣어야 합니다.' };
+    // §72①·시행령§69①·국세기본법시행령§43의3② — 각 회분 분할납부세액의 "납부일 현재" 이자율을 적용한다.
+    // 향후 회차의 이자율은 아직 정해지지 않았으므로, referenceDate(기준일, 보통 연부연납 허가일·신고일 —
+    // 없으면 오늘) 시점에 적용되는 최신 고시 이자율(REFUND_INTEREST_RATE_HISTORY, calculateClawbackInterestJS와
+    // 동일 테이블)을 전체 회차에 공통 적용하는 것으로 자동계산한다(직접 입력하면 그 값이 우선).
+    const referenceDate = p.referenceDate || new Date().toISOString().slice(0, 10);
+    const annualInterestRatePercent = Number(p.annualInterestRatePercent) >= 0
+      ? Number(p.annualInterestRatePercent)
+      : Math.round(refundInterestRateAt_(referenceDate) * 100 * 1000) / 1000;
     const initialPaymentAmount = Math.min(Number(p.initialPaymentAmount) || 0, totalTaxAmount);
 
     const installmentTaxAmount = totalTaxAmount - initialPaymentAmount;
@@ -3136,6 +3193,15 @@
       if (totalReducedShares <= 0) return { error: '총 감자 주식등의 수가 필요합니다.' };
       giftAmount = Math.max(0, Math.round((valuePerShare - paymentPerShare) * totalReducedShares * postReductionOwnershipRatio * (relatedReducedShares / totalReducedShares)));
     } else {
+      // 시행령§29의2①2호 — 고가소각 과세는 "주식등의 1주당 평가액이 액면가액(대가가 액면가액에 미달하는
+      // 경우에는 그 대가)에 미달하는 경우로 한정한다." 액면가 이상인 주식을 고가소각한 경우까지 과세하면
+      // 안 되므로 이 전제조건을 확인해야 한다.
+      const faceValuePerShare = Number(p.faceValuePerShare);
+      if (!(faceValuePerShare > 0)) return { error: '고가소각(high_price)은 액면가액(faceValuePerShare)이 필요합니다(§29의2①2호 — 1주당평가액이 액면가 미달일 때만 과세).' };
+      const effectiveFaceValue = Math.min(faceValuePerShare, paymentPerShare);
+      if (!(valuePerShare < effectiveFaceValue)) {
+        return { 과세대상여부: false, 증여의제이익: 0, 납부세액: 0, 안내: '1주당 평가액이 액면가액(대가가 액면가 미만이면 그 대가) 이상이어서 고가소각 증여의제 요건에 해당하지 않습니다(시행령§29의2①2호).' };
+      }
       const ownReducedShares = Number(p.ownReducedShares) || 0;
       giftAmount = Math.max(0, Math.round((paymentPerShare - valuePerShare) * ownReducedShares));
     }
@@ -3428,6 +3494,11 @@
     const holdingYears = Number(p.holdingYears) || 0;
     if (holdingYears < 2) {
       return { 적용여부: false, 안내: '2년 이상 보유한 산지가 아니어서 적용대상이 아닙니다.' };
+    }
+    // §85의10① — "「산지관리법」에 따른 산지(「국토의 계획 및 이용에 관한 법률」에 따른 도시지역에
+    // 소재하는 산지를 제외하며...)" — 도시지역 소재 산지는 감면 대상에서 명시적으로 제외된다.
+    if (p.isUrbanArea) {
+      return { 적용여부: false, 안내: '「국토의 계획 및 이용에 관한 법률」에 따른 도시지역에 소재하는 산지는 조특법§85의10 감면 대상에서 제외됩니다.' };
     }
     const transferPrice = Number(p.transferPrice) || 0;
     const acquisitionPrice = Number(p.acquisitionPrice) || 0;
@@ -4365,10 +4436,16 @@
     const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
     let calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
+    // §45의5②·시행령§34의5⑨ — 산출세액이 "지배주주등이 직접 증여받은 경우의 증여세 상당액 - 법인세상당액"을
+    // 초과하면 그 초과액은 없는 것으로 본다. "직접 증여받은 경우의 증여세 상당액"은 시행령이 별도 공제 없이
+    // [특정법인의 이익(법인세공제전, 4항1호금액)×지분율]에 누진세율만 적용한 금액으로 정의하므로, 이미 갖고
+    // 있는 값(benefitToCorpAmount·shareholderOwnershipRatio)으로 자동계산한다(직접입력하면 그 값이 우선).
     const corporateTaxEquivalentForShareholder = Math.round(corporateTaxEquivalentTotal * shareholderOwnershipRatio);
-    const directGiftTaxEquivalent = Number(p.directGiftTaxEquivalent);
+    const directGiftTaxEquivalent = Number(p.directGiftTaxEquivalent) > 0
+      ? Number(p.directGiftTaxEquivalent)
+      : progressiveGiftInheritTax(Math.round(benefitToCorpAmount * shareholderOwnershipRatio), GIFT_INHERIT_TAX_BRACKETS);
     let capApplied = false;
-    if (Number.isFinite(directGiftTaxEquivalent) && directGiftTaxEquivalent > 0) {
+    {
       const capLimit = Math.max(0, directGiftTaxEquivalent - corporateTaxEquivalentForShareholder);
       if (calculatedTax > capLimit) { calculatedTax = capLimit; capApplied = true; }
     }
