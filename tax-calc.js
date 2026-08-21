@@ -1396,12 +1396,15 @@
 
   // 무신고·과소신고·납부지연가산세 (국세기본법 §47의2~§47의4) — 일반 20%/10%, 부정행위 40%,
   // 납부지연 1일 10만분의22(시행령 개정 시 바뀔 수 있음).
-  function giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride) {
+  // 국세기본법§47의2①1호·§47의3①1호가목 — 부정행위로 인한 무신고·과소신고가산세는 원칙 40%이나,
+  // "역외거래에서 발생한 부정행위"는 60%다. isOffshoreTransaction이 없으면(대부분의 국내 거래) 종전처럼 40%.
+  function giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride, isOffshoreTransaction) {
     let unreportedPenalty = 0, underreportedPenalty = 0;
+    const fraudRate = isOffshoreTransaction ? 0.60 : 0.40;
     if (filingStatus === 'unreported') {
-      unreportedPenalty = Math.round(taxAfterCredit * (isFraudulent ? 0.40 : 0.20));
+      unreportedPenalty = Math.round(taxAfterCredit * (isFraudulent ? fraudRate : 0.20));
     } else if (filingStatus === 'underreported') {
-      underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? 0.40 : 0.10));
+      underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? fraudRate : 0.10));
     }
     const base = Number.isFinite(unpaidTaxOverride) ? unpaidTaxOverride : taxAfterCredit;
     const latePenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
@@ -1489,7 +1492,7 @@
     const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
     const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
-    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
 
     const interestAmount = Number(p.interestAmount) || 0;
     const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
@@ -1640,7 +1643,7 @@
     const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
     const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
-    const penalties = giftFilingPenalties(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
 
     const interestAmount = Number(p.interestAmount) || 0;
     const forProfitBequestAmount = Number(p.forProfitBequestAmount) || 0;
@@ -1710,6 +1713,32 @@
     const totalInherited = values.reduce(function (s, v) { return s + v; }, 0);
     if (totalInherited <= 0) return { error: '상속인별 실제상속재산가액 합계가 0보다 커야 합니다.' };
 
+    // 시행령§3①1호 — "상속인별 상속세과세표준상당액"을 §28(증여세액공제)용으로 이미 구현한
+    // priorGiftTaxCreditPrecise의 다목(상속인별과세표준상당액) 산식과 정확히 동일하다. 상속인마다
+    // priorGiftTaxableBase(사전증여 과세표준)·priorGiftAmount(사전증여재산가액)가 주어지면 이 정밀
+    // 비율을 쓰고, 없으면(대부분 사전증여가 없는 사안) 종전처럼 실제상속재산가액 비율로 근사한다.
+    const hasPriorGiftData = heirs.some(function (h) { return (Number(h.priorGiftTaxableBase) || 0) > 0 || (Number(h.priorGiftAmount) || 0) > 0; });
+    let preciseRatios = null;
+    if (hasPriorGiftData) {
+      const overallTaxBase = Number(aggregateResult.과세표준) || 0;
+      const overallTaxableAmount = Number(aggregateResult.상속세과세가액_적용값) || totalInherited;
+      const totalPriorGiftTaxableBase = heirs.reduce(function (s, h) { return s + (Number(h.priorGiftTaxableBase) || 0); }, 0);
+      const totalPriorGiftAmount = heirs.reduce(function (s, h) { return s + (Number(h.priorGiftAmount) || 0); }, 0);
+      const 가목 = Math.max(0, overallTaxBase - totalPriorGiftTaxableBase);
+      const 나목 = Math.max(0, overallTaxableAmount - totalPriorGiftAmount);
+      const equivalents = heirs.map(function (h, i) {
+        const giftTaxableBase = Number(h.priorGiftTaxableBase) || 0;
+        const giftAmount = Number(h.priorGiftAmount) || 0;
+        const actualValueRatio = values[i] / totalInherited;
+        const heirTaxableAmountShare = overallTaxableAmount * actualValueRatio;
+        const 다목 = heirTaxableAmountShare - giftAmount;
+        const ratio다나 = 나목 > 0 ? (다목 / 나목) : 0;
+        return Math.max(0, giftTaxableBase + 가목 * ratio다나);
+      });
+      const totalEquivalent = equivalents.reduce(function (s, v) { return s + v; }, 0);
+      if (totalEquivalent > 0) preciseRatios = equivalents.map(function (v) { return v / totalEquivalent; });
+    }
+
     const totalCreditAmount = (aggregateResult.기납부증여세액공제 || 0) + (aggregateResult.특례증여세액공제 || 0)
       + (aggregateResult.외국납부세액공제 || 0) + (aggregateResult.단기재상속세액공제 || 0)
       + (aggregateResult.그밖의공제 || 0) + (aggregateResult.신고세액공제 || 0);
@@ -1727,7 +1756,7 @@
 
     const maxIdx = values.indexOf(Math.max.apply(null, values));
     const rows = heirs.map(function (h, i) {
-      const ratio = values[i] / totalInherited;
+      const ratio = preciseRatios ? preciseRatios[i] : (values[i] / totalInherited);
       const row = { 성명: h.name || ('상속인' + (i + 1)), 관계: h.relation || '', 실제상속재산가액: values[i], 지분율: ratio };
       fields.forEach(function (f) { row[f.key] = Math.round(f.total * ratio); });
       return row;
@@ -1739,8 +1768,11 @@
 
     return {
       상속인별_내역: rows,
+      정밀비율_적용여부: !!preciseRatios,
       합계검증: { 실제상속재산가액_합계: totalInherited, 납부세액_합계: aggregateResult.납부세액 || 0 },
-      안내: '상증세법 §3조의2①에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식). 정확한 법정 비율(시행령§3①의 상속인별 상속세과세표준상당액 비율)은 그 하위개념 산식이 법령에 없어 확정할 수 없으므로, 이 비율은 확정된 법적 근거가 아닌 근사치입니다 — 정밀한 상속인별 부담이 중요한 사안에서는 별도로 검증하세요. 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다.'
+      안내: preciseRatios
+        ? '상증세법§3조의2①·시행령§3①1호에 따라, 상속인별 사전증여(priorGiftTaxableBase·priorGiftAmount) 데이터로 "상속인별 상속세과세표준상당액" 비율을 정밀 계산해서 전체 산출세액·세액공제·가산세 등을 안분했습니다. 다만 시행령§3①2호(수유자 아닌 자에게 사전증여한 부분을 분모에서 제외하는 조정)까지는 반영하지 않았으니, 상속인이 아닌 자에게도 사전증여가 있었던 사안은 별도로 재검토하세요. 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다.'
+        : '상증세법 §3조의2①에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식). 정확한 법정 비율(시행령§3①1호의 상속인별 상속세과세표준상당액 비율)을 쓰려면 상속인별 사전증여 내역(priorGiftTaxableBase·priorGiftAmount)을 함께 입력하세요 — 사전증여가 없으면 이 실제상속재산가액 비율과 결과가 같습니다. 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다.'
     };
   };
 
@@ -1802,7 +1834,7 @@
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
     const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
 
-    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
     return {
@@ -1819,14 +1851,14 @@
   };
 
   // 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 증여재산공제 없이 일반 누진세율+신고세액공제(3%)만 적용.
-  function taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount) {
+  function taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction) {
     // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
     // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다.
     const taxBase = Math.max(0, Math.round(deemedGiftProfit) - (Number(appraisalFeeAmount) || 0));
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
     const taxAfterCredit = calculatedTax - reportCredit;
-    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty);
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return { taxBase, calculatedTax, reportCredit, penalties, finalTax };
   }
@@ -1878,7 +1910,7 @@
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
+    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction);
 
     return {
       과세대상여부: true,
@@ -1932,7 +1964,7 @@
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
+    const r = taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction);
 
     return {
       과세대상여부: true,
@@ -2028,7 +2060,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       채무면제등이익: giftAmount, 증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction,
@@ -2087,7 +2119,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return Object.assign({
       과세대상여부: true,
@@ -2150,7 +2182,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 증여추정재산가액: giftAmount,
@@ -2232,7 +2264,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       신탁이익: giftAmount,
@@ -2274,7 +2306,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
@@ -2524,7 +2556,7 @@
     const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
 
     // 주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세 (소득세법§115) — 법인의 대주주가 양도하는
     // 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 경우, (누락소득금액/양도소득금액)×산출세액×10%를
@@ -2743,13 +2775,14 @@
     ancestral_property: { 근거호: '§12 3호', 설명: '민법§1008의3에 규정된 재산(제사를 주재하는 자가 승계하는 금양임야·묘토인 농지·족보·제구 등) 중 대통령령으로 정하는 범위의 재산' },
     political_party: { 근거호: '§12 4호', 설명: '「정당법」에 따른 정당에 유증등을 한 재산' },
     labor_welfare_fund: { 근거호: '§12 5호', 설명: '「근로복지기본법」에 따른 사내근로복지기금 등에 유증등을 한 재산' },
-    disaster_relief: { 근거호: '§12 6호', 설명: '사회통념상 인정되는 이재구호금품·치료비 등' }
+    disaster_relief: { 근거호: '§12 6호', 설명: '사회통념상 인정되는 이재구호금품·치료비 등' },
+    post_inheritance_donation: { 근거호: '§12 7호', 설명: '상속재산 중 상속인이 §67 신고기한까지 국가·지방자치단체 또는 공공단체에 증여한 재산(1호의 유증과 달리, 일단 상속받은 후 신고기한 내 자발적으로 증여한 경우)' }
   };
   window.calculateNontaxableInheritancePropertyJS = function (p) {
     p = p || {};
     const itemType = p.itemType;
     const meta = NONTAXABLE_INHERITANCE_PROPERTY_LABELS[itemType];
-    if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief 중에서 선택하세요.' };
+    if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief/post_inheritance_donation 중에서 선택하세요.' };
     const amount = Math.max(0, Number(p.amount) || 0);
     if (amount <= 0) return { error: '금액이 필요합니다.' };
     return {
@@ -2816,7 +2849,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
@@ -2880,7 +2913,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 증여의제이익: giftAmount,
@@ -3039,7 +3072,7 @@
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxPaidAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
     const result = {
@@ -3105,7 +3138,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -3152,7 +3185,7 @@
     const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const localIncomeTax = Math.round(taxAfterCredit * 0.1);
     const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
 
@@ -3228,7 +3261,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 증여의제이익: giftAmount,
@@ -3385,15 +3418,46 @@
       penaltyAmount = directExpenseAmount;
       note = '§48⑩에 따라 특수관계에 있는 내국법인의 이익을 증가시키기 위해 정당한 대가를 받지 않고 광고·홍보를 하여, §78⑧에 따라 그 행위와 관련해 직접 지출된 경비 상당액을 가산세로 부과합니다.';
     } else if (penaltyType === 'income_underused') {
-      // §78⑨ — §48②5호(운용소득·매각대금 기준금액 미달사용) 또는 §48②7호(직접공익목적사업 기준금액 미달사용)
+      // §78⑨ — 1호(운용소득 기준금액 미달), 2호(매각대금 기준금액 미달), 3호(§48②7호 기준금액 미달) 중
+      // 해당하는 것마다 각각 가산세를 계산하되, "제1호와 제3호에 동시에 해당하는 경우에는 더 큰 금액으로
+      // 한다"(1호·3호 중 큰 쪽 하나만 적용, 둘을 더하지 않음). 200% 세율은 3호(§48②7호가목 유형 법인)에만
+      // 적용되고 1호·2호는 항상 10%다 — 이전 코드는 세 가지 중 먼저 계산되는 값 하나만 채택하고, 그 값이
+      // 1호·2호에서 나왔어도 isHighRateType이면 200%를 적용하는 오류가 있었다.
       const isHighRateType = !!p.isSect48_2_7HighHoldingType;
-      const rate = isHighRateType ? 2.0 : 0.10;
-      let underusedAmount = Number(p.underusedAmount) || 0;
       let baseNote = '';
+
+      // 1호 — 운용소득 기준금액 미달(시행령§38⑤), 항상 10%
+      const operatingIncomeAmount = Number(p.operatingIncomeAmount) || 0;
+      const taxAndCarryforwardLossAmount = Number(p.taxAndCarryforwardLossAmount) || 0;
+      let operatingIncomeUnderused = Number(p.operatingIncomeUnderusedAmount) || 0;
+      if (operatingIncomeUnderused <= 0 && operatingIncomeAmount > 0) {
+        const operatingIncome = Math.max(0, operatingIncomeAmount - taxAndCarryforwardLossAmount);
+        const usageStandardAmount = Math.round(operatingIncome * 0.8);
+        const actualOperatingIncomeUsedAmount = Number(p.actualOperatingIncomeUsedAmount) || 0;
+        operatingIncomeUnderused = Math.max(0, usageStandardAmount - actualOperatingIncomeUsedAmount);
+        if (operatingIncomeUnderused > 0) baseNote += '[1호] 시행령§38⑤에 따라 [수익사업 소득금액 등 합계(' + operatingIncomeAmount + '원)－법인세등 및 이월결손금(' + taxAndCarryforwardLossAmount + '원)]의 80%인 사용기준금액에서 실제 사용액을 차감한 운용소득 미달사용액=' + operatingIncomeUnderused + '원. ';
+      }
+      const amount1Penalty = Math.round(operatingIncomeUnderused * 0.10);
+
+      // 2호 — 매각대금 기준금액 미달(시행령§38⑦), 항상 10%(1호·3호와 "더 큰 금액" 비교 대상 아님, 별개 산정)
+      const saleProceedsAmount = Number(p.saleProceedsAmount) || 0;
+      const saleCheckpointYear = Number(p.saleCheckpointYear);
+      let saleUnderused = 0;
+      if (saleProceedsAmount > 0 && (saleCheckpointYear === 1 || saleCheckpointYear === 2)) {
+        const requiredRatio = saleCheckpointYear === 2 ? 0.60 : 0.30;
+        const requiredAmount = Math.round(saleProceedsAmount * requiredRatio);
+        const cumulativeActualUsedAmount = Number(p.cumulativeActualUsedAmount) || 0;
+        saleUnderused = Math.max(0, requiredAmount - cumulativeActualUsedAmount);
+        if (saleUnderused > 0) baseNote += '[2호] 시행령§38⑦에 따라 매각대금(' + saleProceedsAmount + '원)의 ' + (saleCheckpointYear === 2 ? '2년 이내 60%' : '1년 이내 30%') + '(' + requiredAmount + '원)에서 누적 실제사용액(' + cumulativeActualUsedAmount + '원)을 차감한 매각대금 미달사용액=' + saleUnderused + '원. ';
+      }
+      const amount2Penalty = Math.round(saleUnderused * 0.10);
+
+      // 3호 — §48②7호 기준금액 미달(시행령§38⑱), 10% 또는 200%(isHighRateType)
       const totalAssetValue = Number(p.totalAssetValue) || 0;
       const liabilityValue = Number(p.liabilityValue);
       const netIncomeValue = Number(p.netIncomeValue);
-      if (underusedAmount <= 0 && totalAssetValue > 0 && Number.isFinite(liabilityValue) && Number.isFinite(netIncomeValue)) {
+      let directUseUnderused = Number(p.directUseUnderusedAmount) || 0;
+      if (directUseUnderused <= 0 && totalAssetValue > 0 && Number.isFinite(liabilityValue) && Number.isFinite(netIncomeValue)) {
         // 시행령§38⑱ — §48②7호의 "대통령령으로 정하는 출연받은 재산의 가액"(수익용·수익사업용으로 운용하는
         // 재산, 직접공익목적사업용 재산 제외)은 [총자산가액－(부채가액＋당기순이익)]으로 계산하고, 여기에
         // 1%(또는 3%)를 곱한 금액이 "기준금액"이다. 3년~5년 미만/5년 이상 보유한 상장주식의 가액은 각각
@@ -3405,36 +3469,18 @@
         const operatingAssetValue = Math.max(0, totalAssetValue - (liabilityValue + netIncomeValue));
         const standardAmount = Math.round(operatingAssetValue * (isHighRateType ? 0.03 : 0.01));
         const actualDirectUseAmount = Number(p.actualDirectUseAmount) || 0;
-        underusedAmount = Math.max(0, standardAmount - actualDirectUseAmount);
-        baseNote = '시행령§38⑱에 따라 [총자산가액(' + totalAssetValue + '원)－(부채가액(' + liabilityValue + '원)＋당기순이익(' + netIncomeValue + '원))]=' + operatingAssetValue + '원(수익용·수익사업용 운용재산가액)에 ' + (isHighRateType ? '3%' : '1%') + '를 곱한 기준금액(' + standardAmount + '원)에서 실제 직접공익목적사업 사용액(' + actualDirectUseAmount + '원)을 차감해 미달사용액을 계산했습니다' + (p.useAssessedValueBasis ? '(재무상태표상 자산가액이 상증세법상 평가액의 70% 이하인 공익법인등이라 평가액 기준으로 계산).' : '.') + ' ';
+        directUseUnderused = Math.max(0, standardAmount - actualDirectUseAmount);
+        if (directUseUnderused > 0) baseNote += '[3호] 시행령§38⑱에 따라 [총자산가액(' + totalAssetValue + '원)－(부채가액(' + liabilityValue + '원)＋당기순이익(' + netIncomeValue + '원))]=' + operatingAssetValue + '원(수익용·수익사업용 운용재산가액)에 ' + (isHighRateType ? '3%' : '1%') + '를 곱한 기준금액(' + standardAmount + '원)에서 실제 직접공익목적사업 사용액(' + actualDirectUseAmount + '원)을 차감한 미달사용액=' + directUseUnderused + '원' + (p.useAssessedValueBasis ? '(평가액 기준)' : '') + '. ';
       }
-      const saleProceedsAmount = Number(p.saleProceedsAmount) || 0;
-      const saleCheckpointYear = Number(p.saleCheckpointYear);
-      if (underusedAmount <= 0 && saleProceedsAmount > 0 && (saleCheckpointYear === 1 || saleCheckpointYear === 2)) {
-        // 시행령§38⑦ — §48②5호 중 "매각대금" 기준금액 미달사용: 매각한 날이 속하는 과세기간(사업연도)
-        // 종료일부터 1년 이내 매각대금의 30%, 2년 이내 매각대금의 60%에 미달하게 직접공익목적사업에
-        // 사용하면 그 미달분(요구액－누적실제사용액)에 가산세를 부과한다.
-        const requiredRatio = saleCheckpointYear === 2 ? 0.60 : 0.30;
-        const requiredAmount = Math.round(saleProceedsAmount * requiredRatio);
-        const cumulativeActualUsedAmount = Number(p.cumulativeActualUsedAmount) || 0;
-        underusedAmount = Math.max(0, requiredAmount - cumulativeActualUsedAmount);
-        baseNote = '시행령§38⑦에 따라 매각대금(' + saleProceedsAmount + '원)의 ' + (saleCheckpointYear === 2 ? '2년 이내 60%' : '1년 이내 30%') + '(' + requiredAmount + '원)를 직접공익목적사업에 사용해야 하는데, 매각일이 속하는 과세기간(사업연도) 종료일부터 ' + saleCheckpointYear + '년 이내 누적 실제사용액(' + cumulativeActualUsedAmount + '원)이 이에 미달해 그 차액을 미달사용액으로 계산했습니다. ';
-      }
-      const operatingIncomeAmount = Number(p.operatingIncomeAmount) || 0;
-      const taxAndCarryforwardLossAmount = Number(p.taxAndCarryforwardLossAmount) || 0;
-      if (underusedAmount <= 0 && operatingIncomeAmount > 0) {
-        // 시행령§38⑤ — §48②5호 중 "운용소득" 기준금액: [해당 과세기간(사업연도) 수익사업 소득금액 등 합계(1호)－
-        // 법인세·소득세·농어촌특별세·주민세 및 이월결손금(2호)]=운용소득의 100분의 80(사용기준금액)에 미달하게
-        // 사용한 금액을 미달사용액으로 한다.
-        const operatingIncome = Math.max(0, operatingIncomeAmount - taxAndCarryforwardLossAmount);
-        const usageStandardAmount = Math.round(operatingIncome * 0.8);
-        const actualOperatingIncomeUsedAmount = Number(p.actualOperatingIncomeUsedAmount) || 0;
-        underusedAmount = Math.max(0, usageStandardAmount - actualOperatingIncomeUsedAmount);
-        baseNote = '시행령§38⑤에 따라 [수익사업 소득금액 등 합계(' + operatingIncomeAmount + '원)－법인세등 및 이월결손금(' + taxAndCarryforwardLossAmount + '원)]=' + operatingIncome + '원(운용소득)의 80%인 사용기준금액(' + usageStandardAmount + '원)에서 실제 사용액(' + actualOperatingIncomeUsedAmount + '원)을 차감해 미달사용액을 계산했습니다. ';
-      }
-      if (underusedAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을, §48②5호 매각대금 기준금액을 계산하려면 매각대금·확인시점(1년/2년)·누적실제사용액을, §48②5호 운용소득 기준금액을 계산하려면 수익사업소득금액등합계·법인세등및이월결손금·실제사용액을 입력하세요.' };
-      penaltyAmount = Math.round(underusedAmount * rate);
-      note = baseNote + '§48②5호(운용소득·매각대금을 기준금액에 미달해 사용) 또는 §48②7호(직접공익목적사업에 기준금액 미달 사용)에 해당해, §78⑨에 따라 미달사용액의 100분의 ' + (isHighRateType ? '200(§48②7호가목 유형의 공익법인등이 발행주식총수등의 10%를 초과해 주식을 보유하는 경우)' : '10') + '을 가산세로 부과합니다. §48②5호와 7호에 동시 해당하면 더 큰 금액을 적용합니다.';
+      const amount3Penalty = Math.round(directUseUnderused * (isHighRateType ? 2.0 : 0.10));
+
+      // legacy 직접입력(underusedAmount)은 어느 호인지 알 수 없어 기존처럼 isHighRateType 하나로만 계산.
+      const legacyUnderused = Number(p.underusedAmount) || 0;
+      const legacyPenalty = legacyUnderused > 0 ? Math.round(legacyUnderused * (isHighRateType ? 2.0 : 0.10)) : 0;
+
+      penaltyAmount = Math.max(Math.max(amount1Penalty, amount3Penalty) + amount2Penalty, legacyPenalty);
+      if (penaltyAmount <= 0) return { error: '기준금액에 미달하여 사용하지 않은 금액을 직접 입력하거나(underusedAmount), §48②7호 기준금액을 계산하려면 총자산가액·부채가액·당기순이익·실제직접사용액을, §48②5호 매각대금 기준금액을 계산하려면 매각대금·확인시점(1년/2년)·누적실제사용액을, §48②5호 운용소득 기준금액을 계산하려면 수익사업소득금액등합계·법인세등및이월결손금·실제사용액을 입력하세요.' };
+      note = baseNote + '§78⑨에 따라 1호(운용소득 미달, 10%)·3호(§48②7호 미달, ' + (isHighRateType ? '200%' : '10%') + ') 중 큰 금액과 2호(매각대금 미달, 10%, 별개 가산)를 더해 가산세를 계산했습니다(1호·3호 동시해당시 더 큰 쪽만 적용).';
     } else if (penaltyType === 'dedicated_account_not_opened') {
       // §78⑩2호 — §50의2③ 전용계좌 개설·신고를 하지 않은 경우: 가목·나목 금액 중 큰 금액
       const directBusinessRevenueAmount = Number(p.directBusinessRevenueAmount) || 0;
@@ -3756,7 +3802,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -4216,7 +4262,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 합병이익: giftAmount,
@@ -4271,7 +4317,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 이익: giftAmount,
@@ -4322,7 +4368,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 이익: giftAmount,
@@ -4362,7 +4408,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true, 재산가치증가이익: giftAmount,
@@ -4456,7 +4502,7 @@
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
     const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
     const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty));
+    const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
       과세대상여부: true,
@@ -4483,9 +4529,9 @@
   window.calculateDeemedInheritancePropertyJS = function (p) {
     p = p || {};
     const itemType = p.itemType;
-    const validTypes = ['insurance', 'trust_settled', 'trust_benefit_from_others', 'retirement'];
+    const validTypes = ['insurance', 'trust_settled', 'trust_benefit_from_others', 'successive_trust_beneficiary', 'retirement'];
     if (validTypes.indexOf(itemType) === -1) {
-      return { error: 'itemType을 insurance(보험금)/trust_settled(피상속인이 신탁한 재산)/trust_benefit_from_others(피상속인이 타인신탁의 수익권 보유)/retirement(퇴직금등) 중에서 선택하세요.' };
+      return { error: 'itemType을 insurance(보험금)/trust_settled(피상속인이 신탁한 재산)/trust_benefit_from_others(피상속인이 타인신탁의 수익권 보유)/successive_trust_beneficiary(수익자연속신탁의 수익자 사망)/retirement(퇴직금등) 중에서 선택하세요.' };
     }
     const amount = Math.max(0, Number(p.amount) || 0);
     let includedAmount, note;
@@ -4511,6 +4557,9 @@
     } else if (itemType === 'trust_benefit_from_others') {
       includedAmount = amount;
       note = '피상속인이 신탁으로 인하여 타인으로부터 신탁의 이익을 받을 권리를 소유하고 있었으므로 그 이익에 상당하는 가액을 상속재산에 포함합니다(§9②).';
+    } else if (itemType === 'successive_trust_beneficiary') {
+      includedAmount = amount;
+      note = '수익자연속신탁의 수익자(피상속인)가 사망함으로써 타인이 새로 취득한 신탁의 이익을 받을 권리의 가액이므로, 사망한 수익자(피상속인)의 상속재산에 포함합니다(§9③).';
     } else { // retirement
       if (p.isExcludedSurvivorPension) {
         includedAmount = 0;
@@ -4533,7 +4582,9 @@
   // ============================================================
 
   // 비상장주식 1주당 평가액 (§63, 시행령 §54) — 순손익가치·순자산가치 가중평균(일반 3:2, 부동산과다보유법인 2:3), 순자산가치 80% 하한.
-  function unlistedStockValuePerShare(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy) {
+  // §54④ — 아래 사유(1·2·6호는 무조건, 3·5호는 가중평균한 가액이 순자산가치보다 낮은 경우로 한정)에
+  // 해당하면 순손익가치·순자산가치 가중평균을 쓰지 않고 순자산가치 그대로를 1주당 평가액으로 한다.
+  function unlistedStockValuePerShare(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags) {
     const shares = Number(totalIssuedShares) || 0;
     if (shares <= 0) return null;
     const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
@@ -4542,10 +4593,19 @@
     const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
     const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
     let valuePerShare = (profitValuePerShare * weights[0] + netAssetValuePerShare * weights[1]) / (weights[0] + weights[1]);
+
+    const f = netAssetOnlyFlags || {};
+    const unconditionalForce = !!f.isLiquidationOrBusinessDifficult || !!f.isNewOrDormantOrClosedBusiness || !!f.hasFixedDissolutionWithin3Years;
+    const conditionalForce = (!!f.isRealEstateAssetRatio80Plus || !!f.isStockAssetRatio80Plus) && valuePerShare < netAssetValuePerShare;
+    const netAssetOnlyApplied = unconditionalForce || conditionalForce;
+    if (netAssetOnlyApplied) {
+      valuePerShare = netAssetValuePerShare;
+      return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치100퍼센트_적용: true, 순자산가치80퍼센트_하한적용: false };
+    }
     const floor = netAssetValuePerShare * 0.8;
     const floorApplied = valuePerShare < floor;
     if (floorApplied) valuePerShare = floor;
-    return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치80퍼센트_하한적용: floorApplied };
+    return { 순손익가치_1주당: Math.round(profitValuePerShare), 순자산가치_1주당: Math.round(netAssetValuePerShare), 평가액_1주당: Math.round(valuePerShare), 순자산가치100퍼센트_적용: false, 순자산가치80퍼센트_하한적용: floorApplied };
   }
 
   window.calculateUnlistedStockValueJS = function (p) {
@@ -4553,9 +4613,26 @@
     const totalIssuedShares = Number(p.totalIssuedShares);
     if (!totalIssuedShares || totalIssuedShares <= 0) return { error: '발행주식총수가 필요합니다.' };
     const ownedShares = Number(p.ownedShares) || 0;
-    const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy);
+    const netAssetOnlyFlags = {
+      isLiquidationOrBusinessDifficult: p.isLiquidationOrBusinessDifficult,
+      isNewOrDormantOrClosedBusiness: p.isNewOrDormantOrClosedBusiness,
+      isRealEstateAssetRatio80Plus: p.isRealEstateAssetRatio80Plus,
+      isStockAssetRatio80Plus: p.isStockAssetRatio80Plus,
+      hasFixedDissolutionWithin3Years: p.hasFixedDissolutionWithin3Years
+    };
+    const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags);
     let totalValue = Math.round(result.평가액_1주당 * ownedShares);
-    const isPremiumExempt = !!p.isSmallBusiness || !!p.isMediumBusinessUnder500B;
+    // §53⑧ — 최대주주등 할증평가(20%) 배제사유 9개. 9호(중소·중견기업)만 구현돼 있던 것을
+    // 나머지 8개(1~8호)까지 전부 반영한다.
+    const isPremiumExempt = !!p.hasContinuousLossFor3Years // 1호
+      || !!p.allMajorShareholderSharesSoldWithin6Months // 2호
+      || !!p.isDeemedProfitCalculationArticle28to30 // 3호(§28~§30 이익 계산시)
+      || !!p.isParentCompanyOfAnotherMajorShareholderValuation // 4호
+      || !!p.newBusinessOperatingLossAllYears // 5호
+      || !!p.isLiquidationConfirmedByFilingDeadline // 6호
+      || !!p.lostMajorShareholderStatusByInheritanceOrGift // 7호
+      || !!p.isNomineeTrustDeemedGift // 8호(§45의2)
+      || !!p.isSmallBusiness || !!p.isMediumBusinessUnder500B; // 9호
     const majorShareholderPremium = (p.isMajorShareholder && !isPremiumExempt) ? Math.round(totalValue * 0.2) : 0;
     totalValue += majorShareholderPremium;
     return Object.assign({
@@ -4588,10 +4665,13 @@
 
   // 영업권 평가 (§64, 시행령 §59②, 시행규칙 §17의3) — 최근 3년간 순손익액의 가중평균(1년전×3+2년전×2+3년전×1)/6의
   // 50%가 자기자본의 정상수익률(10%)을 초과하는 부분을, 영업권 지속연수 5년에 대한 10% 연금현가계수(3.79079)로 현재가치화한다.
-  window.calculateGoodwillValueJS = function (netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, selfCapital) {
+  // §59②단서 — 매입한 무체재산권으로서 그 성질상 영업권에 포함시켜 평가되는 것은 별도 평가하지 않되,
+  // 그 무체재산권의 평가액(보통 매입가액)이 위 환산가액보다 크면 그 값을 영업권 평가액으로 한다.
+  window.calculateGoodwillValueJS = function (netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, selfCapital, purchasedIntangibleAssetValue) {
     const weightedNetProfit = ((Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1) / 6;
     const excessProfit = Math.max(0, weightedNetProfit * 0.5 - (Number(selfCapital) || 0) * 0.1);
-    return Math.round(excessProfit * 3.79079);
+    const computed = Math.round(excessProfit * 3.79079);
+    return Math.max(computed, Number(purchasedIntangibleAssetValue) || 0);
   };
 
   // 연 10% 할인율의 n년 연금현가계수 — 영업권(§59②, n=5 고정 3.79079)과 같은 방식을
