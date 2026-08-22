@@ -372,7 +372,7 @@ const DRIVE_TOOLS = [
         acquisitionStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 셋 다 있어야 조특법시행령§97의3⑤ 원문대로 "임대기간중 발생한 양도차익"을 기준시가 비율로 안분해 70%를 그 부분에만 적용한다(셋 중 하나라도 없으면 임대개시전 발생분까지 과다공제되므로 에러를 반환한다).' },
         registrationStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
         transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 양도 당시 기준시가(원).' },
-        pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의13 연금계좌세액공제. MIN(납입액, 양도차익, 1억원)×10%를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
+        pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의14① 연금계좌세액공제. 납입액×10%(산출세액 한도)를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
         compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
         downContractPriceDifference: { type: 'number', description: '다운계약서(업계약서) 등 거짓 계약으로 비과세·감면을 적용받은 경우(소득세법§91②), 계약서상 거래가액과 실지거래가액의 차액(원). 1세대1주택 비과세라면 MIN(비과세 미적용시 산출세액, 이 차액)을, 8년자경농지·수용감면 등을 받았다면 MIN(감면세액, 이 차액)을 배제·추징한다. 정상신고 사안이면 생략.' },
@@ -4557,7 +4557,7 @@ function transferAssetCore_(t) {
     isRentalSpecial = rentalRate !== null;
     if (isRentalSpecial) ltRate = rentalRate;
 
-    const isMultiHouseSurchargeExcluded = !!t.transferDate && t.transferDate <= '2026-05-09';
+    const isMultiHouseSurchargeExcluded = !!t.transferDate && t.transferDate <= '2026-05-09' && holdingYears >= 2;
     isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
     if (isMultiHouseSurcharge) ltRate = 0;
   }
@@ -5209,11 +5209,11 @@ function toolCalculateTransferTax(p) {
   const conversionValuePenalty = (p.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
     ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
 
-  // 연금계좌세액공제(조특법 §99의13, [별지 제63호의32서식]) — 부동산 양도대금을 양도일로부터 6개월 이내
-  // 연금계좌에 납입하면 MIN(연금계좌납입액, 양도차익, 1억원)×10%를 세액공제한다.
+  // 연금계좌세액공제(조특법§99의14①, 2024.12.31 신설) — "연금계좌 납입액의 100분의 10에 상당하는
+  // 금액을...공제하며, 공제세액은 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다.
   const pensionContribution = Number(p.pensionAccountContribution) || 0;
-  const pensionCreditBase = Math.min(pensionContribution, Math.max(0, Math.round(gainBeforeDeduction)), 100000000);
-  const pensionAccountCredit = pensionContribution > 0 ? Math.round(pensionCreditBase * 0.1) : 0;
+  const pensionAccountCreditRaw = pensionContribution > 0 ? Math.round(pensionContribution * 0.1) : 0;
+  const pensionAccountCredit = Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax));
 
   // 전자신고세액공제(조특법 §104의8①) — 납세자 본인이 직접 전자신고하면 2만원 정액공제(세무대리인 대리신고 시 미적용)
   const eFilingCredit = p.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
@@ -5459,7 +5459,16 @@ function toolCalculateGiftTax(p) {
   const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxAfterPremium - priorGiftTaxCredit));
   // 그 밖의 공제·감면세액(조특법상 각종 감면 등 — 세액 산출 자체는 별도로 계산해서 이 값에 넣어야 한다).
   const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
-  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount);
+  // §69②1호·2호 — 신고세액공제(3%) 기준액은 산출세액에서 §58·§59 세액공제 외에도 "§75에 따라
+  // 징수를 유예받은 금액"(museumDeferredTaxAmount)과 "다른 법률에 따라 산출세액에서 감면되는 금액"
+  // (farmlandGiftTaxExemptionAmount, 조특법§71)을 반드시 뺀 뒤 계산해야 한다 — 최종세액 단계에서만
+  // 빼면 신고세액공제가 과다계산된다. businessSuccessionDeferredTaxAmount(가업승계 증여특례 납부유예,
+  // 조특법§30의7)는 세액공제·감면이 아니라 납부시기 유예이므로 이 기준액에서 빼지 않는다.
+  // 영농자녀 증여농지등 세액감면(조특법§71, [별지 제52호서식]) — 자경농민이 8년 이상 자경한 농지·초지·산림지를 영농자녀에게 증여할 때 감면.
+  // 감면요건(자경기간·계속영농 등)과 한도액 산정은 이 도구가 하지 않으므로, 관할세무서에 신청해 확정된(또는 별도로 계산한) 감면세액을 그대로 입력해야 한다.
+  const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
+  const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
+  const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount - museumDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
   const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
@@ -5468,16 +5477,12 @@ function toolCalculateGiftTax(p) {
   // 이자상당액(각종 사후관리 위반 시 추징세액에 붙는 이자), 공익법인등관련가산세(§78) — 해당 사안일 때만 별도로 계산해서 더한다.
   const interestAmount = Number(p.interestAmount) || 0;
   const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
-  // 박물관자료등징수유예세액, 가업승계납부유예세액(조특법§30의6) — 유예된 세액은 이번 신고 시 납부할 세액에서 뺀다.
-  const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
+  // 가업승계납부유예세액(조특법§30의7) — 유예된 세액은 이번 신고 시 납부할 세액에서 뺀다.
   const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
-  // 영농자녀 증여농지등 세액감면(조특법§71, [별지 제52호서식]) — 자경농민이 8년 이상 자경한 농지·초지·산림지를 영농자녀에게 증여할 때 감면.
-  // 감면요건(자경기간·계속영농 등)과 한도액 산정은 이 도구가 하지 않으므로, 관할세무서에 신청해 확정된(또는 별도로 계산한) 감면세액을 그대로 입력해야 한다.
-  const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
 
   const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
-    - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
+    - businessSuccessionDeferredTaxAmount);
 
   return {
     입력값: {
@@ -6006,7 +6011,7 @@ function toolCalculateSpecialRateGiftTax(p) {
 function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction) {
   // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
   // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다(3호는 3천만원도 추가로 뺀다).
-  const taxBase = Math.max(0, Math.round(deemedGiftProfit) - (Number(appraisalFeeAmount) || 0) - (Number(flatDeduction) || 0));
+  const taxBase = Math.max(0, Math.round(deemedGiftProfit) - Math.min(Number(appraisalFeeAmount) || 0, 5000000) - (Number(flatDeduction) || 0));
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
   const taxAfterCredit = calculatedTax - reportCredit;
@@ -6174,7 +6179,7 @@ function toolCalculateNomineeTrustGiftTax(p) {
 
   return {
     과세대상여부: true,
-    명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, propertyValue),
+    명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, 5000000),
     과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
     무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
     납부세액: r.finalTax,
@@ -7076,6 +7081,14 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
   const shareholderOwnershipRatio = Math.min(1, Math.max(0, Number(p.shareholderOwnershipRatio) || 0));
   if (shareholderOwnershipRatio <= 0) return { error: '지배주주등의 주식보유비율이 필요합니다.' };
+  // §45의5① — 지배주주등의 주식보유비율이 100분의 30 이상인 법인만 "특정법인"에 해당해 과세대상이 된다.
+  // 30% 미만이면 애초에 이 조문의 적용대상 법인이 아니므로 이하 계산을 진행하지 않는다.
+  if (shareholderOwnershipRatio < 0.3) {
+    return {
+      과세대상여부: false, 지배주주등주식보유비율: shareholderOwnershipRatio, 증여의제이익: 0, 납부세액: 0,
+      안내: '지배주주등의 주식보유비율(' + (shareholderOwnershipRatio * 100).toFixed(1) + '%)이 100분의 30 미만이어서 §45의5의 "특정법인"에 해당하지 않아 과세대상이 아닙니다(§45의5①).'
+    };
+  }
 
   const incomeRatio = corporateTaxableIncome > 0 ? Math.min(1, benefitToCorpAmount / corporateTaxableIncome) : 0;
   const corporateTaxEquivalentTotal = Math.round(corporateTaxAfterCredit * incomeRatio);

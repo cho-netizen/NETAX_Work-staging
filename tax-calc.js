@@ -1622,7 +1622,14 @@
       : foreignTaxPaidAmount;
     const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxAfterPremium - priorGiftTaxCredit));
     const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
-    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount);
+    // §69②1호·2호 — 신고세액공제(3%) 기준액은 산출세액에서 §58·§59 세액공제 외에도 "§75에 따라
+    // 징수를 유예받은 금액"(museumDeferredTaxAmount)과 "다른 법률에 따라 산출세액에서 감면되는 금액"
+    // (farmlandGiftTaxExemptionAmount, 조특법§71)을 반드시 뺀 뒤 계산해야 한다 — 최종세액 단계에서만
+    // 빼면 신고세액공제가 과다계산된다. businessSuccessionDeferredTaxAmount(가업승계 증여특례 납부유예,
+    // 조특법§30의7)는 세액공제·감면이 아니라 납부시기 유예이므로 이 기준액에서 빼지 않는다.
+    const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
+    const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
+    const taxAfterPriorCredit = Math.max(0, taxAfterPremium - priorGiftTaxCredit - foreignTaxCredit - otherCreditsAmount - museumDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
     const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
     const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
@@ -1630,13 +1637,11 @@
 
     const interestAmount = Number(p.interestAmount) || 0;
     const publicInterestOrgPenalty = Number(p.publicInterestOrgPenalty) || 0;
-    const museumDeferredTaxAmount = Number(p.museumDeferredTaxAmount) || 0;
     const businessSuccessionDeferredTaxAmount = Number(p.businessSuccessionDeferredTaxAmount) || 0;
-    const farmlandGiftTaxExemptionAmount = Number(p.farmlandGiftTaxExemptionAmount) || 0;
 
     const finalTax = Math.max(0, taxAfterCredit + interestAmount + publicInterestOrgPenalty
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty
-      - museumDeferredTaxAmount - businessSuccessionDeferredTaxAmount - farmlandGiftTaxExemptionAmount);
+      - businessSuccessionDeferredTaxAmount);
 
     return {
       증여재산가액: giftAmount, 인수채무액: debtAssumedAmount,
@@ -2050,7 +2055,7 @@
   function taxOnDeemedGiftProfit(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction) {
     // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
     // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다(3호는 3천만원도 추가로 뺀다).
-    const taxBase = Math.max(0, Math.round(deemedGiftProfit) - (Number(appraisalFeeAmount) || 0) - (Number(flatDeduction) || 0));
+    const taxBase = Math.max(0, Math.round(deemedGiftProfit) - Math.min(Number(appraisalFeeAmount) || 0, 5000000) - (Number(flatDeduction) || 0));
     const calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
     const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
     const taxAfterCredit = calculatedTax - reportCredit;
@@ -2209,7 +2214,7 @@
 
     return {
       과세대상여부: true,
-      명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, propertyValue),
+      명의신탁재산가액: propertyValue, 감정평가수수료공제: Math.min(Number(p.appraisalFeeAmount) || 0, 5000000),
       과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
       무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
       납부세액: r.finalTax,
@@ -4879,6 +4884,14 @@
     const corporateTaxableIncome = Number(p.corporateTaxableIncome) || 0;
     const shareholderOwnershipRatio = Math.min(1, Math.max(0, Number(p.shareholderOwnershipRatio) || 0));
     if (shareholderOwnershipRatio <= 0) return { error: '지배주주등의 주식보유비율이 필요합니다.' };
+    // §45의5① — 지배주주등의 주식보유비율이 100분의 30 이상인 법인만 "특정법인"에 해당해 과세대상이 된다.
+    // 30% 미만이면 애초에 이 조문의 적용대상 법인이 아니므로 이하 계산을 진행하지 않는다.
+    if (shareholderOwnershipRatio < 0.3) {
+      return {
+        과세대상여부: false, 지배주주등주식보유비율: shareholderOwnershipRatio, 증여의제이익: 0, 납부세액: 0,
+        안내: '지배주주등의 주식보유비율(' + (shareholderOwnershipRatio * 100).toFixed(1) + '%)이 100분의 30 미만이어서 §45의5의 "특정법인"에 해당하지 않아 과세대상이 아닙니다(§45의5①).'
+      };
+    }
 
     const incomeRatio = corporateTaxableIncome > 0 ? Math.min(1, benefitToCorpAmount / corporateTaxableIncome) : 0;
     const corporateTaxEquivalentTotal = Math.round(corporateTaxAfterCredit * incomeRatio);
