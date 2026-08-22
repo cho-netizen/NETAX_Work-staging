@@ -1617,14 +1617,18 @@
     const premiumAmount = Math.max(0, Math.round(taxBeforePremium * generationSkipRatio * premiumRate) - priorPaidGenerationSkipPremium);
     const taxAfterPremium = taxBeforePremium + premiumAmount;
 
-    // §58② — 기납부세액공제(§58①)는 무제한이 아니라 "증여세산출세액 × (가산한 증여재산의 과세표준 ÷
+    // §58②·§59(시행령§48) — §69①②과 달리 "산출세액에 가산하는 금액을 포함한다"는 명문이 없으므로,
+    // 이 세액공제들의 계산·한도 기준이 되는 "증여세산출세액"은 세대생략할증(§57) 가산 전(前)의
+    // taxBeforePremium이다(할증 후 taxAfterPremium이 아님). §69②(신고세액공제)만 "가산하는 금액을
+    // 포함한다"는 명문이 있어 taxAfterPremium을 쓴다(아래 taxAfterPriorCredit 계산 참고).
+    // §58① — 기납부세액공제는 무제한이 아니라 "증여세산출세액 × (가산한 증여재산의 과세표준 ÷
     // 이번 증여세 과세표준)"을 한도로 한다. priorGiftTaxableBase는 그 사전증여 당시 산정된 과세표준(가산한
     // 증여재산의 과세표준)이며, 없으면(0) 한도가 사실상 적용되지 않는다(구 입력과의 호환).
     const priorGiftTaxableBase = Number(p.priorGiftTaxableBase) || 0;
     const priorGiftCreditLimit = (taxBase > 0 && priorGiftTaxableBase > 0)
-      ? Math.round(taxAfterPremium * Math.min(1, priorGiftTaxableBase / taxBase))
-      : taxAfterPremium;
-    const priorGiftTaxCredit = Math.min(priorPaidTax, taxAfterPremium, priorGiftCreditLimit);
+      ? Math.round(taxBeforePremium * Math.min(1, priorGiftTaxableBase / taxBase))
+      : taxBeforePremium;
+    const priorGiftTaxCredit = Math.min(priorPaidTax, taxBeforePremium, priorGiftCreditLimit);
     // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액 × (외국법령에 따라 증여세가 부과된
     // 증여재산의 과세표준(해당 외국 법령 기준) ÷ 법§55①에 따른 증여세의 과세표준). 이 금액이 외국법령에
     // 따라 부과된 증여세액(실제 납부액)을 초과하면 그 증여세액을 한도로 한다. foreignGiftTaxBase(외국
@@ -1633,9 +1637,9 @@
     const foreignGiftTaxBase = Number(p.foreignGiftTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
     const foreignTaxCreditByFormula = (foreignGiftTaxBase > 0 && taxBase > 0)
-      ? Math.round(taxAfterPremium * Math.min(1, foreignGiftTaxBase / taxBase))
+      ? Math.round(taxBeforePremium * Math.min(1, foreignGiftTaxBase / taxBase))
       : foreignTaxPaidAmount;
-    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxAfterPremium - priorGiftTaxCredit));
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxBeforePremium - priorGiftTaxCredit));
     const otherCreditsAmount = Number(p.otherCreditsAmount) || 0;
     // §69②1호·2호 — 신고세액공제(3%) 기준액은 산출세액에서 §58·§59 세액공제 외에도 "§75에 따라
     // 징수를 유예받은 금액"(museumDeferredTaxAmount)과 "다른 법률에 따라 산출세액에서 감면되는 금액"
@@ -1786,6 +1790,11 @@
 
     const taxBase = Math.max(0, effectiveEstateAmount - totalDeduction);
     let calculatedTax = progressiveGiftInheritTax(taxBase, GIFT_INHERIT_TAX_BRACKETS);
+    // §28②·§29(시행령§21①)·§30 등 세액공제류는 §69①과 달리 "산출세액에 가산하는 금액을 포함한다"는
+    // 명문이 없으므로, 이 공제들의 계산·한도 기준은 세대생략할증(§27) 가산 전(前)의 taxBeforePremium이다.
+    // 할증액이 가산된 이후 금액(calculatedTax)은 §69①(신고세액공제, "가산액 포함" 명문 있음)과
+    // 최종세액·가산세 계산에만 쓴다.
+    const taxBeforePremium = calculatedTax;
 
     const generationSkipHeirRatio = Math.max(0, Math.min(1, Number(p.generationSkipHeirRatio) || 0));
     // §27① 괄호 — 40%는 "피상속인의 자녀를 제외한 직계비속이면서 미성년자인 상속인·수유자가 20억원
@@ -1799,11 +1808,11 @@
     // §28 증여세액공제 — 상속인별 정밀 계산(위 priorGiftTaxCreditPrecise 참고). nonHeirPriorGiftTaxableBaseTotal·
     // nonHeirPriorGiftAmountTotal(§13①2호, 수유자 아닌 자에 대한 사전증여 합계)을 입력하면 시행령§3①1호
     // 가목·나목 산식에 정확히 반영된다.
-    const priorGiftCreditResult = priorGiftTaxCreditPrecise(calculatedTax, taxBase, effectiveEstateAmount, priorGiftHeirs,
+    const priorGiftCreditResult = priorGiftTaxCreditPrecise(taxBeforePremium, taxBase, effectiveEstateAmount, priorGiftHeirs,
       Number(p.nonHeirPriorGiftTaxableBaseTotal) || 0, Number(p.nonHeirPriorGiftAmountTotal) || 0);
     const priorGiftTaxCredit = priorGiftCreditResult.totalCredit;
     const giftCreditExcludedBySmallEstate = priorGiftCreditResult.excludedBySmallEstate;
-    const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, calculatedTax - priorGiftTaxCredit));
+    const specialGiftTaxCredit = Math.min(Number(p.specialGiftTaxCredit) || 0, Math.max(0, taxBeforePremium - priorGiftTaxCredit));
     // §29·시행령§21① — 외국납부세액공제 = 상속세산출세액 × (외국법령에 따라 상속세가 부과된 상속재산의
     // 과세표준(해당 외국 법령 기준) ÷ 법§25①에 따른 상속세의 과세표준). 다만 이 금액이 외국법령에 따라
     // 부과된 상속세액(실제 납부액)을 초과하면 그 상속세액을 한도로 한다. foreignEstateTaxBase(외국 과세표준)를
@@ -1811,15 +1820,15 @@
     const foreignEstateTaxBase = Number(p.foreignEstateTaxBase) || 0;
     const foreignTaxPaidAmount = Number(p.foreignTaxPaidAmount) || 0;
     const foreignTaxCreditByFormula = (foreignEstateTaxBase > 0 && taxBase > 0)
-      ? Math.round(calculatedTax * Math.min(1, foreignEstateTaxBase / taxBase))
+      ? Math.round(taxBeforePremium * Math.min(1, foreignEstateTaxBase / taxBase))
       : foreignTaxPaidAmount;
-    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit));
+    const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, taxBeforePremium - priorGiftTaxCredit - specialGiftTaxCredit));
     const shortTermCredit = Math.min(
       shortTermReinheritanceCredit(p.priorInheritanceTax, p.reinheritedPropertyValue, p.priorInheritanceTotalPropertyValue, p.priorInheritanceTaxableBase, p.yearsSincePriorInheritance),
-      Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit)
+      Math.max(0, taxBeforePremium - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit)
     );
     const otherCreditsAmount = Math.min(Number(p.otherCreditsAmount) || 0,
-      Math.max(0, calculatedTax - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit));
+      Math.max(0, taxBeforePremium - priorGiftTaxCredit - specialGiftTaxCredit - foreignTaxCredit - shortTermCredit));
 
     // §69①1호 — 신고세액공제(3%) 기준액은 "산출세액에서 제74조에 따라 징수를 유예받은 금액(1호)과
     // 그 밖의 세액공제·감면액(2호)을 뺀 금액"이다. 문화재등징수유예액(culturalPropertyDeferredTaxAmount,
