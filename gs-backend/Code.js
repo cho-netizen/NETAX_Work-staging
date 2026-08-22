@@ -391,7 +391,9 @@ const DRIVE_TOOLS = [
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
-        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' }
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' }
       },
       required: ['transferPrice', 'acquisitionPrice', 'acquisitionDate', 'transferDate']
     }
@@ -411,6 +413,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 — 과소신고분 세액(원)' },
         unpaidDays: { type: 'number', description: '납부지연일수' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준액을 산출세액 합계 대신 다른 값으로 쓰고 싶을 때만 입력(보통 생략)' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지(2만원 세액공제)' }
       },
       required: ['transactions']
@@ -498,6 +502,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['giftAmount', 'relation']
@@ -633,6 +639,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['taxableEstateAmount']
@@ -695,6 +703,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         doneeName: { type: 'string', description: '수증자 성명. list_drive_folder/read_drive_file로 사건 폴더의 가족관계증명서·신분증 사본 등을 먼저 찾아보고, 없으면 사용자에게 직접 물어봐라.' },
         doneeRegNo: { type: 'string', description: '수증자 주민등록번호. 위와 같은 방식으로 확인.' },
         donorName: { type: 'string', description: '증여자 성명. 위와 같은 방식으로 확인.' },
@@ -726,6 +736,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['companySize', 'relatedPartyTransactionRatio', 'shareholderOwnershipRatio']
@@ -754,6 +766,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['phase', 'profitFromOpportunity', 'shareholderOwnershipRatio']
@@ -775,6 +789,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['nomineeTrustPropertyValue']
@@ -794,6 +810,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(filingStatus가 ontime일 때만 적용) 법정신고기한 내 신고를 가정할지 — 기본 true, 신고세액공제 3% 적용' }
       },
       required: ['acquisitionValue']
@@ -821,6 +839,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액. 생략하면 이번 계산의 최종세액을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '(ontime일 때만) 법정신고기한 내 신고 가정 여부 — 기본 true, 신고세액공제 3% 적용.' }
       },
       required: ['debtAmount']
@@ -850,6 +870,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['useType']
@@ -880,6 +902,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['transferType', 'assetValue']
@@ -909,6 +933,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['insuranceProceeds', 'totalPremiumPaid']
@@ -1014,6 +1040,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['benefitToCorpAmount', 'shareholderOwnershipRatio']
@@ -1058,6 +1086,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['excessDividendBaseAmount']
@@ -1089,6 +1119,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['settlementValuePerShare', 'shares']
@@ -1149,6 +1181,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['caseType']
@@ -1182,6 +1216,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['caseType', 'preShares', 'increasedShares']
@@ -1206,7 +1242,9 @@ const DRIVE_TOOLS = [
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
-        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' }
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' }
       },
       required: ['wasResidentFiveYearsContinuously', 'transferPrice']
     }
@@ -1239,6 +1277,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['caseType', 'valuePerShare']
@@ -1420,6 +1460,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['caseType', 'preShares']
@@ -1594,6 +1636,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['postMergerValuePerShare', 'sharesReceivedByOvervaluedShareholders', 'largeShareholderSharesReceived']
@@ -1626,6 +1670,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['useType']
@@ -1659,6 +1705,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['subType']
@@ -1684,6 +1732,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['propertyValueAtIncreaseEvent']
@@ -1738,6 +1788,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['giftAmount']
@@ -1821,6 +1873,8 @@ const DRIVE_TOOLS = [
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원, 국세기본법§47의4①1의2호·3호 계산 기준). monthsAfterDesignatedDueDate와 함께 입력. 고지 전 자진납부만 하는 경우는 생략.' },
         unrecordedIncomeAmount: { type: 'number', description: '주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세(소득세법§115) — assetCategory가 domestic_stock이고 isDaejuju가 true일 때만 의미가 있다. 법인의 대주주가 양도하는 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 소득금액(원). 없으면 생략.' },
         transactionAmountForBookkeepingPenalty: { type: 'number', description: '§115 기장불성실가산세 계산용 — 산출세액이 0원일 때만 쓰인다. 그 거래금액(원)에 1만분의 7을 곱해 가산세로 한다. 없으면 생략.' }
       },
@@ -4787,7 +4841,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
   const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty));
+  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), undefined, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
   const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
   const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
@@ -5220,7 +5274,7 @@ function toolCalculateTransferTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   // 지방소득세(개인지방소득세, 지방세법)는 국세 산출세액(가산세 제외)의 10%가 원칙이며, 가산세에는 부가되지 않는다.
   const localIncomeTax = Math.round(calculatedTax * 0.1);
@@ -5343,11 +5397,18 @@ function marriageOrBirthGiftDeduction_(eligibleGiftAmount, priorUsedAmount) {
   return Math.min(Math.max(0, Number(eligibleGiftAmount) || 0), remaining);
 }
 
-// 무신고·과소신고·납부지연가산세 (국세기본법 §47의2~§47의4) — 일반 20%/10%, 부정행위 40%,
-// 납부지연은 1일 10만분의22(2022.2.15. 이후 세율 기준, 시행령 개정 시 바뀔 수 있으니 확인 필요).
+// 무신고·과소신고·납부지연가산세 (국세기본법 §47의2~§47의4) — 일반 20%/10%, 부정행위 40%.
 // 국세기본법§47의2①1호·§47의3①1호가목 — 부정행위로 인한 무신고·과소신고가산세는 원칙 40%이나,
 // "역외거래에서 발생한 부정행위"는 60%다. isOffshoreTransaction이 없으면(대부분의 국내 거래) 종전처럼 40%.
-function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride, isOffshoreTransaction) {
+// 납부지연가산세(§47의4①, 2026.7.1 시행 개정 반영)는 세 부분으로 구성된다 —
+// 1호: 법정납부기한 다음날~납부고지일(또는 그 전 납부일) 전날까지, 1일 10만분의22(시행령§27의4①).
+// 1의2호·⑦·⑧: 세무서가 고지(지정납부기한 지정)한 뒤에도 계속 체납되면, 지정납부기한 다음날부터
+//   매 1개월 경과시마다 월 1만분의67을 추가한다(시행령§27의4②). 5년(60개월) 상한(⑦), 체납세액이
+//   고지서별·세목별 150만원 미만이면 이 부분은 적용하지 않는다(⑧).
+// 3호: 지정납부기한까지 납부하지 않은 세액에 대해 정액 3%를 1회 추가한다(150만원 기준과 무관하게 적용).
+// monthsAfterDesignatedDueDate·unpaidTaxAtDesignatedDueDate를 생략하면(고지 전 자진납부만 하는 경우)
+// 1호만 적용되어 종전과 동일하게 동작한다.
+function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate) {
   let unreportedPenalty = 0, underreportedPenalty = 0;
   const fraudRate = isOffshoreTransaction ? 0.60 : 0.40;
   if (filingStatus === 'unreported') {
@@ -5356,8 +5417,16 @@ function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underr
     underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? fraudRate : 0.10));
   }
   const base = Number.isFinite(unpaidTaxOverride) ? unpaidTaxOverride : taxAfterCredit;
-  const latePenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
-  return { unreportedPenalty, underreportedPenalty, latePenalty };
+  const dailyInterestPenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
+  const unpaidAtDesignated = Number(unpaidTaxAtDesignatedDueDate) || 0;
+  const cappedMonths = Math.min(Number(monthsAfterDesignatedDueDate) || 0, 60);
+  const monthlyInterestPenalty = (unpaidAtDesignated >= 1500000 && cappedMonths > 0) ? Math.round(unpaidAtDesignated * cappedMonths * 0.0067) : 0;
+  const designatedDueDatePenalty = unpaidAtDesignated > 0 ? Math.round(unpaidAtDesignated * 0.03) : 0;
+  const latePenalty = dailyInterestPenalty + monthlyInterestPenalty + designatedDueDatePenalty;
+  return {
+    unreportedPenalty, underreportedPenalty, latePenalty,
+    납부지연가산세_상세: { 사전이자분_1호: dailyInterestPenalty, 고지후월할이자분_1의2호: monthlyInterestPenalty, 고지후정액3퍼센트분_3호: designatedDueDatePenalty }
+  };
 }
 
 function toolCalculateGiftTax(p) {
@@ -5472,7 +5541,7 @@ function toolCalculateGiftTax(p) {
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
   const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   // 이자상당액(각종 사후관리 위반 시 추징세액에 붙는 이자), 공익법인등관련가산세(§78) — 해당 사안일 때만 별도로 계산해서 더한다.
   const interestAmount = Number(p.interestAmount) || 0;
@@ -5703,7 +5772,7 @@ function toolCalculateInheritanceTax(p) {
   const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
   const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
-  const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   // 이자상당액(사후관리 위반 추징 시), 영리법인 상속세 면제(상증세법 §3의2) — 영리법인이 유증받으면 그 법인의 상속세는 면제되지만,
   // 상속인 및 직계비속이 최대주주 등인 경우 그 지분 상당액만큼은 상속인이 납부할 의무를 진다: (면제세액 - 유증재산가액×10%) × 지분비율.
@@ -5963,7 +6032,7 @@ function toolCalculateSpecialRateGiftTax(p) {
   const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
   const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
 
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
   return {
@@ -6008,14 +6077,14 @@ function toolCalculateSpecialRateGiftTax(p) {
 // flatDeduction: §55①3호("제1호 및 제2호를 제외한 합산배제증여재산: 그 증여재산가액에서 3천만원을
 // 공제한 금액") 전용 — §45(재산취득자금 증여추정)처럼 §55①1호(§45의2)·2호(§45의3·45의4)에 속하지
 // 않는 합산배제증여재산에서만 30000000을 넘겨 쓴다. 1호·2호 해당분은 기존대로 0(미지정).
-function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction) {
+function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate) {
   // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
   // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다(3호는 3천만원도 추가로 뺀다).
   const taxBase = Math.max(0, Math.round(deemedGiftProfit) - Math.min(Number(appraisalFeeAmount) || 0, 5000000) - (Number(flatDeduction) || 0));
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
   const taxAfterCredit = calculatedTax - reportCredit;
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate);
   const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return { taxBase, calculatedTax, reportCredit, penalties, finalTax };
 }
@@ -6071,7 +6140,7 @@ function toolCalculateRelatedPartyTransactionGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   return {
     과세대상여부: true,
@@ -6132,7 +6201,7 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   return {
     과세대상여부: true,
@@ -6175,7 +6244,7 @@ function toolCalculateNomineeTrustGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount);
+  const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, undefined, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   return {
     과세대상여부: true,
@@ -6212,7 +6281,7 @@ function toolCalculatePropertyAcquisitionFundsGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(unprovenAmount, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, false, 30000000);
+  const r = taxOnDeemedGiftProfit_(unprovenAmount, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, false, 30000000, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   return {
     과세대상여부: true, 취득재산가액: acquisitionValue, 입증된금액: provenAmount, 미입증금액: unprovenAmount, 배제기준금액: gateThreshold,
@@ -6254,7 +6323,7 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     채무면제등이익: giftAmount, 증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction,
@@ -6322,7 +6391,7 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   const base = {
     과세대상여부: true,
@@ -6395,7 +6464,7 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여추정재산가액: giftAmount,
@@ -6447,7 +6516,7 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
@@ -6530,7 +6599,7 @@ function toolCalculateTrustIncomeGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     신탁이익: giftAmount,
@@ -6805,7 +6874,7 @@ function toolCalculateStockTransferTax(p) {
   const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   // 주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세 (소득세법§115) — 법인의 대주주가 양도하는
   // 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 경우, (누락소득금액/양도소득금액)×산출세액×10%를
@@ -7139,7 +7208,7 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true,
@@ -7221,7 +7290,7 @@ function toolCalculateMergerBenefitGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 합병이익: giftAmount,
@@ -7284,7 +7353,7 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
@@ -7350,7 +7419,7 @@ function toolCalculateOrgChangeGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
@@ -7397,7 +7466,7 @@ function toolCalculatePropertyValueIncreaseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 재산가치증가이익: giftAmount,
@@ -7908,7 +7977,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -8082,7 +8151,7 @@ function toolCalculateExcessDividendGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
@@ -8155,7 +8224,7 @@ function toolCalculateStockListingGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여의제이익: giftAmount,
@@ -8302,7 +8371,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
   const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
   const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
   const result = {
@@ -8374,7 +8443,7 @@ function toolCalculateInKindContributionGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -8418,7 +8487,7 @@ function toolCalculateOverseasAssetTransferTax(p) {
   const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const localIncomeTax = Math.round(taxAfterCredit * 0.1);
   const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
 
@@ -8497,7 +8566,7 @@ function toolCalculateCapitalReductionGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction);
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여의제이익: giftAmount,
@@ -10046,7 +10115,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const input = block.input || {};
         const resultObj = toolCalculateTransferTaxMulti(input.transactions, {
           filingStatus: input.filingStatus, isFraudulent: input.isFraudulent, underreportedTaxAmount: input.underreportedTaxAmount,
-          unpaidDays: input.unpaidDays, unpaidTaxForLatePenalty: input.unpaidTaxForLatePenalty, isSelfElectronicFiling: input.isSelfElectronicFiling
+          unpaidDays: input.unpaidDays, unpaidTaxForLatePenalty: input.unpaidTaxForLatePenalty, isSelfElectronicFiling: input.isSelfElectronicFiling,
+          monthsAfterDesignatedDueDate: input.monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate: input.unpaidTaxAtDesignatedDueDate
         });
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
