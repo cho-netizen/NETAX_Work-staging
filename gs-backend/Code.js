@@ -1880,8 +1880,11 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        totalIssuedShares: { type: 'number', description: '평가대상 법인의 발행주식총수' },
+        totalIssuedShares: { type: 'number', description: '평가기준일 현재 평가대상 법인의 발행주식총수(§54⑤). 순자산가치 계산과, 아래 연도별 발행주식총수를 생략한 연도의 순손익가치 계산에 쓰인다.' },
         ownedShares: { type: 'number', description: '실제 증여·상속받는(평가할) 주식수' },
+        totalIssuedShares1YearAgo: { type: 'number', description: '평가기준일 직전 사업연도 종료일 현재 발행주식총수(시행령§56③) — 그 사이 증자·감자가 있었을 때만 입력. 생략하면 totalIssuedShares를 그대로 쓴다(증자·감자가 없었던 통상적인 경우와 동일). 증자·감자가 있었다면 그 환산값은 calculate_adjusted_share_count로 먼저 계산하라(시행령§56③단서).' },
+        totalIssuedShares2YearsAgo: { type: 'number', description: '평가기준일 2년 전 사업연도 종료일 현재 발행주식총수. totalIssuedShares1YearAgo와 동일한 방식.' },
+        totalIssuedShares3YearsAgo: { type: 'number', description: '평가기준일 3년 전 사업연도 종료일 현재 발행주식총수. totalIssuedShares1YearAgo와 동일한 방식.' },
         netProfit1YearAgo: { type: 'number', description: '평가기준일 직전 사업연도의 법인 전체 순손익액(원, 세무조정 반영 후). 1주당 값이 아니라 법인 전체 금액.' },
         netProfit2YearsAgo: { type: 'number', description: '평가기준일 2년 전 사업연도의 법인 전체 순손익액(원)' },
         netProfit3YearsAgo: { type: 'number', description: '평가기준일 3년 전 사업연도의 법인 전체 순손익액(원)' },
@@ -1950,6 +1953,17 @@ const DRIVE_TOOLS = [
       annualRent: { type: 'number', description: '연간 임대료(원)' },
       deposit: { type: 'number', description: '임대보증금(원)' }
     }, required: [] }
+  },
+  {
+    name: 'calculate_mortgaged_or_leased_property_value',
+    description: '저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법§66, 시행령§63①1호)를 계산한다. 시가·보충적평가액(baseValue), 그 재산이 담보하는 채권액(또는 등기된 전세금, securedDebtAmount), 임대보증금 환산가액(annualRent÷12%+deposit, calculate_rental_conversion_value와 동일 산식을 내부 계산함) 중 가장 큰 금액을 그 재산의 평가액으로 한다. 담보채권액·임대보증금은 재산 "전체" 기준 금액이므로 baseValue도 지분 적용 전(재산 전체 기준) 금액을 넣어야 하며, 지분(ownershipRatio)은 이 도구가 셋 중 최댓값을 정한 뒤 그 결과 전체에 한 번만 곱한다 — 지분을 먼저 곱한 값을 baseValue에 넣으면 지분이 작을수록 담보채권액이 부당하게 이겨버리므로 절대 하지 말 것. 주식 등 이미 보유수량 기준으로 산출되어 지분율 적용 대상이 아닌 평가액은 ownershipRatio를 생략(1로 처리됨)하면 된다.',
+    input_schema: { type: 'object', properties: {
+      baseValue: { type: 'number', description: '지분 적용 전, 재산 전체 기준의 시가 또는 보충적평가액(원). 토지·건물·주택 등 다른 평가 도구의 결과값을 그대로 넣는다.' },
+      securedDebtAmount: { type: 'number', description: '그 재산이 담보하는 채권액(근저당이면 채권최고액이 아니라 실제 채권액) 또는 등기된 전세금(원). 없으면 생략.' },
+      annualRent: { type: 'number', description: '연간 임대료(원). 임대차계약이 없으면 생략.' },
+      deposit: { type: 'number', description: '임대보증금(원). 임대차계약이 없으면 생략.' },
+      ownershipRatio: { type: 'number', description: '평가대상 재산 중 피상속인·증여자가 보유한 지분율(0~1). 생략하면 1(단독소유)로 처리한다.' }
+    }, required: ['baseValue'] }
   },
   {
     name: 'calculate_goodwill_value',
@@ -4208,11 +4222,19 @@ function farmingInheritanceDeductionDetailed_(p) {
 // netAssetOnlyFlags — §54④ 순자산가치 100% 적용 특례. 청산·사업개시전(또는 휴폐업)·3년내해산예정 3개 사유는
 // 가중평균값과 무관하게 무조건 순자산가치만 적용하고(unconditionalForce), 부동산·주식보유비율 80%이상 2개
 // 사유는 가중평균값이 순자산가치보다 작을 때만 적용한다(conditionalForce, §54④단서).
-function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags) {
+// shares1/2/3YearsAgo(각 사업연도 종료일 현재 발행주식총수, 시행령§56③ — 증자·감자가 있었으면
+// 시행령§56③단서·toolCalculateAdjustedShareCount로 환산한 값)를 생략하면 totalIssuedShares(평가기준일
+// 현재, §54⑤)를 그대로 쓴다(직전 3년 내 증자·감자가 없었던 통상적인 경우와 동일한 결과 — 하위호환).
+function unlistedStockValuePerShare_(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags, shares1YearAgo, shares2YearsAgo, shares3YearsAgo) {
   const shares = Number(totalIssuedShares) || 0;
   if (shares <= 0) return null;
-  const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
-  const weightedNetProfitPerShare = (weightedNetProfitSum / 6) / shares;
+  const s1 = Number(shares1YearAgo) || shares;
+  const s2 = Number(shares2YearsAgo) || shares;
+  const s3 = Number(shares3YearsAgo) || shares;
+  // 시행령§56② — "1주당 최근 3년간의 순손익액의 가중평균액"은 각 사업연도의 "1주당" 순손익액(그 해
+  // 발행주식총수 기준)을 먼저 구한 뒤 3:2:1로 가중평균한다 — 3개년 순손익액을 먼저 가중합산한 뒤
+  // 하나의(평가기준일 현재) 발행주식총수로 나누면, 그 사이 증자·감자가 있었을 때 왜곡된다.
+  const weightedNetProfitPerShare = ((Number(netProfit1YearAgo) || 0) / s1 * 3 + (Number(netProfit2YearsAgo) || 0) / s2 * 2 + (Number(netProfit3YearsAgo) || 0) / s3 * 1) / 6;
   const profitValuePerShare = weightedNetProfitPerShare / 0.10; // 순손익가치환원율 10%(상증세법 시행규칙 §17의3)
   const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
   const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
@@ -4244,7 +4266,7 @@ function toolCalculateUnlistedStockValue(p) {
     isStockAssetRatio80Plus: p.isStockAssetRatio80Plus,
     hasFixedDissolutionWithin3Years: p.hasFixedDissolutionWithin3Years
   };
-  const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags);
+  const result = unlistedStockValuePerShare_(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags, p.totalIssuedShares1YearAgo, p.totalIssuedShares2YearsAgo, p.totalIssuedShares3YearsAgo);
   let totalValue = Math.round(result.평가액_1주당 * ownedShares);
   // §53⑧ — 최대주주등 할증평가(20%) 배제사유 9개.
   const isPremiumExempt = !!p.hasContinuousLossFor3Years // 1호
@@ -4302,6 +4324,28 @@ function toolCalculateListedStockValue(p) {
 function toolCalculateRentalConversionValue(p) {
   p = p || {};
   return { 임대료환산가액: Math.round((Number(p.annualRent) || 0) / 0.12 + (Number(p.deposit) || 0)) };
+}
+
+// 저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법§66, 시행령§63①1호) —
+// 시가·보충적평가액(baseValue, 지분 적용 전 재산 전체 기준), 그 재산이 담보하는 채권액(또는 등기된
+// 전세금), 임대보증금 환산가액 중 가장 큰 금액으로 평가한다. 지분(ownershipRatio)은 셋 중 최댓값을
+// 정한 "다음"에 그 결과 전체에 한 번만 곱해야 한다(먼저 곱하면 지분이 작을수록 담보채권액이 부당하게 이겨버림).
+function toolCalculateMortgagedOrLeasedPropertyValue(p) {
+  p = p || {};
+  const baseValue = Number(p.baseValue) || 0;
+  const securedDebtAmount = Number(p.securedDebtAmount) || 0;
+  const rentalConversionValue = (Number(p.annualRent) || 0) > 0 || (Number(p.deposit) || 0) > 0
+    ? Math.round((Number(p.annualRent) || 0) / 0.12 + (Number(p.deposit) || 0)) : 0;
+  const valueBeforeRatio = Math.max(baseValue, securedDebtAmount, rentalConversionValue);
+  const ratio = p.ownershipRatio == null ? 1 : Math.max(0, Number(p.ownershipRatio) || 0);
+  return {
+    기준가액_시가또는보충적평가액: baseValue,
+    담보채권액: securedDebtAmount,
+    임대보증금환산가액: rentalConversionValue,
+    평가액_지분적용전: valueBeforeRatio,
+    지분율: ratio,
+    최종평가액: Math.round(valueBeforeRatio * ratio)
+  };
 }
 
 function toolCalculateGoodwillValue(p) {
@@ -5935,7 +5979,7 @@ function toolCalculateRelatedPartyTransactionGiftTax(p) {
   const gateShareThreshold = companySize === 'general' ? 3 : 10;
   // §45의3①1호나목2) — 일반기업(중소·중견 아님)은 가목 사유(거래비율>정상거래비율) 외에, "거래비율이
   // 정상거래비율의 3분의 2 초과 + 특수관계법인 매출액이 시행령§34의3⑰의 1천억원 초과"인 경우도
-  // 대체로 과세요건을 충족한다(사업부문별 계산 특례는 미반영 — 그 경우 별도 계산식이 필요).
+  // 대체로 과세요건을 충족한다(시행령§34의3③④의 사업부문별 계산 특례는 미반영 — 그 경우 별도 계산식이 필요).
   const generalAltGateTradeThreshold = companySize === 'general' ? gateTradeThreshold * 2 / 3 : null;
   const relatedPartySalesAmount = Number(p.relatedPartySalesAmount) || 0;
   const meetsGeneralAltGate = companySize === 'general' && tradeRatio > generalAltGateTradeThreshold && relatedPartySalesAmount > 100000000000;
@@ -6042,7 +6086,7 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
     안내: (phase === 'initial'
       ? '개시사업연도 신고는 잠정치입니다 — 2년 경과 후 정산사업연도에 phase="settlement"로 반드시 재계산·정산신고해야 합니다. '
       : '') +
-      '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정, 법인세 납부세액 중 상당액 계산은 별도로 확인해서 정확한 값을 입력해야 합니다.'
+      '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정은 다자간 지분구조 확인이 필요해 이 도구가 자동판정하지 않으니 별도로 확인하세요. 법인세 납부세액 중 상당액은 corporateTaxAfterCredit·corporateTaxableIncome을 넣으면 시행령§34의4④ 산식대로 자동계산되니(수혜법인의 실제 법인세 신고서상 값을 정확히 넣었는지만 확인하면 됩니다), corporateTaxPortion을 직접 계산해서 넣을 필요는 없습니다.'
   };
 }
 
@@ -6507,7 +6551,11 @@ const REFUND_INTEREST_RATE_HISTORY = [
   { from: '2013-02-23', rate: 0.040 }, { from: '2014-03-14', rate: 0.029 }, { from: '2015-03-06', rate: 0.025 },
   { from: '2016-03-07', rate: 0.018 }, { from: '2017-03-15', rate: 0.016 }, { from: '2018-03-19', rate: 0.018 },
   { from: '2019-03-20', rate: 0.021 }, { from: '2020-03-13', rate: 0.018 }, { from: '2021-03-16', rate: 0.012 },
-  { from: '2023-03-20', rate: 0.029 }, { from: '2024-03-22', rate: 0.035 }, { from: '2025-03-21', rate: 0.031 }
+  { from: '2023-03-20', rate: 0.029 }, { from: '2024-03-22', rate: 0.035 }, { from: '2025-03-21', rate: 0.031 },
+  // 2026.1.2 개정 — 국세기본법시행규칙§19조의3 개정이력에 포함되어 있으나 이율 값(연 1천분의31=3.1%)은
+  // 2025.3.21분과 동일하게 유지됨(원문 확인 완료). 값은 안 바뀌지만 이력표를 공식 개정일과 정확히
+  // 맞추기 위해 별도 항목으로 남겨둔다.
+  { from: '2026-01-02', rate: 0.031 }
 ];
 function refundInterestRateAt_(dateStr) {
   let rate = REFUND_INTEREST_RATE_HISTORY[0].rate;
@@ -6737,7 +6785,8 @@ function toolCalculateStockTransferTax(p) {
 // 정해진 특정 신축주택·미분양주택(§99: 1998.5.22~1999.6.30(국민주택 1999.12.31), §99의2:
 // 2013.4.1~2013.12.31, §99의3: 2001.5.23~2003.6.30)을 취득한 경우, 취득일부터 5년 이내 양도하면
 // 그 기간 발생한 양도소득금액 전액을 과세대상에서 제외하고(§99의2는 형식상 "세액 100% 감면"이지만
-// 결과는 동일), 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액만 과세대상에서 뺀다.
+// 결과는 동일), 5년이 지난 후 양도하면 취득일부터 5년간 발생한 양도소득금액만 과세대상에서 뺀다(나머지는
+// 정상 과세). 취득기간·지역요건(§99의2③)·감면신청(③) 등 게이트는 이 도구가 검증하지 않으므로 별도로 확인해야 한다.
 function toolCalculateNewHouseAcquisitionReduction(p) {
   p = p || {};
   const provision = p.provision;
@@ -9791,6 +9840,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_house_value' ||
         b.name === 'calculate_listed_stock_value' ||
         b.name === 'calculate_rental_conversion_value' ||
+        b.name === 'calculate_mortgaged_or_leased_property_value' ||
         b.name === 'calculate_goodwill_value' ||
         b.name === 'calculate_ground_right_value' ||
         b.name === 'calculate_patent_right_value' ||
@@ -10232,6 +10282,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       }
       if (block.name === 'calculate_rental_conversion_value') {
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateRentalConversionValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_mortgaged_or_leased_property_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateMortgagedOrLeasedPropertyValue(block.input || {})) };
       }
       if (block.name === 'calculate_goodwill_value') {
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateGoodwillValue(block.input || {})) };

@@ -145,11 +145,14 @@
   //   상속인별 상속세과세표준상당액 = 그 상속인의 가산증여재산 과세표준
   //     + (전체과세표준－전체가산증여재산과세표준) × [(그 상속인 상속세과세가액상당액－그 상속인 가산증여재산가액)
   //                                                  ÷ (전체상속세과세가액－전체가산증여재산가액)]
-  // "상속인별 상속세과세가액상당액"(다목)의 기준은 §28②후단 조문 자체가 이미 명시하고 있다 — "그 상속인
-  // 또는 수유자가 받았거나 받을 상속재산에 대하여" 계산한다고 했으므로, 그 상속인에게 실제 귀속되는
-  // 상속재산가액(=이 계산기의 actualInheritedValue) 그대로가 기준이다. "상속재산"이라 했지 "순재산"이라
-  // 하지 않았으므로 채무 차감 전 금액이며, §3조의2③의 "각자가 받았거나 받을 재산"(총자산-부채-상속세-
-  // 증여세, 연대납부의무의 "한도"를 정하는 별개 규정)과는 무관하다. "그 상속인이 납부할 상속세액"은
+  // "상속인별 상속세과세가액상당액"(다목)이 정확히 무엇을 가리키는지는 법령 어디에도 명시적으로 정의돼
+  // 있지 않다 — 시행령§3①1호 다목 자체가 "상속인별 상속세과세가액 상당액에서... 증여재산을 제외한 금액"
+  // 이라고, 정의되지 않은 그 용어를 다시 언급할 뿐이다(§28②후단 "대통령령으로 정하는 바에 따라 계산한
+  // 과세표준"이라는 위임 문구도 계산방법을 §3①에 다시 위임할 뿐 직접 정의하지 않는다). 그래서 이
+  // 계산기는 그 상속인에게 실제 귀속되는 상속재산가액(=actualInheritedValue, 채무 차감 전, "상속재산"과
+  // "순재산"을 구분한 문언에 따름)을 근사치로 쓴다 — 법령이 명시한 값이 아니라 실무적 근사임에 유의할 것.
+  // §3조의2③의 "각자가 받았거나 받을 재산"(총자산-부채-상속세-증여세, 연대납부의무의 "한도"를 정하는
+  // 별개 규정)과는 무관하다. "그 상속인이 납부할 상속세액"은
   // §3조의2①→시행령§3①이 정하는 "상속인별 상속세과세표준상당액(1호) ÷ 제2호 금액(전체상속세과세표준－
   // §13①2호 비수유자증여과세표준)" 비율을 전체 산출세액에 곱한 값이며, 이 계산기의 §3조의2① 안분 도구
   // (allocateInheritanceTaxByHeirJS)와 동일한 비율(실제상속재산가액 비율, 또는 사전증여 데이터가 있으면
@@ -2136,7 +2139,7 @@
     const gateShareThreshold = companySize === 'general' ? 3 : 10;
     // §45의3①1호나목2) — 일반기업(중소·중견 아님)은 가목 사유(거래비율>정상거래비율) 외에, "거래비율이
     // 정상거래비율의 3분의 2 초과 + 특수관계법인 매출액이 시행령§34의3⑰의 1천억원 초과"인 경우도
-    // 대체로 과세요건을 충족한다(사업부문별 계산 특례는 미반영 — 그 경우 별도 계산식이 필요).
+    // 대체로 과세요건을 충족한다(시행령§34의3③④의 사업부문별 계산 특례는 미반영 — 그 경우 별도 계산식이 필요).
     const generalAltGateTradeThreshold = companySize === 'general' ? gateTradeThreshold * 2 / 3 : null;
     const relatedPartySalesAmount = Number(p.relatedPartySalesAmount) || 0;
     const meetsGeneralAltGate = companySize === 'general' && tradeRatio > generalAltGateTradeThreshold && relatedPartySalesAmount > 100000000000;
@@ -2230,7 +2233,7 @@
       무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
       안내: (phase === 'initial'
         ? '개시사업연도 신고는 잠정치입니다 — 2년 경과 후 정산사업연도에 재계산·정산신고해야 합니다. '
-        : '') + '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정, 법인세 납부세액 중 상당액 계산은 별도로 확인해서 정확한 값을 입력해야 합니다.',
+        : '') + '증여재산공제는 적용되지 않습니다(증여의제이익 전액이 과세표준). 지배주주 판정은 다자간 지분구조 확인이 필요해 이 도구가 자동판정하지 않으니 별도로 확인하세요. 법인세 납부세액 중 상당액은 corporateTaxAfterCredit·corporateTaxableIncome을 넣으면 시행령§34의4④ 산식대로 자동계산되니(수혜법인의 실제 법인세 신고서상 값을 정확히 넣었는지만 확인하면 됩니다), corporateTaxPortion을 직접 계산해서 넣을 필요는 없습니다.',
       납부세액: r.finalTax
     };
   };
@@ -2702,7 +2705,11 @@
     { from: '2013-02-23', rate: 0.040 }, { from: '2014-03-14', rate: 0.029 }, { from: '2015-03-06', rate: 0.025 },
     { from: '2016-03-07', rate: 0.018 }, { from: '2017-03-15', rate: 0.016 }, { from: '2018-03-19', rate: 0.018 },
     { from: '2019-03-20', rate: 0.021 }, { from: '2020-03-13', rate: 0.018 }, { from: '2021-03-16', rate: 0.012 },
-    { from: '2023-03-20', rate: 0.029 }, { from: '2024-03-22', rate: 0.035 }, { from: '2025-03-21', rate: 0.031 }
+    { from: '2023-03-20', rate: 0.029 }, { from: '2024-03-22', rate: 0.035 }, { from: '2025-03-21', rate: 0.031 },
+    // 2026.1.2 개정 — 국세기본법시행규칙§19조의3 개정이력에 포함되어 있으나 이율 값(연 1천분의31=3.1%)은
+    // 2025.3.21분과 동일하게 유지됨(원문 확인 완료). 값은 안 바뀌지만 이력표를 공식 개정일과 정확히
+    // 맞추기 위해 별도 항목으로 남겨둔다.
+    { from: '2026-01-02', rate: 0.031 }
   ];
   function refundInterestRateAt_(dateStr) {
     let rate = REFUND_INTEREST_RATE_HISTORY[0].rate;
@@ -5063,11 +5070,19 @@
   // 비상장주식 1주당 평가액 (§63, 시행령 §54) — 순손익가치·순자산가치 가중평균(일반 3:2, 부동산과다보유법인 2:3), 순자산가치 80% 하한.
   // §54④ — 아래 사유(1·2·6호는 무조건, 3·5호는 가중평균한 가액이 순자산가치보다 낮은 경우로 한정)에
   // 해당하면 순손익가치·순자산가치 가중평균을 쓰지 않고 순자산가치 그대로를 1주당 평가액으로 한다.
-  function unlistedStockValuePerShare(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags) {
+  // shares1/2/3YearsAgo(각 사업연도 종료일 현재 발행주식총수, 시행령§56③ — 증자·감자가 있었으면
+  // 시행령§56③단서·calculateAdjustedShareCountJS로 환산한 값)를 생략하면 totalIssuedShares(평가기준일
+  // 현재, §54⑤)를 그대로 쓴다(직전 3년 내 증자·감자가 없었던 통상적인 경우와 동일한 결과 — 하위호환).
+  function unlistedStockValuePerShare(netProfit1YearAgo, netProfit2YearsAgo, netProfit3YearsAgo, totalIssuedShares, netAssetValue, isRealEstateHeavy, netAssetOnlyFlags, shares1YearAgo, shares2YearsAgo, shares3YearsAgo) {
     const shares = Number(totalIssuedShares) || 0;
     if (shares <= 0) return null;
-    const weightedNetProfitSum = (Number(netProfit1YearAgo) || 0) * 3 + (Number(netProfit2YearsAgo) || 0) * 2 + (Number(netProfit3YearsAgo) || 0) * 1;
-    const weightedNetProfitPerShare = (weightedNetProfitSum / 6) / shares;
+    const s1 = Number(shares1YearAgo) || shares;
+    const s2 = Number(shares2YearsAgo) || shares;
+    const s3 = Number(shares3YearsAgo) || shares;
+    // 시행령§56② — "1주당 최근 3년간의 순손익액의 가중평균액"은 각 사업연도의 "1주당" 순손익액(그 해
+    // 발행주식총수 기준)을 먼저 구한 뒤 3:2:1로 가중평균한다 — 3개년 순손익액을 먼저 가중합산한 뒤
+    // 하나의(평가기준일 현재) 발행주식총수로 나누면, 그 사이 증자·감자가 있었을 때 왜곡된다.
+    const weightedNetProfitPerShare = ((Number(netProfit1YearAgo) || 0) / s1 * 3 + (Number(netProfit2YearsAgo) || 0) / s2 * 2 + (Number(netProfit3YearsAgo) || 0) / s3 * 1) / 6;
     const profitValuePerShare = weightedNetProfitPerShare / 0.10;
     const netAssetValuePerShare = (Number(netAssetValue) || 0) / shares;
     const weights = isRealEstateHeavy ? [2, 3] : [3, 2];
@@ -5099,7 +5114,7 @@
       isStockAssetRatio80Plus: p.isStockAssetRatio80Plus,
       hasFixedDissolutionWithin3Years: p.hasFixedDissolutionWithin3Years
     };
-    const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags);
+    const result = unlistedStockValuePerShare(p.netProfit1YearAgo, p.netProfit2YearsAgo, p.netProfit3YearsAgo, totalIssuedShares, p.netAssetValue, !!p.isRealEstateHeavy, netAssetOnlyFlags, p.totalIssuedShares1YearAgo, p.totalIssuedShares2YearsAgo, p.totalIssuedShares3YearsAgo);
     let totalValue = Math.round(result.평가액_1주당 * ownedShares);
     // §53⑧ — 최대주주등 할증평가(20%) 배제사유 9개. 9호(중소·중견기업)만 구현돼 있던 것을
     // 나머지 8개(1~8호)까지 전부 반영한다.
@@ -5170,6 +5185,31 @@
   // 중 큰 금액을 그 자산의 가액으로 한다. 환산율은 12%(시행규칙 §15).
   window.calculateRentalConversionValueJS = function (annualRent, deposit) {
     return Math.round((Number(annualRent) || 0) / 0.12 + (Number(deposit) || 0));
+  };
+
+  // 저당권·질권 등이 설정된 재산 및 임대차계약이 체결된 재산의 평가특례(상증세법§66, 시행령§63①1호) —
+  // 시가·보충적평가액(baseValue, 지분 적용 전 재산 전체 기준), 그 재산이 담보하는 채권액(또는 등기된
+  // 전세금), 임대보증금 환산가액(임대보증금+연간임대료÷12%) 중 가장 큰 금액으로 평가한다. 담보채권액·
+  // 임대보증금은 등기부·임대차계약상 재산 "전체" 기준이므로, 지분(ownershipRatio)은 셋 중 최댓값을 정한
+  // "다음"에 그 결과 전체에 한 번만 곱해야 한다(먼저 곱하면 지분이 작을수록 담보채권액이 부당하게 이겨버림).
+  // 주식 등 이미 보유수량 기준으로 산출된 평가액(ownershipRatio를 적용할 대상이 아닌 경우)은 ownershipRatio를
+  // 생략하거나 1로 두면 된다.
+  window.calculateMortgagedOrLeasedPropertyValueJS = function (p) {
+    p = p || {};
+    const baseValue = Number(p.baseValue) || 0;
+    const securedDebtAmount = Number(p.securedDebtAmount) || 0;
+    const rentalConversionValue = (Number(p.annualRent) || 0) > 0 || (Number(p.deposit) || 0) > 0
+      ? window.calculateRentalConversionValueJS(p.annualRent, p.deposit) : 0;
+    const valueBeforeRatio = Math.max(baseValue, securedDebtAmount, rentalConversionValue);
+    const ratio = p.ownershipRatio == null ? 1 : Math.max(0, Number(p.ownershipRatio) || 0);
+    return {
+      기준가액_시가또는보충적평가액: baseValue,
+      담보채권액: securedDebtAmount,
+      임대보증금환산가액: rentalConversionValue,
+      평가액_지분적용전: valueBeforeRatio,
+      지분율: ratio,
+      최종평가액: Math.round(valueBeforeRatio * ratio)
+    };
   };
 
   // 영업권 평가 (§64, 시행령 §59②, 시행규칙 §17의3) — 최근 3년간 순손익액의 가중평균(1년전×3+2년전×2+3년전×1)/6의
