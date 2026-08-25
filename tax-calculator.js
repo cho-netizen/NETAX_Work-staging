@@ -966,8 +966,8 @@ const VALUATION_METHOD_LABELS = {
   trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)',
   otherTangible: '선박·항공기·차량·기계장비·입목/상품·제품 등(§62, 재취득가액→장부가액→시가표준액)',
   groundRight: '지상권(§61③, 토지가액×2%를 잔존연수 현재가치화)',
-  patentRight: '특허권·상표권·저작권등(§61③, 연도별수입금액을 잔존연수(최대20년) 현재가치화)',
-  miningRight: '광업권·채석권등(§61③, 3년평균소득을 채굴가능연수 현재가치화)',
+  patentRight: '특허권·상표권·저작권등(§64, 연도별수입금액을 잔존연수(최대20년) 현재가치화 vs 취득가액-감가상각 중 큰 금액)',
+  miningRight: '광업권·채석권등(§64, 3년평균소득을 채굴가능연수 현재가치화 vs 취득가액-감가상각 중 큰 금액)',
   memberRight: '조합원입주권(재개발·재건축 조합원권리가액, §61③)'
 };
 // 지분은 평가방법과 무관하게 모든 자산에 공통으로 적용되는 별도 항목이다(예: 확인된 시가가 그 자체로
@@ -1017,8 +1017,8 @@ function computeValuationAssetValue(a){
     }
     case 'goodwill': value = calculateGoodwillValueJS(a.gwProfit1, a.gwProfit2, a.gwProfit3, a.gwSelfCapital); break;
     case 'groundRight': value = calculateGroundRightValueJS(a.grLandValue, a.grRemainingYears).지상권가액; break;
-    case 'patentRight': value = calculatePatentRightValueJS(a.prAnnualIncome, a.prRemainingYears).특허권등가액; break;
-    case 'miningRight': value = calculateMiningRightValueJS(a.mrAverageIncome, a.mrMiningYears).광업권등가액; break;
+    case 'patentRight': value = calculatePatentRightValueJS(a.prAnnualIncome, a.prRemainingYears, a.prAcquisitionCost, a.prDepreciation).특허권등가액; break;
+    case 'miningRight': value = calculateMiningRightValueJS(a.mrAverageIncome, a.mrMiningYears, a.mrAcquisitionCost, a.mrDepreciation).광업권등가액; break;
     case 'memberRight': {
       const r = calculateMemberRightValueJS({
         formerLandBuildingValue: a.mbFormerValue, expectedRevenueAfterCompletion: a.mbExpectedRevenue,
@@ -1153,11 +1153,15 @@ function valuationAssetMethodFieldsHtml(m, a){
   if (m === 'patentRight') return '' +
     '<div class="taxcalc-field"><label>각 연도 수입금액</label><input type="number" data-field="prAnnualIncome" value="' + (a.prAnnualIncome || '') + '" placeholder="확정되지 않았으면 평가기준일 전 3년 평균 수입금액"></div>' +
     '<div class="taxcalc-field"><label>평가기준일부터의 잔존(경과)연수</label><input type="number" data-field="prRemainingYears" value="' + (a.prRemainingYears || '') + '" placeholder="년 (20년 초과시 20년)"></div>' +
-    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연도별 수입금액을 잔존연수만큼 연 10% 할인율로 현재가치화합니다(시행규칙§19②③④)</label></div>';
+    '<div class="taxcalc-field"><label>[매입한 경우만] 취득가액</label><input type="number" data-field="prAcquisitionCost" value="' + (a.prAcquisitionCost || '') + '" placeholder="원 (자체개발·출원 등이면 비움)"></div>' +
+    '<div class="taxcalc-field"><label>[취득가액 입력시] 취득일~평가기준일 감가상각비 누계</label><input type="number" data-field="prDepreciation" value="' + (a.prDepreciation || '') + '" placeholder="원 (없으면 0)"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연도별 수입금액을 잔존연수만큼 연 10% 할인율로 현재가치화한 금액과, 매입가액이 있으면 그 취득가액에서 감가상각비를 뺀 금액 중 큰 금액입니다(§64, 시행규칙§19②③④)</label></div>';
   if (m === 'miningRight') return '' +
     '<div class="taxcalc-field"><label>평가기준일전 3년간 평균소득</label><input type="number" data-field="mrAverageIncome" value="' + (a.mrAverageIncome || '') + '" placeholder="실적 없으면 예상순소득"></div>' +
     '<div class="taxcalc-field"><label>채굴가능연수</label><input type="number" data-field="mrMiningYears" value="' + (a.mrMiningYears || '') + '" placeholder="년"></div>' +
-    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 3년평균소득을 채굴가능연수만큼 연 10% 할인율로 현재가치화합니다(시행규칙§19⑤)</label></div>';
+    '<div class="taxcalc-field"><label>[매입한 경우만] 취득가액</label><input type="number" data-field="mrAcquisitionCost" value="' + (a.mrAcquisitionCost || '') + '" placeholder="원 (비움 가능)"></div>' +
+    '<div class="taxcalc-field"><label>[취득가액 입력시] 취득일~평가기준일 감가상각비 누계</label><input type="number" data-field="mrDepreciation" value="' + (a.mrDepreciation || '') + '" placeholder="원 (없으면 0)"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 3년평균소득을 채굴가능연수만큼 연 10% 할인율로 현재가치화한 금액과, 매입가액이 있으면 그 취득가액에서 감가상각비를 뺀 금액 중 큰 금액입니다(§64, 시행규칙§19⑤)</label></div>';
   if (m === 'memberRight') return '' +
     '<div class="taxcalc-field"><label>분양대상자의 종전 토지·건축물 가격</label><input type="number" data-field="mbFormerValue" value="' + (a.mbFormerValue || '') + '"></div>' +
     '<div class="taxcalc-field"><label>정비사업완료후 대지·건축물의 총 수입추산액</label><input type="number" data-field="mbExpectedRevenue" value="' + (a.mbExpectedRevenue || '') + '"></div>' +

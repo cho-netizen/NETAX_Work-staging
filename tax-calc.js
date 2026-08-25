@@ -5522,20 +5522,37 @@
     return { 연간수입금액: annualIncome, 지상권가액: value };
   };
 
-  // 특허권·실용신안권·상표권·디자인권·저작권 등의 평가 (§61③, 시행령§59⑤, 시행규칙§19②③) — 권리로
+  // §64 1호(취득가액에서 감가상각비를 뺀 금액)와 2호(장래경제적이익 환산가액) 중 큰 금액으로 한다.
+  function applyAcquisitionCostFloor_(convertedValue, acquisitionCost, depreciationSinceAcquisition) {
+    const cost = Number(acquisitionCost) || 0;
+    if (cost <= 0) return { finalValue: convertedValue, acquisitionValueLessDepreciation: null };
+    const dep = Number(depreciationSinceAcquisition) || 0;
+    const acquisitionValueLessDepreciation = Math.max(0, cost - dep);
+    return { finalValue: Math.max(convertedValue, acquisitionValueLessDepreciation), acquisitionValueLessDepreciation: acquisitionValueLessDepreciation };
+  }
+
+  // 특허권·실용신안권·상표권·디자인권·저작권 등 무체재산권의 평가 (§64, 시행령§59⑤, 시행규칙§19②③) — 권리로
   // 장래에 받을 각 연도 수입금액을, 평가기준일부터의 잔존(경과)연수(최대 20년)에 대한 10% 연금현가계수로
-  // 환산한다. 각 연도 수입금액이 확정되지 않은 경우 평가기준일 전 3년간 평균 수입금액을 쓴다(시행규칙§19④).
-  window.calculatePatentRightValueJS = function (annualIncomeAmount, remainingYears) {
+  // 환산한 가액(2호)과, 매입한 것이라면 취득가액에서 감가상각비를 뺀 금액(1호) 중 큰 금액으로 한다(§64).
+  // 각 연도 수입금액이 확정되지 않은 경우 평가기준일 전 3년간 평균 수입금액을 쓴다(시행규칙§19④).
+  window.calculatePatentRightValueJS = function (annualIncomeAmount, remainingYears, acquisitionCost, depreciationSinceAcquisition) {
     const years = Math.min(Number(remainingYears) || 0, 20);
-    const value = Math.round((Number(annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years));
-    return { 특허권등가액: value };
+    const convertedValue = Math.round((Number(annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years));
+    const floored = applyAcquisitionCostFloor_(convertedValue, acquisitionCost, depreciationSinceAcquisition);
+    const result = { 환산가액: convertedValue, 특허권등가액: floored.finalValue };
+    if (floored.acquisitionValueLessDepreciation != null) result.취득가액_감가상각후 = floored.acquisitionValueLessDepreciation;
+    return result;
   };
 
-  // 광업권·채석권등의 평가 (§61③, 시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이
-  // 없으면 예상순소득)을, 평가기준일 이후의 채굴가능연수에 대한 10% 연금현가계수로 환산한다.
-  window.calculateMiningRightValueJS = function (average3YearIncome, miningPossibleYears) {
-    const value = Math.round((Number(average3YearIncome) || 0) * annuityPresentValueFactor10_(miningPossibleYears));
-    return { 광업권등가액: value };
+  // 광업권·채석권등의 평가 (§64, 시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이
+  // 없으면 예상순소득)을, 평가기준일 이후의 채굴가능연수에 대한 10% 연금현가계수로 환산한 가액(2호)과,
+  // 매입한 것이라면 취득가액에서 감가상각비를 뺀 금액(1호) 중 큰 금액으로 한다(§64).
+  window.calculateMiningRightValueJS = function (average3YearIncome, miningPossibleYears, acquisitionCost, depreciationSinceAcquisition) {
+    const convertedValue = Math.round((Number(average3YearIncome) || 0) * annuityPresentValueFactor10_(miningPossibleYears));
+    const floored = applyAcquisitionCostFloor_(convertedValue, acquisitionCost, depreciationSinceAcquisition);
+    const result = { 환산가액: convertedValue, 광업권등가액: floored.finalValue };
+    if (floored.acquisitionValueLessDepreciation != null) result.취득가액_감가상각후 = floored.acquisitionValueLessDepreciation;
+    return result;
   };
 
   // 조합원입주권 등 부동산을 취득할 수 있는 권리의 평가 (§61③, 시행령§51②, 시행규칙§16③) — 재개발·

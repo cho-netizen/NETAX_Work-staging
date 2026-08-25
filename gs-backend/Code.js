@@ -2087,18 +2087,22 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_patent_right_value',
-    description: '특허권·실용신안권·상표권·디자인권·저작권 등의 상증세법§61③ 평가액(시행령§59⑤, 시행규칙§19②③④) — 각 연도 수입금액(미확정이면 평가기준일 전 3년 평균)을 잔존연수(최대 20년)에 대한 10% 연금현가계수로 환산한다.',
+    description: '특허권·실용신안권·상표권·디자인권·저작권 등 무체재산권의 상증세법§64 평가액(시행령§59⑤, 시행규칙§19②③④) — 각 연도 수입금액(미확정이면 평가기준일 전 3년 평균)을 잔존연수(최대 20년)에 대한 10% 연금현가계수로 환산한 가액(2호)과, 매입한 것이라면 취득가액에서 감가상각비를 뺀 금액(1호) 중 큰 금액으로 한다(§64).',
     input_schema: { type: 'object', properties: {
       annualIncomeAmount: { type: 'number', description: '연간 수입금액(원, 미확정이면 평가기준일 전 3년 평균 수입금액)' },
-      remainingYears: { type: 'number', description: '잔존연수(년, 최대 20년으로 자동 제한됨)' }
+      remainingYears: { type: 'number', description: '잔존연수(년, 최대 20년으로 자동 제한됨)' },
+      acquisitionCost: { type: 'number', description: '§64 1호 비교용 — 매입 등으로 취득한 경우의 취득가액(원). 자체 개발·출원 등으로 취득가액 비교대상이 없으면 생략(이 경우 2호 환산가액만 적용).' },
+      depreciationSinceAcquisition: { type: 'number', description: 'acquisitionCost를 입력했을 때 — 취득한 날부터 평가기준일까지의 법인세법상 감가상각비 누계액(원). 없으면 0.' }
     }, required: ['annualIncomeAmount', 'remainingYears'] }
   },
   {
     name: 'calculate_mining_right_value',
-    description: '광업권·채석권등의 상증세법§61③ 평가액(시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이 없으면 예상순소득)을 채굴가능연수에 대한 10% 연금현가계수로 환산한다.',
+    description: '광업권·채석권등의 상증세법§64 평가액(시행령§59⑥, 시행규칙§19⑤) — 평가기준일 전 3년간 평균소득(실적이 없으면 예상순소득)을 채굴가능연수에 대한 10% 연금현가계수로 환산한 가액(2호)과, 매입한 것이라면 취득가액에서 감가상각비를 뺀 금액(1호) 중 큰 금액으로 한다(§64).',
     input_schema: { type: 'object', properties: {
       average3YearIncome: { type: 'number', description: '평가기준일 전 3년간 평균소득(또는 예상순소득, 원)' },
-      miningPossibleYears: { type: 'number', description: '채굴가능연수(년)' }
+      miningPossibleYears: { type: 'number', description: '채굴가능연수(년)' },
+      acquisitionCost: { type: 'number', description: '§64 1호 비교용 — 매입 등으로 취득한 경우의 취득가액(원). 취득가액 비교대상이 없으면 생략(이 경우 2호 환산가액만 적용).' },
+      depreciationSinceAcquisition: { type: 'number', description: 'acquisitionCost를 입력했을 때 — 취득한 날부터 평가기준일까지의 법인세법상 감가상각비 누계액(원). 없으면 0.' }
     }, required: ['average3YearIncome', 'miningPossibleYears'] }
   },
   {
@@ -4488,15 +4492,40 @@ function toolCalculateGroundRightValue(p) {
   return { 연간수입금액: annualIncome, 지상권가액: value };
 }
 
+// §64 1호(취득가액에서 감가상각비를 뺀 금액)와 2호(장래경제적이익 환산가액) 중 큰 금액으로 한다.
+// 매입 없이 자체 취득·개발한 무체재산권처럼 취득가액 비교대상이 없으면 acquisitionCost를 생략하면 된다
+// (이 경우 2호 환산가액만 적용 — 기존 동작과 동일).
+function applyAcquisitionCostFloor_(convertedValue, p) {
+  const acquisitionCost = Number(p.acquisitionCost) || 0;
+  if (acquisitionCost <= 0) return { finalValue: convertedValue, acquisitionValueLessDepreciation: null };
+  const depreciation = Number(p.depreciationSinceAcquisition) || 0;
+  const acquisitionValueLessDepreciation = Math.max(0, acquisitionCost - depreciation);
+  return { finalValue: Math.max(convertedValue, acquisitionValueLessDepreciation), acquisitionValueLessDepreciation: acquisitionValueLessDepreciation };
+}
+
 function toolCalculatePatentRightValue(p) {
   p = p || {};
   const years = Math.min(Number(p.remainingYears) || 0, 20);
-  return { 특허권등가액: Math.round((Number(p.annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years)) };
+  const convertedValue = Math.round((Number(p.annualIncomeAmount) || 0) * annuityPresentValueFactor10_(years));
+  const floored = applyAcquisitionCostFloor_(convertedValue, p);
+  const result = { 환산가액: convertedValue, 특허권등가액: floored.finalValue };
+  if (floored.acquisitionValueLessDepreciation != null) {
+    result.취득가액_감가상각후 = floored.acquisitionValueLessDepreciation;
+    result.안내 = '§64에 따라 취득가액에서 감가상각비를 뺀 금액(' + floored.acquisitionValueLessDepreciation + '원)과 장래수입금액 환산가액(' + convertedValue + '원) 중 큰 금액을 적용했습니다.';
+  }
+  return result;
 }
 
 function toolCalculateMiningRightValue(p) {
   p = p || {};
-  return { 광업권등가액: Math.round((Number(p.average3YearIncome) || 0) * annuityPresentValueFactor10_(p.miningPossibleYears)) };
+  const convertedValue = Math.round((Number(p.average3YearIncome) || 0) * annuityPresentValueFactor10_(p.miningPossibleYears));
+  const floored = applyAcquisitionCostFloor_(convertedValue, p);
+  const result = { 환산가액: convertedValue, 광업권등가액: floored.finalValue };
+  if (floored.acquisitionValueLessDepreciation != null) {
+    result.취득가액_감가상각후 = floored.acquisitionValueLessDepreciation;
+    result.안내 = '§64에 따라 취득가액에서 감가상각비를 뺀 금액(' + floored.acquisitionValueLessDepreciation + '원)과 평균소득 환산가액(' + convertedValue + '원) 중 큰 금액을 적용했습니다.';
+  }
+  return result;
 }
 
 function toolCalculateMemberRightValue(p) {
