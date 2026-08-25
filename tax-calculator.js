@@ -2020,6 +2020,8 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="stUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="stPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 확정신고기한 다음해 5.31 대비)</label><input type="number" id="stUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="stMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="stUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-stock-transfer">세액 계산하기</button>' +
       '<div id="taxCalcStockTransferResult"></div>' +
@@ -2048,6 +2050,8 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="oaUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="oaPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 확정신고기한 다음해 5.31 대비)</label><input type="number" id="oaUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="oaMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="oaUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-overseas-asset-transfer">세액 계산하기</button>' +
       '<div id="taxCalcOverseasAssetTransferResult"></div>' +
@@ -2751,6 +2755,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="srUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="srPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 증여일+3개월 신고기한 대비)</label><input type="number" id="srUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="srMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="srUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-special-rate-gift">특례세율 증여세 계산하기</button>' +
       '<div id="taxCalcSpecialRateGiftResult"></div>' +
@@ -2780,6 +2786,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(자금출처가 된 재산 취득일 또는 채무 상환일)</label><input type="text" class="taxcalc-date" id="afGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="afPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 증여일+3개월 신고기한 대비)</label><input type="number" id="afUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="afMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="afUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-property-funds">증여세 계산하기</button>' +
       '<div id="taxCalcPropertyFundsResult"></div>' +
@@ -2801,6 +2809,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(면제·인수·변제받은 날)</label><input type="text" class="taxcalc-date" id="dfGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="dfPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="dfUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="dfMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="dfUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-debt-forgiveness">증여세 계산하기</button>' +
       '<div id="taxCalcDebtForgivenessResult"></div>' +
@@ -2839,6 +2849,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(주식대금 납입일 등)</label><input type="text" class="taxcalc-date" id="ciGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="ciPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="ciUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="ciMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="ciUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-capital-increase-gift">증여세 계산하기</button>' +
       '<div id="taxCalcCapitalIncreaseGiftResult"></div>' +
@@ -2868,6 +2880,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(주주총회결의일 등)</label><input type="text" class="taxcalc-date" id="crGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="crPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="crUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="crMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="crUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-capital-reduction-gift">증여세 계산하기</button>' +
       '<div id="taxCalcCapitalReductionGiftResult"></div>' +
@@ -2897,6 +2911,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(현물출자 납입일 등)</label><input type="text" class="taxcalc-date" id="icfGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="icfPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="icfUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="icfMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="icfUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-in-kind-contribution-gift">증여세 계산하기</button>' +
       '<div id="taxCalcInKindContributionGiftResult"></div>' +
@@ -2935,6 +2951,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일</label><input type="text" class="taxcalc-date" id="cbGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="cbPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="cbUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="cbMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="cbUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-convertible-bond-gift">증여세 계산하기</button>' +
       '<div id="taxCalcConvertibleBondGiftResult"></div>' +
@@ -2960,6 +2978,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(무상사용·담보이용 개시일)</label><input type="text" class="taxcalc-date" id="fuGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="fuPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="fuUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="fuMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="fuUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-free-property-use">증여세 계산하기</button>' +
       '<div id="taxCalcFreePropertyUseResult"></div>' +
@@ -2986,6 +3006,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(양도일)</label><input type="text" class="taxcalc-date" id="spGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="spPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="spUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="spMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="spUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-spouse-property-transfer">증여세 계산하기</button>' +
       '<div id="taxCalcSpousePropertyTransferResult"></div>' +
@@ -3009,6 +3031,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(보험사고 발생일)</label><input type="text" class="taxcalc-date" id="ipGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="ipPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="ipUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="ipMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="ipUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-insurance-proceeds">증여세 계산하기</button>' +
       '<div id="taxCalcInsuranceProceedsResult"></div>' +
@@ -3029,6 +3053,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(원본·수익 실제 지급일 등)</label><input type="text" class="taxcalc-date" id="tiGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="tiPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="tiUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="tiMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="tiUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-trust-income">증여세 계산하기</button>' +
       '<div id="taxCalcTrustIncomeResult"></div>' +
@@ -3057,6 +3083,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="jmUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="jmPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 사업연도종료일+3개월 신고기한 대비)</label><input type="number" id="jmUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="jmMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="jmUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-related-party-gift">일감몰아주기 증여세 계산하기</button>' +
       '<div id="taxCalcRelatedPartyGiftResult"></div>' +
@@ -3086,6 +3114,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="jtUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="jtPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 사업연도종료일+3개월 신고기한 대비)</label><input type="number" id="jtUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="jtMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="jtUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-business-opportunity-gift">일감떼어주기 증여세 계산하기</button>' +
       '<div id="taxCalcBusinessOpportunityGiftResult"></div>' +
@@ -3110,6 +3140,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>특정법인 사업연도 종료일</label><input type="date" id="scFiscalYearEnd" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="scPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 사업연도종료일+3개월 신고기한 대비)</label><input type="number" id="scUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="scMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="scUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-specific-corp-gift">증여세 계산하기</button>' +
       '<div id="taxCalcSpecificCorpGiftResult"></div>' +
@@ -3135,6 +3167,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(배당지급일)</label><input type="text" class="taxcalc-date" id="edGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="edPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="edUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="edMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="edUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-excess-dividend-gift">증여세 계산하기</button>' +
       '<div id="taxCalcExcessDividendGiftResult"></div>' +
@@ -3162,6 +3196,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(정산기준일)</label><input type="text" class="taxcalc-date" id="slGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="slPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="slUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="slMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="slUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-stock-listing-gift">증여세 계산하기</button>' +
       '<div id="taxCalcStockListingGiftResult"></div>' +
@@ -3300,6 +3336,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(합병등기일)</label><input type="text" class="taxcalc-date" id="mgGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="mgPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="mgUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="mgMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="mgUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-merger-gift">증여세 계산하기</button>' +
       '<div id="taxCalcMergerGiftResult"></div>' +
@@ -3328,6 +3366,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일</label><input type="text" class="taxcalc-date" id="puGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="puPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="puUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="puMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="puUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-property-use-gift">증여세 계산하기</button>' +
       '<div id="taxCalcPropertyUseGiftResult"></div>' +
@@ -3356,6 +3396,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일</label><input type="text" class="taxcalc-date" id="ocGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="ocPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="ocUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="ocMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="ocUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-org-change-gift">증여세 계산하기</button>' +
       '<div id="taxCalcOrgChangeGiftResult"></div>' +
@@ -3378,6 +3420,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>증여일(재산가치증가사유 발생일)</label><input type="text" class="taxcalc-date" id="pvGiftDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="text" class="taxcalc-date" id="pvPaidDate" placeholder="YYYY-MM-DD"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산)</label><input type="number" id="pvUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="pvMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="pvUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-property-value-increase-gift">증여세 계산하기</button>' +
       '<div id="taxCalcPropertyValueIncreaseGiftResult"></div>' +
@@ -5307,6 +5351,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('stFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('stUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('stUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('stMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('stUnpaidAtDesignated').value) || 0,
       unrecordedIncomeAmount: numVal(document.getElementById('stUnrecordedIncome').value) || 0,
       transactionAmountForBookkeepingPenalty: numVal(document.getElementById('stBookkeepingPenaltyTxAmount').value) || 0
     };
@@ -5324,7 +5370,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('oaFilingStatus').value,
       isFraudulent: document.getElementById('oaFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('oaUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('oaUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('oaUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('oaMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('oaUnpaidAtDesignated').value) || 0
     };
     renderOverseasAssetTransferResult(calculateOverseasAssetTransferTaxJS(input));
   } else if (action === 'send-debt-to-transfer'){
@@ -5475,7 +5523,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('srFilingStatus').value,
       isFraudulent: document.getElementById('srFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('srUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('srUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('srUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('srMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('srUnpaidAtDesignated').value) || 0
     };
     renderSpecialRateGiftResult(calculateSpecialRateGiftTaxJS(input));
   } else if (action === 'run-nominee-trust'){
@@ -5492,7 +5542,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('afFilingStatus').value,
       isFraudulent: document.getElementById('afFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('afUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('afUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('afUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('afMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('afUnpaidAtDesignated').value) || 0
     };
     renderPropertyFundsResult(calculatePropertyAcquisitionFundsGiftTaxJS(input));
   } else if (action === 'run-debt-forgiveness'){
@@ -5504,7 +5556,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('dfFilingStatus').value,
       isFraudulent: document.getElementById('dfFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('dfUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('dfUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('dfUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('dfMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('dfUnpaidAtDesignated').value) || 0
     };
     renderDebtForgivenessResult(calculateDebtForgivenessGiftTaxJS(input));
   } else if (action === 'run-capital-increase-gift'){
@@ -5527,7 +5581,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('ciFilingStatus').value,
       isFraudulent: document.getElementById('ciFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('ciUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('ciUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('ciUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('ciMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('ciUnpaidAtDesignated').value) || 0
     };
     renderCapitalIncreaseGiftResult(calculateCapitalIncreaseGiftTaxJS(input));
   } else if (action === 'run-capital-reduction-gift'){
@@ -5544,7 +5600,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('crFilingStatus').value,
       isFraudulent: document.getElementById('crFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('crUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('crUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('crUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('crMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('crUnpaidAtDesignated').value) || 0
     };
     renderCapitalReductionGiftResult(calculateCapitalReductionGiftTaxJS(input));
   } else if (action === 'run-in-kind-contribution-gift'){
@@ -5562,7 +5620,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('icfFilingStatus').value,
       isFraudulent: document.getElementById('icfFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('icfUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('icfUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('icfUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('icfMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('icfUnpaidAtDesignated').value) || 0
     };
     renderInKindContributionGiftResult(calculateInKindContributionGiftTaxJS(input));
   } else if (action === 'run-convertible-bond-gift'){
@@ -5586,7 +5646,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('cbFilingStatus').value,
       isFraudulent: document.getElementById('cbFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('cbUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('cbUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('cbUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('cbMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('cbUnpaidAtDesignated').value) || 0
     };
     renderConvertibleBondGiftResult(calculateConvertibleBondGiftTaxJS(input));
   } else if (action === 'run-excess-dividend-gift'){
@@ -5602,7 +5664,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('edFilingStatus').value,
       isFraudulent: document.getElementById('edFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('edUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('edUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('edUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('edMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('edUnpaidAtDesignated').value) || 0
     };
     renderExcessDividendGiftResult(calculateExcessDividendGiftTaxJS(input));
   } else if (action === 'run-stock-listing-gift'){
@@ -5618,7 +5682,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('slFilingStatus').value,
       isFraudulent: document.getElementById('slFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('slUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('slUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('slUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('slMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('slUnpaidAtDesignated').value) || 0
     };
     renderStockListingGiftResult(calculateStockListingGiftTaxJS(input));
   } else if (action === 'run-nontaxable-inheritance'){
@@ -5650,7 +5716,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('fuFilingStatus').value,
       isFraudulent: document.getElementById('fuFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('fuUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('fuUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('fuUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('fuMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('fuUnpaidAtDesignated').value) || 0
     };
     renderFreePropertyUseResult(calculateFreePropertyUseGiftTaxJS(input));
   } else if (action === 'run-spouse-property-transfer'){
@@ -5665,7 +5733,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('spFilingStatus').value,
       isFraudulent: document.getElementById('spFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('spUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('spUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('spUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('spMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('spUnpaidAtDesignated').value) || 0
     };
     renderSpousePropertyTransferResult(calculateSpousePropertyTransferGiftTaxJS(input));
   } else if (action === 'run-insurance-proceeds'){
@@ -5679,7 +5749,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('ipFilingStatus').value,
       isFraudulent: document.getElementById('ipFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('ipUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('ipUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('ipUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('ipMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('ipUnpaidAtDesignated').value) || 0
     };
     renderInsuranceProceedsResult(calculateInsuranceProceedsGiftTaxJS(input));
   } else if (action === 'run-trust-income'){
@@ -5690,7 +5762,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('tiFilingStatus').value,
       isFraudulent: document.getElementById('tiFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('tiUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('tiUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('tiUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('tiMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('tiUnpaidAtDesignated').value) || 0
     };
     renderTrustIncomeResult(calculateTrustIncomeGiftTaxJS(input));
   } else if (action === 'run-specific-corp-gift'){
@@ -5705,7 +5779,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('scFilingStatus').value,
       isFraudulent: document.getElementById('scFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('scUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('scUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('scUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('scMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('scUnpaidAtDesignated').value) || 0
     };
     renderSpecificCorpGiftResult(calculateSpecificCorporationGiftTaxJS(input));
   } else if (action === 'run-nontaxable-gift'){
@@ -5778,7 +5854,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('mgFilingStatus').value,
       isFraudulent: document.getElementById('mgFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('mgUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('mgUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('mgUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('mgMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('mgUnpaidAtDesignated').value) || 0
     };
     renderMergerGiftResult(calculateMergerBenefitGiftTaxJS(input));
   } else if (action === 'run-property-use-gift'){
@@ -5795,7 +5873,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('puFilingStatus').value,
       isFraudulent: document.getElementById('puFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('puUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('puUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('puUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('puMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('puUnpaidAtDesignated').value) || 0
     };
     renderPropertyUseGiftResult(calculatePropertyUseServiceGiftTaxJS(input));
   } else if (action === 'run-org-change-gift'){
@@ -5812,7 +5892,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('ocFilingStatus').value,
       isFraudulent: document.getElementById('ocFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('ocUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('ocUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('ocUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('ocMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('ocUnpaidAtDesignated').value) || 0
     };
     renderOrgChangeGiftResult(calculateOrgChangeGiftTaxJS(input));
   } else if (action === 'run-property-value-increase-gift'){
@@ -5825,7 +5907,9 @@ taxCalcView.addEventListener('click', function(e){
       filingStatus: document.getElementById('pvFilingStatus').value,
       isFraudulent: document.getElementById('pvFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('pvUnderreportedTax').value) || 0,
-      unpaidDays: numVal(document.getElementById('pvUnpaidDays').value) || 0
+      unpaidDays: numVal(document.getElementById('pvUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('pvMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('pvUnpaidAtDesignated').value) || 0
     };
     renderPropertyValueIncreaseGiftResult(calculatePropertyValueIncreaseGiftTaxJS(input));
   } else if (action === 'run-related-party-gift'){
@@ -5841,6 +5925,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('jmFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('jmUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('jmUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('jmMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('jmUnpaidAtDesignated').value) || 0,
       reportedInTime: document.getElementById('jmReportedInTime').checked
     };
     renderRelatedPartyGiftResult(calculateRelatedPartyTransactionGiftTaxJS(input));
@@ -5858,6 +5944,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('jtFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('jtUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('jtUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('jtMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('jtUnpaidAtDesignated').value) || 0,
       reportedInTime: document.getElementById('jtReportedInTime').checked
     };
     renderBusinessOpportunityGiftResult(calculateBusinessOpportunityGiftTaxJS(input));
