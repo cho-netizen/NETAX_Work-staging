@@ -2835,26 +2835,53 @@
     const transferPrice = Number(p.transferPrice);
     if (!fairMarketValue || fairMarketValue <= 0) return { error: '시가가 필요합니다.' };
     if (!(transferPrice >= 0)) return { error: '실제 거래한 대가가 필요합니다.' };
+    const isSpecialRelation = (p.isSpecialRelation !== false);
 
     const diff = Math.abs(fairMarketValue - transferPrice);
-    const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
-    // §35① — "그 대가와 시가의 차액이... 기준금액 이상인 경우"(원문 "이상" — 경계값 포함).
-    const meetsGate = diff >= threshold;
     const direction = transferPrice < fairMarketValue ? '저가양수(매수인이 이익을 얻음)' : (transferPrice > fairMarketValue ? '고가양도(매도인이 이익을 얻음)' : '차액없음');
 
-    if (!meetsGate) {
+    if (isSpecialRelation) {
+      // §35①·시행령§26② — 기준금액(게이트=차감액) = min(시가×30%, 3억원). "이상"(경계값 포함).
+      const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
+      const meetsGate = diff >= threshold;
+
+      if (!meetsGate) {
+        return {
+          과세대상여부: false, 거래유형: direction, 특수관계여부: '특수관계인 간(§35①)',
+          시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
+          안내: '특수관계인 간 거래 기준으로, 차액이 차감기준액(min(시가×30%, 3억원))을 초과하지 않아 과세대상이 아닙니다.'
+        };
+      }
+
+      const deemedGiftAmount = diff - threshold;
       return {
-        과세대상여부: false, 거래유형: direction,
-        시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
-        안내: '특수관계인 간 거래 기준으로, 차액이 차감기준액(min(시가×30%, 3억원))을 초과하지 않아 과세대상이 아닙니다. 비특수관계인 간 거래는 기준·계산식이 다릅니다.'
+        과세대상여부: true, 거래유형: direction, 특수관계여부: '특수관계인 간(§35①)',
+        시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
+        안내: '이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
       };
     }
 
-    const deemedGiftAmount = diff - threshold;
+    // §35②·시행령§26③④ — 비특수관계인 간: 게이트=시가×30%(3억 상한 없음), 차감액은 3억원 정액.
+    const gateThreshold = Math.round(fairMarketValue * 0.3);
+    const meetsGate = diff >= gateThreshold;
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false, 거래유형: direction, 특수관계여부: '비특수관계인 간(§35②)',
+        시가와대가의차액: diff, 차감기준액_게이트: gateThreshold, 증여재산가액: 0,
+        안내: '비특수관계인 간 거래 기준으로, 차액이 게이트 기준금액(시가×30%)을 초과하지 않아 과세대상이 아닙니다.'
+      };
+    }
+
+    const FLAT_DEDUCTION = 300000000;
+    const deemedGiftAmount = Math.max(0, diff - FLAT_DEDUCTION);
     return {
-      과세대상여부: true, 거래유형: direction,
-      시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
-      안내: '이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요. 특수관계인 간 거래를 전제로 계산했습니다.'
+      과세대상여부: deemedGiftAmount > 0, 거래유형: direction, 특수관계여부: '비특수관계인 간(§35②)',
+      시가와대가의차액: diff, 차감기준액_게이트: gateThreshold, 차감액_공제: FLAT_DEDUCTION, 증여재산가액: deemedGiftAmount,
+      안내: (deemedGiftAmount > 0
+        ? '이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+        : '게이트(시가×30%)는 넘었지만 정액 차감액(3억원)을 빼면 0 이하가 되어 실제 과세대상은 아닙니다.')
+        + ' "거래의 관행상 정당한 사유" 유무는 개별 사실관계로 별도 판단해야 합니다.'
     };
   };
 

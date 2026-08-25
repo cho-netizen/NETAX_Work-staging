@@ -1861,12 +1861,13 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_low_price_transfer_gift_amount',
-    description: '저가양수·고가양도에 따른 이익의 증여의제(상증세법 §35)의 증여재산가액을 계산한다. 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로 거래하면, 그 차액에서 min(시가×30%, 3억원)을 뺀 금액이 증여재산가액이 된다. 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
+    description: '저가양수·고가양도에 따른 이익의 증여의제(상증세법 §35)의 증여재산가액을 계산한다. §35①(특수관계인 간)은 그 대가와 시가의 차액이 min(시가×30%, 3억원) 이상이면 그 차액에서 같은 금액을 뺀 것이 증여재산가액이다. §35②(비특수관계인 간, 거래관행상 정당한 사유 없이 현저히 낮게/높게 거래)는 게이트 기준금액이 시가×30%(3억 상한 없음)이고 차감액은 3억원 정액이라 계산식이 다르다(시행령§26②③④). 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
     input_schema: {
       type: 'object',
       properties: {
         fairMarketValue: { type: 'number', description: '거래재산의 시가(원) — calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
-        transferPrice: { type: 'number', description: '실제 거래한 대가(원) — 매매대금 등.' }
+        transferPrice: { type: 'number', description: '실제 거래한 대가(원) — 매매대금 등.' },
+        isSpecialRelation: { type: 'boolean', description: '거래 상대방이 특수관계인인지 여부. true(기본값) — §35① 적용(기준금액=min(시가×30%, 3억원)). false — §35② 적용(비특수관계인 간, 게이트=시가×30%, 차감액=3억원 정액). §35②는 "거래의 관행상 정당한 사유"가 없는 경우에만 적용되므로 그 사실판단은 별도로 확인할 것.' }
       },
       required: ['fairMarketValue', 'transferPrice']
     }
@@ -6723,26 +6724,55 @@ function toolCalculateLowPriceTransferGiftAmount(p) {
   const transferPrice = Number(p.transferPrice);
   if (!fairMarketValue || fairMarketValue <= 0) return { error: '시가(fairMarketValue)가 필요합니다.' };
   if (!(transferPrice >= 0)) return { error: '실제 거래한 대가(transferPrice)가 필요합니다.' };
+  // isSpecialRelation 생략 시 특수관계인 간 거래(§35①)로 간주(기존 동작과 호환).
+  const isSpecialRelation = (p.isSpecialRelation !== false);
 
   const diff = Math.abs(fairMarketValue - transferPrice);
-  const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
-  // §35① — "그 대가와 시가의 차액이... 기준금액 이상인 경우"(원문 "이상" — 경계값 포함).
-  const meetsGate = diff >= threshold;
   const direction = transferPrice < fairMarketValue ? '저가양수(매수인이 이익을 얻음)' : (transferPrice > fairMarketValue ? '고가양도(매도인이 이익을 얻음)' : '차액없음');
 
-  if (!meetsGate) {
+  if (isSpecialRelation) {
+    // §35①·시행령§26② — 기준금액(게이트=차감액) = min(시가×30%, 3억원). "그 대가와 시가의 차액이... 기준금액 이상인 경우"(원문 "이상" — 경계값 포함).
+    const threshold = Math.min(Math.round(fairMarketValue * 0.3), 300000000);
+    const meetsGate = diff >= threshold;
+
+    if (!meetsGate) {
+      return {
+        과세대상여부: false, 거래유형: direction, 특수관계여부: '특수관계인 간(§35①)',
+        시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
+        안내: '특수관계인 간 거래 기준으로, 차액(' + diff + '원)이 차감기준액(min(시가×30%, 3억원) = ' + threshold + '원)을 초과하지 않아 과세대상이 아닙니다.'
+      };
+    }
+
+    const deemedGiftAmount = diff - threshold;
     return {
-      과세대상여부: false, 거래유형: direction,
-      시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: 0,
-      안내: '특수관계인 간 거래 기준으로, 차액(' + diff + '원)이 차감기준액(min(시가×30%, 3억원) = ' + threshold + '원)을 초과하지 않아 과세대상이 아닙니다. 비특수관계인 간 거래는 기준·계산식이 다르고(거래관행상 정당한 사유 유무 판단 필요) 이 도구는 특수관계인 간 거래를 전제로 계산합니다.'
+      과세대상여부: true, 거래유형: direction, 특수관계여부: '특수관계인 간(§35①)',
+      시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
+      안내: '이익을 얻은 쪽(저가양수면 매수인, 고가양도면 매도인)이 수증자입니다. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요. 시가는 반드시 상증세법상 평가방법(감정가액·매매사례가액·보충적평가 등)에 따라 확정해야 합니다.'
     };
   }
 
-  const deemedGiftAmount = diff - threshold;
+  // §35②·시행령§26③④ — 비특수관계인 간: 게이트 기준금액은 시가×30%만(3억 상한 없음), 차감액은 3억원 정액.
+  // "거래의 관행상 정당한 사유" 유무는 법이 대통령령에 위임하지 않은 사실판단 사항이라 이 도구가 자동판정하지 않는다(안내로 대체).
+  const gateThreshold = Math.round(fairMarketValue * 0.3);
+  const meetsGate = diff >= gateThreshold;
+
+  if (!meetsGate) {
+    return {
+      과세대상여부: false, 거래유형: direction, 특수관계여부: '비특수관계인 간(§35②)',
+      시가와대가의차액: diff, 차감기준액_게이트: gateThreshold, 증여재산가액: 0,
+      안내: '비특수관계인 간 거래 기준으로, 차액(' + diff + '원)이 게이트 기준금액(시가×30% = ' + gateThreshold + '원)을 초과하지 않아 과세대상이 아닙니다.'
+    };
+  }
+
+  const FLAT_DEDUCTION = 300000000;
+  const deemedGiftAmount = Math.max(0, diff - FLAT_DEDUCTION);
   return {
-    과세대상여부: true, 거래유형: direction,
-    시가와대가의차액: diff, 차감기준액: threshold, 증여재산가액: deemedGiftAmount,
-    안내: '이익을 얻은 쪽(저가양수면 매수인, 고가양도면 매도인)이 수증자입니다. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요. 특수관계인 간 거래를 전제로 계산했으며, 비특수관계인 간 거래는 "거래의 관행상 정당한 사유" 판단과 다른 기준금액(시가의 30%만 사용, 3억 상한 없음)이 적용될 수 있어 별도로 확인해야 합니다. 시가는 반드시 상증세법상 평가방법(감정가액·매매사례가액·보충적평가 등)에 따라 확정해야 합니다.'
+    과세대상여부: deemedGiftAmount > 0, 거래유형: direction, 특수관계여부: '비특수관계인 간(§35②)',
+    시가와대가의차액: diff, 차감기준액_게이트: gateThreshold, 차감액_공제: FLAT_DEDUCTION, 증여재산가액: deemedGiftAmount,
+    안내: (deemedGiftAmount > 0
+      ? '이익을 얻은 쪽(저가양수면 매수인, 고가양도면 매도인)이 수증자입니다. 이 증여재산가액을 calculate_gift_tax의 giftAmount로 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+      : '게이트(시가×30%)는 넘었지만 정액 차감액(3억원)을 빼면 0 이하가 되어 실제 과세대상은 아닙니다(§35②·시행령§26④).')
+      + ' 이 계산은 "거래의 관행상 정당한 사유"가 없다는 것을 전제로 한 것으로, 그 사유 유무는 개별 사실관계(거래 경위, 관계, 거래 관행 등)로 별도 판단해야 하며 이 도구가 자동으로 판정하지 않습니다. 시가는 반드시 상증세법상 평가방법(감정가액·매매사례가액·보충적평가 등)에 따라 확정해야 합니다.'
   };
 }
 

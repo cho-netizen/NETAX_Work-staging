@@ -3550,8 +3550,12 @@ function renderGiftPane(){
       '<div id="taxCalcCulturalHeritageTaxDeferralResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
-      '<div class="taxcalc-asset-head"><b>저가양수·고가양도에 따른 이익의 증여의제(§35) — 특수관계인 간 시가보다 낮게(높게) 거래했을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
+      '<div class="taxcalc-asset-head"><b>저가양수·고가양도에 따른 이익의 증여의제(§35) — 시가보다 낮게(높게) 거래했을 때 증여재산가액을 계산합니다. 계산된 금액은 위 일반 증여세 계산기의 증여재산가액에 넣어 세액까지 계산하세요</b></div>' +
       '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>거래 상대방</label><select id="lpIsSpecialRelation">' +
+          '<option value="true">특수관계인 간(§35①, 기준금액=min(시가×30%, 3억원))</option>' +
+          '<option value="false">비특수관계인 간(§35②, 게이트=시가×30%, 차감액=3억원 정액 — 거래관행상 정당한 사유 없을 것)</option>' +
+        '</select></div>' +
         '<div class="taxcalc-field"><label>시가</label><input type="number" id="lpFairValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>실제 거래대가</label><input type="number" id="lpTransferPrice" placeholder="원"></div>' +
       '</div>' +
@@ -4217,9 +4221,12 @@ function renderLowPriceResult(r){
   const box = document.getElementById('taxCalcLowPriceResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('구분', r.특수관계여부);
   html += taxCalcResultRow('거래유형', r.거래유형);
   html += taxCalcResultRow('시가와 대가의 차액', won(r.시가와대가의차액));
-  html += taxCalcResultRow('차감기준액', won(r.차감기준액));
+  if (r.차감기준액 != null) html += taxCalcResultRow('차감기준액', won(r.차감기준액));
+  if (r.차감기준액_게이트 != null) html += taxCalcResultRow('게이트 기준금액(시가×30%)', won(r.차감기준액_게이트));
+  if (r.차감액_공제 != null) html += taxCalcResultRow('차감액(정액)', won(r.차감액_공제));
   html += taxCalcResultRow('증여재산가액', won(r.증여재산가액), { total: true });
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
@@ -6024,7 +6031,8 @@ taxCalcView.addEventListener('click', function(e){
   } else if (action === 'run-low-price-transfer'){
     const input = {
       fairMarketValue: numVal(document.getElementById('lpFairValue').value) || 0,
-      transferPrice: numVal(document.getElementById('lpTransferPrice').value) || 0
+      transferPrice: numVal(document.getElementById('lpTransferPrice').value) || 0,
+      isSpecialRelation: document.getElementById('lpIsSpecialRelation').value !== 'false'
     };
     renderLowPriceResult(calculateLowPriceTransferGiftAmountJS(input));
   } else if (action === 'run-interest-free-loan'){
