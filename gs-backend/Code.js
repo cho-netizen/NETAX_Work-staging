@@ -1873,6 +1873,28 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_gift_special_provision_overlap',
+    description: '증여세 과세특례 — 조문 중복적용 배제(상증세법 §43①)를 판정한다. 하나의 증여에 대해 §33~39, 39의2, 39의3, 40, 41의2~41의5, 42, 42의2, 42의3, 44, 45, 45의3~45의5의 증여의제·증여추정 규정 중 둘 이상이 동시에 적용될 수 있는 경우, 이익이 가장 많게 계산되는 것 하나만 적용하고 나머지는 배제한다. 각 조문의 증여재산가액을 해당 개별 계산도구(calculate_low_price_transfer_gift_amount, calculate_interest_free_loan_gift_amount 등)로 먼저 계산한 뒤 이 도구에 넣어 최종 적용할 조문 하나를 가려낸다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        candidates: {
+          type: 'array',
+          description: '동일한 증여에 동시적용 가능성이 있는 조문별 계산결과 목록(2건 이상).',
+          items: {
+            type: 'object',
+            properties: {
+              article: { type: 'string', description: '조문 라벨(예: "§35 저가양수", "§42 재산사용이익").' },
+              giftAmount: { type: 'number', description: '그 조문으로 계산한 증여재산가액(원).' }
+            },
+            required: ['article', 'giftAmount']
+          }
+        }
+      },
+      required: ['candidates']
+    }
+  },
+  {
     name: 'calculate_interest_free_loan_gift_amount',
     description: '금전 무상대출 등에 따른 이익의 증여의제(상증세법 §41의4)의 증여재산가액을 계산한다. 특수관계인 간 금전을 무상 또는 적정이자율(현재 연 4.6%)보다 낮은 이자로 빌려주면 그 차액이 증여재산가액이 되며, 연간 계산액이 1천만원 미만이면 과세하지 않는다. 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
     input_schema: {
@@ -6776,6 +6798,36 @@ function toolCalculateLowPriceTransferGiftAmount(p) {
   };
 }
 
+// 증여세 과세특례 — 조문 중복적용 배제 (상증세법 §43①) — 하나의 증여에 대해 §33~39, 39의2, 39의3, 40,
+// 41의2~41의5, 42, 42의2, 42의3, 44, 45, 45의3~45의5 중 둘 이상의 증여의제·증여추정 규정이 동시에
+// 적용될 수 있는 경우, 그 중 이익이 가장 많게 계산되는 것 하나만 적용한다(중복과세 방지). 각 조문의
+// 증여재산가액은 해당 개별 계산도구(calculate_low_price_transfer_gift_amount 등)로 먼저 계산한 뒤,
+// 그 결과들을 이 도구에 candidates로 넣어 최종 적용할 조문 하나를 가려낸다.
+function toolCalculateGiftSpecialProvisionOverlap(p) {
+  p = p || {};
+  const candidates = Array.isArray(p.candidates) ? p.candidates : [];
+  if (candidates.length < 2) return { error: '동시에 적용 검토 중인 조문의 계산결과를 candidates에 2건 이상 넣어야 합니다(1건뿐이면 비교할 필요가 없습니다).' };
+
+  const parsed = candidates.map(function (c, idx) {
+    const giftAmount = Number(c && c.giftAmount);
+    if (!(giftAmount >= 0)) return { error: idx };
+    return { article: String((c && c.article) || ('후보' + (idx + 1))), giftAmount: giftAmount };
+  });
+  const badIdx = parsed.findIndex(function (c) { return c.error !== undefined; });
+  if (badIdx !== -1) return { error: 'candidates[' + badIdx + '].giftAmount이 0 이상의 숫자가 아닙니다.' };
+
+  let winner = parsed[0];
+  for (let i = 1; i < parsed.length; i++) { if (parsed[i].giftAmount > winner.giftAmount) winner = parsed[i]; }
+  const excluded = parsed.filter(function (c) { return c !== winner; });
+
+  return {
+    적용조문: winner.article, 적용증여재산가액: winner.giftAmount,
+    배제된조문: excluded.map(function (c) { return { article: c.article, giftAmount: c.giftAmount }; }),
+    안내: '§43①에 따라 동일한 증여에 둘 이상의 증여의제·증여추정 규정이 동시에 적용될 수 있으면 이익이 가장 많은 것(' + winner.article + ', ' + winner.giftAmount + '원) 하나만 적용하고 나머지(' +
+      excluded.map(function (c) { return c.article; }).join(', ') + ')는 적용하지 않습니다. 적용조문의 증여재산가액만 calculate_gift_tax의 giftAmount로 넣어 세액을 계산하세요.'
+  };
+}
+
 // 금전 무상대출 등에 따른 이익의 증여의제 (상증세법 §41의4) — 특수관계인에게(또는으로부터) 금전을 무상 또는 적정이자율보다
 // 낮은 이자로 빌려주면(빌리면) 그 차액을 증여받은 것으로 본다. 연간 계산액이 1천만원 미만이면 과세하지 않는다.
 function toolCalculateInterestFreeLoanGiftAmount(p) {
@@ -9981,6 +10033,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
+        b.name === 'calculate_gift_special_provision_overlap' ||
         b.name === 'calculate_interest_free_loan_gift_amount' ||
         b.name === 'calculate_stock_transfer_tax' ||
         b.name === 'calculate_unlisted_stock_value' ||
@@ -10406,6 +10459,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_low_price_transfer_gift_amount') {
         const resultObj = toolCalculateLowPriceTransferGiftAmount(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_gift_special_provision_overlap') {
+        const resultObj = toolCalculateGiftSpecialProvisionOverlap(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

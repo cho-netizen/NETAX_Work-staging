@@ -2885,6 +2885,32 @@
     };
   };
 
+  // 증여세 과세특례 — 조문 중복적용 배제 (상증세법 §43①) — Code.js toolCalculateGiftSpecialProvisionOverlap와 동일 로직.
+  window.calculateGiftSpecialProvisionOverlapJS = function (p) {
+    p = p || {};
+    const candidates = Array.isArray(p.candidates) ? p.candidates : [];
+    if (candidates.length < 2) return { error: '동시에 적용 검토 중인 조문의 계산결과를 2건 이상 넣어야 합니다.' };
+
+    const parsed = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const giftAmount = Number(c && c.giftAmount);
+      if (!(giftAmount >= 0)) return { error: 'candidates[' + i + '].giftAmount이 0 이상의 숫자가 아닙니다.' };
+      parsed.push({ article: String((c && c.article) || ('후보' + (i + 1))), giftAmount: giftAmount });
+    }
+
+    let winner = parsed[0];
+    for (let i = 1; i < parsed.length; i++) { if (parsed[i].giftAmount > winner.giftAmount) winner = parsed[i]; }
+    const excluded = parsed.filter(function (c) { return c !== winner; });
+
+    return {
+      적용조문: winner.article, 적용증여재산가액: winner.giftAmount,
+      배제된조문: excluded.map(function (c) { return { article: c.article, giftAmount: c.giftAmount }; }),
+      안내: '§43①에 따라 이익이 가장 많은 것(' + winner.article + ', ' + winner.giftAmount + '원) 하나만 적용하고 나머지(' +
+        excluded.map(function (c) { return c.article; }).join(', ') + ')는 적용하지 않습니다. 적용조문의 증여재산가액만 계산기 상단의 giftAmount에 넣어 세액을 계산하세요.'
+    };
+  };
+
   // 금전 무상대출 등에 따른 이익의 증여의제 (상증세법 §41의4) — Code.js toolCalculateInterestFreeLoanGiftAmount와 동일 로직.
   window.calculateInterestFreeLoanGiftAmountJS = function (p) {
     p = p || {};

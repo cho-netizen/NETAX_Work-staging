@@ -3572,6 +3572,21 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-interest-free-loan">증여재산가액 계산하기</button>' +
       '<div id="taxCalcLoanResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>증여세 과세특례 — 조문 중복적용 배제(§43①) — 하나의 증여에 §33~39·39의2·39의3·40·41의2~41의5·42·42의2·42의3·44·45·45의3~45의5 중 둘 이상의 증여의제·증여추정 규정이 동시에 적용될 수 있을 때, 각 조문별로 계산한 증여재산가액을 아래에 입력하면 이익이 가장 많은 것 하나만 골라줍니다(나머지는 적용하지 않음)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>후보1 조문</label><input type="text" id="gspArticle1" placeholder="예: §35 저가양수"></div>' +
+        '<div class="taxcalc-field"><label>후보1 증여재산가액</label><input type="number" id="gspAmount1" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>후보2 조문</label><input type="text" id="gspArticle2" placeholder="예: §42 재산사용이익"></div>' +
+        '<div class="taxcalc-field"><label>후보2 증여재산가액</label><input type="number" id="gspAmount2" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>후보3 조문(선택)</label><input type="text" id="gspArticle3" placeholder=""></div>' +
+        '<div class="taxcalc-field"><label>후보3 증여재산가액(선택)</label><input type="number" id="gspAmount3" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>후보4 조문(선택)</label><input type="text" id="gspArticle4" placeholder=""></div>' +
+        '<div class="taxcalc-field"><label>후보4 증여재산가액(선택)</label><input type="number" id="gspAmount4" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-gift-special-provision-overlap">중복적용 배제 판정하기</button>' +
+      '<div id="taxCalcGiftOverlapResult"></div>' +
     '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
   const giftDateEl = document.getElementById('giftDate');
@@ -4228,6 +4243,18 @@ function renderLowPriceResult(r){
   if (r.차감기준액_게이트 != null) html += taxCalcResultRow('게이트 기준금액(시가×30%)', won(r.차감기준액_게이트));
   if (r.차감액_공제 != null) html += taxCalcResultRow('차감액(정액)', won(r.차감액_공제));
   html += taxCalcResultRow('증여재산가액', won(r.증여재산가액), { total: true });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderGiftOverlapResult(r){
+  const box = document.getElementById('taxCalcGiftOverlapResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('적용조문', r.적용조문);
+  html += taxCalcResultRow('적용 증여재산가액', won(r.적용증여재산가액), { total: true });
+  (r.배제된조문 || []).forEach(function(c){ html += taxCalcResultRow('배제 — ' + c.article, won(c.giftAmount)); });
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -6043,6 +6070,16 @@ taxCalcView.addEventListener('click', function(e){
       loanMonths: document.getElementById('loanMonths').value === '' ? null : numVal(document.getElementById('loanMonths').value)
     };
     renderLoanGiftResult(calculateInterestFreeLoanGiftAmountJS(input));
+  } else if (action === 'run-gift-special-provision-overlap'){
+    const candidates = [];
+    for (let i = 1; i <= 4; i++) {
+      const amountEl = document.getElementById('gspAmount' + i);
+      const amountVal = amountEl.value;
+      if (amountVal === '') continue;
+      const articleEl = document.getElementById('gspArticle' + i);
+      candidates.push({ article: articleEl.value || ('후보' + i), giftAmount: numVal(amountVal) || 0 });
+    }
+    renderGiftOverlapResult(calculateGiftSpecialProvisionOverlapJS({ candidates: candidates }));
   } else if (action === 'run-installment-inheritance'){
     const input = {
       taxType: document.getElementById('ipIhTaxType').value,
