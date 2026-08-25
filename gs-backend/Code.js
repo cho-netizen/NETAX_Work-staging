@@ -413,6 +413,7 @@ const DRIVE_TOOLS = [
         },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: '전체 확정신고 기준 신고 상태. 생략하면 ontime.' },
         isFraudulent: { type: 'boolean', description: '부정행위 여부(가산세율 40%로 상향)' },
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 — 과소신고분 세액(원)' },
         unpaidDays: { type: 'number', description: '납부지연일수' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준액을 산출세액 합계 대신 다른 값으로 쓰고 싶을 때만 입력(보통 생략)' },
@@ -4877,7 +4878,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
   const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), undefined, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
   const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
   const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
@@ -5157,7 +5158,11 @@ function toolCalculateTransferTax(p) {
 
     // 다주택자 중과(소득세법 §104⑦, 조정대상지역 2주택 이상) — 적용되면 장기보유특별공제 자체가 배제된다.
     // (등록임대주택 장특공제 특례를 적용받는 주택은 다주택 수 계산에서 제외되는 것이 원칙이라 여기서는 중과 대상에서 제외한다.)
-    isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!p.isAdjustedArea && multiHouseCount >= 2;
+    // 소득세법시행령§167의3①12호의2(및 §167의4③6의2·§167의10①12호의2·§167의11①12호, 부칙 제4조 —
+    // 2022.5.10 이후 양도분부터 적용) — 조정대상지역 다주택자라도 "보유기간 2년 이상" 요건을 갖춘
+    // "2026년 5월 9일까지 양도하는 주택"만 한시적으로 중과(세율가산+장특공제배제)를 적용하지 않는다.
+    const isMultiHouseSurchargeExcluded = !!p.transferDate && p.transferDate <= '2026-05-09' && holdingYears >= 2;
+    isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!p.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
     if (isMultiHouseSurcharge) longTermRate = 0;
   }
 
@@ -10176,7 +10181,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const resultObj = toolCalculateTransferTaxMulti(input.transactions, {
           filingStatus: input.filingStatus, isFraudulent: input.isFraudulent, underreportedTaxAmount: input.underreportedTaxAmount,
           unpaidDays: input.unpaidDays, unpaidTaxForLatePenalty: input.unpaidTaxForLatePenalty, isSelfElectronicFiling: input.isSelfElectronicFiling,
-          monthsAfterDesignatedDueDate: input.monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate: input.unpaidTaxAtDesignatedDueDate
+          monthsAfterDesignatedDueDate: input.monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate: input.unpaidTaxAtDesignatedDueDate,
+          isOffshoreTransaction: input.isOffshoreTransaction
         });
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }

@@ -948,7 +948,7 @@
     const eFilingCredit = t.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(t.filingStatus) !== -1 ? t.filingStatus : 'ontime';
-    const penalties = giftFilingPenalties(calculatedTax, filingStatus, !!t.isFraudulent, t.underreportedTaxAmount, t.unpaidDays, Number(t.unpaidTaxForLatePenalty), undefined, t.monthsAfterDesignatedDueDate, Number(t.unpaidTaxAtDesignatedDueDate));
+    const penalties = giftFilingPenalties(calculatedTax, filingStatus, !!t.isFraudulent, t.underreportedTaxAmount, t.unpaidDays, Number(t.unpaidTaxForLatePenalty), !!t.isOffshoreTransaction, t.monthsAfterDesignatedDueDate, Number(t.unpaidTaxAtDesignatedDueDate));
     const localIncomeTax = Math.round(calculatedTax * 0.1);
     const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + core.conversionValuePenalty
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
@@ -1249,7 +1249,7 @@
     const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
     const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
-    const penalties = giftFilingPenalties(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), undefined, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
+    const penalties = giftFilingPenalties(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
     const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
     const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
       + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
