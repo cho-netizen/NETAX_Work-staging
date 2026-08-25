@@ -5670,4 +5670,78 @@
       해지시일시금: cancellationValue, 평가액: value
     };
   };
+
+  // 정기금을 받을 권리의 평가 (상증세법§65①, 시행령§62, 시행규칙§19의2③ 이자율 연3%) — Code.js
+  // toolCalculatePeriodicPaymentRightValue와 동일 로직.
+  window.calculatePeriodicPaymentRightValueJS = function (p) {
+    p = p || {};
+    const annuityType = p.annuityType;
+    if (['fixed_term', 'perpetual', 'lifetime'].indexOf(annuityType) === -1) {
+      return { error: 'annuityType을 fixed_term(유기정기금)/perpetual(무기정기금)/lifetime(종신정기금) 중에서 선택하세요.' };
+    }
+    const annualAmount = Number(p.annualAmount) || 0;
+    if (annualAmount <= 0) return { error: '1년분 정기금액(annualAmount)이 필요합니다.' };
+    const RATE = 0.03;
+    const cancellationValue = Number(p.cancellationValue) || 0;
+
+    if (annuityType === 'perpetual') {
+      const perpetualValue = annualAmount * 20;
+      return {
+        평가방법: '무기정기금(시행령§62 2호)', 정기금가액: perpetualValue, 해지시일시금: cancellationValue,
+        평가액: Math.max(perpetualValue, cancellationValue),
+        안내: '무기정기금은 1년분 정기금액의 20배가 정액으로 평가액입니다(연도별 현재가치 계산 불필요).'
+      };
+    }
+
+    let years;
+    if (annuityType === 'fixed_term') {
+      years = Math.max(0, Math.round(Number(p.remainingYears) || 0));
+      if (years <= 0) return { error: 'fixed_term(유기정기금)일 때 잔존기간(remainingYears, 년)이 필요합니다.' };
+    } else {
+      years = Math.max(0, Math.floor(Number(p.lifeExpectancyYears) || 0));
+      if (years <= 0) return { error: 'lifetime(종신정기금)일 때 기대여명 연수(lifeExpectancyYears, 소수점 이하 버림)가 필요합니다.' };
+    }
+
+    let presentValueSum = 0;
+    const yearlyDetail = [];
+    for (let n = 1; n <= years; n++) {
+      const pv = annualAmount / Math.pow(1 + RATE, n);
+      presentValueSum += pv;
+      yearlyDetail.push({ 연차: n, 정기금액: annualAmount, 현재가치: Math.round(pv) });
+    }
+    presentValueSum = Math.round(presentValueSum);
+
+    let periodicValue = presentValueSum;
+    let capNote = '';
+    if (annuityType === 'fixed_term') {
+      const cap = annualAmount * 20;
+      if (presentValueSum > cap) { periodicValue = cap; capNote = ' 계산된 현재가치 합계(' + presentValueSum + '원)가 1년분 정기금액의 20배(' + cap + '원)를 초과해 그 한도를 적용했습니다.'; }
+    }
+    const finalValue = Math.max(periodicValue, cancellationValue);
+
+    return {
+      평가방법: annuityType === 'fixed_term' ? '유기정기금(시행령§62 1호)' : '종신정기금(시행령§62 3호)',
+      적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
+      현재가치합계: presentValueSum, 정기금가액: periodicValue, 해지시일시금: cancellationValue, 평가액: finalValue,
+      안내: '연도별 정기금액이 매년 동일하다는 전제로 계산했습니다. 계약상 매년 금액이 다르면 각 연도별로 따로 현재가치를 계산해 합산해야 합니다.'
+        + capNote + (annuityType === 'lifetime' ? ' 기대여명 연수는 통계청(국가데이터처) 고시 성별·연령별 기대여명 통계표를 기준으로 소수점 이하를 버린 값을 입력하세요.' : '')
+    };
+  };
+
+  // 조건부 권리·존속기간이 확정되지 않은 권리·소송 중인 권리의 고려요소 안내 (상증세법§65①, 시행령§60①) —
+  // Code.js toolExplainConditionalRightValuationFactors와 동일 로직(계산 없이 법령상 고려요소만 안내).
+  const CONDITIONAL_RIGHT_VALUATION_FACTORS_JS_ = {
+    conditional: { 근거: '시행령§60①1호', 유형: '조건부 권리', 고려요소: '본래의 권리의 가액을 기초로, 평가기준일 현재의 조건내용을 구성하는 사실, 조건성취의 확실성, 그 밖의 모든 사정' },
+    undetermined_duration: { 근거: '시행령§60①2호', 유형: '존속기간이 확정되지 않은 권리', 고려요소: '평가기준일 현재의 권리의 성질, 목적물의 내용연수, 그 밖의 모든 사정' },
+    litigation: { 근거: '시행령§60①3호', 유형: '소송 중인 권리', 고려요소: '평가기준일 현재의 분쟁관계의 진상, 소송진행의 상황' }
+  };
+  window.explainConditionalRightValuationFactorsJS = function (p) {
+    p = p || {};
+    const meta = CONDITIONAL_RIGHT_VALUATION_FACTORS_JS_[p.rightType];
+    if (!meta) return { error: 'rightType을 conditional(조건부 권리)/undetermined_duration(존속기간 미확정 권리)/litigation(소송 중인 권리) 중에서 선택하세요.' };
+    return {
+      유형: meta.유형, 근거조문: meta.근거, 고려요소: meta.고려요소,
+      안내: '§65①·' + meta.근거 + '는 이 권리의 평가에 객관적 계산식을 두지 않고 "' + meta.고려요소 + '"을 고려한 적정가액으로만 정합니다. 이 계산기는 그 적정가액 자체를 계산하지 않으므로, 위 고려요소를 근거로 감정평가법인 등 전문가의 평가나 사실관계 조사를 통해 별도로 금액을 확정해서 위 재산평가 금액란에 직접 입력하세요.'
+    };
+  };
 })();

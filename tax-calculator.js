@@ -964,6 +964,8 @@ const VALUATION_METHOD_LABELS = {
   rental: '임대 중인 부동산(임대료환산가액)',
   goodwill: '영업권(§64, 초과이익의 5년 현재가치)',
   trustBenefit: '신탁의 이익을 받을 권리(§65, 시행령§61, 연3% 현재가치할인)',
+  periodicPayment: '정기금을 받을 권리(§65, 시행령§62, 유기·무기·종신 구분, 연3% 현재가치할인)',
+  conditionalRight: '조건부권리·존속기간불확정권리·소송중인권리(§65, 시행령§60① — 계산식 없이 사실판단으로 적정가액 결정)',
   otherTangible: '선박·항공기·차량·기계장비·입목/상품·제품 등(§62, 재취득가액→장부가액→시가표준액)',
   groundRight: '지상권(§61③, 토지가액×2%를 잔존연수 현재가치화)',
   patentRight: '특허권·상표권·저작권등(§64, 연도별수입금액을 잔존연수(최대20년) 현재가치화 vs 취득가액-감가상각 중 큰 금액)',
@@ -1044,6 +1046,16 @@ function computeValuationAssetValue(a){
       value = r.error ? 0 : r.평가액;
       break;
     }
+    case 'periodicPayment': {
+      const r = calculatePeriodicPaymentRightValueJS({
+        annuityType: a.ppAnnuityType, annualAmount: a.ppAnnualAmount,
+        remainingYears: a.ppRemainingYears, lifeExpectancyYears: a.ppLifeExpectancyYears,
+        cancellationValue: a.ppCancellationValue
+      });
+      value = r.error ? 0 : r.평가액;
+      break;
+    }
+    case 'conditionalRight': value = numVal(a.crManualValue) || 0; break;
     case 'unlistedStock': {
       const r = calculateUnlistedStockValueJS({
         totalIssuedShares: a.uTotalShares, ownedShares: a.uOwnedShares,
@@ -1146,6 +1158,27 @@ function valuationAssetMethodFieldsHtml(m, a){
       '</select></div>') +
     '<div class="taxcalc-field"><label>해지시 받을 일시금(있으면)</label><input type="number" data-field="tbCancellationValue" placeholder="원 (신탁 철회·해지·취소로 받을 수 있는 일시금 — 이보다 크면 이 금액을 그대로 평가액으로 씀)" value="' + (a.tbCancellationValue || '') + '"></div>' +
     '<div class="taxcalc-field"><label style="color:var(--sub);">※ 연 이자율 1,000분의 30(상증세법시행규칙§14①)으로 각 연도 수익의 현재가치를 할인합니다. 아래 "신탁 수익 내역"에서 연도별로 입력하세요</label></div>';
+  if (m === 'periodicPayment') return '' +
+    '<div class="taxcalc-field"><label>정기금 종류</label><select data-field="ppAnnuityType">' +
+      '<option value="">선택</option>' +
+      '<option value="fixed_term"' + (a.ppAnnuityType === 'fixed_term' ? ' selected' : '') + '>유기정기금(잔존기간 정해짐)</option>' +
+      '<option value="perpetual"' + (a.ppAnnuityType === 'perpetual' ? ' selected' : '') + '>무기정기금(기간 없음)</option>' +
+      '<option value="lifetime"' + (a.ppAnnuityType === 'lifetime' ? ' selected' : '') + '>종신정기금(받을 자 생존기간)</option>' +
+    '</select></div>' +
+    '<div class="taxcalc-field"><label>1년분 정기금액</label><input type="number" data-field="ppAnnualAmount" value="' + (a.ppAnnualAmount || '') + '" placeholder="원 (매년 동일 가정)"></div>' +
+    (a.ppAnnuityType === 'fixed_term' ? '<div class="taxcalc-field"><label>잔존기간</label><input type="number" data-field="ppRemainingYears" value="' + (a.ppRemainingYears || '') + '" placeholder="년"></div>' : '') +
+    (a.ppAnnuityType === 'lifetime' ? '<div class="taxcalc-field"><label>기대여명 연수</label><input type="number" data-field="ppLifeExpectancyYears" value="' + (a.ppLifeExpectancyYears || '') + '" placeholder="년 (통계청 고시 성별·연령별 기대여명, 소수점 버림)"></div>' : '') +
+    '<div class="taxcalc-field"><label>해지시 받을 일시금(있으면)</label><input type="number" data-field="ppCancellationValue" value="' + (a.ppCancellationValue || '') + '" placeholder="원 (계약 철회·해지·취소로 받을 일시금 — 이보다 크면 이 금액을 씀)"></div>' +
+    '<div class="taxcalc-field"><label style="color:var(--sub);">※ 유기·종신정기금은 매년 정기금액을 연3% 할인율로 현재가치화한 합계(유기는 1년분의 20배 한도), 무기정기금은 1년분의 20배 정액입니다(§65①, 시행령§62)</label></div>';
+  if (m === 'conditionalRight') return '' +
+    '<div class="taxcalc-field"><label>권리 유형</label><select data-field="crRightType">' +
+      '<option value="">선택</option>' +
+      '<option value="conditional"' + (a.crRightType === 'conditional' ? ' selected' : '') + '>조건부 권리</option>' +
+      '<option value="undetermined_duration"' + (a.crRightType === 'undetermined_duration' ? ' selected' : '') + '>존속기간이 확정되지 않은 권리</option>' +
+      '<option value="litigation"' + (a.crRightType === 'litigation' ? ' selected' : '') + '>소송 중인 권리</option>' +
+    '</select></div>' +
+    (a.crRightType ? '<div class="taxcalc-field"><label style="color:var(--sub);">※ ' + (explainConditionalRightValuationFactorsJS({ rightType: a.crRightType }).안내 || '') + '</label></div>' : '') +
+    '<div class="taxcalc-field"><label>전문가 평가 등으로 확정한 적정가액</label><input type="number" data-field="crManualValue" value="' + (a.crManualValue || '') + '" placeholder="원 — 이 계산기는 금액을 산출하지 않으므로 직접 입력"></div>';
   if (m === 'groundRight') return '' +
     '<div class="taxcalc-field"><label>지상권이 설정된 토지가액</label><input type="number" data-field="grLandValue" value="' + (a.grLandValue || '') + '"></div>' +
     '<div class="taxcalc-field"><label>잔존연수</label><input type="number" data-field="grRemainingYears" value="' + (a.grRemainingYears || '') + '" placeholder="년 (민법§280·281 준용)"></div>' +
@@ -1291,7 +1324,7 @@ function renderValuationAssetList(containerId, assets){
       const idx = numVal(el.closest('.taxcalc-asset').dataset.idx);
       const key = el.dataset.field;
       assets[idx][key] = el.type === 'checkbox' ? el.checked : el.value;
-      if (key === 'method' || key === 'assetKind' || key === 'tbSameBeneficiary' || key === 'otTangibleType'){
+      if (key === 'method' || key === 'assetKind' || key === 'tbSameBeneficiary' || key === 'otTangibleType' || key === 'ppAnnuityType' || key === 'crRightType'){
         renderValuationAssetList(containerId, assets); // 필드 구성 자체가 바뀌므로 다시 그림
       } else {
         const row = el.closest('.taxcalc-asset');

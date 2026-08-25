@@ -2167,6 +2167,24 @@ const DRIVE_TOOLS = [
     }, required: [] }
   },
   {
+    name: 'calculate_periodic_payment_right_value',
+    description: '정기금을 받을 권리의 상증세법§65① 평가액(시행령§62, 시행규칙§19의2③ 이자율 연3%). fixed_term(유기정기금): 잔존기간 동안 매년 정기금액을 연3%로 할인한 현재가치 합계(1년분의 20배 한도). perpetual(무기정기금): 1년분 정기금액의 20배 정액. lifetime(종신정기금): 기대여명 연수까지 매년 정기금액의 현재가치 합계(한도 없음). 계약의 철회·해지·취소 등으로 받을 수 있는 일시금이 더 크면 그 금액을 적용한다. 매년 정기금액이 동일하다는 전제로 계산하므로 연도별 금액이 다르면 별도로 계산해야 한다.',
+    input_schema: { type: 'object', properties: {
+      annuityType: { type: 'string', enum: ['fixed_term', 'perpetual', 'lifetime'], description: 'fixed_term=유기정기금, perpetual=무기정기금, lifetime=종신정기금' },
+      annualAmount: { type: 'number', description: '1년분 정기금액(원, 매년 동일하다고 가정)' },
+      remainingYears: { type: 'number', description: 'annuityType이 fixed_term일 때 필수 — 잔존기간(년)' },
+      lifeExpectancyYears: { type: 'integer', description: 'annuityType이 lifetime일 때 필수 — 정기금을 받을 권리자의 통계청(국가데이터처) 고시 성별·연령별 기대여명 연수(소수점 이하 버림)' },
+      cancellationValue: { type: 'number', description: '계약의 철회·해지·취소 등으로 받을 수 있는 일시금(원, 없으면 0) — 위 계산액보다 크면 이 값을 적용' }
+    }, required: ['annuityType', 'annualAmount'] }
+  },
+  {
+    name: 'explain_conditional_right_valuation_factors',
+    description: '조건부 권리·존속기간이 확정되지 않은 권리·소송 중인 권리의 평가(상증세법§65①, 시행령§60①)에 법령이 열거한 고려요소를 안내한다. 이 3가지는 법령에 객관적 계산식이 없고 "모든 사정을 고려한 적정가액"으로만 정하는 사실판단 영역이라, 이 도구는 금액을 계산하지 않고 그 판단에 반영해야 할 요소만 알려준다. 실제 평가액은 감정평가·전문가 판단 등으로 별도로 확정해야 한다.',
+    input_schema: { type: 'object', properties: {
+      rightType: { type: 'string', enum: ['conditional', 'undetermined_duration', 'litigation'], description: 'conditional=조건부 권리, undetermined_duration=존속기간이 확정되지 않은 권리, litigation=소송 중인 권리' }
+    }, required: ['rightType'] }
+  },
+  {
     name: 'calculate_proportional_allocation',
     description: '토지·건물 등을 함께 양도(취득)했는데 각 자산의 가액 구분이 불분명할 때, 소득세법시행령§166④에 따라 감정가액 또는 기준시가 비율로 안분한다. 2개 이상의 자산이 필요하다.',
     input_schema: { type: 'object', properties: {
@@ -4613,6 +4631,84 @@ function toolCalculateTrustBenefitValue(p) {
     적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
     수익권_평가액: incomeInterestValue, 원본권_평가액: principalInterestValue,
     해지시일시금: cancellationValue, 평가액: value
+  };
+}
+
+// 정기금을 받을 권리의 평가 (상증세법§65①, 시행령§62, 시행규칙§19의2③ 이자율 연3%) — 유기정기금(잔존기간
+// 동안 매년 정기금액의 현재가치 합계, 1년분의 20배 한도)·무기정기금(1년분의 20배 정액)·종신정기금(기대여명
+// 연수까지 매년 정기금액의 현재가치 합계, 한도 없음). 해지시 받을 수 있는 일시금이 더 크면 그 금액.
+function toolCalculatePeriodicPaymentRightValue(p) {
+  p = p || {};
+  const annuityType = p.annuityType;
+  if (['fixed_term', 'perpetual', 'lifetime'].indexOf(annuityType) === -1) {
+    return { error: 'annuityType을 fixed_term(유기정기금)/perpetual(무기정기금)/lifetime(종신정기금) 중에서 선택하세요.' };
+  }
+  const annualAmount = Number(p.annualAmount) || 0;
+  if (annualAmount <= 0) return { error: '1년분 정기금액(annualAmount)이 필요합니다.' };
+  const RATE = 0.03;
+  const cancellationValue = Number(p.cancellationValue) || 0;
+
+  if (annuityType === 'perpetual') {
+    const perpetualValue = annualAmount * 20;
+    return {
+      평가방법: '무기정기금(시행령§62 2호)', 정기금가액: perpetualValue, 해지시일시금: cancellationValue,
+      평가액: Math.max(perpetualValue, cancellationValue),
+      안내: '무기정기금은 1년분 정기금액의 20배가 정액으로 평가액입니다(연도별 현재가치 계산 불필요).'
+    };
+  }
+
+  let years;
+  if (annuityType === 'fixed_term') {
+    years = Math.max(0, Math.round(Number(p.remainingYears) || 0));
+    if (years <= 0) return { error: 'fixed_term(유기정기금)일 때 잔존기간(remainingYears, 년)이 필요합니다.' };
+  } else {
+    years = Math.max(0, Math.floor(Number(p.lifeExpectancyYears) || 0));
+    if (years <= 0) return { error: 'lifetime(종신정기금)일 때 기대여명 연수(lifeExpectancyYears, 소수점 이하 버림)가 필요합니다.' };
+  }
+
+  let presentValueSum = 0;
+  const yearlyDetail = [];
+  for (let n = 1; n <= years; n++) {
+    const pv = annualAmount / Math.pow(1 + RATE, n);
+    presentValueSum += pv;
+    yearlyDetail.push({ 연차: n, 정기금액: annualAmount, 현재가치: Math.round(pv) });
+  }
+  presentValueSum = Math.round(presentValueSum);
+
+  let periodicValue = presentValueSum;
+  let capNote = '';
+  if (annuityType === 'fixed_term') {
+    const cap = annualAmount * 20;
+    if (presentValueSum > cap) { periodicValue = cap; capNote = ' 계산된 현재가치 합계(' + presentValueSum + '원)가 1년분 정기금액의 20배(' + cap + '원)를 초과해 그 한도를 적용했습니다.'; }
+  }
+  const finalValue = Math.max(periodicValue, cancellationValue);
+
+  return {
+    평가방법: annuityType === 'fixed_term' ? '유기정기금(시행령§62 1호)' : '종신정기금(시행령§62 3호)',
+    적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
+    현재가치합계: presentValueSum, 정기금가액: periodicValue, 해지시일시금: cancellationValue, 평가액: finalValue,
+    안내: '연도별 정기금액이 매년 동일하다는 전제로 계산했습니다. 계약상 매년 금액이 다르면 각 연도별로 따로 현재가치를 계산해 합산해야 합니다.'
+      + capNote + (annuityType === 'lifetime' ? ' 기대여명 연수는 통계청(국가데이터처) 고시 성별·연령별 기대여명 통계표를 기준으로 소수점 이하를 버린 값을 입력하세요.' : '')
+  };
+}
+
+// 조건부 권리·존속기간이 확정되지 않은 권리·소송 중인 권리의 평가 (상증세법§65①, 시행령§60①) — 이
+// 3가지는 법령이 객관적 계산식을 정하지 않고 "모든 사정을 고려한 적정가액"으로만 규정한 사실판단 영역이라,
+// 이 도구는 세액을 계산하지 않고 시행령이 열거한 고려요소만 안내한다. 실제 평가액은 그 요소들을 근거로
+// 감정평가·전문가 판단 등을 거쳐 별도로 확정해야 한다.
+const CONDITIONAL_RIGHT_VALUATION_FACTORS_ = {
+  conditional: { 근거: '시행령§60①1호', 유형: '조건부 권리', 고려요소: '본래의 권리의 가액을 기초로, 평가기준일 현재의 조건내용을 구성하는 사실, 조건성취의 확실성, 그 밖의 모든 사정' },
+  undetermined_duration: { 근거: '시행령§60①2호', 유형: '존속기간이 확정되지 않은 권리', 고려요소: '평가기준일 현재의 권리의 성질, 목적물의 내용연수, 그 밖의 모든 사정' },
+  litigation: { 근거: '시행령§60①3호', 유형: '소송 중인 권리', 고려요소: '평가기준일 현재의 분쟁관계의 진상, 소송진행의 상황' }
+};
+function toolExplainConditionalRightValuationFactors(p) {
+  p = p || {};
+  const rightType = p.rightType;
+  const meta = CONDITIONAL_RIGHT_VALUATION_FACTORS_[rightType];
+  if (!meta) return { error: 'rightType을 conditional(조건부 권리)/undetermined_duration(존속기간 미확정 권리)/litigation(소송 중인 권리) 중에서 선택하세요.' };
+  return {
+    유형: meta.유형, 근거조문: meta.근거, 고려요소: meta.고려요소,
+    안내: '§65①·' + meta.근거 + '는 이 권리의 평가에 객관적 계산식을 두지 않고 "' + meta.고려요소 + '"을 고려한 적정가액으로만 정합니다. 이 도구는 그 적정가액 자체를 계산하지 않으므로, 위 고려요소를 근거로 감정평가법인 등 전문가의 평가나 사실관계 조사를 통해 별도로 금액을 확정한 뒤, 그 확정된 금액을 calculate_gift_tax·calculate_inheritance_tax의 재산가액으로 입력하세요.'
   };
 }
 
@@ -10289,6 +10385,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_adjusted_share_count' ||
         b.name === 'calculate_other_tangible_property_value' ||
         b.name === 'calculate_trust_benefit_value' ||
+        b.name === 'calculate_periodic_payment_right_value' ||
+        b.name === 'explain_conditional_right_valuation_factors' ||
         b.name === 'calculate_proportional_allocation' ||
         b.name === 'manage_task_plan' ||
         b.name === 'lookup_calendar_events' ||
@@ -10766,6 +10864,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       }
       if (block.name === 'calculate_trust_benefit_value') {
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateTrustBenefitValue(block.input || {})) };
+      }
+      if (block.name === 'calculate_periodic_payment_right_value') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculatePeriodicPaymentRightValue(block.input || {})) };
+      }
+      if (block.name === 'explain_conditional_right_valuation_factors') {
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolExplainConditionalRightValuationFactors(block.input || {})) };
       }
       if (block.name === 'calculate_proportional_allocation') {
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolCalculateProportionalAllocation(block.input || {})) };
