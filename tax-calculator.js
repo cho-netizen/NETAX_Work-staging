@@ -347,8 +347,11 @@ function recomputeHeirDerivedFields(){
 
   const childHeirs = heirs.filter(function(h){ return h.relation === '자녀' || (h.relation || '').indexOf('손자녀') !== -1; });
   const childCount = heirs.filter(function(h){ return h.relation === '자녀'; }).length;
+  // §20①2호·3호 — 미성년자공제·연로자공제는 "상속인(배우자는 제외한다) 및 동거가족"만 대상이다.
+  // 4호(장애인공제)는 배우자 제외 문구가 없으므로 disabledCount는 배우자를 포함해 그대로 센다.
   let minorYears = 0, elderlyCount = 0;
   heirs.forEach(function(h){
+    if (h.relation === '배우자') return;
     const age = calcAgeAt_(h.birthDate, deathDate);
     if (age === null) return;
     if (age < 19) minorYears += (19 - age);
@@ -2638,6 +2641,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>수증자 주소(납세지)</label><div class="taxcalc-field-inline"><input type="text" id="giftDoneeAddress"><button type="button" class="taxcalc-ai-btn" data-action="open-address-search-simple" data-target-input="giftDoneeAddress" title="주소 검색">🔍</button></div>' +
           '<button type="button" class="taxcalc-ai-btn" data-action="open-tax-office-guide" data-address-input="giftDoneeAddress" style="margin-top:4px;">🏢 관할세무서 확인</button>' +
         '</div>' +
+        '<div class="taxcalc-field"><label>수증자 거주구분(국내에 주소를 두거나 183일 이상 거소를 둔 사람=거주자)</label><select id="giftDoneeResident"><option value="resident" selected>거주자</option><option value="nonresident">비거주자</option></select><span class="taxcalc-result-note" style="margin:2px 0 0;">비거주자면 증여재산공제(§53)·혼인출산증여재산공제(§53의2)를 받을 수 없습니다.</span></div>' +
         '<div class="taxcalc-field"><span class="taxcalc-result-note" id="giftMinorHint" style="margin:0;">수증자 미성년 여부는 위 주민등록번호로 자동 판정됩니다</span></div>' +
         '<div class="taxcalc-field"><label>증여자 성명</label><input type="text" id="giftDonorName" data-nameonly="1"></div>' +
         '<div class="taxcalc-field"><label>증여자 주민등록번호</label><input type="text" id="giftDonorRegNo" placeholder="000000-0000000" data-regno="1"></div>' +
@@ -5453,6 +5457,7 @@ taxCalcView.addEventListener('click', function(e){
       giftAmount: numVal(document.getElementById('giftAmount').value) || 0,
       relation: document.getElementById('giftRelation').value,
       isMinor: taxCalcGiftDoneeIsMinor(),
+      isDoneeResident: document.getElementById('giftDoneeResident').value !== 'nonresident',
       debtAssumedAmount: numVal(document.getElementById('giftDebtAssumed').value) || 0,
       isDebtObjectivelyProven: !!document.getElementById('giftDebtObjProven').checked,
       priorGiftAmount: numVal(document.getElementById('giftPriorAmount').value) || 0,

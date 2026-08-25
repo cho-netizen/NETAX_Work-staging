@@ -393,6 +393,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -415,6 +416,7 @@ const DRIVE_TOOLS = [
         isFraudulent: { type: 'boolean', description: '부정행위 여부(가산세율 40%로 상향)' },
         isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 — 과소신고분 세액(원)' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'number', description: '납부지연일수' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준액을 산출세액 합계 대신 다른 값으로 쓰고 싶을 때만 입력(보통 생략)' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -464,9 +466,10 @@ const DRIVE_TOOLS = [
         giftAmount: { type: 'number', description: '이번 증여재산가액(원, 채무인수분 포함 총액 — 부담부증여면 debtAssumedAmount로 채무액을 따로 알려줄 것). 이 금액을 정할 때는 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 지금 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 이 중 어느 것도 확인할 수 없는 값(공시지가 자체, 감정평가액 등)은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         relation: { type: 'string', enum: ['배우자', '직계존속', '직계비속', '기타친족', '기타'], description: '증여자와 수증자의 관계 (수증자 기준)' },
         isMinor: { type: 'boolean', description: '수증자가 미성년자인지 (relation이 직계존속일 때 공제액에 영향)' },
+        isDoneeResident: { type: 'boolean', description: '§53 본문·§53의2①②는 둘 다 "거주자가... 증여를 받은 경우"로 한정되어 있어, 수증자가 비거주자면 증여재산공제(§53)도 혼인·출산증여재산공제(§53의2)도 받을 수 없다. 생략하면 거주자로 간주한다.' },
         debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원). 증여재산가액에서 제외되어 증여세만 줄어들고, 그만큼은 증여자에게 별도로 양도소득세가 과세되므로 calculate_transfer_tax를 함께 호출해야 한다. 단 relation이 배우자·직계존속·직계비속이면 §47③에 따라 isDebtObjectivelyProven이 true가 아닌 한 이 금액은 공제되지 않는다(인수 안 된 것으로 추정).' },
         isDebtObjectivelyProven: { type: 'boolean', description: 'relation이 배우자·직계존속·직계비속일 때만 의미 있음 — 인수한 채무가 국가·지방자치단체에 대한 채무 등 객관적으로 인수 사실이 인정되는지(§47③ 단서). true가 아니면 debtAssumedAmount는 공제되지 않는다.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산 합산액(원). 없으면 생략.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 기증여재산 합산액(원, §47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '위 기증여분에 대해 이미 납부한 증여세액(원). 없으면 생략.' },
         priorGiftTaxableBase: { type: 'number', description: '위 기증여분의 증여세 과세표준(원, §58②). 기납부세액공제는 무제한이 아니라 "이번 산출세액×(이 값÷이번 과세표준)"을 한도로 하므로, 입력하지 않으면 이 한도가 적용되지 않아 공제가 과다산정될 수 있다.' },
         isGenerationSkip: { type: 'boolean', description: '세대를 건너뛴 증여(예: 조부모→손자녀)인지 여부' },
@@ -504,6 +507,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부담부증여 은폐 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -552,8 +556,8 @@ const DRIVE_TOOLS = [
         priorGiftedAmountIncludedInEstate: { type: 'number', description: 'taxableEstateAmount에 가산된 10년 이내 사전증여재산가액의 원본(재산가액 자체, 과세표준 아님). 배우자공제 한도액 계산의 "상속재산의 가액" 산출에 쓰인다.' },
         spouseTaxableBaseOfPriorGift: { type: 'number', description: '상속재산에 가산한 증여재산 중 배우자가 사전증여받은 부분의 증여세 과세표준(원). 배우자공제 한도액에서 차감된다.' },
         childCount: { type: 'integer', description: '자녀 수 (1인당 5천만원 공제)' },
-        minorHeirRemainingYears: { type: 'number', description: '미성년 상속인들의 19세까지 남은 잔여연수 합계 (1년당 1천만원 공제)' },
-        elderlyHeirCount: { type: 'integer', description: '65세 이상 상속인 수 (1인당 5천만원 공제)' },
+        minorHeirRemainingYears: { type: 'number', description: '§20①2호 — 상속인(배우자는 제외한다) 및 동거가족 중 미성년 상속인들의 19세까지 남은 잔여연수 합계 (1년당 1천만원 공제). 배우자는 미성년이더라도 이 합계에 포함하지 말 것.' },
+        elderlyHeirCount: { type: 'integer', description: '§20①3호 — 상속인(배우자는 제외한다) 및 동거가족 중 65세 이상인 사람 수 (1인당 5천만원 공제). 배우자는 65세 이상이더라도 이 수에 포함하지 말 것.' },
         disabledHeirRemainingYears: { type: 'number', description: '장애인 상속인들의 기대여명 잔여연수 합계 (1년당 1천만원 공제)' },
         netFinancialAssets: { type: 'number', description: '순금융재산가액(금융재산-금융채무, 원). 2천만원 이하면 전액, 초과하면 20%와 2천만원 중 큰 금액(2억원 한도)이 공제된다.' },
         hasCohabitingHouseDeduction: { type: 'boolean', description: '동거주택상속공제 구버전 단일 플래그 — 아래 3개 세부요건 플래그를 하나라도 넣으면 이 값 대신 그 3개(AND)로 정확히 판정한다. 세부요건을 모른다면 이 값 대신 반드시 아래 3개를 개별 확인해서 넣을 것을 권장한다.' },
@@ -641,6 +645,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 재산은닉 등 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -705,6 +710,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원). 과소신고가산세 계산 기준.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 납부지연가산세(1일 10만분의22) 계산에 사용, 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -739,6 +745,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime. 법정신고기한은 수혜법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월이 되는 날.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -770,6 +777,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -794,6 +802,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -816,6 +825,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 최종세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -844,6 +854,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때 과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액. 생략하면 이번 계산의 최종세액을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -865,7 +876,7 @@ const DRIVE_TOOLS = [
         loanAmount: { type: 'number', description: 'useType이 collateral일 때 필수 — 담보를 이용해 차입한 금전 등의 금액(원).' },
         actualInterestPaid: { type: 'number', description: 'useType이 collateral일 때 — 실제로 지급했거나 지급할 이자(원). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액(원).' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -874,6 +885,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -896,7 +908,7 @@ const DRIVE_TOOLS = [
         priorTaxesSum: { type: 'number', description: 'transferType이 bypass일 때 — 당초 양도자 및 양수자가 부담한 소득세 결정세액 합계(원).' },
         comparisonGiftTax: { type: 'number', description: 'transferType이 bypass일 때 — 재양도 재산가액을 증여추정할 경우의 증여세액(원). 비워두면 이 도구가 assetValue·관계별공제 등으로 자동계산한 산출세액을 그대로 쓰며, 입력하면 그 값을 우선 사용한다. priorTaxesSum이 이보다 크면 §44②단서에 따라 과세 제외된다.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -905,6 +917,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -926,7 +939,7 @@ const DRIVE_TOOLS = [
         premiumPaidByOthers: { type: 'number', description: '보험금 수령인이 아닌 자가 납부한 보험료(원, §34①1호). 없으면 0.' },
         premiumPaidFromGiftedAssets: { type: 'number', description: '수령인이 증여받은 재산으로 납부한 보험료(원, §34①2호). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -935,6 +948,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1032,7 +1046,7 @@ const DRIVE_TOOLS = [
         shareholderOwnershipRatio: { type: 'number', description: '증여의제이익을 계산할 그 지배주주등의 주식보유비율(0~1).' },
         directGiftTaxEquivalent: { type: 'number', description: '§45의5② 한도 계산용 — 그 지배주주등이 특정법인의 이익 중 자기 지분에 해당하는 금액을 직접 증여받았다고 볼 경우의 증여세 상당액(원, 관계별 공제 반영해 별도 계산). 없으면 한도를 적용하지 않는다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액 — 증여자가 법인이므로 통상 0.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1041,6 +1055,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1077,7 +1092,7 @@ const DRIVE_TOOLS = [
         actualIncomeTax: { type: 'number', description: 'isFinalSettlement가 true이고 초과배당금액이 비과세·과세제외되거나 분리과세된 경우 — 그 실제 소득세액(원, 비과세면 0). 종합과세되는 경우는 comprehensiveIncomeTaxBase를 입력하면 자동계산되므로 생략 가능.' },
         comprehensiveIncomeTaxBase: { type: 'number', description: 'isFinalSettlement가 true이고 초과배당금액이 종합과세되는 경우 — 초과배당금액이 발생한 연도의 종합소득과세표준(원, 초과배당금액 포함된 값). 입력하면 시행규칙§10의3②3호 산식(가목·나목 중 큰 금액)으로 실제소득세액을 자동계산한다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1086,6 +1101,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1109,7 +1125,7 @@ const DRIVE_TOOLS = [
         shares: { type: 'number', description: '증여받거나 유상으로 취득한 주식등의 수.' },
         originalGiftTaxPaid: { type: 'number', description: '정산기준일 현재 가액이 당초 과세가액보다 기준금액 이상 낮아졌을 때(환급 대상 판정시)만 사용 — 증여받은 때 실제 납부한 당초의 증여세액(원). §41의3④단서에 따라 이 금액 전액이 환급액으로 계산된다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1118,6 +1134,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1170,7 +1187,7 @@ const DRIVE_TOOLS = [
         bondAcquisitionCost: { type: 'number', description: 'isBondTransferred가 true일 때 — 전환사채등의 취득가액(원).' },
         relatedPriorOwnershipRatio: { type: 'number', description: 'conversion_reverse일 때 — 주식을 교부받은 자의 특수관계인이 전환등을 하기 전에 보유한 지분비율(0~1).' },
         relationDeductionLimit: { type: 'number', description: 'caseType이 acquisition일 때만 — 증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: 'caseType이 acquisition일 때만 — 10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: 'caseType이 acquisition일 때만 — 10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         disasterLossAmount: { type: 'number', description: 'caseType이 acquisition일 때만 — 재해손실공제(§54). 없으면 생략.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1179,6 +1196,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1204,7 +1222,7 @@ const DRIVE_TOOLS = [
         acquiredShares: { type: 'number', description: 'high_price일 때 — 현물출자자가 인수한 신주수.' },
         relatedShareholderRatio: { type: 'number', description: 'high_price일 때 — 현물출자자 외 주주등(현물출자 전에 현물출자자의 특수관계인인 경우 한정)의 지분비율(0~1).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1213,6 +1231,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1240,6 +1259,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1264,7 +1284,7 @@ const DRIVE_TOOLS = [
         ownReducedShares: { type: 'number', description: 'caseType이 high_price일 때 — 해당 주주등의 감자한 주식등의 수.' },
         faceValuePerShare: { type: 'number', description: 'caseType이 high_price일 때 필수 — 1주당 액면가액(원). 1주당 평가액(valuePerShare)이 이 액면가(또는 대가가 액면가 미만이면 그 대가) 미만일 때만 과세된다(시행령§29의2①2호).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1273,6 +1293,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1446,7 +1467,7 @@ const DRIVE_TOOLS = [
         underAllocatedShares: { type: 'number', description: 'high_nonshareholder일 때 — 신주를 배정받지 아니하거나 균등조건에 미달되게 배정받은 주주의 그 신주수.' },
         nonShareholderAndExcessTotalShares: { type: 'number', description: 'high_nonshareholder일 때 — 주주가 아닌 자에게 배정된 신주 및 균등조건을 초과해 인수한 신주의 총수.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1455,6 +1476,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1621,7 +1643,7 @@ const DRIVE_TOOLS = [
         sharesReceivedByOvervaluedShareholders: { type: 'number', description: '과대평가법인의 주주등이 합병으로 인하여 교부받은 신설 또는 존속법인 주식등의 수(전체).' },
         largeShareholderSharesReceived: { type: 'number', description: '이익을 계산할 대주주등이 합병으로 교부받은 신설 또는 존속법인 주식등의 수.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1630,6 +1652,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1654,7 +1677,7 @@ const DRIVE_TOOLS = [
         marketValue: { type: 'number', description: 'useType이 low_or_high일 때 — 재산·용역의 시가(원).' },
         considerationPaid: { type: 'number', description: 'useType이 low_or_high일 때 — 실제 지급하거나 받은 대가(원).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1663,6 +1686,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1688,7 +1712,7 @@ const DRIVE_TOOLS = [
         beforeValue: { type: 'number', description: 'subType이 value_change일 때 — 변동 전 가액(원).' },
         afterValue: { type: 'number', description: 'subType이 value_change일 때 — 변동 후 가액(원).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1697,6 +1721,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1724,6 +1749,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1770,7 +1796,7 @@ const DRIVE_TOOLS = [
         isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         giftAmount: { type: 'number', description: '신탁이익(원본 또는 수익의 가액, 원). 여러 차례 나눠 받는 경우 calculate_trust_benefit_value 도구의 평가액을 사용.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
+        priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 그 합친 금액이 1천만원 미만이면 이 도구가 자동으로 합산에서 제외하므로 그대로 실제 금액을 넣으면 된다. 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
         priorPaidTax: { type: 'number', description: '§58 납부세액공제. 없으면 생략.' },
@@ -1779,6 +1805,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
         underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -1786,6 +1813,18 @@ const DRIVE_TOOLS = [
         reportedInTime: { type: 'boolean', description: '법정신고기한 내 신고 가정 여부 — 기본 true.' }
       },
       required: ['giftAmount']
+    }
+  },
+  {
+    name: 'calculate_installment_split_payment_limit',
+    description: '상속세·증여세 자진납부시 분납(分納) 한도를 계산한다(§70②, 시행령§66②). 연부연납(calculate_installment_payment_schedule, §71)과는 별개 제도로, 납부할 세액이 1천만원을 초과하면 신고기한까지 전액을 내는 대신 일부를 신고기한이 지난 후 2개월 이내에 나눠 낼 수 있다. 연부연납을 허가받은 경우에는 이 분납을 적용할 수 없다(중복 불가, §70②단서).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        totalTaxAmount: { type: 'number', description: '납부할 세액(원, §70①에 따라 각종 공제·연부연납·물납 신청분을 제외한 자진납부할 금액). 1천만원을 초과해야 분납 가능.' },
+        hasInstallmentPaymentApproval: { type: 'boolean', description: '이 세액에 대해 연부연납(§71)을 이미 허가받았는지. true면 분납을 적용할 수 없다.' }
+      },
+      required: ['totalTaxAmount']
     }
   },
   {
@@ -1864,6 +1903,7 @@ const DRIVE_TOOLS = [
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
         underreportedTaxAmount: { type: 'number', description: 'filingStatus가 underreported일 때, 과소신고로 인해 부족하게 신고된 세액(원).' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: '국세기본법§47의3①1호가목 — 위 underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). isFraudulent가 true이면서 과소신고분 중 일부만 부정행위인 경우에만 넣는다(생략하면 underreportedTaxAmount 전액이 부정행위분인 것으로 계산됨). 나머지(비부정행위분)는 10%로 별도 계산되어 합산된다.' },
         unpaidDays: { type: 'integer', description: '법정납부기한 다음날부터 실제 납부일까지의 미납일수. 없으면 생략(0).' },
         unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준이 되는 미납세액(원). 생략하면 이번 계산의 산출세액(가산세 제외분)을 그대로 쓴다.' },
         monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우, 지정납부기한 다음날부터 실제 납부일까지 경과한 개월 수(국세기본법§47의4①1의2호, 2026.7.1 시행). 고지 전 자진납부만 하는 경우는 생략.' },
@@ -3950,6 +3990,13 @@ function rentalLongTermHoldingDeductionRate_(type, holdingYears, rentalYears) {
   return null;
 }
 
+// §47② — 증여일 전 10년 이내 동일인(직계존속 증여는 그 배우자 포함)으로부터 받은 증여재산가액을
+// 합친 금액이 1천만원 "이상"인 경우에만 이번 증여세 과세가액에 가산한다. 1천만원 미만이면 합산 자체를
+// 하지 않으므로(단서에 합산배제증여재산은 애초에 적용 제외), 과세표준 계산에서 통째로 빠져야 한다.
+function giftAggregationAmount_(priorGiftAmount) {
+  return priorGiftAmount >= 10000000 ? priorGiftAmount : 0;
+}
+
 // 증여재산공제 (상증세법 §53, 10년간 합산 한도액 기준)
 function giftPropertyDeduction_(relation, isMinor) {
   switch (relation) {
@@ -4922,7 +4969,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
   const eFilingCredit = filingParams.isSelfElectronicFiling ? Math.min(20000, Math.max(0, totalCalculatedTax - pensionAccountCreditTotal)) : 0;
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate), filingParams.fraudulentUnderreportedTaxAmount);
   const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
   const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
@@ -5123,7 +5170,7 @@ function toolCalculateTransferTax(p) {
   const eFilingCredit = p.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
 
   // 지방소득세(개인지방소득세, 지방세법)는 국세 산출세액(가산세 제외)의 10%가 원칙이며, 가산세에는 부가되지 않는다.
   const localIncomeTax = Math.round(calculatedTax * 0.1);
@@ -5257,13 +5304,20 @@ function marriageOrBirthGiftDeduction_(eligibleGiftAmount, priorUsedAmount) {
 // 3호: 지정납부기한까지 납부하지 않은 세액에 대해 정액 3%를 1회 추가한다(150만원 기준과 무관하게 적용).
 // monthsAfterDesignatedDueDate·unpaidTaxAtDesignatedDueDate를 생략하면(고지 전 자진납부만 하는 경우)
 // 1호만 적용되어 종전과 동일하게 동작한다.
-function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate) {
+function giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxOverride, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate, fraudulentUnderreportedTaxAmount) {
   let unreportedPenalty = 0, underreportedPenalty = 0;
   const fraudRate = isOffshoreTransaction ? 0.60 : 0.40;
   if (filingStatus === 'unreported') {
     unreportedPenalty = Math.round(taxAfterCredit * (isFraudulent ? fraudRate : 0.20));
   } else if (filingStatus === 'underreported') {
-    underreportedPenalty = Math.round((Number(underreportedTaxAmount) || 0) * (isFraudulent ? fraudRate : 0.10));
+    const total = Number(underreportedTaxAmount) || 0;
+    if (isFraudulent) {
+      const fraudPortion = fraudulentUnderreportedTaxAmount != null ? Math.min(Number(fraudulentUnderreportedTaxAmount) || 0, total) : total;
+      const nonFraudPortion = total - fraudPortion;
+      underreportedPenalty = Math.round(fraudPortion * fraudRate) + Math.round(nonFraudPortion * 0.10);
+    } else {
+      underreportedPenalty = Math.round(total * 0.10);
+    }
   }
   const base = Number.isFinite(unpaidTaxOverride) ? unpaidTaxOverride : taxAfterCredit;
   const dailyInterestPenalty = Math.round(base * (Number(unpaidDays) || 0) * 0.00022);
@@ -5286,7 +5340,7 @@ function toolCalculateGiftTax(p) {
   if (['배우자', '직계존속', '직계비속', '기타친족', '기타'].indexOf(relation) === -1) {
     return { error: 'relation은 "배우자", "직계존속", "직계비속", "기타친족", "기타" 중 하나여야 합니다.' };
   }
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   const isGenerationSkip = !!p.isGenerationSkip;
   const generationSkipOver2Billion = !!p.generationSkipOver2Billion;
@@ -5318,6 +5372,10 @@ function toolCalculateGiftTax(p) {
   // "합산배제증여재산"은 §53(관계별공제)·§53의2(혼인출산공제)·§54(재해손실공제)를 적용하지 않고
   // "증여재산가액 - 3천만원"만 과세표준으로 한다(감정평가수수료는 모든 호에 공통 적용). 4호(일반증여)와는
   // 완전히 별개 산식이므로 10년내 동일인 증여 합산(priorGiftAmount)도 적용하지 않는다(§47②단서).
+  // §53 본문·§53의2①② — 둘 다 "거주자가... 증여를 받은 경우"로 한정되어 있어, 수증자가 비거주자이면
+  // 관계별공제(§53)도 혼인출산공제(§53의2)도 받을 수 없다(기본값은 거주자로 두되, 비거주자임을
+  // 명시하면 두 공제 모두 0으로 게이트한다).
+  const isDoneeResident = p.isDoneeResident !== false;
   let relationDeduction = 0, marriageBirthDeduction = 0, disasterLossDeduction = 0, aggregationExclusionDeduction = 0, taxBase;
   if (p.isExcludedFromAggregation) {
     aggregationExclusionDeduction = 30000000;
@@ -5326,10 +5384,11 @@ function toolCalculateGiftTax(p) {
     // §53 본문 — "그 증여세 과세가액에서 공제받을 금액과 수증자가 증여받기 전 10년 이내에 공제받은
     // 금액을 합한 금액이 [한도]를 초과하면 초과분은 공제하지 아니한다" — 관계별 한도는 "이번 한 번"이
     // 아니라 "10년 합산" 기준이므로, 그 기간 중 이미 쓴 공제액을 이번 한도에서 미리 차감해야 한다.
-    relationDeduction = Math.max(0, giftPropertyDeduction_(relation, !!p.isMinor) - (Number(p.priorRelationDeductionUsed) || 0));
+    relationDeduction = isDoneeResident
+      ? Math.max(0, giftPropertyDeduction_(relation, !!p.isMinor) - (Number(p.priorRelationDeductionUsed) || 0)) : 0;
     // §53의2①② — "거주자가 직계존속으로부터... 증여를 받는 경우"에만 적용되는 공제다. 배우자·직계비속·
     // 기타친족으로부터의 증여에는 적용되지 않는다.
-    marriageBirthDeduction = (relation === '직계존속' && (p.isMarriageGift || p.isBirthGift))
+    marriageBirthDeduction = (isDoneeResident && relation === '직계존속' && (p.isMarriageGift || p.isBirthGift))
       ? marriageOrBirthGiftDeduction_(netGiftAmount, p.priorMarriageOrBirthDeductionUsed) : 0;
     disasterLossDeduction = Number(p.disasterLossAmount) || 0;
     const totalDeduction = relationDeduction + marriageBirthDeduction + appraisalFeeDeduction + disasterLossDeduction;
@@ -5394,7 +5453,7 @@ function toolCalculateGiftTax(p) {
   const reportCredit = reportedInTime ? Math.round(taxAfterPriorCredit * 0.03) : 0;
   const taxAfterCredit = taxAfterPriorCredit - reportCredit;
 
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
 
   // 이자상당액(각종 사후관리 위반 시 추징세액에 붙는 이자), 공익법인등관련가산세(§78) — 해당 사안일 때만 별도로 계산해서 더한다.
   const interestAmount = Number(p.interestAmount) || 0;
@@ -5477,6 +5536,9 @@ function toolCalculateInheritanceTax(p) {
 
   const hasSpouse = !!p.hasSpouse;
   const childCount = Number(p.childCount) || 0;
+  // §20①2호·3호 — 미성년자공제·연로자공제는 "상속인(배우자는 제외한다) 및 동거가족"만 대상이므로
+  // minorHeirRemainingYears·elderlyHeirCount에는 배우자를 포함하지 않은 값을 넣어야 한다(4호 장애인공제는
+  // 배우자 제외 문구가 없어 disabledHeirRemainingYears는 배우자를 포함해도 된다).
   const minorHeirRemainingYears = Number(p.minorHeirRemainingYears) || 0;
   const elderlyHeirCount = Number(p.elderlyHeirCount) || 0;
   const disabledHeirRemainingYears = Number(p.disabledHeirRemainingYears) || 0;
@@ -5638,7 +5700,7 @@ function toolCalculateInheritanceTax(p) {
   const reportCredit = reportedInTime ? Math.round(taxAfterCredits * 0.03) : 0;
   const taxAfterReportCredit = taxAfterCredits - reportCredit;
 
-  const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterReportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
 
   // 이자상당액(사후관리 위반 추징 시), 영리법인 상속세 면제(상증세법 §3의2) — 영리법인이 유증받으면 그 법인의 상속세는 면제되지만,
   // 상속인 및 직계비속이 최대주주 등인 경우 그 지분 상당액만큼은 상속인이 납부할 의무를 진다: (면제세액 - 유증재산가액×10%) × 지분비율.
@@ -5899,7 +5961,7 @@ function toolCalculateSpecialRateGiftTax(p) {
   const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
   const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
 
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
   return {
@@ -5944,7 +6006,7 @@ function toolCalculateSpecialRateGiftTax(p) {
 // flatDeduction: §55①3호("제1호 및 제2호를 제외한 합산배제증여재산: 그 증여재산가액에서 3천만원을
 // 공제한 금액") 전용 — §45(재산취득자금 증여추정)처럼 §55①1호(§45의2)·2호(§45의3·45의4)에 속하지
 // 않는 합산배제증여재산에서만 30000000을 넘겨 쓴다. 1호·2호 해당분은 기존대로 0(미지정).
-function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate, unlistedStockAppraisalFeeAmount) {
+function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, reportedInTime, appraisalFeeAmount, isOffshoreTransaction, flatDeduction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate, unlistedStockAppraisalFeeAmount, fraudulentUnderreportedTaxAmount) {
   // §55①1~3호 — 명의신탁재산 증여의제·§45의3·45의4 증여의제이익·기타 합산배제증여재산은 전부
   // "그 금액에서 대통령령으로 정하는 증여재산의 감정평가 수수료를 뺀 금액"이 과세표준이다(3호는 3천만원도 추가로 뺀다).
   // 시행령§46의2·§20의3③ — 일반 감정평가법인 등(1·3호) 수수료는 500만원, 비상장주식 신용평가전문기관
@@ -5954,7 +6016,7 @@ function taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, isFraudulent, un
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const reportCredit = reportedInTime ? Math.round(calculatedTax * 0.03) : 0;
   const taxAfterCredit = calculatedTax - reportCredit;
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate);
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, isFraudulent, underreportedTaxAmount, unpaidDays, unpaidTaxForLatePenalty, isOffshoreTransaction, monthsAfterDesignatedDueDate, unpaidTaxAtDesignatedDueDate, fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return { taxBase, calculatedTax, reportCredit, penalties, finalTax };
 }
@@ -6010,7 +6072,7 @@ function toolCalculateRelatedPartyTransactionGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount, p.fraudulentUnderreportedTaxAmount);
 
   return {
     과세대상여부: true,
@@ -6071,7 +6133,7 @@ function toolCalculateBusinessOpportunityGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount);
+  const r = taxOnDeemedGiftProfit_(deemedGiftProfit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, !!p.isOffshoreTransaction, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount, p.fraudulentUnderreportedTaxAmount);
 
   return {
     과세대상여부: true,
@@ -6114,7 +6176,7 @@ function toolCalculateNomineeTrustGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, undefined, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount);
+  const r = taxOnDeemedGiftProfit_(propertyValue, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, undefined, undefined, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount, p.fraudulentUnderreportedTaxAmount);
 
   return {
     과세대상여부: true,
@@ -6151,7 +6213,7 @@ function toolCalculatePropertyAcquisitionFundsGiftTax(p) {
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
-  const r = taxOnDeemedGiftProfit_(unprovenAmount, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, false, 30000000, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount);
+  const r = taxOnDeemedGiftProfit_(unprovenAmount, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), reportedInTime, p.appraisalFeeAmount, false, 30000000, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.unlistedStockAppraisalFeeAmount, p.fraudulentUnderreportedTaxAmount);
 
   return {
     과세대상여부: true, 취득재산가액: acquisitionValue, 입증된금액: provenAmount, 미입증금액: unprovenAmount, 배제기준금액: gateThreshold,
@@ -6174,7 +6236,7 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -6192,7 +6254,7 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     채무면제등이익: giftAmount, 증여재산공제: relationDeduction,
@@ -6241,7 +6303,7 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -6259,7 +6321,7 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   const base = {
     과세대상여부: true,
@@ -6299,7 +6361,7 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
@@ -6331,7 +6393,7 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여추정재산가액: giftAmount,
@@ -6364,7 +6426,7 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -6382,7 +6444,7 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
@@ -6446,7 +6508,7 @@ function toolCalculateTrustIncomeGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -6464,7 +6526,7 @@ function toolCalculateTrustIncomeGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     신탁이익: giftAmount,
@@ -6473,6 +6535,35 @@ function toolCalculateTrustIncomeGiftTax(p) {
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
     안내: '증여일은 원칙적으로 원본·수익이 실제 지급되는 날입니다(위탁자 사망시 사망일, 약정일까지 미지급시 약정일 등 예외는 시행령§25①). 수익자가 특정·존재하지 않으면 위탁자(또는 상속인)를 수익자로 보아 과세하고, 나중에 수익자가 특정되면 그때 새로운 신탁이 있는 것으로 봅니다(§33②).'
+  };
+}
+
+// 상속세·증여세 자진납부시 분납 한도 (§70②, 시행령§66②) — 연부연납(§71)과는 별개 제도로, 신고기한까지
+// 전액을 내는 대신 일부를 "신고기한이 지난 후 2개월 이내"에 나눠 낼 수 있다. §70②단서 — 연부연납을
+// 허가받은 경우에는 이 분납을 적용하지 않는다(중복 불가). 시행령§66② — 납부할 세액이 2천만원 이하면
+// 1천만원 초과분까지, 2천만원 초과면 세액의 50% 이하까지 분납 가능.
+function toolCalculateInstallmentSplitPaymentLimit(p) {
+  p = p || {};
+  const totalTaxAmount = Number(p.totalTaxAmount);
+  if (!totalTaxAmount || totalTaxAmount <= 0) return { error: '납부할 세액이 필요합니다.' };
+  if (p.hasInstallmentPaymentApproval) {
+    return { 분납가능여부: false, 안내: '연부연납(§71)을 허가받은 경우에는 분납(§70②)을 적용하지 않습니다(중복 불가).' };
+  }
+  if (totalTaxAmount <= 10000000) {
+    return { 분납가능여부: false, 안내: '납부할 세액이 1천만원을 초과하지 않아 분납할 수 없습니다(§70②).' };
+  }
+  const maxSplitAmount = totalTaxAmount <= 20000000
+    ? (totalTaxAmount - 10000000)
+    : Math.floor(totalTaxAmount * 0.5);
+  const immediateDueAmount = totalTaxAmount - maxSplitAmount;
+  return {
+    분납가능여부: true,
+    신고기한까지_납부할금액: immediateDueAmount,
+    분납가능_최대금액: maxSplitAmount,
+    분납기한: '신고기한이 지난 후 2개월 이내',
+    안내: (totalTaxAmount <= 20000000
+      ? '세액이 2천만원 이하이므로 1천만원 초과분(' + maxSplitAmount.toLocaleString() + '원)까지 분납할 수 있습니다(시행령§66②1호).'
+      : '세액이 2천만원을 초과하므로 세액의 50% 이하(' + maxSplitAmount.toLocaleString() + '원)까지 분납할 수 있습니다(시행령§66②2호).')
   };
 }
 
@@ -6743,7 +6834,7 @@ function toolCalculateStockTransferTax(p) {
   const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
 
   // 주식등에 대한 장부의 비치·기록의무 및 기장불성실가산세 (소득세법§115) — 법인의 대주주가 양도하는
   // 주식등에 대해 거래명세 등을 기장하지 않았거나 누락한 경우, (누락소득금액/양도소득금액)×산출세액×10%를
@@ -7044,7 +7135,7 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftDeemedAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   let calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
@@ -7077,7 +7168,7 @@ function toolCalculateSpecificCorporationGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true,
@@ -7140,7 +7231,7 @@ function toolCalculateMergerBenefitGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -7158,7 +7249,7 @@ function toolCalculateMergerBenefitGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 합병이익: giftAmount,
@@ -7202,7 +7293,7 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -7220,7 +7311,7 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
@@ -7267,7 +7358,7 @@ function toolCalculateOrgChangeGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -7285,7 +7376,7 @@ function toolCalculateOrgChangeGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
@@ -7332,7 +7423,7 @@ function toolCalculatePropertyValueIncreaseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 재산가치증가이익: giftAmount,
@@ -7824,7 +7915,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -7842,7 +7933,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -7997,7 +8088,7 @@ function toolCalculateExcessDividendGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -8015,7 +8106,7 @@ function toolCalculateExcessDividendGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
@@ -8088,7 +8179,7 @@ function toolCalculateStockListingGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여의제이익: giftAmount,
@@ -8218,7 +8309,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
     isAggregationExcluded = false;
     const disasterLossAmount = Number(p.disasterLossAmount) || 0;
     const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-    const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+    const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
     taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
     relationDeductionOut = relationDeduction; disasterLossAmountOut = disasterLossAmount;
   } else {
@@ -8234,7 +8325,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
   const foreignTaxCredit = Math.min(foreignTaxPaidAmount, foreignTaxCreditByFormula, Math.max(0, calculatedTax - priorPaidTax));
   const taxAfterCredit = Math.max(0, calculatedTax - priorPaidTax - foreignTaxCredit);
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
   const result = {
@@ -8287,7 +8378,7 @@ function toolCalculateInKindContributionGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -8305,7 +8396,7 @@ function toolCalculateInKindContributionGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
@@ -8349,7 +8440,7 @@ function toolCalculateOverseasAssetTransferTax(p) {
   const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const localIncomeTax = Math.round(taxAfterCredit * 0.1);
   const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
 
@@ -8409,7 +8500,7 @@ function toolCalculateCapitalReductionGiftTax(p) {
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
-  const priorGiftAmount = Number(p.priorGiftAmount) || 0;
+  const priorGiftAmount = giftAggregationAmount_(Number(p.priorGiftAmount) || 0);
   const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
@@ -8427,7 +8518,7 @@ function toolCalculateCapitalReductionGiftTax(p) {
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const reportCredit = reportedInTime ? Math.round(taxAfterCredit * 0.03) : 0;
-  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
+  const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여의제이익: giftAmount,
@@ -9830,6 +9921,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_property_use_service_gift_tax' ||
         b.name === 'calculate_org_change_gift_tax' ||
         b.name === 'calculate_property_value_increase_gift_tax' ||
+        b.name === 'calculate_installment_split_payment_limit' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
@@ -10238,6 +10330,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_property_value_increase_gift_tax') {
         const resultObj = toolCalculatePropertyValueIncreaseGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_installment_split_payment_limit') {
+        const resultObj = toolCalculateInstallmentSplitPaymentLimit(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
