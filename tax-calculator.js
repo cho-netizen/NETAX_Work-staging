@@ -2779,6 +2779,15 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>명의신탁재산의 가액</label><input type="number" id="ntPropertyValue" placeholder="원 (명의개서일 또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날 현재 평가액)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ntAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntNoAvoidancePurpose"><label for="ntNoAvoidancePurpose">조세회피 목적 없음(§45의2①1호 — 적용배제)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntTrustPropertyReg"><label for="ntTrustPropertyReg">자본시장법상 신탁재산 등기(§45의2①3호 — 적용배제)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntNonResidentAgentReg"><label for="ntNonResidentAgentReg">비거주자 법정대리인·재산관리인 명의 등기(§45의2①4호 — 적용배제)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntNameChangeNeglect"><label for="ntNameChangeNeglect">실제소유자 명의로 명의개서를 하지 않은 경우(§45의2③ — 조세회피목적 추정, 아래 세이프하버 확인)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntSaleWithTransferReport"><label for="ntSaleWithTransferReport">[명의개서해태만] 매매취득 + 종전소유자 양도소득세(증권거래세)신고시 소유권변경신고(세이프하버)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntInheritanceWithEstateReport"><label for="ntInheritanceWithEstateReport">[명의개서해태만] 상속취득 + 상속세신고에 포함(세이프하버)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="ntLateAmendedAfterAudit"><label for="ntLateAmendedAfterAudit">[상속세이프하버만] 결정·경정 알고 한 수정신고·기한후신고(세이프하버 무효화)</label></div>' +
+      '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-nominee-trust">증여세 계산하기</button>' +
       '<div id="taxCalcNomineeTrustResult"></div>' +
     '</div>' +
@@ -5630,7 +5639,14 @@ taxCalcView.addEventListener('click', function(e){
   } else if (action === 'run-nominee-trust'){
     const input = {
       nomineeTrustPropertyValue: numVal(document.getElementById('ntPropertyValue').value) || 0,
-      appraisalFeeAmount: numVal(document.getElementById('ntAppraisalFee').value) || 0
+      appraisalFeeAmount: numVal(document.getElementById('ntAppraisalFee').value) || 0,
+      isNoTaxAvoidancePurpose: document.getElementById('ntNoAvoidancePurpose').checked,
+      isTrustPropertyRegistration: document.getElementById('ntTrustPropertyReg').checked,
+      isNonResidentAgentRegistration: document.getElementById('ntNonResidentAgentReg').checked,
+      isNameChangeNeglectCase: document.getElementById('ntNameChangeNeglect').checked,
+      isSaleAcquisitionWithTransferReport: document.getElementById('ntSaleWithTransferReport').checked,
+      isInheritanceAcquisitionWithEstateReport: document.getElementById('ntInheritanceWithEstateReport').checked,
+      isLateAmendedAfterAuditNotice: document.getElementById('ntLateAmendedAfterAudit').checked
     };
     renderNomineeTrustResult(calculateNomineeTrustGiftTaxJS(input));
   } else if (action === 'run-property-funds'){

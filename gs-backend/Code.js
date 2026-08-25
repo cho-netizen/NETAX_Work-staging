@@ -790,14 +790,18 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_nominee_trust_gift_tax',
-    description: '명의신탁재산의 증여 의제(상증세법§45의2)를 계산한다. 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 — 대표적으로 비상장·상장주식등)의 실제소유자와 명의자가 다르면, 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한 것으로 본다. §55①1호에 따라 증여재산공제(§53) 없이 명의신탁재산의 금액 전액(감정평가수수료만 차감)이 과세표준이 된다. §45의2①단서 적용배제 사유(isNoTaxAvoidancePurpose 등)를 확인해서 넣지 않으면 그 사유가 없다고 전제하고(=과세대상으로) 계산하므로 반드시 확인해서 입력해야 한다.',
+    description: '명의신탁재산의 증여 의제(상증세법§45의2)를 계산한다. 등기·등록·명의개서가 필요한 재산(토지·건물은 제외 — 대표적으로 비상장·상장주식등)의 실제소유자와 명의자가 다르면, 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날)에 그 재산가액을 실제소유자가 명의자에게 증여한 것으로 본다. §55①1호에 따라 증여재산공제(§53) 없이 명의신탁재산의 금액 전액(감정평가수수료만 차감)이 과세표준이 된다. §45의2①단서 적용배제 사유(isNoTaxAvoidancePurpose 등)를 확인해서 넣지 않으면 그 사유가 없다고 전제하고(=과세대상으로) 계산하므로 반드시 확인해서 입력해야 한다. "실제소유자 명의로 명의개서를 하지 아니한 경우"(isNameChangeNeglectCase)는 §45의2③에 따라 조세회피목적이 있는 것으로 추정되며, 매매취득+양도소득세신고 소유권변경신고 또는 상속취득+상속세신고포함(사전에 결정·경정을 알고 한 수정신고·기한후신고는 제외) 세이프하버에 해당해야만 그 추정이 배제된다.',
     input_schema: {
       type: 'object',
       properties: {
         nomineeTrustPropertyValue: { type: 'number', description: '명의신탁재산의 가액(원) — 명의개서일(또는 소유권취득일이 속한 해의 다음 해 말일의 다음 날) 현재 평가액.' },
-        isNoTaxAvoidancePurpose: { type: 'boolean', description: '§45의2①1호 — 조세회피 목적 없이 타인 명의로 등기등을 하거나(또는 소유권취득 후 실제소유자 명의로 명의개서를 하지 않은) 경우인지. true면 증여의제 적용 자체가 배제된다(과세대상 아님).' },
+        isNoTaxAvoidancePurpose: { type: 'boolean', description: '§45의2①1호 — 조세회피 목적 없이 타인 명의로 등기등을 하거나(또는 소유권취득 후 실제소유자 명의로 명의개서를 하지 않은) 경우인지. true면 증여의제 적용 자체가 배제된다(과세대상 아님). 다른 근거 없이 §45의2③ 세이프하버만으로 조세회피목적 없음을 주장하려면 이 필드 대신 isNameChangeNeglectCase 등을 사용할 것.' },
         isTrustPropertyRegistration: { type: 'boolean', description: '§45의2①3호 — 자본시장과 금융투자업에 관한 법률에 따른 신탁재산인 사실의 등기등을 한 경우인지. true면 적용 배제.' },
         isNonResidentAgentRegistration: { type: 'boolean', description: '§45의2①4호 — 비거주자가 법정대리인 또는 재산관리인의 명의로 등기등을 한 경우인지. true면 적용 배제.' },
+        isNameChangeNeglectCase: { type: 'boolean', description: '§45의2③ — 처음부터 타인명의로 등기한 것이 아니라, 취득 후 "실제소유자 명의로 명의개서를 하지 아니한" 경우인지(예: 상속·매매로 취득했는데 실소유자 명의로 이전등기하지 않은 경우). true이고 isNoTaxAvoidancePurpose가 없으면 아래 세이프하버 요건으로 조세회피목적 추정 여부를 판단한다.' },
+        isSaleAcquisitionWithTransferReport: { type: 'boolean', description: 'isNameChangeNeglectCase가 true일 때 — 매매로 소유권을 취득한 경우로서 종전 소유자가 양도소득 과세표준신고 또는 증권거래세 신고와 함께 소유권변경 내용을 신고했는지(§45의2③단서 가목). true면 조세회피목적 추정이 배제된다.' },
+        isInheritanceAcquisitionWithEstateReport: { type: 'boolean', description: 'isNameChangeNeglectCase가 true일 때 — 상속으로 소유권을 취득한 경우로서 상속인이 상속세 과세표준신고(또는 수정신고·기한후신고)와 함께 해당 재산을 상속세 과세가액에 포함해 신고했는지(§45의2③단서 나목). isLateAmendedAfterAuditNotice가 함께 true이면 이 세이프하버는 적용되지 않는다.' },
+        isLateAmendedAfterAuditNotice: { type: 'boolean', description: 'isInheritanceAcquisitionWithEstateReport가 true일 때 — 상속세 과세표준과 세액을 결정 또는 경정할 것을 미리 알고 한 수정신고·기한후신고인지(§45의2③단서 나목 단서). true면 그 상속세이프하버는 인정되지 않는다.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산의 감정평가 수수료(원, §55①). 없으면 생략.' },
         unlistedStockAppraisalFeeAmount: { type: 'number', description: '비상장주식 신용평가전문기관 평가수수료(원, §49의2⑨). 위 appraisalFeeAmount의 500만원 한도와 별개로 1천만원 한도로 공제된다(시행령§46의2·§20의3③). 없으면 생략.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
@@ -6245,6 +6249,23 @@ function toolCalculateNomineeTrustGiftTax(p) {
   if (p.isNoTaxAvoidancePurpose) exclusionReasons.push('조세회피 목적 없음(§45의2①1호)');
   if (p.isTrustPropertyRegistration) exclusionReasons.push('자본시장법상 신탁재산 등기(§45의2①3호)');
   if (p.isNonResidentAgentRegistration) exclusionReasons.push('비거주자의 법정대리인·재산관리인 명의 등기(§45의2①4호)');
+
+  // §45의2③ — "실제소유자 명의로 명의개서를 하지 아니한 경우"(등기 자체는 이미 타인명의로 되어 있었는데
+  // 취득 후 실소유자 명의로 바꾸지 않은 경우)는 조세회피 목적이 있는 것으로 "추정"한다(반증책임 전환).
+  // 다만 매매취득+양도소득세(증권거래세)신고시 소유권변경신고, 또는 상속취득+상속세신고에 포함(사전에
+  // 결정·경정을 알고 한 수정신고·기한후신고는 제외)이면 추정하지 않는다(세이프하버). isNoTaxAvoidancePurpose를
+  // 이미 별도 근거로 주장한 경우에는 이 추정 메커니즘과 무관하게 그대로 배제사유로 인정한다(위에서 처리).
+  let presumptionNote = '';
+  if (p.isNameChangeNeglectCase && exclusionReasons.length === 0) {
+    const safeHarborBySale = !!p.isSaleAcquisitionWithTransferReport;
+    const safeHarborByInheritance = !!p.isInheritanceAcquisitionWithEstateReport && !p.isLateAmendedAfterAuditNotice;
+    if (safeHarborBySale || safeHarborByInheritance) {
+      exclusionReasons.push('명의개서 해태이나 §45의2③단서 세이프하버 충족(' + (safeHarborBySale ? '매매취득+양도소득세(증권거래세)신고시 소유권변경신고' : '상속취득+상속세신고에 포함') + ')로 조세회피목적 추정이 배제됨');
+    } else {
+      presumptionNote = ' 실제소유자 명의로 명의개서를 하지 않은 경우로서 매매취득+양도소득세신고 소유권변경신고, 상속취득+상속세신고포함 중 어느 세이프하버에도 해당하지 않아 조세회피 목적이 있는 것으로 추정됩니다(§45의2③). 이 추정은 다른 반증자료로 뒤집을 수 있으나 그 입증책임은 납세자에게 있습니다.';
+    }
+  }
+
   if (exclusionReasons.length > 0) {
     return {
       과세대상여부: false, 명의신탁재산가액: propertyValue, 납부세액: 0,
@@ -6262,7 +6283,7 @@ function toolCalculateNomineeTrustGiftTax(p) {
     과세표준: r.taxBase, 산출세액: r.calculatedTax, 신고세액공제: r.reportCredit,
     무신고가산세: r.penalties.unreportedPenalty, 과소신고가산세: r.penalties.underreportedPenalty, 납부지연가산세: r.penalties.latePenalty,
     납부세액: r.finalTax,
-    안내: '증여재산공제(§53)는 적용되지 않습니다(§55①1호 — 명의신탁재산의 금액 전액이 과세표준, 감정평가수수료만 차감). isNoTaxAvoidancePurpose·isTrustPropertyRegistration·isNonResidentAgentRegistration을 확인해서 명시적으로 넣지 않으면 이 배제사유를 검토하지 않은 채(과세대상으로 전제하고) 계산한 것이니 반드시 확인하세요. 실제소유자와 명의자 사이의 증여세는 실제소유자가 납부의무를 진다(§4의2②).'
+    안내: '증여재산공제(§53)는 적용되지 않습니다(§55①1호 — 명의신탁재산의 금액 전액이 과세표준, 감정평가수수료만 차감). isNoTaxAvoidancePurpose·isTrustPropertyRegistration·isNonResidentAgentRegistration을 확인해서 명시적으로 넣지 않으면 이 배제사유를 검토하지 않은 채(과세대상으로 전제하고) 계산한 것이니 반드시 확인하세요. 실제소유자와 명의자 사이의 증여세는 실제소유자가 납부의무를 진다(§4의2②).' + presumptionNote
   };
 }
 
