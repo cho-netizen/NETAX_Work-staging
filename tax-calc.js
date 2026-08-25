@@ -3772,7 +3772,10 @@
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.' + aggNote
+      안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.'
+        + (caseType === 'low_price'
+          ? ' §39의3②·시행령§29⑤ — 현물출자자가 아닌 주주등 중 소액주주(지분 1% 미만이면서 액면가액 합계 3억원 미만)가 2명 이상이면, 그 소액주주들을 1명으로 보고 특수관계 여부 등을 판단해야 합니다.'
+          : '') + aggNote
     };
   };
 
@@ -4481,7 +4484,10 @@
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.' + aggNote
+      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.'
+        + ((caseType === 'low_allocated' || caseType === 'low_unallocated')
+          ? ' §39②·시행령§29⑤ — 신주인수권을 포기해 이익을 준 자가 소액주주(지분 1% 미만이면서 액면가액 합계 3억원 미만)로서 2명 이상이면, 그 소액주주들을 1명으로 보고 특수관계 여부 등을 판단해야 합니다.'
+          : '') + aggNote
     };
   };
 

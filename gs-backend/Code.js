@@ -1215,7 +1215,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_in_kind_contribution_gift_tax',
-    description: '현물출자에 따른 이익의 증여(상증세법§39의3)를 계산한다. §39(증자에 따른 이익의 증여)의 산식을 "증자"를 "현물출자"로 치환해 그대로 준용한다. low_price(1호, 저가발행): 이익=(현물출자후1주당평가액-신주1주당인수가액)×현물출자자가배정받은신주수, 게이트 없음. high_price(2호, 고가발행): 이익=(신주1주당인수가액-현물출자후1주당평가액)×현물출자자가인수한신주수×현물출자자외특수관계인주주등의지분비율, 게이트: 차액비율 30%이상 또는 이익 3억원이상.',
+    description: '현물출자에 따른 이익의 증여(상증세법§39의3)를 계산한다. §39(증자에 따른 이익의 증여)의 산식을 "증자"를 "현물출자"로 치환해 그대로 준용한다. low_price(1호, 저가발행): 이익=(현물출자후1주당평가액-신주1주당인수가액)×현물출자자가배정받은신주수, 게이트 없음. high_price(2호, 고가발행): 이익=(신주1주당인수가액-현물출자후1주당평가액)×현물출자자가인수한신주수×현물출자자외특수관계인주주등의지분비율, 게이트: 차액비율 30%이상 또는 이익 3억원이상. low_price는 §39의3②에 따라 현물출자자가 아닌 소액주주(지분1%미만·액면가합계3억원미만)가 2명 이상이면 1명으로 간주해 특수관계를 판단해야 한다(allocatedShares 등 산정 전 확인 필요).',
     input_schema: {
       type: 'object',
       properties: {
@@ -1457,7 +1457,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_capital_increase_gift_tax',
-    description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 없음).',
+    description: '증자에 따른 이익의 증여(상증세법§39, 시행령§29②)를 계산한다. 신주를 시가보다 낮거나 높은 가액으로 발행할 때 실권주 배정 여부·저가/고가 여부에 따라 5가지 세부 케이스로 나뉜다. low_allocated(법§39①1호가·다·라목 — 저가발행, 실권주 배정/비주주직접배정/균등초과배정, 게이트 없음), low_unallocated(법§39①1호나목 — 저가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_allocated(법§39①2호가목 — 고가발행, 실권주 배정, 게이트 없음), high_unallocated(법§39①2호나목 — 고가발행, 실권주 미배정, 게이트: 차액비율30%이상 또는 이익3억이상), high_nonshareholder(법§39①2호다·라목 — 고가발행, 비주주직접배정 또는 균등초과배정, 게이트 없음). low_allocated·low_unallocated는 §39②에 따라 이익을 준 소액주주(지분1%미만·액면가합계3억원미만)가 2명 이상이면 1명으로 간주해 특수관계를 판단해야 한다(allocatedShares·deemedAllocatedShares 등 산정 전 확인 필요).',
     input_schema: {
       type: 'object',
       properties: {
@@ -8195,7 +8195,10 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
-    안내: ('증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.' + aggNote)
+    안내: ('증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.'
+      + ((caseType === 'low_allocated' || caseType === 'low_unallocated')
+        ? ' §39②·시행령§29⑤ — 신주인수권을 포기해 이익을 준 자(신주인수를 포기한 주주등)가 소액주주(지분 1% 미만이면서 액면가액 합계 3억원 미만)로서 2명 이상이면, 그 소액주주들을 1명으로 보고 특수관계 여부 등을 판단해야 합니다. 이 계산기는 이미 결정된 실권주수·특수관계인 관련 수치를 입력받으므로, 그 수치를 정할 때 이 간주규정을 반영했는지 별도로 확인하세요.'
+        : '') + aggNote)
   };
 }
 
@@ -8688,7 +8691,10 @@ function toolCalculateInKindContributionGiftTax(p) {
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
-    안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.' + aggNote
+    안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.'
+      + (caseType === 'low_price'
+        ? ' §39의3②·시행령§29⑤ — 현물출자자가 아닌 주주등 중 소액주주(지분 1% 미만이면서 액면가액 합계 3억원 미만)가 2명 이상이면, 그 소액주주들을 1명으로 보고 특수관계 여부 등을 판단해야 합니다. 이 계산기는 이미 결정된 배정주식수 등을 입력받으므로, 그 수치를 정할 때 이 간주규정을 반영했는지 별도로 확인하세요.'
+        : '') + aggNote
   };
 }
 
