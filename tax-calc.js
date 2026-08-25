@@ -2162,11 +2162,12 @@
     if (['general', 'medium', 'small'].indexOf(companySize) === -1) {
       return { error: '기업규모를 일반/중견기업/중소기업 중에서 선택하세요.' };
     }
-    // §45의3①2호가목(중소기업)은 "세후순이익"을, 나목(중견기업)·다목(그 외)은 "세후영업이익"을 쓴다 —
-    // 두 값이 서로 다른 개념이므로 별도로 입력받는다.
+    // §45의3①2호가·나·다목 — 중소기업·중견기업·일반기업 모두 소득기준은 "수혜법인의 세후영업이익"으로
+    // 동일하다(law.go.kr 원문 산식 이미지의 LaTeX 대체텍스트로 2026-08-25 직접 재검증 — 세 목 모두
+    // "수혜법인의세후영업이익 × ..." 로 시작하며 "세후순이익"이라는 표현은 어디에도 없다. 과거에 중소기업만
+    // "세후순이익"을 쓰는 것으로 잘못 구현되어 있었던 것을 이번에 바로잡음).
     const afterTaxOperatingIncome = Number(p.afterTaxOperatingIncome) || 0;
-    const afterTaxNetIncome = Number(p.afterTaxNetIncome) || 0;
-    const incomeBase = companySize === 'small' ? afterTaxNetIncome : afterTaxOperatingIncome;
+    const incomeBase = afterTaxOperatingIncome;
     const tradeRatio = Number(p.relatedPartyTransactionRatio) || 0;
     const shareRatio = Number(p.shareholderOwnershipRatio) || 0;
 
@@ -2206,7 +2207,7 @@
 
     return {
       과세대상여부: true,
-      적용소득기준: companySize === 'small' ? '세후순이익' : '세후영업이익', 적용소득금액: incomeBase,
+      적용소득기준: '세후영업이익', 적용소득금액: incomeBase,
       증여의제이익_계산식차감비율_거래: formulaTradeSubtract, 증여의제이익_계산식차감비율_지분: formulaShareSubtract,
       배당소득공제: dividendDeduction,
       증여의제이익: deemedGiftProfit,
