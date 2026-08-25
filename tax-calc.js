@@ -5414,7 +5414,9 @@
     totalValue += majorShareholderPremium;
     return Object.assign({
       발행주식총수: totalIssuedShares, 평가대상주식수: ownedShares, 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 평가총액: totalValue
-    }, result);
+    }, result, {
+      안내: 'isMajorShareholder(최대주주등 해당 여부)와 ownedShares(보유주식수)를 판정할 때는 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도하거나 증여한 주식등도 그 보유주식등에 합산해서 판단해야 합니다(이 계산기는 그 합산을 자동으로 반영하지 않으므로 입력 전에 직접 확인하세요).'
+    });
   };
 
   // 토지 평가 (§61) — 개별공시지가 × 면적 × 지분율(%)
@@ -5461,7 +5463,10 @@
     if (premiumParams.isMajorShareholder === undefined) {
       return totalValue; // 구버전 호환: isMajorShareholder를 아예 지정하지 않은 위치인자 호출은 숫자만 반환
     }
-    return { 평가액_할증전: Math.round(averageClosingPrice * shares), 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 상장주식가액: totalValue };
+    return {
+      평가액_할증전: Math.round(averageClosingPrice * shares), 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 상장주식가액: totalValue,
+      안내: 'isMajorShareholder(최대주주등 해당 여부)와 shares(보유주식수)를 판정할 때는 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도하거나 증여한 주식등도 그 보유주식등에 합산해서 판단해야 합니다(이 계산기는 그 합산을 자동으로 반영하지 않으므로 입력 전에 직접 확인하세요).'
+    };
   };
 
   // 임대료 등의 환산가액 (§61⑤, 시행령 §50) — 임대 중인 부동산은 이 환산가액과 기준시가(보충적평가액)
