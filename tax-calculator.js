@@ -991,7 +991,14 @@ function computeValuationAssetValue(a){
       value = (r && !r.error) ? r.건물기준시가 : 0;
       break;
     }
-    case 'listedStock': value = calculateListedStockValueJS(a.listedPrice, a.listedShares); break;
+    case 'listedStock': {
+      const r = calculateListedStockValueJS({
+        averageClosingPrice: a.listedPrice, shares: a.listedShares,
+        isMajorShareholder: a.lsMajorShareholder, isSmallBusiness: a.lsIsSmallBusiness, isMediumBusinessUnder500B: a.lsIsMediumUnder500B
+      });
+      value = (typeof r === 'number') ? r : r.상장주식가액;
+      break;
+    }
     case 'rental': {
       const t = computeRentalLeaseTotals_(a.rentalLeases);
       value = calculateRentalConversionValueJS(t.annualRent, t.deposit);
@@ -1076,7 +1083,10 @@ function valuationAssetMethodFieldsHtml(m, a){
   }
   if (m === 'listedStock') return '' +
     '<div class="taxcalc-field"><label>2개월 종가평균(원/주)</label><input type="number" data-field="listedPrice" value="' + (a.listedPrice || '') + '"></div>' +
-    '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>';
+    '<div class="taxcalc-field"><label>주식수</label><input type="number" data-field="listedShares" value="' + (a.listedShares || '') + '"></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="lsMajorShareholder" ' + (a.lsMajorShareholder ? 'checked' : '') + '><label>최대주주 등 할증(20%, §63③)</label></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="lsIsSmallBusiness" ' + (a.lsIsSmallBusiness ? 'checked' : '') + '><label>중소기업이 발행한 주식(할증 배제)</label></div>' +
+    '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="lsIsMediumUnder500B" ' + (a.lsIsMediumUnder500B ? 'checked' : '') + '><label>중견기업(직전3년 매출평균 5천억 미만)이 발행한 주식(할증 배제)</label></div>';
   if (m === 'rental'){
     return '<div class="taxcalc-field"><label style="color:var(--sub);">※ 아래 "임대차 내역"에서 자동 합산된 금액으로 환산가액을 계산합니다. 이 값과 별도로 계산한 기준시가 중 큰 금액을 실제 평가액으로 쓰세요</label></div>';
   }
@@ -1666,6 +1676,9 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>다주택중과 판정용 주택수</label><select data-field="multiHouseCount"><option value="0">해당없음/1주택</option><option value="2">2주택</option><option value="3">3주택 이상</option></select></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isNonBusinessLand" id="nbl-' + idx + '"><label for="nbl-' + idx + '">비사업용토지</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isUnregisteredTransfer" id="unreg-' + idx + '"><label for="unreg-' + idx + '">미등기양도</label></div>' +
+          '<div class="taxcalc-field"><label>가업상속공제 적용률(0~1, 해당시)</label><input type="number" step="0.01" min="0" max="1" data-field="businessSuccessionDeductionRatio" placeholder="예: 0.5"></div>' +
+          '<div class="taxcalc-field"><label>피상속인 취득가액(위와 함께 입력, §97의2④)</label><input type="number" data-field="decedentAcquisitionValue" placeholder="원"></div>' +
+          '<div class="taxcalc-field"><label>피상속인 취득일(위와 함께 입력, §95④단서)</label><input type="date" data-field="decedentAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isEightYearFarmland" id="farm-' + idx + '"><label for="farm-' + idx + '">8년 자경농지 감면(§69)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLivestockLandExempt" id="livestock-' + idx + '"><label for="livestock-' + idx + '">8년 이상 자경 축사용지 폐업 감면(§69의2)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isFisheryLandExempt" id="fishery-' + idx + '"><label for="fishery-' + idx + '">8년 이상 자영 어업용토지 감면(§69의3)</label></div>' +
@@ -1725,6 +1738,8 @@ function renderTransferPane(){
       '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="trUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
       '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="trPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
       '<div class="taxcalc-field"><label>납부지연일수(자동계산: 확정신고기한 다음해 5.31 대비)</label><input type="number" id="trUnpaidDays" placeholder="0" readonly></div>' +
+      '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="trMonthsAfterDesignated" placeholder="0"></div>' +
+      '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="trUnpaidAtDesignated" placeholder="0"></div>' +
       '<div class="taxcalc-field checkbox"><input type="checkbox" id="trSelfEfiling"><label for="trSelfEfiling">납세자 본인이 직접 전자신고(2만원 공제)</label></div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-transfer">세액 계산하기</button>' +
@@ -2204,7 +2219,10 @@ function collectTransferInput(vals){
     originalNecessaryExpenses: numVal(vals.originalNecessaryExpenses) || 0,
     useConvertedRightsBaseAcquisitionPrice: !!vals.useConvertedRightsBaseAcquisitionPrice,
     originalAcquisitionStandardPrice: numVal(vals.originalAcquisitionStandardPrice) || 0,
-    approvalDateStandardPrice: numVal(vals.approvalDateStandardPrice) || 0
+    approvalDateStandardPrice: numVal(vals.approvalDateStandardPrice) || 0,
+    businessSuccessionDeductionRatio: numVal(vals.businessSuccessionDeductionRatio) || 0,
+    decedentAcquisitionValue: vals.decedentAcquisitionValue !== '' && vals.decedentAcquisitionValue != null ? numVal(vals.decedentAcquisitionValue) : null,
+    decedentAcquisitionDate: vals.decedentAcquisitionDate || ''
   };
 }
 
@@ -2692,6 +2710,8 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="giftUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="giftPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 증여일+3개월 신고기한 대비)</label><input type="number" id="giftUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="giftMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="giftUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-gift">세액 계산하기</button>' +
@@ -4325,6 +4345,8 @@ function renderInheritancePane(){
         '<div class="taxcalc-field"><label>과소신고분 세액</label><input type="number" id="ihUnderreportedTax" placeholder="원 (과소신고일 때만)"></div>' +
         '<div class="taxcalc-field"><label>실제 납부일</label><input type="date" id="ihPaidDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>납부지연일수(자동계산: 상속개시일+6개월 신고기한 대비)</label><input type="number" id="ihUnpaidDays" placeholder="0" readonly></div>' +
+        '<div class="taxcalc-field"><label>세무서 고지 후 체납 — 지정납부기한 경과 개월수(있으면)</label><input type="number" id="ihMonthsAfterDesignated" placeholder="0"></div>' +
+        '<div class="taxcalc-field"><label>지정납부기한까지 미납세액(원, 위와 함께 입력)</label><input type="number" id="ihUnpaidAtDesignated" placeholder="0"></div>' +
       '</div>' +
     '</div>' +
     '<button type="button" class="taxcalc-run-btn" data-action="run-inheritance">세액 계산하기</button>' +
@@ -5109,6 +5131,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('trFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('trUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('trUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('trMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('trUnpaidAtDesignated').value) || 0,
       isSelfElectronicFiling: document.getElementById('trSelfEfiling').checked
     };
     const result = calculateTransferTaxMultiJS(inputs, filingParams);
@@ -5425,6 +5449,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('giftFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('giftUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('giftUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('giftMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('giftUnpaidAtDesignated').value) || 0,
       reportedInTime: document.getElementById('giftReportedInTime').checked
     };
     renderGiftResult(calculateGiftTaxJS(input));
@@ -6044,6 +6070,8 @@ taxCalcView.addEventListener('click', function(e){
       isFraudulent: document.getElementById('ihFraudulent').checked,
       underreportedTaxAmount: numVal(document.getElementById('ihUnderreportedTax').value) || 0,
       unpaidDays: numVal(document.getElementById('ihUnpaidDays').value) || 0,
+      monthsAfterDesignatedDueDate: numVal(document.getElementById('ihMonthsAfterDesignated').value) || 0,
+      unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('ihUnpaidAtDesignated').value) || 0,
       reportedInTime: document.getElementById('ihReportedInTime').checked
     };
     renderInheritanceResult(calculateInheritanceTaxJS(input));
