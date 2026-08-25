@@ -4494,7 +4494,7 @@ function toolCalculateProportionalAllocation(p) {
 function transferAssetCore_(t) {
   const transferPrice = Number(t.transferPrice);
   let necessaryExpenses = Number(t.necessaryExpenses) || 0;
-  if (!transferPrice || transferPrice <= 0) return { error: '양도가액이 필요합니다.' };
+  if (!transferPrice || transferPrice <= 0) return { error: '양도가액(transferPrice)이 필요합니다.' };
 
   let acquisitionPrice = Number(t.acquisitionPrice) || 0;
   let acquisitionPriceMethodNote = '';
@@ -4536,11 +4536,11 @@ function transferAssetCore_(t) {
     acquisitionPriceMethodNote += (acquisitionPriceMethodNote ? ' ' : '') + '가업상속공제 적용분(§97의2④, 적용률 ' + Math.round(bizSuccessionRatio * 100) + '%)을 반영해 취득가액을 피상속인 취득가액과 상속개시일 현재가액의 가중평균(' + blendedAcquisitionPrice + '원)으로 조정했습니다.';
     acquisitionPrice = blendedAcquisitionPrice;
   }
-  if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
-  if (!t.acquisitionDate || !t.transferDate) return { error: '취득일과 양도일이 필요합니다.' };
+  if (!t.isReconstructionRights && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액(acquisitionPrice)이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
+  if (!t.acquisitionDate || !t.transferDate) return { error: '취득일(acquisitionDate)과 양도일(transferDate)이 YYYY-MM-DD 형식으로 필요합니다.' };
 
   const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(t.acquisitionDate), t.transferDate);
-  if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다.' };
+  if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다. 날짜를 확인하세요.' };
 
   if (!t.necessaryExpenses && t.useEstimatedNecessaryExpense && acquisitionStandardPriceForConversion > 0) {
     const estimatedExpenseRate = t.isUnregisteredTransfer ? 0.003 : 0.03;
@@ -4576,8 +4576,8 @@ function transferAssetCore_(t) {
     const rightsValue = Number(t.rightsValue) || 0;
     const settlementPaid = Number(t.settlementPaid) || 0;
     const managementDispositionDate = t.managementDispositionDate;
-    if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액)이 필요합니다.' };
-    if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일이 필요합니다.' };
+    if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액, rightsValue)이 필요합니다.' };
+    if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일(managementDispositionDate)이 필요합니다.' };
 
     let originalAcqPrice = Number(t.originalAssetAcquisitionPrice) || 0;
     if (t.useConvertedRightsBaseAcquisitionPrice) {
@@ -4903,105 +4903,19 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
 
 function toolCalculateTransferTax(p) {
   p = p || {};
-  const transferPrice = Number(p.transferPrice);
-  let necessaryExpenses = Number(p.necessaryExpenses) || 0;
-  const isReconstruction = !!p.isReconstructionRights;
-  if (!transferPrice || transferPrice <= 0) return { error: '양도가액(transferPrice)이 필요합니다.' };
-
-  // 취득가액 결정 — 실지거래가액(acquisitionPrice 직접입력)이 최우선이다. 이를 확인할 수 없으면
-  // 소득세법시행령§176의2③의 순차적용(1호 매매사례가액 → 2호 감정가액 → 3호 환산취득가액 → 4호
-  // 취득당시 기준시가)에 따라 자동으로 결정한다. 환산취득가액(§176의2②2호, 토지·건물·부동산취득권리
-  // 기준)은 [양도당시 실지거래가액 × (취득당시기준시가÷양도당시기준시가)]이다.
-  // acquisitionStandardPriceForConversion/transferStandardPriceForConversion은 이 환산취득가액 계산
-  // 전용 필드다 — rentalSpecialType=rental_general에서 쓰는 acquisitionStandardPrice·transferStandardPrice
-  // (임대기간중 양도차익 안분용, 아래 별도 분기)와 이름이 겹치지 않도록 의도적으로 구분했다.
-  let acquisitionPrice = Number(p.acquisitionPrice) || 0;
-  let acquisitionPriceMethodNote = '';
-  let acquisitionPriceUsedAppraisalOrConversion = false;
-  const acquisitionStandardPriceForConversion = Number(p.acquisitionStandardPriceForConversion) || Number(p.acquisitionStandardPriceForExpense) || 0;
-  if (!p.acquisitionPrice && !isReconstruction) {
-    const comparableTransactionPrice = Number(p.comparableTransactionPrice) || 0;
-    const appraisalValue = Number(p.appraisalValue) || 0;
-    const transferStandardPriceForConversion = Number(p.transferStandardPriceForConversion) || 0;
-    if (comparableTransactionPrice > 0) {
-      acquisitionPrice = comparableTransactionPrice;
-      acquisitionPriceMethodNote = '취득가액은 매매사례가액(' + comparableTransactionPrice + '원, 시행령§176의2③1호)을 적용했습니다.';
-    } else if (appraisalValue > 0) {
-      acquisitionPrice = appraisalValue;
-      acquisitionPriceUsedAppraisalOrConversion = true;
-      acquisitionPriceMethodNote = '취득가액은 감정가액(' + appraisalValue + '원, 시행령§176의2③2호)을 적용했습니다.';
-    } else if (acquisitionStandardPriceForConversion > 0 && transferStandardPriceForConversion > 0) {
-      acquisitionPriceUsedAppraisalOrConversion = true;
-      acquisitionPrice = Math.round(transferPrice * acquisitionStandardPriceForConversion / transferStandardPriceForConversion);
-      acquisitionPriceMethodNote = '취득가액은 환산취득가액(시행령§176의2②2호·③3호) = 양도가액(' + transferPrice + '원)×[취득당시기준시가(' + acquisitionStandardPriceForConversion + '원)÷양도당시기준시가(' + transferStandardPriceForConversion + '원)] = ' + acquisitionPrice + '원으로 자동계산했습니다.';
-    } else if (acquisitionStandardPriceForConversion > 0) {
-      acquisitionPrice = acquisitionStandardPriceForConversion;
-      acquisitionPriceMethodNote = '취득가액은 취득당시 기준시가(' + acquisitionStandardPriceForConversion + '원, 시행령§176의2③4호)를 그대로 적용했습니다.';
-    }
-  }
-  // §97③ — 보유기간 중 그 자산에 대한 감가상각비를 사업소득금액 계산시 필요경비에 산입했거나
-  // 산입할 금액이 있으면, 그 금액을 취득가액에서 공제한다(사업경비로 이미 공제받은 감가상각비를
-  // 취득가액에도 남겨두면 이중공제가 되기 때문). 실제 산입액은 과거 사업소득 신고내역에 따른
-  // 사실관계라 자동계산할 수 없으므로 직접 입력을 받는다.
-  const depreciationDeductedAsBusinessExpense = Number(p.depreciationDeductedAsBusinessExpense) || 0;
-  if (depreciationDeductedAsBusinessExpense > 0) {
-    acquisitionPrice = Math.max(0, acquisitionPrice - depreciationDeductedAsBusinessExpense);
-    acquisitionPriceMethodNote += (acquisitionPriceMethodNote ? ' ' : '') + '사업소득 필요경비로 산입한 감가상각비(' + depreciationDeductedAsBusinessExpense + '원, §97③)를 취득가액에서 차감했습니다.';
-  }
-  // §97의2④ — 가업상속공제(상증세법§18의2)가 적용된 자산을 상속인이 양도하는 경우, 취득가액은
-  // "피상속인의 취득가액 × 가업상속공제적용률"과 "상속개시일 현재 해당 자산가액 × (1-가업상속공제적용률)"을
-  // 합한 금액이다(일반 상속재산처럼 상속개시일 현재가액 전액을 취득가액으로 보지 않는다). 이 취득가액
-  // 조정은 businessSuccessionDeductionRatio·decedentAcquisitionValue를 입력했을 때만 적용된다.
-  const bizSuccessionRatio = Math.max(0, Math.min(1, Number(p.businessSuccessionDeductionRatio) || 0));
-  if (bizSuccessionRatio > 0 && p.decedentAcquisitionValue != null) {
-    const decedentAcquisitionValue = Number(p.decedentAcquisitionValue) || 0;
-    const blendedAcquisitionPrice = Math.round(decedentAcquisitionValue * bizSuccessionRatio + acquisitionPrice * (1 - bizSuccessionRatio));
-    acquisitionPriceMethodNote += (acquisitionPriceMethodNote ? ' ' : '') + '가업상속공제 적용분(§97의2④, 적용률 ' + Math.round(bizSuccessionRatio * 100) + '%)을 반영해 취득가액을 피상속인 취득가액과 상속개시일 현재가액의 가중평균(' + blendedAcquisitionPrice + '원)으로 조정했습니다.';
-    acquisitionPrice = blendedAcquisitionPrice;
-  }
-  // 재건축·재개발 특례는 취득가액 대신 종전자산 취득가액(originalAssetAcquisitionPrice)·권리가액(rightsValue)을
-  // 별도로 쓰므로, 이 경우에는 일반 취득가액 필수 검증을 적용하지 않는다(아래 재건축 분기에서 별도 검증).
-  if (!isReconstruction && (!acquisitionPrice || acquisitionPrice < 0)) return { error: '취득가액(acquisitionPrice)이 필요합니다(실지거래가액을 모르면 매매사례가액·감정가액·취득당시기준시가 중 하나 이상을 입력하면 자동으로 산정합니다).' };
-  if (!p.acquisitionDate || !p.transferDate) return { error: '취득일(acquisitionDate)과 양도일(transferDate)이 YYYY-MM-DD 형식으로 필요합니다.' };
-
-  const holdingYears = fullYearsElapsed_(deemedAcquisitionDate_(p.acquisitionDate), p.transferDate);
-  if (holdingYears < 0) return { error: '양도일이 취득일보다 빠릅니다. 날짜를 확인하세요.' };
-  // 조특법§69의4 "직접 경영한 기간"은 양도차익 계산용 의제취득일(1985.1.1) 의제를 적용하지 않는
-  // 실제 취득일 기준 기간이므로 holdingYears와 별도로 계산한다.
-  const forestManagementYears = fullYearsElapsed_(p.acquisitionDate, p.transferDate);
-
-  // 실제 취득가액을 확인할 수 없을 때(매매계약서 분실 등)의 필요경비 개산공제(시행령§163⑥1호·2호):
-  // 취득 당시 기준시가 × 3%(토지·건물 일반 기준)를 필요경비로 대체 인정하되, 미등기양도자산은 3/1000(0.3%).
-  if (!p.necessaryExpenses && p.useEstimatedNecessaryExpense && acquisitionStandardPriceForConversion > 0) {
-    const estimatedExpenseRate = p.isUnregisteredTransfer ? 0.003 : 0.03;
-    necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
-  }
-
-  const assetType = p.assetType === 'house' ? 'house' : (p.assetType === 'presale_right' ? 'presale_right' : 'other');
-  const isPresaleRight = assetType === 'presale_right';
-  const isOneHouse = !isPresaleRight && !isReconstruction && !!p.isOneHouseOneFamily;
-  // 소득세법§95③은 §89①3호 단서의 고가주택뿐 아니라 §89①4호 각목외 단서의 "고가조합원입주권"
-  // (1세대가 1조합원입주권만 보유하는 등 원래는 전액 비과세 요건을 충족하나 양도가액이 12억원을 초과하는
-  // 경우)도 함께 "대통령령으로 정하는 바에 따라 계산"하도록 위임한다. 소득세법시행령§160①②는 문언상
-  // "고가주택"만 명시하고 조합원입주권을 별도로 규정하지 않는데, 이는 입법미비로 보이며 §160①②의
-  // 12억초과 비율안분 산식을 고가조합원입주권에도 유추적용하는 것이 §95③의 위임 취지에 맞다(준공 전
-  // 조합원입주권 자체 양도, 즉 아래 §166①1호 분기에만 해당 — 준공 후 신축주택은 이미 "주택" 자체이므로
-  // §160① 문언 그대로 적용된다). 다른 비과세 요건 없이 무조건 적용하면 정책 취지에 반하므로, 원래
-  // §89①4호 요건(1세대1조합원입주권)을 충족한다는 전제가 있을 때만(isOneMemberRightOneFamily) 적용한다.
-  const isOneMemberRightOnly = isReconstruction && !p.isCompletedNewHousing && !!p.isOneMemberRightOneFamily;
-  const isUnregistered = !!p.isUnregisteredTransfer;
-  const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
+  const core = transferAssetCore_(p);
+  if (core.error) return { error: core.error };
 
   // 미등기양도자산(소득세법 §104③) — 장기보유특별공제·기본공제·1세대1주택 특례 전부 배제,
   // 양도차익 전액에 70% 단일세율. 다른 특례와 절대 함께 적용되지 않으므로 여기서 바로 반환.
-  if (isUnregistered) {
-    const uCalculatedTax = Math.max(0, Math.round(gainBeforeDeduction * 0.7));
+  if (core.isUnregistered) {
+    const uCalculatedTax = Math.max(0, Math.round(core.gainBeforeDeduction * 0.7));
     const uLocalTax = Math.round(uCalculatedTax * 0.1);
     return {
-      입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 미등기양도: true },
-      취득가액_산정방법: acquisitionPriceMethodNote || undefined,
-      양도차익: Math.round(gainBeforeDeduction),
-      과세표준: Math.max(0, Math.round(gainBeforeDeduction)),
+      입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 미등기양도: true },
+      취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
+      양도차익: Math.round(core.gainBeforeDeduction),
+      과세표준: Math.max(0, Math.round(core.gainBeforeDeduction)),
       적용세율_설명: '미등기양도자산 — 장기보유특별공제·기본공제 배제, 70% 단일세율',
       산출세액: uCalculatedTax,
       지방소득세: uLocalTax,
@@ -5010,191 +4924,39 @@ function toolCalculateTransferTax(p) {
     };
   }
 
-  // 1세대1조합원입주권(§89①4호, 준공 전 조합원입주권 자체 양도) 비과세 요건 충족을 전제로, 양도가액이
-  // 12억원 이하이면 전액 비과세(§89①4호 각목외 단서 반대해석). 12억 초과분은 아래 §166①1호 분기에서
-  // 고가조합원입주권 비율안분을 적용한다.
-  if (isOneMemberRightOnly && transferPrice <= 1200000000) {
+  // 1세대1주택(§89①3호) 또는 1세대1조합원입주권(§89①4호) 비과세 요건 충족을 전제로, 양도가액이
+  // 12억원 이하이면 전액 비과세.
+  if (core.exempt) {
+    const downContractDiff = Number(p.downContractPriceDifference) || 0;
+    if (downContractDiff > 0) {
+      // 다운계약서(업계약서) 등 거짓 계약으로 비과세를 적용받은 경우(소득세법 §91②) —
+      // MIN(비과세를 적용받지 않았다면 부과됐을 산출세액, 계약서 거래가액과 실지거래가액의 차액)만큼 비과세를 배제하고 추징한다.
+      const wouldBeTaxResult = toolCalculateTransferTax(Object.assign({}, p, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
+      const wouldBeTax = (wouldBeTaxResult && typeof wouldBeTaxResult.납부세액_합계 === 'number') ? wouldBeTaxResult.납부세액_합계 : 0;
+      const clawback = Math.min(wouldBeTax, downContractDiff);
+      return {
+        입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+        취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
+        비과세여부: false,
+        다운계약서_비과세배제: true,
+        비과세미적용시_산출세액: wouldBeTax,
+        계약서_실거래_차액: downContractDiff,
+        납부세액: clawback,
+        납부세액_합계: clawback,
+        안내: '다운계약서(업계약서) 등 거짓 계약으로 1세대1주택 비과세를 적용받은 것으로 전제했습니다(소득세법 §91②). 비과세를 적용받지 않았다면 부과됐을 세액(지방소득세 포함)과 계약서상 거래가액·실지거래가액 차액 중 작은 금액을 추징세액으로 계산했으며, 별도의 가산세·과태료는 포함하지 않았습니다.'
+      };
+    }
     return {
-      입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
-      취득가액_산정방법: acquisitionPriceMethodNote || undefined,
+      입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
+      취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
       비과세여부: true,
       납부세액: 0,
-      안내: '1세대1조합원입주권 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다(§89①4호). 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
+      안내: '1세대1주택(또는 1세대1조합원입주권) 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다. 2년 이상 보유(조정대상지역은 거주요건 포함) 등 비과세 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
     };
   }
 
-  let taxableGain = gainBeforeDeduction;
-  let longTermRate = 0;
-  let isRentalSpecial = false;
-  let isMultiHouseSurcharge = false;
-  const multiHouseCount = Number(p.multiHouseCount) || 0;
-  let incomeAmount, longTermDeductionAmount, reconstructionDetail = null;
-
-  if (isReconstruction) {
-    // 소득세법시행령§166①②③ — 재개발·재건축 조합원이 기존건물과 그 부수토지를 제공하고 취득한
-    // 조합원입주권(준공 전) 또는 신축주택(준공 후)을 청산금 납부하고 양도하는 경우의 양도차익 계산.
-    const rightsValue = Number(p.rightsValue) || 0;
-    const settlementPaid = Number(p.settlementPaid) || 0;
-    const managementDispositionDate = p.managementDispositionDate;
-    if (!rightsValue) return { error: '재건축·재개발 특례: 권리가액(종전자산평가액, rightsValue)이 필요합니다.' };
-    if (!managementDispositionDate) return { error: '재건축·재개발 특례: 관리처분계획인가일(managementDispositionDate)이 필요합니다.' };
-
-    // 소득세법시행령§166③ — 기존건물과 그 부수토지의 취득가액을 확인할 수 없는 경우의 환산(원문 확인 완료):
-    // 평가액 × (취득일 현재 기존건물과 그 부수토지의 소득세법§99①1호에 따른 기준시가 ÷
-    //           관리처분계획등인가일 현재 기존건물과 그 부수토지의 같은 호에 따른 기준시가)
-    let originalAcqPrice = Number(p.originalAssetAcquisitionPrice) || 0;
-    if (p.useConvertedRightsBaseAcquisitionPrice) {
-      const acqStd = Number(p.originalAcquisitionStandardPrice) || 0;
-      const apprStd = Number(p.approvalDateStandardPrice) || 0;
-      if (acqStd > 0 && apprStd > 0) originalAcqPrice = Math.round(rightsValue * acqStd / apprStd);
-    }
-    const originalNecessaryExpenses = Number(p.originalNecessaryExpenses) || 0;
-
-    // 관리처분계획등인가전양도차익 = (평가액-기존건물취득가액)-필요경비(§97①2·3호 또는 §163⑥)
-    const gainBeforeApproval = (rightsValue - originalAcqPrice) - originalNecessaryExpenses;
-    // 관리처분계획등인가후양도차익 = 양도가액-(평가액+납부한청산금)-필요경비(§97①2·3호)
-    const gainAfterApproval = transferPrice - (rightsValue + settlementPaid) - necessaryExpenses;
-
-    const holdingYearsBeforeApproval = fullYearsElapsed_(deemedAcquisitionDate_(p.acquisitionDate), managementDispositionDate);
-    const holdingYearsSinceApproval = fullYearsElapsed_(managementDispositionDate, p.transferDate);
-
-    if (!p.isCompletedNewHousing) {
-      // ①1호 — 조합원입주권 자체를 준공 전 양도. §95②단서 "관리처분계획인가...전 토지분 또는 건물분의
-      // 양도차익으로 한정"에 따라 장기보유특별공제는 인가전양도차익에만 적용되고, 인가후양도차익에는 전혀 적용되지 않는다.
-      taxableGain = gainBeforeApproval + gainAfterApproval;
-      const ltRateBefore = longTermHoldingDeductionRate_(holdingYearsBeforeApproval);
-      longTermDeductionAmount = Math.round(Math.max(0, gainBeforeApproval) * ltRateBefore);
-      incomeAmount = taxableGain - longTermDeductionAmount;
-      reconstructionDetail = { 구분: '조합원입주권(준공전) 양도 — §166①1호', 관리처분계획등인가전양도차익: Math.round(gainBeforeApproval), 관리처분계획등인가후양도차익: Math.round(gainAfterApproval), 인가전_보유기간_년: holdingYearsBeforeApproval, 인가전_장특공제율: ltRateBefore };
-      // 소득세법§95③ 후단(고가조합원입주권) — 시행령§160①②의 12억초과 비율안분을 유추적용한다(시행령이
-      // 조합원입주권 몫을 명시하지 않은 입법미비로 보아, isOneMemberRightOnly 정의부의 근거 주석 참조).
-      // 1세대1조합원입주권 비과세 요건 충족을 전제로 했을 때만 적용한다.
-      if (isOneMemberRightOnly && transferPrice > 1200000000) {
-        const highValueRatio = (transferPrice - 1200000000) / transferPrice;
-        taxableGain = taxableGain * highValueRatio;
-        longTermDeductionAmount = Math.round(longTermDeductionAmount * highValueRatio);
-        incomeAmount = taxableGain - longTermDeductionAmount;
-        reconstructionDetail.고가조합원입주권_12억초과비율 = highValueRatio;
-      }
-    } else {
-      // ②1호 — 준공된 신축주택을 양도(청산금납부). 인가후양도차익을 "청산금납부분"과 "기존건물분"으로
-      // (청산금납부액:평가액) 비율로 재분배하고, 각각 다른 보유기간(§166⑤2호가·나목)으로 장특공제를 적용한다.
-      const denom = rightsValue + settlementPaid;
-      const settlementPortionGain = denom > 0 ? gainAfterApproval * settlementPaid / denom : 0;
-      const existingPortionGain = (gainAfterApproval - settlementPortionGain) + gainBeforeApproval;
-      taxableGain = settlementPortionGain + existingPortionGain;
-      const ltRateSettlement = longTermHoldingDeductionRate_(holdingYearsSinceApproval);
-      const ltRateExisting = longTermHoldingDeductionRate_(holdingYears);
-      longTermDeductionAmount = Math.round(Math.max(0, settlementPortionGain) * ltRateSettlement) + Math.round(Math.max(0, existingPortionGain) * ltRateExisting);
-      incomeAmount = taxableGain - longTermDeductionAmount;
-      reconstructionDetail = {
-        구분: '신축주택(준공후) 양도 — §166②1호', 청산금납부분양도차익: Math.round(settlementPortionGain), 기존건물분양도차익: Math.round(existingPortionGain),
-        청산금분_보유기간_년: holdingYearsSinceApproval, 청산금분_장특공제율: ltRateSettlement, 기존건물분_보유기간_년: holdingYears, 기존건물분_장특공제율: ltRateExisting
-      };
-      // §95③·시행령§160① — 신축주택은 문언상 "주택"이므로 고가주택(12억 초과)이면 §95①에 따른
-      // 양도차익·§95②에 따른 장기보유특별공제액 모두에 "(양도가액-12억)/양도가액" 비율을 곱해
-      // 12억 초과분에 해당하는 부분만 과세한다. 조합원입주권 자체(준공 전, 위 ①분기)의 고가조합원입주권
-      // 특례는 위 isOneMemberRightOnly 분기에서 별도로 적용했다.
-      if (transferPrice > 1200000000) {
-        const highValueRatio = (transferPrice - 1200000000) / transferPrice;
-        taxableGain = taxableGain * highValueRatio;
-        longTermDeductionAmount = Math.round(longTermDeductionAmount * highValueRatio);
-        incomeAmount = taxableGain - longTermDeductionAmount;
-        reconstructionDetail.고가주택_12억초과비율 = highValueRatio;
-      }
-    }
-    longTermRate = taxableGain !== 0 ? longTermDeductionAmount / taxableGain : 0;
-  } else if (isPresaleRight) {
-    // 소득세법§95②은 장기보유특별공제를 §94①1호 자산(부동산)과 조합원입주권에만 인정하고
-    // 분양권은 열거하지 않으므로, 분양권은 보유기간과 무관하게 장특공제를 전혀 받지 못한다.
-    longTermRate = 0;
-  } else if (isOneHouse) {
-    if (transferPrice <= 1200000000) {
-      // 다운계약서(업계약서) 등 거짓 계약으로 비과세를 적용받은 경우(소득세법 §91②) —
-      // MIN(비과세를 적용받지 않았다면 부과됐을 산출세액, 계약서 거래가액과 실지거래가액의 차액)만큼 비과세를 배제하고 추징한다.
-      const downContractDiff = Number(p.downContractPriceDifference) || 0;
-      if (downContractDiff > 0) {
-        const wouldBeTaxResult = toolCalculateTransferTax(Object.assign({}, p, { isOneHouseOneFamily: false, downContractPriceDifference: 0 }));
-        const wouldBeTax = (wouldBeTaxResult && typeof wouldBeTaxResult.납부세액_합계 === 'number') ? wouldBeTaxResult.납부세액_합계 : 0;
-        const clawback = Math.min(wouldBeTax, downContractDiff);
-        return {
-          입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
-          취득가액_산정방법: acquisitionPriceMethodNote || undefined,
-          비과세여부: false,
-          다운계약서_비과세배제: true,
-          비과세미적용시_산출세액: wouldBeTax,
-          계약서_실거래_차액: downContractDiff,
-          납부세액: clawback,
-          납부세액_합계: clawback,
-          안내: '다운계약서(업계약서) 등 거짓 계약으로 1세대1주택 비과세를 적용받은 것으로 전제했습니다(소득세법 §91②). 비과세를 적용받지 않았다면 부과됐을 세액(지방소득세 포함)과 계약서상 거래가액·실지거래가액 차액 중 작은 금액을 추징세액으로 계산했으며, 별도의 가산세·과태료는 포함하지 않았습니다.'
-        };
-      }
-      return {
-        입력값: { 양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses, 보유기간_년: holdingYears },
-        취득가액_산정방법: acquisitionPriceMethodNote || undefined,
-        비과세여부: true,
-        납부세액: 0,
-        안내: '1세대1주택 비과세 요건 충족을 전제로, 양도가액이 12억원 이하이므로 전액 비과세입니다. 2년 이상 보유(조정대상지역은 거주요건 포함) 등 비과세 요건 자체는 이 도구가 검증하지 않으므로 별도로 반드시 확인하세요.'
-      };
-    }
-    // 고가주택(12억 초과분)만 안분해서 과세
-    taxableGain = gainBeforeDeduction * (transferPrice - 1200000000) / transferPrice;
-    longTermRate = longTermHoldingDeductionRate1House_(holdingYears, Number(p.residenceYears) || 0);
-  } else if (bizSuccessionRatio > 0 && p.decedentAcquisitionDate) {
-    // §95④단서 — 가업상속공제가 적용된 비율에 해당하는 자산은 장기보유특별공제의 보유기간 기산일이
-    // "피상속인이 해당 자산을 취득한 날"이다(나머지 비율은 상속개시일 기산인 일반 상속재산과 동일).
-    // §104(세율판정용 holdingYears)에는 이런 예외가 없으므로 holdingYears는 상속개시일 기준 그대로 쓴다.
-    const decedentHoldingYears = fullYearsElapsed_(deemedAcquisitionDate_(p.decedentAcquisitionDate), p.transferDate);
-    longTermRate = longTermHoldingDeductionRate_(decedentHoldingYears) * bizSuccessionRatio + longTermHoldingDeductionRate_(holdingYears) * (1 - bizSuccessionRatio);
-  } else {
-    longTermRate = longTermHoldingDeductionRate_(holdingYears);
-  }
-
-  if (!isReconstruction && !isPresaleRight) {
-    // 장기임대주택 등 특례([별지 제84호서식] 코드04·05, 조특법 §97의3·§97의4) — 신청한 경우 위에서 계산한 일반/1세대1주택 공제율을 대체한다.
-    const rentalRate = rentalLongTermHoldingDeductionRate_(p.rentalSpecialType, holdingYears, p.rentalYears);
-    isRentalSpecial = rentalRate !== null;
-    if (isRentalSpecial) longTermRate = rentalRate;
-
-    // 다주택자 중과(소득세법 §104⑦, 조정대상지역 2주택 이상) — 적용되면 장기보유특별공제 자체가 배제된다.
-    // (등록임대주택 장특공제 특례를 적용받는 주택은 다주택 수 계산에서 제외되는 것이 원칙이라 여기서는 중과 대상에서 제외한다.)
-    // 소득세법시행령§167의3①12호의2(및 §167의4③6의2·§167의10①12호의2·§167의11①12호, 부칙 제4조 —
-    // 2022.5.10 이후 양도분부터 적용) — 조정대상지역 다주택자라도 "보유기간 2년 이상" 요건을 갖춘
-    // "2026년 5월 9일까지 양도하는 주택"만 한시적으로 중과(세율가산+장특공제배제)를 적용하지 않는다.
-    const isMultiHouseSurchargeExcluded = !!p.transferDate && p.transferDate <= '2026-05-09' && holdingYears >= 2;
-    isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!p.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
-    if (isMultiHouseSurcharge) longTermRate = 0;
-  }
-
-  let rentalPeriodSplit = null;
-  if (!isReconstruction) {
-    // 조특법시행령§97의3⑤ — rental_general(§97의3)은 "임대기간중 발생한 양도차익"에 한정해 70%를 적용하고
-    // 등록 전 기간분에는 일반 장특공제율을 적용한다(rental_long/§97의4는 법문상 전체 양도차익에 적용하므로 분리 안 함).
-    const acqStd = Number(p.acquisitionStandardPrice) || 0;
-    const regStd = Number(p.registrationStandardPrice) || 0;
-    const trfStd = Number(p.transferStandardPrice) || 0;
-    const rentalGeneralNeedsSplit = isRentalSpecial && p.rentalSpecialType === 'rental_general' && longTermRate > 0;
-    if (rentalGeneralNeedsSplit && !(acqStd > 0 && regStd > 0 && trfStd > 0 && trfStd !== acqStd)) {
-      // 기준시가 3종이 없거나 취득당시=양도당시(분모 0)이면 안분이 불가능하다. 이 경우 전체
-      // 양도차익에 70%/50%를 그대로 적용하면 "임대기간중 발생분"이 아닌 임대개시전 발생분까지
-      // 특례공제를 받아 과다공제가 되므로, §97의5(toolCalculateLongTermRentalHouseReduction)와
-      // 마찬가지로 안분에 필요한 값을 반드시 요구한다(조특법시행령§97의3⑤).
-      return { error: '등록임대주택 장특공제 특례(§97의3, 10년이상 70%)는 임대기간중 발생한 양도차익에만 적용되므로, 취득당시·등록일당시·양도당시 기준시가(acquisitionStandardPrice·registrationStandardPrice·transferStandardPrice) 3종을 모두 입력해야 합니다(취득당시=양도당시 기준시가는 안분 불가).' };
-    }
-    if (rentalGeneralNeedsSplit) {
-      const rentalPeriodGain = taxableGain * (trfStd - regStd) / (trfStd - acqStd);
-      const beforeRentalGain = taxableGain - rentalPeriodGain;
-      const normalRate = longTermHoldingDeductionRate_(holdingYears);
-      longTermDeductionAmount = Math.round(Math.max(0, rentalPeriodGain) * longTermRate + Math.max(0, beforeRentalGain) * normalRate);
-      incomeAmount = taxableGain - longTermDeductionAmount;
-      rentalPeriodSplit = { 임대기간중양도차익: Math.round(rentalPeriodGain), 임대전양도차익: Math.round(beforeRentalGain), 임대전적용공제율: normalRate };
-    } else {
-      longTermDeductionAmount = Math.round(taxableGain * longTermRate);
-      incomeAmount = taxableGain - longTermDeductionAmount;
-    }
-  }
   const basicDeduction = 2500000;
-  const taxBase = Math.max(0, incomeAmount - basicDeduction);
+  const taxBase = Math.max(0, core.incomeAmount - basicDeduction);
 
   let calculatedTax, appliedRateNote;
   const surchargeNotes = [];
@@ -5205,26 +4967,26 @@ function toolCalculateTransferTax(p) {
   function surchargeBasedTax_() {
     let tax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS);
     const notes = [];
-    if (isMultiHouseSurcharge) {
-      const surchargeRate = multiHouseCount >= 3 ? 0.30 : 0.20;
+    if (core.isMultiHouseSurcharge) {
+      const surchargeRate = core.multiHouseCount >= 3 ? 0.30 : 0.20;
       const surchargeAmount = Math.round(taxBase * surchargeRate);
       tax += surchargeAmount;
       notes.push('다주택자 중과(+' + (surchargeRate * 100) + '%p): +' + surchargeAmount + '원');
     }
-    if (p.isNonBusinessLand) {
+    if (core.isNonBusinessLand) {
       const surchargeAmount = Math.round(taxBase * 0.10);
       tax += surchargeAmount;
       notes.push('비사업용토지 가산(+10%p): +' + surchargeAmount + '원');
     }
     return { tax: tax, notes: notes };
   }
-  if (isPresaleRight) {
+  if (core.assetType === 'presale_right') {
     // 소득세법§104①1호·2호·3호 — 분양권은 보유기간 1년 미만 70%, 1년 이상은 무조건 60%(기본세율 누진 적용 없음).
-    const rate = holdingYears < 1 ? 0.70 : 0.60;
+    const rate = core.holdingYears < 1 ? 0.70 : 0.60;
     calculatedTax = Math.round(taxBase * rate);
-    appliedRateNote = '분양권 — ' + (holdingYears < 1 ? '보유기간 1년 미만 70%' : '60%') + ' 단일세율 적용(장기보유특별공제·기본세율누진 배제)';
-  } else if (holdingYears < 2 && (isMultiHouseSurcharge || p.isNonBusinessLand)) {
-    const shortRate = holdingYears < 1 ? (assetType === 'house' ? 0.70 : 0.50) : (assetType === 'house' ? 0.60 : 0.40);
+    appliedRateNote = '분양권 — ' + (core.holdingYears < 1 ? '보유기간 1년 미만 70%' : '60%') + ' 단일세율 적용(장기보유특별공제·기본세율누진 배제)';
+  } else if (core.holdingYears < 2 && (core.isMultiHouseSurcharge || core.isNonBusinessLand)) {
+    const shortRate = core.holdingYears < 1 ? (core.assetType === 'house' ? 0.70 : 0.50) : (core.assetType === 'house' ? 0.60 : 0.40);
     const shortTermTax = Math.round(taxBase * shortRate);
     const alt = surchargeBasedTax_();
     if (alt.tax > shortTermTax) {
@@ -5233,14 +4995,14 @@ function toolCalculateTransferTax(p) {
       appliedRateNote = '보유기간 2년 미만이나 다주택중과·비사업용토지 가산세율 적용시 세액이 더 커서(§104④·⑦후단) 기본세율+가산율 적용 — 단기세율(' + (shortRate * 100) + '%) 적용시: ' + shortTermTax + '원';
     } else {
       calculatedTax = shortTermTax;
-      appliedRateNote = '보유기간 ' + (holdingYears < 1 ? '1년 미만' : '1년 이상 2년 미만') + ' 단기세율 ' + (shortRate * 100) + '% 적용(§104④·⑦후단 비교 결과 기본세율+가산율보다 큼)';
+      appliedRateNote = '보유기간 ' + (core.holdingYears < 1 ? '1년 미만' : '1년 이상 2년 미만') + ' 단기세율 ' + (shortRate * 100) + '% 적용(§104④·⑦후단 비교 결과 기본세율+가산율보다 큼)';
     }
-  } else if (holdingYears < 1) {
-    const shortRate = assetType === 'house' ? 0.70 : 0.50;
+  } else if (core.holdingYears < 1) {
+    const shortRate = core.assetType === 'house' ? 0.70 : 0.50;
     calculatedTax = Math.round(taxBase * shortRate);
     appliedRateNote = '보유기간 1년 미만 단기세율 ' + (shortRate * 100) + '% 적용';
-  } else if (holdingYears < 2) {
-    const shortRate = assetType === 'house' ? 0.60 : 0.40;
+  } else if (core.holdingYears < 2) {
+    const shortRate = core.assetType === 'house' ? 0.60 : 0.40;
     calculatedTax = Math.round(taxBase * shortRate);
     appliedRateNote = '보유기간 1년 이상 2년 미만 단기세율 ' + (shortRate * 100) + '% 적용';
   } else {
@@ -5266,13 +5028,12 @@ function toolCalculateTransferTax(p) {
   } else if (p.isForestManagementExempt) {
     // 조특법§69의4① — 10년 이상 직접 경영해야 하며(미만이면 감면 없음), 경영기간 구간별로 감면율이
     // 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%.
-    const forestRate_ = forestManagementYears >= 50 ? 0.50 : forestManagementYears >= 40 ? 0.40
-      : forestManagementYears >= 30 ? 0.30 : forestManagementYears >= 20 ? 0.20
-      : forestManagementYears >= 10 ? 0.10 : 0;
-    if (forestRate_ > 0) {
-      farmlandReduction = Math.min(Math.round(calculatedTax * forestRate_), 100000000);
+    const yrs = core.forestManagementYears;
+    const forestRate = yrs >= 50 ? 0.50 : yrs >= 40 ? 0.40 : yrs >= 30 ? 0.30 : yrs >= 20 ? 0.20 : yrs >= 10 ? 0.10 : 0;
+    if (forestRate > 0) {
+      farmlandReduction = Math.min(Math.round(calculatedTax * forestRate), 100000000);
       calculatedTax -= farmlandReduction;
-      farmlandReductionLabel = '자경산지 감면(조특법§69의4, 경영기간 ' + forestManagementYears + '년 — ' + Math.round(forestRate_ * 100) + '%)';
+      farmlandReductionLabel = '자경산지 감면(조특법§69의4, 경영기간 ' + yrs + '년 — ' + Math.round(forestRate * 100) + '%)';
     }
   }
 
@@ -5289,11 +5050,11 @@ function toolCalculateTransferTax(p) {
   let compensationReduction = 0;
   let compensationReductionLabel = '';
   if (COMPENSATION_REDUCTION_RATES_[p.compensationType] !== undefined) {
-    const compRaw_ = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
+    const compRaw = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
     // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
     // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
     // 추적하지 않음).
-    compensationReduction = Math.min(compRaw_, 200000000);
+    compensationReduction = Math.min(compRaw, 200000000);
     calculatedTax -= compensationReduction;
     compensationReductionLabel = (p.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
       : (p.compensationType === 'restricted_zone_40' || p.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
@@ -5302,57 +5063,43 @@ function toolCalculateTransferTax(p) {
 
   // 다운계약서(업계약서) 등 거짓 계약으로 위 감면을 적용받은 경우(소득세법 §91②) —
   // MIN(감면세액 합계, 계약서 거래가액과 실지거래가액의 차액)만큼 감면을 배제하고 추징한다.
-  const downContractDiff = Number(p.downContractPriceDifference) || 0;
+  const downContractDiff2 = Number(p.downContractPriceDifference) || 0;
   let downContractClawback = 0;
-  if (downContractDiff > 0 && (farmlandReduction + compensationReduction) > 0) {
-    downContractClawback = Math.min(farmlandReduction + compensationReduction, downContractDiff);
+  if (downContractDiff2 > 0 && (farmlandReduction + compensationReduction) > 0) {
+    downContractClawback = Math.min(farmlandReduction + compensationReduction, downContractDiff2);
     calculatedTax += downContractClawback;
   }
 
-  // 감정가액·환산취득가액 가산세(소득세법§114의2①) — 신축 또는 증축(85㎡ 초과분만)한 건물을 취득일·
-  // 증축일로부터 5년 이내에 양도하면서 그 취득가액을 감정가액 또는 환산취득가액으로 한 경우, 두 방법
-  // 모두 동일하게 해당 건물분 가액의 5%를 가산세로 부과한다(§114의2②에 따라 산출세액이 0이어도 적용).
-  // 건물분만 별도로 지정하려면 convertedBuildingAcquisitionValueForPenalty를 직접 입력하고, 없으면
-  // 위에서 감정가액·환산취득가액으로 자동결정된 취득가액(acquisitionPrice, 토지·건물 합산분)을 그대로
-  // 쓴다(건물·토지를 분리평가하지 않은 단일자산 양도를 가정한 근사 — 토지·건물을 구분평가했다면
-  // convertedBuildingAcquisitionValueForPenalty에 건물분만 직접 입력하세요).
-  const convertedBuildingAcquisitionValueForPenalty = Number(p.convertedBuildingAcquisitionValueForPenalty) ||
-    (acquisitionPriceUsedAppraisalOrConversion ? acquisitionPrice : 0);
-  const conversionValuePenalty = (p.isNewBuildingWithin5Years && convertedBuildingAcquisitionValueForPenalty > 0)
-    ? Math.round(convertedBuildingAcquisitionValueForPenalty * 0.05) : 0;
-
   // 연금계좌세액공제(조특법§99의14①, 2024.12.31 신설) — "연금계좌 납입액의 100분의 10에 상당하는
   // 금액을...공제하며, 공제세액은 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다.
-  const pensionContribution = Number(p.pensionAccountContribution) || 0;
-  const pensionAccountCreditRaw = pensionContribution > 0 ? Math.round(pensionContribution * 0.1) : 0;
+  const pensionAccountCreditRaw = core.pensionAccountContribution > 0 ? Math.round(Number(core.pensionAccountContribution) * 0.1) : 0;
   const pensionAccountCredit = Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax));
 
   // 전자신고세액공제(조특법 §104의8①) — 납세자 본인이 직접 전자신고하면 2만원 정액공제(세무대리인 대리신고 시 미적용)
   const eFilingCredit = p.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
 
   const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(p.filingStatus) !== -1 ? p.filingStatus : 'ontime';
-  const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
   const penalties = giftFilingPenalties_(calculatedTax, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
 
   // 지방소득세(개인지방소득세, 지방세법)는 국세 산출세액(가산세 제외)의 10%가 원칙이며, 가산세에는 부가되지 않는다.
   const localIncomeTax = Math.round(calculatedTax * 0.1);
-  const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + conversionValuePenalty
+  const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + core.conversionValuePenalty
     + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
 
   return {
     입력값: {
-      양도가액: transferPrice, 취득가액: acquisitionPrice, 필요경비: necessaryExpenses,
-      보유기간_년: holdingYears, 자산종류: assetType === 'house' ? '주택·조합원입주권' : '그 외',
-      '1세대1주택_전제': isOneHouse, 다주택중과_전제: isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland,
+      양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses,
+      보유기간_년: core.holdingYears, 자산종류: core.assetType === 'house' ? '주택·조합원입주권' : '그 외',
+      '1세대1주택_전제': core.isOneHouse, 다주택중과_전제: core.isMultiHouseSurcharge, 비사업용토지_전제: !!p.isNonBusinessLand, '8년자경농지감면_전제': !!p.isEightYearFarmland,
       신고상태: filingStatus
     },
-    취득가액_산정방법: acquisitionPriceMethodNote || undefined,
-    조합원입주권_재건축상세: reconstructionDetail,
-    양도차익: Math.round(reconstructionDetail ? taxableGain : gainBeforeDeduction),
-    과세대상양도차익: Math.round(taxableGain),
-    장기보유특별공제율: longTermRate,
-    장기보유특별공제액: longTermDeductionAmount,
-    양도소득금액: Math.round(incomeAmount),
+    취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
+    조합원입주권_재건축상세: core.reconstructionDetail,
+    양도차익: Math.round(core.reconstructionDetail ? core.taxableGain : core.gainBeforeDeduction),
+    과세대상양도차익: Math.round(core.taxableGain),
+    장기보유특별공제율: core.longTermRate,
+    장기보유특별공제액: core.longTermDeductionAmount,
+    양도소득금액: Math.round(core.incomeAmount),
     기본공제: basicDeduction,
     과세표준: taxBase,
     적용세율_설명: appliedRateNote,
@@ -5362,11 +5109,11 @@ function toolCalculateTransferTax(p) {
     수용감면액: compensationReduction,
     수용감면_구분: compensationReductionLabel,
     다운계약서_감면배제_추징액: downContractClawback,
-    장기임대주택특례_적용여부: isRentalSpecial, 장기임대주택특례_임대기간중분리상세: rentalPeriodSplit,
+    장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
     산출세액: calculatedTax,
     연금계좌세액공제: pensionAccountCredit,
     전자신고세액공제: eFilingCredit,
-    환산취득가액가산세: conversionValuePenalty,
+    환산취득가액가산세: core.conversionValuePenalty,
     무신고가산세: penalties.unreportedPenalty,
     과소신고가산세: penalties.underreportedPenalty,
     납부지연가산세: penalties.latePenalty,
