@@ -4,7 +4,7 @@
   // GAS_URL은 /config.js(window.NX_CONFIG) 하나로 통합 관리됩니다 — report-writer/index.html도 동일 파일을 참조.
   // config.js 로드 실패 시를 대비해 마지막에 쓰던 값을 폴백으로 남겨둡니다.
   const GAS_URL = (window.NX_CONFIG && window.NX_CONFIG.GAS_URL)
-    || 'https://script.google.com/macros/s/AKfycbz9pam82WMSMKHYo6-6EtEguMbpZ0AaqHirVzwcW6ZFRsdq4WGluvhpPkYUoTE2l_bm/exec';
+    || 'https://script.google.com/macros/s/AKfycbyFbvXiV6rSzCvhtc_T2WrzNF5ZxhOFWtSSsgzSavzPbjv4LBGhjXhu_Q2_8m-PDj8s/exec';
   // 예전에는 'https://work.netax.kr/report-writer/'로 도메인을 고정해뒀었는데,
   // 그러면 나중에 dev.netax.kr 같은 테스트용 사본 도메인에서 열어도 편집기는 항상
   // 진짜 실서비스(work.netax.kr) 쪽을 열어버리는 문제가 있었다. location.origin으로

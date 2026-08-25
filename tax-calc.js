@@ -5111,9 +5111,39 @@
     return Math.round((Number(officialHousePrice) || 0) * ratio);
   };
 
-  // 상장주식 평가 (§63) — 평가기준일 전후 2개월 종가평균 × 주식수
-  window.calculateListedStockValueJS = function (averageClosingPrice, shares) {
-    return Math.round((Number(averageClosingPrice) || 0) * (Number(shares) || 0));
+  // 상장주식 평가 (§63①1호가목) — 평가기준일 전후 2개월 종가평균 × 주식수.
+  // §63③ — "제1항제1호"(가목 상장주식·나목 비상장주식 모두 포함)에 최대주주등 할증평가(20%)가 적용되므로
+  // 상장주식도 예외가 아니다(§53⑧ 배제사유 9개는 비상장주식용 calculateUnlistedStockValueJS와 동일).
+  // p 객체로 호출하면 할증까지 반영하고, 구버전 호환을 위해 (averageClosingPrice, shares) 위치인자
+  // 호출도 계속 지원한다(이 경우 할증 없이 §63①1호가목 금액만 반환).
+  window.calculateListedStockValueJS = function (p, sharesArg) {
+    let averageClosingPrice, shares, premiumParams;
+    if (p !== null && typeof p === 'object' && !Array.isArray(p)) {
+      averageClosingPrice = Number(p.averageClosingPrice) || 0;
+      shares = Number(p.shares) || 0;
+      premiumParams = p;
+    } else {
+      averageClosingPrice = Number(p) || 0;
+      shares = Number(sharesArg) || 0;
+      premiumParams = {};
+    }
+    let totalValue = Math.round(averageClosingPrice * shares);
+    // §53⑧ — 최대주주등 할증평가(20%) 배제사유 9개(비상장주식과 동일 조문을 준용).
+    const isPremiumExempt = !!premiumParams.hasContinuousLossFor3Years // 1호
+      || !!premiumParams.allMajorShareholderSharesSoldWithin6Months // 2호
+      || !!premiumParams.isDeemedProfitCalculationArticle28to30 // 3호
+      || !!premiumParams.isParentCompanyOfAnotherMajorShareholderValuation // 4호
+      || !!premiumParams.newBusinessOperatingLossAllYears // 5호
+      || !!premiumParams.isLiquidationConfirmedByFilingDeadline // 6호
+      || !!premiumParams.lostMajorShareholderStatusByInheritanceOrGift // 7호
+      || !!premiumParams.isNomineeTrustDeemedGift // 8호
+      || !!premiumParams.isSmallBusiness || !!premiumParams.isMediumBusinessUnder500B; // 9호
+    const majorShareholderPremium = (premiumParams.isMajorShareholder && !isPremiumExempt) ? Math.round(totalValue * 0.2) : 0;
+    totalValue += majorShareholderPremium;
+    if (premiumParams.isMajorShareholder === undefined) {
+      return totalValue; // 구버전 호환: isMajorShareholder를 아예 지정하지 않은 위치인자 호출은 숫자만 반환
+    }
+    return { 평가액_할증전: Math.round(averageClosingPrice * shares), 최대주주할증액: majorShareholderPremium, 할증평가배제여부: isPremiumExempt, 상장주식가액: totalValue };
   };
 
   // 임대료 등의 환산가액 (§61⑤, 시행령 §50) — 임대 중인 부동산은 이 환산가액과 기준시가(보충적평가액)
