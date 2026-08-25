@@ -827,7 +827,6 @@ const DRIVE_TOOLS = [
         debtAmount: { type: 'number', description: '면제·인수·변제받은 채무액(원).' },
         compensationPaid: { type: 'number', description: '그 대가로 지급한 보상액(원). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액(원) — 10년간 합산 사용액을 감안해 직접 계산해서 넣는다.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2, 최대 1억원). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인으로부터 받은 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(원, 500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '신고기한 이내 재난으로 멸실·훼손된 증여재산가액(원, §54). 없으면 생략.' },
@@ -858,7 +857,6 @@ const DRIVE_TOOLS = [
         loanAmount: { type: 'number', description: 'useType이 collateral일 때 필수 — 담보를 이용해 차입한 금전 등의 금액(원).' },
         actualInterestPaid: { type: 'number', description: 'useType이 collateral일 때 — 실제로 지급했거나 지급할 이자(원). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액(원).' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -890,7 +888,6 @@ const DRIVE_TOOLS = [
         priorTaxesSum: { type: 'number', description: 'transferType이 bypass일 때 — 당초 양도자 및 양수자가 부담한 소득세 결정세액 합계(원).' },
         comparisonGiftTax: { type: 'number', description: 'transferType이 bypass일 때 — 재양도 재산가액을 증여추정할 경우의 증여세액(원). 비워두면 이 도구가 assetValue·관계별공제 등으로 자동계산한 산출세액을 그대로 쓰며, 입력하면 그 값을 우선 사용한다. priorTaxesSum이 이보다 크면 §44②단서에 따라 과세 제외된다.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -921,7 +918,6 @@ const DRIVE_TOOLS = [
         premiumPaidByOthers: { type: 'number', description: '보험금 수령인이 아닌 자가 납부한 보험료(원, §34①1호). 없으면 0.' },
         premiumPaidFromGiftedAssets: { type: 'number', description: '수령인이 증여받은 재산으로 납부한 보험료(원, §34①2호). 없으면 0.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1028,7 +1024,6 @@ const DRIVE_TOOLS = [
         shareholderOwnershipRatio: { type: 'number', description: '증여의제이익을 계산할 그 지배주주등의 주식보유비율(0~1).' },
         directGiftTaxEquivalent: { type: 'number', description: '§45의5② 한도 계산용 — 그 지배주주등이 특정법인의 이익 중 자기 지분에 해당하는 금액을 직접 증여받았다고 볼 경우의 증여세 상당액(원, 관계별 공제 반영해 별도 계산). 없으면 한도를 적용하지 않는다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액 — 증여자가 법인이므로 통상 0.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1074,7 +1069,6 @@ const DRIVE_TOOLS = [
         actualIncomeTax: { type: 'number', description: 'isFinalSettlement가 true이고 초과배당금액이 비과세·과세제외되거나 분리과세된 경우 — 그 실제 소득세액(원, 비과세면 0). 종합과세되는 경우는 comprehensiveIncomeTaxBase를 입력하면 자동계산되므로 생략 가능.' },
         comprehensiveIncomeTaxBase: { type: 'number', description: 'isFinalSettlement가 true이고 초과배당금액이 종합과세되는 경우 — 초과배당금액이 발생한 연도의 종합소득과세표준(원, 초과배당금액 포함된 값). 입력하면 시행규칙§10의3②3호 산식(가목·나목 중 큰 금액)으로 실제소득세액을 자동계산한다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1107,7 +1101,6 @@ const DRIVE_TOOLS = [
         shares: { type: 'number', description: '증여받거나 유상으로 취득한 주식등의 수.' },
         originalGiftTaxPaid: { type: 'number', description: '정산기준일 현재 가액이 당초 과세가액보다 기준금액 이상 낮아졌을 때(환급 대상 판정시)만 사용 — 증여받은 때 실제 납부한 당초의 증여세액(원). §41의3④단서에 따라 이 금액 전액이 환급액으로 계산된다.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1169,7 +1162,6 @@ const DRIVE_TOOLS = [
         bondAcquisitionCost: { type: 'number', description: 'isBondTransferred가 true일 때 — 전환사채등의 취득가액(원).' },
         relatedPriorOwnershipRatio: { type: 'number', description: 'conversion_reverse일 때 — 주식을 교부받은 자의 특수관계인이 전환등을 하기 전에 보유한 지분비율(0~1).' },
         relationDeductionLimit: { type: 'number', description: 'caseType이 acquisition일 때만 — 증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: 'caseType이 acquisition일 때만 — 혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: 'caseType이 acquisition일 때만 — 10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         disasterLossAmount: { type: 'number', description: 'caseType이 acquisition일 때만 — 재해손실공제(§54). 없으면 생략.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
@@ -1204,7 +1196,6 @@ const DRIVE_TOOLS = [
         acquiredShares: { type: 'number', description: 'high_price일 때 — 현물출자자가 인수한 신주수.' },
         relatedShareholderRatio: { type: 'number', description: 'high_price일 때 — 현물출자자 외 주주등(현물출자 전에 현물출자자의 특수관계인인 경우 한정)의 지분비율(0~1).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1265,7 +1256,6 @@ const DRIVE_TOOLS = [
         ownReducedShares: { type: 'number', description: 'caseType이 high_price일 때 — 해당 주주등의 감자한 주식등의 수.' },
         faceValuePerShare: { type: 'number', description: 'caseType이 high_price일 때 필수 — 1주당 액면가액(원). 1주당 평가액(valuePerShare)이 이 액면가(또는 대가가 액면가 미만이면 그 대가) 미만일 때만 과세된다(시행령§29의2①2호).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1448,7 +1438,6 @@ const DRIVE_TOOLS = [
         underAllocatedShares: { type: 'number', description: 'high_nonshareholder일 때 — 신주를 배정받지 아니하거나 균등조건에 미달되게 배정받은 주주의 그 신주수.' },
         nonShareholderAndExcessTotalShares: { type: 'number', description: 'high_nonshareholder일 때 — 주주가 아닌 자에게 배정된 신주 및 균등조건을 초과해 인수한 신주의 총수.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1624,7 +1613,6 @@ const DRIVE_TOOLS = [
         sharesReceivedByOvervaluedShareholders: { type: 'number', description: '과대평가법인의 주주등이 합병으로 인하여 교부받은 신설 또는 존속법인 주식등의 수(전체).' },
         largeShareholderSharesReceived: { type: 'number', description: '이익을 계산할 대주주등이 합병으로 교부받은 신설 또는 존속법인 주식등의 수.' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1658,7 +1646,6 @@ const DRIVE_TOOLS = [
         marketValue: { type: 'number', description: 'useType이 low_or_high일 때 — 재산·용역의 시가(원).' },
         considerationPaid: { type: 'number', description: 'useType이 low_or_high일 때 — 실제 지급하거나 받은 대가(원).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1693,7 +1680,6 @@ const DRIVE_TOOLS = [
         beforeValue: { type: 'number', description: 'subType이 value_change일 때 — 변동 전 가액(원).' },
         afterValue: { type: 'number', description: 'subType이 value_change일 때 — 변동 후 가액(원).' },
         relationDeductionLimit: { type: 'number', description: '증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -1776,7 +1762,6 @@ const DRIVE_TOOLS = [
         isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         giftAmount: { type: 'number', description: '신탁이익(원본 또는 수익의 가액, 원). 여러 차례 나눠 받는 경우 calculate_trust_benefit_value 도구의 평가액을 사용.' },
         relationDeductionLimit: { type: 'number', description: '증여자와의 관계별 증여재산공제(§53) 남은 한도액.' },
-        marriageBirthDeduction: { type: 'number', description: '혼인·출산 증여재산공제(§53의2). 없으면 0.' },
         priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여재산가액(§47②). 없으면 0.' },
         appraisalFeeAmount: { type: 'number', description: '증여재산 감정평가 수수료(500만원 한도). 없으면 생략.' },
         disasterLossAmount: { type: 'number', description: '재해손실공제(§54). 없으면 생략.' },
@@ -6321,10 +6306,9 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const giftAmount = Math.max(0, debtAmount - compensationPaid);
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -6344,7 +6328,7 @@ function toolCalculateDebtForgivenessGiftTax(p) {
   const penalties = giftFilingPenalties_(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate));
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
-    채무면제등이익: giftAmount, 증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction,
+    채무면제등이익: giftAmount, 증여재산공제: relationDeduction,
     감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount, 과세표준: taxBase,
     산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
@@ -6389,10 +6373,9 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   }
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -6413,7 +6396,7 @@ function toolCalculateFreePropertyUseGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   const base = {
     과세대상여부: true,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -6448,10 +6431,9 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   const giftAmount = assetValue;
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
   if (transferType === 'bypass') {
@@ -6486,7 +6468,7 @@ function toolCalculateSpousePropertyTransferGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여추정재산가액: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -6514,10 +6496,9 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -6538,7 +6519,7 @@ function toolCalculateInsuranceProceedsGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     보험금상당액: proceedsShare, 증여받은재산으로낸보험료: premiumPaidFromGiftedAssets, 증여재산가액: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -6597,10 +6578,9 @@ function toolCalculateTrustIncomeGiftTax(p) {
   if (giftAmount <= 0) return { error: '신탁이익(원본 또는 수익의 가액 — 여러 차례 나눠 받는 경우 §61 신탁수익권 평가액)이 필요합니다.' };
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -6621,7 +6601,7 @@ function toolCalculateTrustIncomeGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     신탁이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7191,10 +7171,9 @@ function toolCalculateSpecificCorporationGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftDeemedAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftDeemedAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   let calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
 
   // §45의5②·시행령§34의5⑨ — 산출세액이 "지배주주등이 직접 증여받은 경우의 증여세 상당액 - 법인세상당액"을
@@ -7232,7 +7211,7 @@ function toolCalculateSpecificCorporationGiftTax(p) {
     과세대상여부: true,
     특정법인의이익: specificCorpNetBenefit, 법인세상당액_전체: corporateTaxEquivalentTotal,
     증여의제이익: giftDeemedAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7288,10 +7267,9 @@ function toolCalculateMergerBenefitGiftTax(p) {
   }
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -7312,7 +7290,7 @@ function toolCalculateMergerBenefitGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 합병이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7351,10 +7329,9 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   }
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -7375,7 +7352,7 @@ function toolCalculatePropertyUseServiceGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7417,10 +7394,9 @@ function toolCalculateOrgChangeGiftTax(p) {
   }
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -7441,7 +7417,7 @@ function toolCalculateOrgChangeGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -7975,10 +7951,9 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -7999,7 +7974,7 @@ function toolCalculateCapitalIncreaseGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -8149,10 +8124,9 @@ function toolCalculateExcessDividendGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -8173,7 +8147,7 @@ function toolCalculateExcessDividendGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -8367,15 +8341,14 @@ function toolCalculateConvertibleBondGiftTax(p) {
   const reportedInTime = filingStatus === 'ontime' && p.reportedInTime !== false;
 
   let taxBase, isAggregationExcluded;
-  let relationDeductionOut = 0, marriageBirthDeductionOut = 0, disasterLossAmountOut = 0;
+  let relationDeductionOut = 0, disasterLossAmountOut = 0;
   if (caseType === 'acquisition') {
     isAggregationExcluded = false;
     const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-    const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
     const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
     const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-    taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
-    relationDeductionOut = relationDeduction; marriageBirthDeductionOut = marriageBirthDeduction; disasterLossAmountOut = disasterLossAmount;
+    taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
+    relationDeductionOut = relationDeduction; disasterLossAmountOut = disasterLossAmount;
   } else {
     isAggregationExcluded = true;
     taxBase = Math.max(0, giftAmount - 30000000 - appraisalFeeAmount);
@@ -8404,7 +8377,7 @@ function toolCalculateConvertibleBondGiftTax(p) {
       : '증여일은 전환사채등을 인수·취득한 날입니다(시행령§30①1호).'
   };
   if (!isAggregationExcluded) {
-    result.증여재산공제 = relationDeductionOut; result.혼인출산공제 = marriageBirthDeductionOut; result.재해손실공제 = disasterLossAmountOut;
+    result.증여재산공제 = relationDeductionOut; result.재해손실공제 = disasterLossAmountOut;
   }
   return result;
 }
@@ -8441,10 +8414,9 @@ function toolCalculateInKindContributionGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -8465,7 +8437,7 @@ function toolCalculateInKindContributionGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
@@ -8564,10 +8536,9 @@ function toolCalculateCapitalReductionGiftTax(p) {
 
   const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
   const disasterLossAmount = Number(p.disasterLossAmount) || 0;
-  const marriageBirthDeduction = Number(p.marriageBirthDeduction) || 0;
   const relationDeduction = Math.min(Number(p.relationDeductionLimit) || 0, Math.max(0, giftAmount));
   const priorGiftAmount = Number(p.priorGiftAmount) || 0;
-  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - marriageBirthDeduction - appraisalFeeAmount - disasterLossAmount);
+  const taxBase = Math.max(0, giftAmount + priorGiftAmount - relationDeduction - appraisalFeeAmount - disasterLossAmount);
   const calculatedTax = calcProgressiveTax_(taxBase, GIFT_INHERIT_TAX_BRACKETS);
   const priorPaidTax = Number(p.priorPaidTax) || 0;
   // §59·시행령§48(§21 준용) — 외국납부세액공제 = 증여세산출세액×(외국법령에 따라 증여세가 부과된
@@ -8588,7 +8559,7 @@ function toolCalculateCapitalReductionGiftTax(p) {
   const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
   return {
     과세대상여부: true, 증여의제이익: giftAmount,
-    증여재산공제: relationDeduction, 혼인출산공제: marriageBirthDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
+    증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
     과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     납부세액: finalTax,
