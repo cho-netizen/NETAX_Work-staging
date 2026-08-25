@@ -26,6 +26,14 @@ function numVal(v){
   return Number.isFinite(n) ? n : 0;
 }
 
+// §43②(1년 이내 동일거래 합산) 입력칸 하나(합계액)를 각 계산기가 요구하는 priorBenefitsWithinOneYear
+// 배열로 변환한다. 비어있으면 빈 배열(합산 없음, 기존 동작과 동일).
+function priorBenefitsArray_(elementId){
+  const el = document.getElementById(elementId);
+  const v = el ? numVal(el.value) : 0;
+  return v > 0 ? [v] : [];
+}
+
 // 금액·숫자 입력칸에 입력 중 천단위 콤마를 자동으로 찍어준다. type="number"는 브라우저가 콤마를
 // 아예 허용하지 않아서(입력 자체가 막힘) type="text"로 바꾸고 흉내낸다. 소수점(비율·이자율 필드)도
 // 그대로 지원하므로 이 함수는 금액 필드뿐 아니라 정밀계산 화면의 모든 숫자 입력칸에 공통으로 쓴다.
@@ -2841,6 +2849,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[고가미배정만] 균등증자시 주식총수</label><input type="number" id="ciEqualIncreaseTotalShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[고가비주주만] 미달배정 주주의 그 신주수</label><input type="number" id="ciUnderAllocatedShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[고가비주주만] 비주주배정+균등초과인수 신주 총수</label><input type="number" id="ciNonShareholderTotalShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형(케이스) 이전거래 이익 합계(§43②)</label><input type="number" id="ciPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="ciRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="ciAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -2872,6 +2881,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[저가소각만] 대주주등의 감자후 지분비율</label><input type="number" step="0.01" min="0" max="1" id="crPostRatio" placeholder="0~1"></div>' +
         '<div class="taxcalc-field"><label>[저가소각만] 대주주등과 특수관계인의 감자 주식등의 수</label><input type="number" id="crRelatedShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[고가소각만] 해당 주주등의 감자한 주식등의 수</label><input type="number" id="crOwnShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형(케이스) 이전거래 이익 합계(§43②)</label><input type="number" id="crPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="crRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="crAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -2903,6 +2913,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[저가발행만] 현물출자자가 배정받은 신주수</label><input type="number" id="icfAllocatedShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[고가발행만] 현물출자자가 인수한 신주수</label><input type="number" id="icfAcquiredShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>[고가발행만] 현물출자자 외 특수관계인주주등의 지분비율</label><input type="number" step="0.01" min="0" max="1" id="icfRelatedRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형(케이스) 이전거래 이익 합계(§43②)</label><input type="number" id="icfPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="icfRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="icfAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -2943,6 +2954,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[전환시(정방향)만] 취득일부터 만기까지 기간</label><input type="number" step="0.1" id="cbYearsToMaturity" placeholder="년"></div>' +
         '<div class="taxcalc-field"><label>[전환시(정방향)만] 기과세된 취득시 이익</label><input type="number" id="cbPriorAcquisitionGift" placeholder="원 (같은 건 법1호로 이미 과세된 금액, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>[전환시 반대편만] 그 특수관계인의 전환등전 보유지분비율</label><input type="number" step="0.01" min="0" max="1" id="cbRelatedRatio" placeholder="0~1"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형(케이스) 이전거래 이익 합계(§43②)</label><input type="number" id="cbPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액(취득시만)</label><input type="number" id="cbRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="cbAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -2970,6 +2982,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>부동산가액(무상사용일 때)</label><input type="number" id="fuPropertyValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>차입금액(담보이용일 때)</label><input type="number" id="fuLoanAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>실제 지급한 이자(담보이용일 때)</label><input type="number" id="fuActualInterest" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형 이전거래 이익 합계(§43②)</label><input type="number" id="fuPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="fuRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="fuAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3132,6 +3145,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>특정법인의 해당 사업연도 소득금액</label><input type="number" id="scCorpIncome" placeholder="원 (법인세법§14)"></div>' +
         '<div class="taxcalc-field"><label>지배주주등의 주식보유비율</label><input type="number" step="0.01" min="0" max="1" id="scShareRatio" placeholder="0~1"></div>' +
         '<div class="taxcalc-field"><label>직접증여시 증여세상당액(§45의5② 한도용)</label><input type="number" id="scDirectGiftTax" placeholder="원 (관계별공제 반영해 별도 계산, 없으면 한도 미적용)"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 같은 특정법인과의 이전거래 이익 합계(§43②)</label><input type="number" id="scPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="scRelationDeduction" placeholder="원 (증여자가 법인이므로 통상 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="scAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3159,6 +3173,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[최초신고만] 추정 소득세상당액(선택)</label><input type="number" id="edEstimatedTax" placeholder="비워두면 시행규칙§10의3① 추정율표로 자동계산"></div>' +
         '<div class="taxcalc-field"><label>[정산신고·종합과세만] 종합소득과세표준</label><input type="number" id="edComprehensiveBase" placeholder="원 (초과배당금액발생연도, 초과배당금액 포함된 값 — 입력시 자동계산)"></div>' +
         '<div class="taxcalc-field"><label>[정산신고·비과세/분리과세만] 실제 소득세액 직접입력</label><input type="number" id="edActualTax" placeholder="원 (종합과세면 위 종합소득과세표준을 입력하세요)"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일 최대주주등의 이전 초과배당금액 합계(§43②)</label><input type="number" id="edPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="edRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="edAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3328,6 +3343,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>과대평가법인 합병전 주식수</label><input type="number" id="mgOvervaluedShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>과대평가법인 주주등이 교부받은 신설법인 주식수(전체)</label><input type="number" id="mgReceivedShares" placeholder="주"></div>' +
         '<div class="taxcalc-field"><label>대주주등이 교부받은 신설법인 주식수</label><input type="number" id="mgLargeShareholderShares" placeholder="주"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일한 합병등 이전거래 이익 합계(§43②)</label><input type="number" id="mgPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="mgRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="mgAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3358,6 +3374,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>[무상, 담보차입 아님] 시가 상당액</label><input type="number" id="puMarketValueEquiv" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[저가·고가만] 시가</label><input type="number" id="puMarketValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>[저가·고가만] 실제 지급·수령한 대가</label><input type="number" id="puConsideration" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형 이전거래 이익 합계(§43②)</label><input type="number" id="puPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>증여재산공제 남은 한도액</label><input type="number" id="puRelationDeduction" placeholder="원 (관계별 §53 한도, 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>감정평가수수료</label><input type="number" id="puAppraisalFee" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
@@ -3558,6 +3575,7 @@ function renderGiftPane(){
         '</select></div>' +
         '<div class="taxcalc-field"><label>시가</label><input type="number" id="lpFairValue" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>실제 거래대가</label><input type="number" id="lpTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형 이전거래 이익 합계(§43②)</label><input type="number" id="lpPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-low-price-transfer">증여재산가액 계산하기</button>' +
       '<div id="taxCalcLowPriceResult"></div>' +
@@ -3567,6 +3585,7 @@ function renderGiftPane(){
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>대여원금</label><input type="number" id="loanPrincipal" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>실제 지급(약정)이자</label><input type="number" id="loanActualInterest" placeholder="원 (무이자면 0)"></div>' +
+        '<div class="taxcalc-field"><label>1년 이내 동일유형 이전거래 이익 합계(§43②)</label><input type="number" id="loanPriorBenefitsSum" placeholder="원 (없으면 비움)"></div>' +
         '<div class="taxcalc-field"><label>적정이자율(법정 기본값 4.6%, 개정 시 직접 수정)</label><input type="number" step="0.1" id="loanRate" value="4.6"></div>' +
         '<div class="taxcalc-field"><label>대출기간</label><input type="number" id="loanMonths" placeholder="개월 (기본 12)" maxlength="3"></div>' +
       '</div>' +
@@ -5615,6 +5634,7 @@ taxCalcView.addEventListener('click', function(e){
       equalIncreaseTotalShares: numVal(document.getElementById('ciEqualIncreaseTotalShares').value) || 0,
       underAllocatedShares: numVal(document.getElementById('ciUnderAllocatedShares').value) || 0,
       nonShareholderAndExcessTotalShares: numVal(document.getElementById('ciNonShareholderTotalShares').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('ciPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('ciRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('ciAppraisalFee').value) || 0,
       filingStatus: document.getElementById('ciFilingStatus').value,
@@ -5634,6 +5654,7 @@ taxCalcView.addEventListener('click', function(e){
       postReductionOwnershipRatio: numVal(document.getElementById('crPostRatio').value) || 0,
       relatedReducedShares: numVal(document.getElementById('crRelatedShares').value) || 0,
       ownReducedShares: numVal(document.getElementById('crOwnShares').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('crPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('crRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('crAppraisalFee').value) || 0,
       filingStatus: document.getElementById('crFilingStatus').value,
@@ -5654,6 +5675,7 @@ taxCalcView.addEventListener('click', function(e){
       allocatedShares: numVal(document.getElementById('icfAllocatedShares').value) || 0,
       acquiredShares: numVal(document.getElementById('icfAcquiredShares').value) || 0,
       relatedShareholderRatio: numVal(document.getElementById('icfRelatedRatio').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('icfPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('icfRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('icfAppraisalFee').value) || 0,
       filingStatus: document.getElementById('icfFilingStatus').value,
@@ -5680,6 +5702,7 @@ taxCalcView.addEventListener('click', function(e){
       yearsToMaturityAtAcquisition: numVal(document.getElementById('cbYearsToMaturity').value) || 0,
       priorAcquisitionGiftAmount: numVal(document.getElementById('cbPriorAcquisitionGift').value) || 0,
       relatedPriorOwnershipRatio: numVal(document.getElementById('cbRelatedRatio').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('cbPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('cbRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('cbAppraisalFee').value) || 0,
       filingStatus: document.getElementById('cbFilingStatus').value,
@@ -5698,6 +5721,7 @@ taxCalcView.addEventListener('click', function(e){
       estimatedIncomeTaxEquivalent: numVal(document.getElementById('edEstimatedTax').value) || 0,
       actualIncomeTax: numVal(document.getElementById('edActualTax').value) || 0,
       comprehensiveIncomeTaxBase: numVal(document.getElementById('edComprehensiveBase').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('edPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('edRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('edAppraisalFee').value) || 0,
       filingStatus: document.getElementById('edFilingStatus').value,
@@ -5750,6 +5774,7 @@ taxCalcView.addEventListener('click', function(e){
       propertyValue: numVal(document.getElementById('fuPropertyValue').value) || 0,
       loanAmount: numVal(document.getElementById('fuLoanAmount').value) || 0,
       actualInterestPaid: numVal(document.getElementById('fuActualInterest').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('fuPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('fuRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('fuAppraisalFee').value) || 0,
       filingStatus: document.getElementById('fuFilingStatus').value,
@@ -5813,6 +5838,7 @@ taxCalcView.addEventListener('click', function(e){
       corporateTaxableIncome: numVal(document.getElementById('scCorpIncome').value) || 0,
       shareholderOwnershipRatio: numVal(document.getElementById('scShareRatio').value) || 0,
       directGiftTaxEquivalent: numVal(document.getElementById('scDirectGiftTax').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('scPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('scRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('scAppraisalFee').value) || 0,
       filingStatus: document.getElementById('scFilingStatus').value,
@@ -5888,6 +5914,7 @@ taxCalcView.addEventListener('click', function(e){
       overvaluedPreMergerShareCount: numVal(document.getElementById('mgOvervaluedShares').value) || 0,
       sharesReceivedByOvervaluedShareholders: numVal(document.getElementById('mgReceivedShares').value) || 0,
       largeShareholderSharesReceived: numVal(document.getElementById('mgLargeShareholderShares').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('mgPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('mgRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('mgAppraisalFee').value) || 0,
       filingStatus: document.getElementById('mgFilingStatus').value,
@@ -5907,6 +5934,7 @@ taxCalcView.addEventListener('click', function(e){
       marketValueEquivalent: numVal(document.getElementById('puMarketValueEquiv').value) || 0,
       marketValue: numVal(document.getElementById('puMarketValue').value) || 0,
       considerationPaid: numVal(document.getElementById('puConsideration').value) || 0,
+      priorBenefitsWithinOneYear: priorBenefitsArray_('puPriorBenefitsSum'),
       relationDeductionLimit: numVal(document.getElementById('puRelationDeduction').value) || 0,
       appraisalFeeAmount: numVal(document.getElementById('puAppraisalFee').value) || 0,
       filingStatus: document.getElementById('puFilingStatus').value,
@@ -6059,7 +6087,8 @@ taxCalcView.addEventListener('click', function(e){
     const input = {
       fairMarketValue: numVal(document.getElementById('lpFairValue').value) || 0,
       transferPrice: numVal(document.getElementById('lpTransferPrice').value) || 0,
-      isSpecialRelation: document.getElementById('lpIsSpecialRelation').value !== 'false'
+      isSpecialRelation: document.getElementById('lpIsSpecialRelation').value !== 'false',
+      priorBenefitsWithinOneYear: priorBenefitsArray_('lpPriorBenefitsSum')
     };
     renderLowPriceResult(calculateLowPriceTransferGiftAmountJS(input));
   } else if (action === 'run-interest-free-loan'){
@@ -6067,7 +6096,8 @@ taxCalcView.addEventListener('click', function(e){
       loanPrincipal: numVal(document.getElementById('loanPrincipal').value) || 0,
       actualInterestPaid: numVal(document.getElementById('loanActualInterest').value) || 0,
       appropriateInterestRatePercent: document.getElementById('loanRate').value === '' ? null : numVal(document.getElementById('loanRate').value),
-      loanMonths: document.getElementById('loanMonths').value === '' ? null : numVal(document.getElementById('loanMonths').value)
+      loanMonths: document.getElementById('loanMonths').value === '' ? null : numVal(document.getElementById('loanMonths').value),
+      priorBenefitsWithinOneYear: priorBenefitsArray_('loanPriorBenefitsSum')
     };
     renderLoanGiftResult(calculateInterestFreeLoanGiftAmountJS(input));
   } else if (action === 'run-gift-special-provision-overlap'){

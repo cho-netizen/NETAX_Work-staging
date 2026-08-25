@@ -92,6 +92,12 @@
     return priorGiftAmount >= 10000000 ? priorGiftAmount : 0;
   }
 
+  // §43②·시행령§32의4 — 1년 이내 동일거래 합산용. Code.js sumPriorBenefitsWithinOneYear_와 동일 로직.
+  function sumPriorBenefitsWithinOneYear(arr) {
+    if (!Array.isArray(arr)) return 0;
+    return arr.reduce(function (sum, v) { return sum + (Number(v) || 0); }, 0);
+  }
+
   // 증여재산공제 (상증세법 §53, 10년간 합산 한도액 기준)
   function giftPropertyDeduction(relation, isMinor) {
     switch (relation) {
@@ -2405,26 +2411,32 @@
     p = p || {};
     const useType = p.useType;
     if (['occupancy', 'collateral'].indexOf(useType) === -1) return { error: '무상사용 또는 담보이용 중에서 선택하세요.' };
-    let giftAmount, annualBenefit;
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    let giftAmount, annualBenefit, thisTransactionGiftAmount;
     if (useType === 'occupancy') {
       const propertyValue = Number(p.propertyValue) || 0;
       annualBenefit = Math.round(propertyValue * 0.02);
-      giftAmount = Math.round(annualBenefit * 3.79079);
+      thisTransactionGiftAmount = Math.round(annualBenefit * 3.79079);
+      giftAmount = thisTransactionGiftAmount + priorBenefitSum;
       if (giftAmount < 100000000) {
         return {
-          과세대상여부: false, 연간이익: annualBenefit, 오년간현재가치합계: giftAmount, 기준금액: 100000000, 납부세액: 0,
-          안내: '5년간 이익의 현재가치 합계(' + giftAmount + '원)가 기준금액(1억원, 시행령§27④)에 미달해 과세대상이 아닙니다.'
+          과세대상여부: false, 연간이익: annualBenefit, 이번거래현재가치: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum,
+          오년간현재가치합계: giftAmount, 기준금액: 100000000, 납부세액: 0,
+          안내: '5년간 이익의 현재가치 합계(' + giftAmount + '원' + aggNote + ')가 기준금액(1억원, 시행령§27④)에 미달해 과세대상이 아닙니다.'
         };
       }
     } else {
       const loanAmount = Number(p.loanAmount) || 0;
       const appropriateInterestRate = 0.046;
       const actualInterestPaid = Number(p.actualInterestPaid) || 0;
-      giftAmount = Math.max(0, Math.round(loanAmount * appropriateInterestRate) - actualInterestPaid);
+      thisTransactionGiftAmount = Math.max(0, Math.round(loanAmount * appropriateInterestRate) - actualInterestPaid);
+      giftAmount = thisTransactionGiftAmount + priorBenefitSum;
       if (giftAmount < 10000000) {
         return {
-          과세대상여부: false, 담보이용이익: giftAmount, 기준금액: 10000000, 납부세액: 0,
-          안내: '담보이용이익(' + giftAmount + '원)이 기준금액(1천만원, 시행령§27⑥)에 미달해 과세대상이 아닙니다.'
+          과세대상여부: false, 이번거래담보이용이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum,
+          담보이용이익: giftAmount, 기준금액: 10000000, 납부세액: 0,
+          안내: '담보이용이익(' + giftAmount + '원' + aggNote + ')이 기준금액(1천만원, 시행령§27⑥)에 미달해 과세대상이 아닙니다.'
         };
       }
     }
@@ -2457,10 +2469,10 @@
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: useType === 'occupancy'
+      안내: (useType === 'occupancy'
         ? '5년마다 증여시기가 재산정되므로(무상사용 개시일로부터 5년이 되는 날의 다음날에 새로 개시한 것으로 봄), 5년을 초과해 계속 무상사용하면 그 다음 5년분도 별도로 계산해서 신고해야 합니다. 특수관계인이 아닌 경우 거래관행상 정당한 사유가 없을 때만 과세됩니다(§37③).'
-        : '차입기간을 정하지 않았으면 1년으로 보고, 1년 초과시 그 다음 1년분도 새로 계산합니다(시행령§27⑤). 적정이자율(4.6%)은 시행령§31의4①과 동일합니다.'
-    }, useType === 'occupancy' ? { 연간이익: annualBenefit, 오년간현재가치합계: giftAmount } : { 담보이용이익: giftAmount });
+        : '차입기간을 정하지 않았으면 1년으로 보고, 1년 초과시 그 다음 1년분도 새로 계산합니다(시행령§27⑤). 적정이자율(4.6%)은 시행령§31의4①과 동일합니다.') + aggNote
+    }, useType === 'occupancy' ? { 연간이익: annualBenefit, 이번거래현재가치: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 오년간현재가치합계: giftAmount } : { 이번거래담보이용이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 담보이용이익: giftAmount });
   };
 
   // 배우자 등에게 양도한 재산의 증여 추정 (상증세법§44) — 배우자·직계존비속에게 양도한 재산은 그 재산가액을
@@ -2922,20 +2934,24 @@
 
     const appropriateInterestAmount = Math.round(loanPrincipal * appropriateInterestRatePercent / 100 * loanMonths / 12);
     const deemedGiftAmount = Math.max(0, appropriateInterestAmount - actualInterestPaid);
-    const meetsGate = deemedGiftAmount >= 10000000;
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 동일한 대출등이 더 있으면 각 이익을 합산해 게이트를 계산.
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggDeemedGiftAmount = deemedGiftAmount + priorBenefitSum;
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전 대출등의 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    const meetsGate = aggDeemedGiftAmount >= 10000000;
 
     if (!meetsGate) {
       return {
         과세대상여부: false, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
-        증여재산가액: 0,
-        안내: '계산된 이익이 1천만원(연간 기준) 미만이어서 과세대상이 아닙니다.'
+        이번거래이익: deemedGiftAmount, 직전1년합산액: priorBenefitSum, 증여재산가액: 0,
+        안내: '계산된 이익(' + aggDeemedGiftAmount + '원' + aggNote + ')이 1천만원(연간 기준) 미만이어서 과세대상이 아닙니다.'
       };
     }
 
     return {
       과세대상여부: true, 적정이자상당액: appropriateInterestAmount, 실제지급이자: actualInterestPaid,
-      증여재산가액: deemedGiftAmount,
-      안내: '대출기간이 1년을 초과하면 매년 다시 계산해야 합니다. 이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.'
+      이번거래이익: deemedGiftAmount, 직전1년합산액: priorBenefitSum, 증여재산가액: aggDeemedGiftAmount,
+      안내: '대출기간이 1년을 초과하면 매년 다시 계산해야 합니다. 이 증여재산가액을 계산기 상단의 giftAmount에 넣어 증여재산공제·누진세율을 정상 적용해 세액을 계산하세요.' + aggNote
     };
   };
 
@@ -3280,7 +3296,11 @@
     const excessDividendBaseAmount = Number(p.excessDividendBaseAmount) || 0;
     if (excessDividendBaseAmount <= 0) return { error: '최대주주등의 특수관계인이 보유주식등에 비례한 금액을 초과해 받은 배당등의 금액(초과배당금액 산정용)이 필요합니다.' };
     const disproportionateShortfallRatio = Math.min(1, Math.max(0, Number(p.disproportionateShortfallRatio) || 0));
-    const excessDividendAmount = Math.round(excessDividendBaseAmount * disproportionateShortfallRatio);
+    const thisTransactionExcessDividendAmount = Math.round(excessDividendBaseAmount * disproportionateShortfallRatio);
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 동일한 초과배당등이 더 있으면 각 초과배당금액을 합산해서 계산.
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전 초과배당금액 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    const excessDividendAmount = thisTransactionExcessDividendAmount + priorBenefitSum;
 
     // 시행령§31의2③1호(2026.2.27 개정) — "초과배당금액에 대한 §68①에 따른 증여세 과세표준 신고기한이
     // 해당 초과배당금액이 발생한 연도의 다음 연도 6월 1일(성실신고확인대상사업자는 7월 1일) 이후인
@@ -3344,12 +3364,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
+      과세대상여부: true, 이번거래초과배당금액: thisTransactionExcessDividendAmount, 직전1년합산액: priorBenefitSum, 초과배당금액: excessDividendAmount, 소득세상당액: incomeTaxEquivalent, 증여의제이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: note
+      안내: note + aggNote
     };
   };
 
@@ -3551,8 +3571,14 @@
       }
     }
 
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 같은 호(caseType)의 이익이 더 있으면 합산해 기준금액을 계산.
+    const thisTransactionGiftAmount = giftAmount;
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    giftAmount = thisTransactionGiftAmount + priorBenefitSum;
+
     if (giftAmount < gateThreshold) {
-      return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§30②).' };
+      return { 과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원' + aggNote + ')이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§30②).' };
     }
 
     const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
@@ -3586,15 +3612,15 @@
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
 
     const result = {
-      과세대상여부: true, 증여의제이익: giftAmount,
+      과세대상여부: true, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount,
       감정평가수수료공제: appraisalFeeAmount,
       외국납부세액공제: foreignTaxCredit,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: isAggregationExcluded
+      안내: (isAggregationExcluded
         ? '합산배제증여재산이므로(§47①) 관계별 증여재산공제(§53)는 적용하지 않고 이익에서 3천만원을 공제해 과세표준을 계산합니다(§55①3호).'
-        : '증여일은 전환사채등을 인수·취득한 날입니다(시행령§30①1호).'
+        : '증여일은 전환사채등을 인수·취득한 날입니다(시행령§30①1호).') + aggNote
     };
     if (!isAggregationExcluded) {
       result.증여재산공제 = relationDeductionOut; result.재해손실공제 = disasterLossAmountOut;
@@ -3630,9 +3656,16 @@
       const acquiredShares = Number(p.acquiredShares) || 0;
       const relatedShareholderRatio = Number(p.relatedShareholderRatio) || 0;
       giftAmount = Math.max(0, Math.round((issuePricePerShare - postValuePerShare) * acquiredShares * relatedShareholderRatio));
+    }
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 같은 호(caseType)의 이익이 더 있으면 합산해 기준금액을 계산.
+    const thisTransactionGiftAmount = giftAmount;
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    giftAmount = thisTransactionGiftAmount + priorBenefitSum;
+    if (caseType === 'high_price') {
       const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
       if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
-        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29의3②).' };
+        return { 과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29의3②).' + aggNote };
       }
     }
 
@@ -3660,12 +3693,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
+      과세대상여부: true, 현물출자후1주당평가액: Math.round(postValuePerShare), 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.'
+      안내: '증여일은 현물출자 납입일 등입니다(시행령§29①을 준용). §39(증자에 따른 이익의 증여)와 계산구조가 같습니다.' + aggNote
     };
   };
 
@@ -3760,10 +3793,15 @@
 
     const diffRatio = Math.abs(valuePerShare - paymentPerShare) / valuePerShare;
     const gateThreshold = diffRatio >= 0.3 ? 0 : 300000000;
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 같은 호(caseType)의 이익이 더 있으면 합산해 기준금액을 계산.
+    const thisTransactionGiftAmount = giftAmount;
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    giftAmount = thisTransactionGiftAmount + priorBenefitSum;
     if (giftAmount < gateThreshold) {
       return {
-        과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0,
-        안내: '이익(' + giftAmount + '원)이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§29의2②).'
+        과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount, 납부세액: 0,
+        안내: '이익(' + giftAmount + '원' + aggNote + ')이 기준금액(' + gateThreshold + '원) 미만이어서 과세하지 않습니다(시행령§29의2②).'
       };
     }
 
@@ -3791,12 +3829,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 증여의제이익: giftAmount,
+      과세대상여부: true, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 감자를 위한 주주총회결의일 등입니다(시행령§29의2①). 대주주등의 판정기준은 §38·§39의2와 동일합니다.'
+      안내: '증여일은 감자를 위한 주주총회결의일 등입니다(시행령§29의2①). 대주주등의 판정기준은 §38·§39의2와 동일합니다.' + aggNote
     };
   };
 
@@ -4315,11 +4353,17 @@
       gateApplies = false; gateThreshold = 0;
     }
 
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 같은 호(caseType)의 이익이 더 있으면 합산해 기준금액을 계산.
+    const thisTransactionGiftAmount = giftAmount;
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    giftAmount = thisTransactionGiftAmount + priorBenefitSum;
+
     // 게이트 판정 — low_unallocated·high_unallocated는 "이익 3억원 이상 또는 차액비율 30%이상" 중 하나만 충족해도 과세.
     if (caseType === 'low_unallocated') {
       const diffRatio = postValuePerShare > 0 ? (postValuePerShare - issuePricePerShare) / postValuePerShare : 0;
       if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
-        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' };
+        return { 과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②2호).' + aggNote };
       }
     } else if (caseType === 'high_unallocated') {
       // 시행령§29②(법§39①2호나목 게이트): "제3호 가목의 가액에서 제3호 나목의 가액을 차감한 금액이
@@ -4330,7 +4374,7 @@
       // 가/나 라벨을 뒤바꿔 읽은 오류였다 — 이번 재검증으로 원상태를 다시 정정한다.
       const diffRatio = postValuePerShare > 0 ? (issuePricePerShare - postValuePerShare) / postValuePerShare : 0;
       if (!(diffRatio >= 0.3 || giftAmount >= 300000000)) {
-        return { 과세대상여부: false, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' };
+        return { 과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount, 납부세액: 0, 안내: '차액비율이 30% 미만이고 이익도 3억원 미만이어서 과세하지 않습니다(시행령§29②4호).' + aggNote };
       }
     }
 
@@ -4358,12 +4402,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 증여의제이익: giftAmount,
+      과세대상여부: true, 증자후1주당평가액: Math.round(postValuePerShare), 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.'
+      안내: '증여일은 주식대금 납입일 등입니다(§39①, 시행령§29①). high_nonshareholder(시행령5호, 법§39①2호다·라목)는 시행령§29②5호 원문상 별도의 게이트(문턱금액) 조항이 없어 게이트 없이 계산합니다.' + aggNote
     };
   };
 
@@ -4803,11 +4847,15 @@
       return { error: '합병후 1주당평가액, 과대평가법인 주주등이 교부받은 신설법인 주식수, 대주주등이 교부받은 주식수가 필요합니다.' };
     }
     const 나 = overvaluedPreMergerValuePerShare * (overvaluedPreMergerShareCount / sharesReceivedByOvervaluedShareholders);
-    const giftAmount = Math.max(0, Math.round((postMergerValuePerShare - 나) * largeShareholderSharesReceived));
+    const thisTransactionGiftAmount = Math.max(0, Math.round((postMergerValuePerShare - 나) * largeShareholderSharesReceived));
     const totalReceivedValue = postMergerValuePerShare * largeShareholderSharesReceived;
     const gateThreshold = Math.min(totalReceivedValue * 0.3, 300000000);
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 동일한 합병등 거래가 더 있으면 각 이익을 합산해 기준금액을 계산.
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    const giftAmount = thisTransactionGiftAmount + priorBenefitSum;
     if (giftAmount < gateThreshold) {
-      return { 과세대상여부: false, 합병이익: giftAmount, 납부세액: 0, 안내: '합병이익(' + giftAmount + '원)이 기준금액(합병후 교부받은 주식가액의 30%와 3억원 중 적은 금액, ' + Math.round(gateThreshold) + '원) 미만이어서 과세하지 않습니다(§38①단서, 시행령§28④1호).' };
+      return { 과세대상여부: false, 이번거래합병이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 합병이익: giftAmount, 납부세액: 0, 안내: '합병이익(' + giftAmount + '원' + aggNote + ')이 기준금액(합병후 교부받은 주식가액의 30%와 3억원 중 적은 금액, ' + Math.round(gateThreshold) + '원) 미만이어서 과세하지 않습니다(§38①단서, 시행령§28④1호).' };
     }
     const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossAmount = Number(p.disasterLossAmount) || 0;
@@ -4833,12 +4881,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 합병이익: giftAmount,
+      과세대상여부: true, 이번거래합병이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 합병이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '증여일은 합병등기일입니다(§38①). 대주주등이 2인 이상인 경우 각자 계산하며, 합병대가를 주식등 외 재산으로 받는 경우(1주당평가액이 액면가액에 미달하는 경우)는 이 계산기가 다루지 않으니 별도로 계산하세요.'
+      안내: '증여일은 합병등기일입니다(§38①). 대주주등이 2인 이상인 경우 각자 계산하며, 합병대가를 주식등 외 재산으로 받는 경우(1주당평가액이 액면가액에 미달하는 경우)는 이 계산기가 다루지 않으니 별도로 계산하세요.' + aggNote
     };
   };
 
@@ -4869,8 +4917,13 @@
       gateThreshold = marketValue * 0.3;
       gateNote = '기준금액(시가의 30%, ' + Math.round(gateThreshold) + '원)';
     }
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 동일한 거래등이 더 있으면 각 이익(같은 호의 이익별로 구분)을 합산해 기준금액을 계산.
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    const thisTransactionGiftAmount = giftAmount;
+    giftAmount = thisTransactionGiftAmount + priorBenefitSum;
     if (giftAmount < gateThreshold) {
-      return { 과세대상여부: false, 이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원)이 ' + gateNote + ' 미만이어서 과세하지 않습니다(§42①단서, 시행령§32②).' };
+      return { 과세대상여부: false, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 이익: giftAmount, 납부세액: 0, 안내: '이익(' + giftAmount + '원' + aggNote + ')이 ' + gateNote + ' 미만이어서 과세하지 않습니다(§42①단서, 시행령§32②).' };
     }
     const appraisalFeeAmount = Math.min(Number(p.appraisalFeeAmount) || 0, 5000000);
     const disasterLossAmount = Number(p.disasterLossAmount) || 0;
@@ -4896,12 +4949,12 @@
     const penalties = giftFilingPenalties(taxAfterCredit - reportCredit, filingStatus, !!p.isFraudulent, p.underreportedTaxAmount, p.unpaidDays, Number(p.unpaidTaxForLatePenalty), !!p.isOffshoreTransaction, p.monthsAfterDesignatedDueDate, Number(p.unpaidTaxAtDesignatedDueDate), p.fraudulentUnderreportedTaxAmount);
     const finalTax = Math.max(0, taxAfterCredit - reportCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty);
     return {
-      과세대상여부: true, 이익: giftAmount,
+      과세대상여부: true, 이번거래이익: thisTransactionGiftAmount, 직전1년합산액: priorBenefitSum, 이익: giftAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: '재산사용·용역제공 기간이 1년 이상이면 1년이 되는 날의 다음 날마다 새로 증여받은 것으로 봅니다(§42②). 특수관계인이 아닌 자 간의 거래는 거래관행상 정당한 사유가 없는 경우에만 적용됩니다(§42③).'
+      안내: '재산사용·용역제공 기간이 1년 이상이면 1년이 되는 날의 다음 날마다 새로 증여받은 것으로 봅니다(§42②). 특수관계인이 아닌 자 간의 거래는 거래관행상 정당한 사유가 없는 경우에만 적용됩니다(§42③).' + aggNote
     };
   };
 
@@ -5074,12 +5127,16 @@
     const incomeRatio = corporateTaxableIncome > 0 ? Math.min(1, benefitToCorpAmount / corporateTaxableIncome) : 0;
     const corporateTaxEquivalentTotal = Math.round(corporateTaxAfterCredit * incomeRatio);
     const specificCorpNetBenefit = Math.max(0, benefitToCorpAmount - corporateTaxEquivalentTotal);
-    const giftDeemedAmount = Math.round(specificCorpNetBenefit * shareholderOwnershipRatio);
+    const thisTransactionGiftDeemedAmount = Math.round(specificCorpNetBenefit * shareholderOwnershipRatio);
+    // §43②·시행령§32의4 — 증여일부터 소급 1년 이내 동일한 거래등이 더 있으면 각 이익을 합산해 기준금액을 계산.
+    const priorBenefitSum = sumPriorBenefitsWithinOneYear(p.priorBenefitsWithinOneYear);
+    const aggNote = priorBenefitSum > 0 ? (' (§43②에 따라 1년 이내 이전거래 이익 ' + priorBenefitSum + '원을 합산한 금액입니다.)') : '';
+    const giftDeemedAmount = thisTransactionGiftDeemedAmount + priorBenefitSum;
 
     if (giftDeemedAmount < 100000000) {
       return {
-        과세대상여부: false, 증여의제이익: giftDeemedAmount, 납부세액: 0,
-        안내: '증여의제이익(' + giftDeemedAmount + '원)이 1억원 미만이어서 과세하지 않습니다(시행령§34의5⑤).'
+        과세대상여부: false, 이번거래증여의제이익: thisTransactionGiftDeemedAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftDeemedAmount, 납부세액: 0,
+        안내: '증여의제이익(' + giftDeemedAmount + '원' + aggNote + ')이 1억원 미만이어서 과세하지 않습니다(시행령§34의5⑤).'
       };
     }
 
@@ -5124,12 +5181,12 @@
     return {
       과세대상여부: true,
       특정법인의이익: specificCorpNetBenefit, 법인세상당액_전체: corporateTaxEquivalentTotal,
-      증여의제이익: giftDeemedAmount,
+      이번거래증여의제이익: thisTransactionGiftDeemedAmount, 직전1년합산액: priorBenefitSum, 증여의제이익: giftDeemedAmount,
       증여재산공제: relationDeduction, 감정평가수수료공제: appraisalFeeAmount, 재해손실공제: disasterLossAmount,
       과세표준: taxBase, 산출세액: calculatedTax, 신고세액공제: reportCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
-      안내: (capApplied ? '산출세액이 §45의5② 한도(직접증여시 증여세상당액-법인세상당액)를 초과해 그 한도로 낮췄습니다. ' : '') + '증여자가 지배주주의 친족이 아닌 특정법인 자체이므로 증여재산공제(§53)는 통상 적용되지 않습니다(위 관계별공제 한도는 0으로 입력하는 것이 원칙입니다). 증여세 과세표준 신고기한은 특정법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월입니다(§68①).'
+      안내: (capApplied ? '산출세액이 §45의5② 한도(직접증여시 증여세상당액-법인세상당액)를 초과해 그 한도로 낮췄습니다. ' : '') + '증여자가 지배주주의 친족이 아닌 특정법인 자체이므로 증여재산공제(§53)는 통상 적용되지 않습니다(위 관계별공제 한도는 0으로 입력하는 것이 원칙입니다). 증여세 과세표준 신고기한은 특정법인의 법인세 과세표준 신고기한이 속하는 달의 말일부터 3개월입니다(§68①).' + aggNote
     };
   };
 
