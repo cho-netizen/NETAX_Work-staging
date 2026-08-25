@@ -3606,6 +3606,31 @@ function renderGiftPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-gift-special-provision-overlap">중복적용 배제 판정하기</button>' +
       '<div id="taxCalcGiftOverlapResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>시가 인정범위 판정(§60②, 시행령§49) — 매매·감정·수용·경매·공매 증거가액을 다른 계산기의 "시가"로 쓰기 전에, 평가기간·특수관계인거래·비상장주식 최소요건·감정가액 기준금액을 확인합니다(상속·증여 공통)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>세목</label><select id="fmvTaxType">' +
+          '<option value="gift">증여(평가기준일 전 6개월~후 3개월)</option>' +
+          '<option value="inheritance">상속(평가기준일 전후 6개월)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>평가기준일(상속개시일 또는 증여일)</label><input type="text" class="taxcalc-date" id="fmvBaseDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field"><label>증거 유형</label><select id="fmvEvidenceType">' +
+          '<option value="sale">매매</option>' +
+          '<option value="appraisal">감정</option>' +
+          '<option value="expropriation_auction_public_sale">수용·경매·공매</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>증거일(매매계약일 / 가격산정기준일·감정평가서작성일 / 가액결정일)</label><input type="text" class="taxcalc-date" id="fmvEvidenceDate" placeholder="YYYY-MM-DD"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="fmvRelatedParty"><label for="fmvRelatedParty">[매매만] 특수관계인과의 거래</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="fmvUnlistedStock"><label for="fmvUnlistedStock">평가대상이 비상장주식등</label></div>' +
+        '<div class="taxcalc-field"><label>[비상장주식만] 거래(취득)주식 액면가액 합계</label><input type="number" id="fmvTradedFaceValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[비상장주식만] 발행주식총액(액면가액 합계)</label><input type="number" id="fmvTotalFaceValue" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[감정만] 감정가액 평균</label><input type="number" id="fmvAppraisalAvg" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[감정만] 보충적평가액(§61·62·64·65)</label><input type="number" id="fmvSupplementaryValue" placeholder="원 (유가증권등§63 재산은 해당없음)"></div>' +
+        '<div class="taxcalc-field"><label>[감정만, 선택] 유사재산 시가의 90%</label><input type="number" id="fmvSimilar90" placeholder="원 (있으면)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-fair-market-value-recognition">시가 인정 여부 판정하기</button>' +
+      '<div id="taxCalcFmvRecognitionResult"></div>' +
     '</div>';
   renderValuationAssetList('giftValuationList', giftValuationAssets);
   const giftDateEl = document.getElementById('giftDate');
@@ -4274,6 +4299,22 @@ function renderGiftOverlapResult(r){
   html += taxCalcResultRow('적용조문', r.적용조문);
   html += taxCalcResultRow('적용 증여재산가액', won(r.적용증여재산가액), { total: true });
   (r.배제된조문 || []).forEach(function(c){ html += taxCalcResultRow('배제 — ' + c.article, won(c.giftAmount)); });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderFmvRecognitionResult(r){
+  const box = document.getElementById('taxCalcFmvRecognitionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('시가 인정 여부', r.시가인정여부 ? '인정됨' : '인정 안 됨', { total: true });
+  html += taxCalcResultRow('평가기간', r.평가기간_시작 + ' ~ ' + r.평가기간_종료);
+  html += taxCalcResultRow('평가기간 이내 여부', r.평가기간이내여부 ? '예' : '아니오');
+  (r.게이트별_판정 || []).forEach(function(g){
+    html += taxCalcResultRow(g.항목, g.통과 ? '통과' : '미통과');
+    if (g.사유) html += '<div class="taxcalc-result-note">' + g.사유 + '</div>';
+  });
   html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
   box.innerHTML = html;
@@ -6110,6 +6151,21 @@ taxCalcView.addEventListener('click', function(e){
       candidates.push({ article: articleEl.value || ('후보' + i), giftAmount: numVal(amountVal) || 0 });
     }
     renderGiftOverlapResult(calculateGiftSpecialProvisionOverlapJS({ candidates: candidates }));
+  } else if (action === 'run-fair-market-value-recognition'){
+    const input = {
+      taxType: document.getElementById('fmvTaxType').value,
+      valuationBaseDate: document.getElementById('fmvBaseDate').value,
+      evidenceType: document.getElementById('fmvEvidenceType').value,
+      evidenceDate: document.getElementById('fmvEvidenceDate').value,
+      isRelatedPartyTransaction: document.getElementById('fmvRelatedParty').checked,
+      isUnlistedStock: document.getElementById('fmvUnlistedStock').checked,
+      tradedStockFaceValueSum: numVal(document.getElementById('fmvTradedFaceValue').value) || 0,
+      totalIssuedStockFaceValue: numVal(document.getElementById('fmvTotalFaceValue').value) || 0,
+      appraisalValueAverage: numVal(document.getElementById('fmvAppraisalAvg').value) || 0,
+      supplementaryValue: numVal(document.getElementById('fmvSupplementaryValue').value) || 0,
+      similarAssetMarketValue90pct: document.getElementById('fmvSimilar90').value === '' ? null : numVal(document.getElementById('fmvSimilar90').value)
+    };
+    renderFmvRecognitionResult(checkFairMarketValueRecognitionJS(input));
   } else if (action === 'run-installment-inheritance'){
     const input = {
       taxType: document.getElementById('ipIhTaxType').value,

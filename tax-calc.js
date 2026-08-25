@@ -2840,6 +2840,80 @@
     };
   };
 
+  // 시가 인정범위 판정 (상증세법§60②, 시행령§49) — Code.js toolCalculateFairMarketValueRecognitionGate와 동일 로직.
+  window.checkFairMarketValueRecognitionJS = function (p) {
+    p = p || {};
+    const taxType = p.taxType === 'inheritance' ? 'inheritance' : (p.taxType === 'gift' ? 'gift' : null);
+    if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여) 중에서 선택하세요.' };
+    if (!p.valuationBaseDate) return { error: '평가기준일(상속개시일 또는 증여일)이 필요합니다.' };
+    const evidenceType = p.evidenceType;
+    if (['sale', 'appraisal', 'expropriation_auction_public_sale'].indexOf(evidenceType) === -1) {
+      return { error: '증거유형을 매매/감정/수용·경매·공매 중에서 선택하세요.' };
+    }
+    if (!p.evidenceDate) return { error: '증거일(매매계약일, 가격산정기준일·감정평가서작성일, 또는 보상가액·경매가액·공매가액 결정일)이 필요합니다.' };
+
+    const baseDate = new Date(p.valuationBaseDate + 'T00:00:00');
+    const evidDate = new Date(p.evidenceDate + 'T00:00:00');
+    if (isNaN(baseDate.getTime()) || isNaN(evidDate.getTime())) return { error: '날짜 형식이 올바르지 않습니다(YYYY-MM-DD).' };
+
+    const periodStart = new Date(baseDate.getTime()); periodStart.setMonth(periodStart.getMonth() - 6);
+    const periodEnd = new Date(baseDate.getTime()); periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+    const withinPeriod = evidDate >= periodStart && evidDate <= periodEnd;
+    const fmt = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+    const gates = [];
+    let recognized = withinPeriod;
+    const periodNote = withinPeriod
+      ? '평가기간(' + fmt(periodStart) + '~' + fmt(periodEnd) + ') 이내입니다.'
+      : '평가기간(' + fmt(periodStart) + '~' + fmt(periodEnd) + ')을 벗어났습니다. 평가기준일 전 2년 이내이거나 평가기간 경과 후 신고기한까지의 매매등이라면, 가격변동의 특별한 사정이 없다는 전제로 평가심의위원회 심의를 신청해 인정받을 수 있습니다(시행령§49①단서) — 이 계산기는 그 심의결과를 판정하지 않습니다.';
+
+    if (evidenceType === 'sale') {
+      if (p.isRelatedPartyTransaction) {
+        recognized = false;
+        gates.push({ 항목: '특수관계인 거래', 통과: false, 사유: '특수관계인과의 거래로 거래가액이 객관적으로 부당하다고 인정되면 시가에서 제외됩니다(시행령§49①1호가목).' });
+      } else {
+        gates.push({ 항목: '특수관계인 거래', 통과: true });
+      }
+    }
+
+    if ((evidenceType === 'sale' || evidenceType === 'expropriation_auction_public_sale') && p.isUnlistedStock) {
+      const tradedFaceValue = Number(p.tradedStockFaceValueSum) || 0;
+      const totalFaceValue = Number(p.totalIssuedStockFaceValue) || 0;
+      const threshold = Math.min(totalFaceValue * 0.01, 300000000);
+      const meets = tradedFaceValue >= threshold;
+      if (!meets) recognized = false;
+      gates.push({
+        항목: '비상장주식 최소거래규모', 통과: meets,
+        거래주식액면가액합계: tradedFaceValue, 기준금액: threshold,
+        사유: meets ? undefined : ('거래(취득)된 비상장주식의 액면가액 합계가 발행주식총액의 1%와 3억원 중 적은 금액(' + threshold + '원) 미만이면 원칙적으로 시가로 인정되지 않습니다(시행령§49①1호나목·3호나목). 다만 평가심의위원회 심의를 거쳐 거래관행상 정당한 사유가 인정되면 예외적으로 인정될 수 있습니다.')
+      });
+    }
+
+    if (evidenceType === 'appraisal') {
+      const appraisalAvg = Number(p.appraisalValueAverage) || 0;
+      if (!appraisalAvg) return { error: '감정가액 평균이 필요합니다.' };
+      const supplementaryValue = Number(p.supplementaryValue) || 0;
+      const similar90 = (p.similarAssetMarketValue90pct != null && p.similarAssetMarketValue90pct !== '') ? Number(p.similarAssetMarketValue90pct) : null;
+      const candidates = [supplementaryValue > 0 ? supplementaryValue : Infinity, (similar90 != null && similar90 > 0) ? similar90 : Infinity];
+      const thresholdBase = Math.min.apply(null, candidates);
+      const hasThreshold = Number.isFinite(thresholdBase);
+      const meets = !hasThreshold || appraisalAvg >= thresholdBase;
+      if (!meets) recognized = false;
+      gates.push({
+        항목: '감정가액 기준금액', 통과: meets,
+        감정가액평균: appraisalAvg, 기준금액: hasThreshold ? thresholdBase : null,
+        사유: meets ? undefined : ('감정가액평균이 보충적평가액(§61·62·64·65)과 유사재산시가의 90% 중 적은 금액(기준금액, ' + thresholdBase + '원)에 미달합니다(시행령§49①2호 — 이 조항은 상장주식(§63①1호가목)·가상자산(§65②)에는 적용되지 않습니다). 세무서장등이 다른 감정기관에 재감정을 의뢰할 수 있으며, 그 재감정가액보다 납세자가 제시한 감정가액이 낮으면 원래 감정가액이 그대로 인정됩니다.')
+      });
+    }
+
+    return {
+      시가인정여부: recognized, 평가기간이내여부: withinPeriod,
+      평가기간_시작: fmt(periodStart), 평가기간_종료: fmt(periodEnd),
+      게이트별_판정: gates,
+      안내: periodNote + (recognized ? '' : ' 위 게이트 중 하나라도 통과하지 못하면 이 증거가액은 §60②의 시가로 인정되지 않으므로, 다른 시가 증거를 찾거나 §61~65의 보충적 평가방법을 사용해야 합니다.')
+    };
+  };
+
   // 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — Code.js toolCalculateLowPriceTransferGiftAmount와 동일 로직.
   window.calculateLowPriceTransferGiftAmountJS = function (p) {
     p = p || {};

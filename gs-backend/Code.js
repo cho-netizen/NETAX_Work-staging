@@ -1869,6 +1869,27 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'check_fair_market_value_recognition',
+    description: '시가 인정범위(상증세법§60②, 시행령§49)를 판정한다. 입력한 시가 증거(매매·감정·수용·경매·공매)가 ①평가기간(상속: 상속개시일 전후 6개월, 증여: 증여일 전 6개월~후 3개월) 이내인지, ②매매의 경우 특수관계인 간 거래가 아닌지, ③비상장주식 매매·경매·공매는 거래(취득)주식 액면가액 합계가 min(발행주식총액×1%, 3억원) 이상인지, ④감정가액은 감정가액평균이 기준금액(보충적평가액과 유사재산시가90% 중 적은 금액) 이상인지를 확인해 시가로 인정되는지 판정한다. 평가기간 이탈·감정가액 미달 시에도 평가심의위원회 심의로 예외 인정될 수 있으나 그 절차는 이 도구가 판정하지 않는다. calculate_gift_tax/calculate_inheritance_tax 등에 "시가"를 입력하기 전에 그 시가 증거가 유효한지 먼저 확인할 때 쓴다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속(평가기준일 전후 6개월), gift=증여(평가기준일 전 6개월~후 3개월).' },
+        valuationBaseDate: { type: 'string', description: '평가기준일(YYYY-MM-DD) — 상속개시일 또는 증여일.' },
+        evidenceType: { type: 'string', enum: ['sale', 'appraisal', 'expropriation_auction_public_sale'], description: 'sale=매매, appraisal=감정, expropriation_auction_public_sale=수용·경매·공매.' },
+        evidenceDate: { type: 'string', description: '증거일(YYYY-MM-DD) — sale이면 매매계약일, appraisal이면 가격산정기준일과 감정평가서작성일 중 나중 날(보수적으로), expropriation_auction_public_sale이면 보상가액·경매가액·공매가액이 결정된 날.' },
+        isRelatedPartyTransaction: { type: 'boolean', description: 'evidenceType이 sale일 때 — 특수관계인과의 거래인지. true면 거래가액이 시가에서 제외됩니다(시행령§49①1호가목).' },
+        isUnlistedStock: { type: 'boolean', description: '평가대상이 비상장주식등인지. true이고 evidenceType이 sale 또는 expropriation_auction_public_sale이면 최소거래규모 요건을 확인한다.' },
+        tradedStockFaceValueSum: { type: 'number', description: 'isUnlistedStock이 true일 때 — 이번에 거래(또는 경매·공매로 취득)된 비상장주식의 액면가액 합계(원).' },
+        totalIssuedStockFaceValue: { type: 'number', description: 'isUnlistedStock이 true일 때 — 해당 법인의 발행주식총액(또는 출자총액) 액면가액 합계(원).' },
+        appraisalValueAverage: { type: 'number', description: 'evidenceType이 appraisal일 때 필수 — 둘 이상(또는 기준시가 10억원 이하 부동산은 하나 이상) 감정기관 감정가액의 평균(원).' },
+        supplementaryValue: { type: 'number', description: 'evidenceType이 appraisal일 때 — 상증세법§61·62·64·65에 따른 보충적평가액(원, 유가증권등§63 재산은 이 조항 적용대상이 아니므로 생략).' },
+        similarAssetMarketValue90pct: { type: 'number', description: 'evidenceType이 appraisal일 때(선택) — 시행령§49④에 따른 유사재산 시가의 100분의 90에 해당하는 가액(원). 있으면 보충적평가액과 비교해 더 작은 쪽을 기준금액으로 쓴다.' }
+      },
+      required: ['taxType', 'valuationBaseDate', 'evidenceType', 'evidenceDate']
+    }
+  },
+  {
     name: 'calculate_low_price_transfer_gift_amount',
     description: '저가양수·고가양도에 따른 이익의 증여의제(상증세법 §35)의 증여재산가액을 계산한다. §35①(특수관계인 간)은 그 대가와 시가의 차액이 min(시가×30%, 3억원) 이상이면 그 차액에서 같은 금액을 뺀 것이 증여재산가액이다. §35②(비특수관계인 간, 거래관행상 정당한 사유 없이 현저히 낮게/높게 거래)는 게이트 기준금액이 시가×30%(3억 상한 없음)이고 차감액은 3억원 정액이라 계산식이 다르다(시행령§26②③④). 이 도구는 세액이 아니라 증여재산가액만 계산하므로, 결과값을 calculate_gift_tax의 giftAmount로 넣어 정상적으로 증여재산공제·누진세율·신고세액공제를 적용해 세액을 계산해야 한다.',
     input_schema: {
@@ -6739,6 +6760,87 @@ function splitDateRangeByRate_(startDateStr, endDateStr) {
   return segments;
 }
 
+// 시가 인정범위 판정 (상증세법§60②, 시행령§49) — 입력받은 "시가" 증거(매매·감정·수용·경매·공매)가
+// 실제로 법정 시가로 인정되는지 판정한다. ①평가기간(상속: 상속개시일 전후 6개월, 증여: 증여일 전 6개월
+// ~후 3개월) 이내인지(§49①), ②매매의 경우 특수관계인 간 거래이면 배제(§49①1호가목), ③비상장주식
+// 매매·경매·공매는 거래(취득)주식 액면가액 합계가 min(발행주식총액×1%, 3억원) 미만이면 원칙적으로
+// 배제(§49①1호나목·3호나목), ④감정가액은 감정가액평균이 기준금액(§61·62·64·65 보충적평가액과 유사재산
+// 시가90% 중 적은 금액) 미달이면 재감정 대상(§49①2호)임을 확인한다. 평가기간을 벗어나거나 감정가액이
+// 기준미달이어도 평가심의위원회 심의를 거쳐 예외적으로 인정될 수 있으나, 그 절차의 승인 여부는 사실판단·
+// 행정절차라 이 도구가 판정하지 않고 안내로만 알린다.
+function toolCalculateFairMarketValueRecognitionGate(p) {
+  p = p || {};
+  const taxType = p.taxType === 'inheritance' ? 'inheritance' : (p.taxType === 'gift' ? 'gift' : null);
+  if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여) 중에서 선택하세요.' };
+  if (!p.valuationBaseDate) return { error: '평가기준일(valuationBaseDate — 상속개시일 또는 증여일)이 필요합니다.' };
+  const evidenceType = p.evidenceType;
+  if (['sale', 'appraisal', 'expropriation_auction_public_sale'].indexOf(evidenceType) === -1) {
+    return { error: 'evidenceType을 sale(매매)/appraisal(감정)/expropriation_auction_public_sale(수용·경매·공매) 중에서 선택하세요.' };
+  }
+  if (!p.evidenceDate) return { error: '증거일(evidenceDate — 매매계약일, 가격산정기준일·감정평가서작성일, 또는 보상가액·경매가액·공매가액 결정일)이 필요합니다.' };
+
+  const baseDate = new Date(p.valuationBaseDate + 'T00:00:00');
+  const evidDate = new Date(p.evidenceDate + 'T00:00:00');
+  if (isNaN(baseDate.getTime()) || isNaN(evidDate.getTime())) return { error: '날짜 형식이 올바르지 않습니다(YYYY-MM-DD).' };
+
+  const periodStart = new Date(baseDate.getTime()); periodStart.setMonth(periodStart.getMonth() - 6);
+  const periodEnd = new Date(baseDate.getTime()); periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+  const withinPeriod = evidDate >= periodStart && evidDate <= periodEnd;
+  const fmt = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+  const gates = [];
+  let recognized = withinPeriod;
+  const periodNote = withinPeriod
+    ? '평가기간(' + fmt(periodStart) + '~' + fmt(periodEnd) + ') 이내입니다.'
+    : '평가기간(' + fmt(periodStart) + '~' + fmt(periodEnd) + ')을 벗어났습니다. 평가기준일 전 2년 이내이거나 평가기간 경과 후 신고기한까지의 매매등이라면, 가격변동의 특별한 사정이 없다는 전제로 평가심의위원회 심의를 신청해 인정받을 수 있습니다(시행령§49①단서) — 이 도구는 그 심의결과를 판정하지 않습니다.';
+
+  if (evidenceType === 'sale') {
+    if (p.isRelatedPartyTransaction) {
+      recognized = false;
+      gates.push({ 항목: '특수관계인 거래', 통과: false, 사유: '특수관계인과의 거래로 거래가액이 객관적으로 부당하다고 인정되면 시가에서 제외됩니다(시행령§49①1호가목).' });
+    } else {
+      gates.push({ 항목: '특수관계인 거래', 통과: true });
+    }
+  }
+
+  if ((evidenceType === 'sale' || evidenceType === 'expropriation_auction_public_sale') && p.isUnlistedStock) {
+    const tradedFaceValue = Number(p.tradedStockFaceValueSum) || 0;
+    const totalFaceValue = Number(p.totalIssuedStockFaceValue) || 0;
+    const threshold = Math.min(totalFaceValue * 0.01, 300000000);
+    const meets = tradedFaceValue >= threshold;
+    if (!meets) recognized = false;
+    gates.push({
+      항목: '비상장주식 최소거래규모', 통과: meets,
+      거래주식액면가액합계: tradedFaceValue, 기준금액: threshold,
+      사유: meets ? undefined : ('거래(취득)된 비상장주식의 액면가액 합계가 발행주식총액의 1%와 3억원 중 적은 금액(' + threshold + '원) 미만이면 원칙적으로 시가로 인정되지 않습니다(시행령§49①1호나목·3호나목). 다만 평가심의위원회 심의를 거쳐 거래관행상 정당한 사유가 인정되면 예외적으로 인정될 수 있습니다.')
+    });
+  }
+
+  if (evidenceType === 'appraisal') {
+    const appraisalAvg = Number(p.appraisalValueAverage) || 0;
+    if (!appraisalAvg) return { error: 'evidenceType이 appraisal이면 감정가액 평균(appraisalValueAverage)이 필요합니다.' };
+    const supplementaryValue = Number(p.supplementaryValue) || 0;
+    const similar90 = (p.similarAssetMarketValue90pct != null && p.similarAssetMarketValue90pct !== '') ? Number(p.similarAssetMarketValue90pct) : null;
+    const candidates = [supplementaryValue > 0 ? supplementaryValue : Infinity, (similar90 != null && similar90 > 0) ? similar90 : Infinity];
+    const thresholdBase = Math.min.apply(null, candidates);
+    const hasThreshold = Number.isFinite(thresholdBase);
+    const meets = !hasThreshold || appraisalAvg >= thresholdBase;
+    if (!meets) recognized = false;
+    gates.push({
+      항목: '감정가액 기준금액', 통과: meets,
+      감정가액평균: appraisalAvg, 기준금액: hasThreshold ? thresholdBase : null,
+      사유: meets ? undefined : ('감정가액평균이 보충적평가액(§61·62·64·65)과 유사재산시가의 90% 중 적은 금액(기준금액, ' + thresholdBase + '원)에 미달합니다(시행령§49①2호 — 이 조항은 상장주식(§63①1호가목)·가상자산(§65②)에는 적용되지 않습니다). 세무서장등이 다른 감정기관에 재감정을 의뢰할 수 있으며, 그 재감정가액보다 납세자가 제시한 감정가액이 낮으면 원래 감정가액이 그대로 인정됩니다.')
+    });
+  }
+
+  return {
+    시가인정여부: recognized, 평가기간이내여부: withinPeriod,
+    평가기간_시작: fmt(periodStart), 평가기간_종료: fmt(periodEnd),
+    게이트별_판정: gates,
+    안내: periodNote + (recognized ? '' : ' 위 게이트 중 하나라도 통과하지 못하면 이 증거가액은 §60②의 시가로 인정되지 않으므로, 다른 시가 증거를 찾거나 §61~65의 보충적 평가방법을 사용해야 합니다.')
+  };
+}
+
 // 사후관리 위반 시 추징세액에 붙는 이자상당액 계산 (영농자녀 증여세 감면 위반 [별지 제52호의2서식], 창업자금 증여세 과세특례 위반
 // [별지 제11호의7서식], 가업승계 주식등 증여세 과세특례 추징 [별지 제11호의10서식] 등에 공통되는 계산식).
 // 이자 기산일부터 추징사유 발생일까지를 이율 변경일 기준으로 나눠, 각 구간에 그 시점 국세환급가산금
@@ -10111,6 +10213,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_installment_split_payment_limit' ||
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
+        b.name === 'check_fair_market_value_recognition' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
         b.name === 'calculate_gift_special_provision_overlap' ||
         b.name === 'calculate_interest_free_loan_gift_amount' ||
@@ -10533,6 +10636,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_clawback_interest') {
         const resultObj = toolCalculateClawbackInterest(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'check_fair_market_value_recognition') {
+        const resultObj = toolCalculateFairMarketValueRecognitionGate(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
