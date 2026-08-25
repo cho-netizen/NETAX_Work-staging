@@ -524,6 +524,8 @@ const DRIVE_TOOLS = [
       type: 'object',
       properties: {
         isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
+        isWarOrDutyDeath: { type: 'boolean', description: '§11 — 전쟁 또는 대통령령으로 정하는 공무의 수행 중 사망하거나 그로 인한 부상·질병으로 사망하여 상속이 개시되는 경우인지. true면 다른 입력과 무관하게 상속세를 전액 부과하지 않는다.' },
+        presumedFictitiousDebtAmount: { type: 'number', description: '§15② — 피상속인이 국가·지방자치단체·금융회사등이 아닌 자(개인 등)에게 부담한 채무로서 상속인이 변제할 의무가 없는 것으로 추정되는(가공채무로 의심되는) 금액(원). taxableEstateAmount 계산시 이미 채무로 공제됐다면, 그 금액을 여기 넣어 과세가액에 다시 산입해야 한다. 없으면 생략.' },
         taxableEstateAmount: { type: 'number', description: '상속세 과세가액(원) — 총상속재산가액에서 공과금·채무를 빼고 10년 이내 사전증여재산 등을 가산해 이미 계산된 금액이어야 한다(조특법§30의5·6 특례증여재산은 증여시기와 무관하게 항상 가산해야 함에 유의). 장례비용은 여기서 빼면 안 된다 — 이 도구가 funeralCostAmount·funeralNicheCostAmount로 별도 입력받아 자동으로 공제하므로, 여기에 미리 빼서 넣으면 장례비용이 이중으로 공제된다. 비과세재산가액·과세가액불산입재산가액은 여기 포함하지 말 것(nonTaxableAmount 등으로 별도 입력하면 자동으로 차감된다). 상속개시전 처분재산 추정액(disposalPresumptionItems)도 여기 포함하지 말 것 — 자동으로 더해진다. 그 총상속재산가액을 구성하는 개별 자산의 가액은 반드시 다음 순서로 확인하라: ① list_drive_folder/read_drive_file로 사건 폴더 안에 계약서·감정평가서 등 시가를 알 수 있는 문서가 있는지 먼저 찾는다 ② 없으면 lookup_real_estate_price로 유사 매매사례가 있는지 조회한다 ③ 그래도 없으면 부동산은 토지=개별공시지가×면적, 건물=calculate_building_standard_price(보충적평가방법)로 계산하고, 비상장주식은 calculate_unlisted_stock_value로 계산한다 ④ 그래도 확인할 수 없는 값은 사용자에게 직접 물어봐라. 각 단계를 시도했는지, 어느 단계에서 값을 확정했는지 답변에서 밝혀라.' },
         nonTaxableAmount: { type: 'number', description: '비과세되는 상속재산가액(원, §12) — 국가·지방자치단체·공공단체 유증재산, 문화재보호구역 토지, 금양임야·묘토인 농지(한도 2억원), 족보·제구(한도 1천만원), 정당 유증재산, 사내근로복지기금 등 유증재산, 이재구호금품 등. 없으면 생략.' },
         publicInterestOrgAmount: { type: 'number', description: '상속세 과세표준 신고기한 이내에 공익법인등에 출연한 재산가액(원, §16 — 과세가액 불산입). 없으면 생략.' },
@@ -1071,10 +1073,12 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        itemType: { type: 'string', enum: ['government', 'ancestral_property', 'political_party', 'labor_welfare_fund', 'disaster_relief'], description: 'government=국가·지자체·공공단체 유증등(1호), ancestral_property=민법§1008의3 제사용재산(3호), political_party=정당 유증등(4호), labor_welfare_fund=사내근로복지기금 등(5호), disaster_relief=이재구호금품·치료비 등(6호).' },
-        amount: { type: 'number', description: '해당 항목의 금액(원).' }
+        itemType: { type: 'string', enum: ['government', 'ancestral_property', 'political_party', 'labor_welfare_fund', 'disaster_relief', 'post_inheritance_donation'], description: 'government=국가·지자체·공공단체 유증등(1호), ancestral_property=민법§1008의3 제사용재산(3호, amount 대신 graveyardForestAndPaddyAmount·genealogyAndRitualToolsAmount로 입력), political_party=정당 유증등(4호), labor_welfare_fund=사내근로복지기금 등(5호), disaster_relief=이재구호금품·치료비 등(6호), post_inheritance_donation=신고기한내 국가등에 재증여한 재산(7호).' },
+        amount: { type: 'number', description: 'itemType이 ancestral_property가 아닐 때 — 해당 항목의 금액(원).' },
+        graveyardForestAndPaddyAmount: { type: 'number', description: 'itemType이 ancestral_property일 때만 — 시행령§8③1호·2호(금양임야·묘토인 농지) 재산가액 합계(원). 2억원 한도로 자동으로 잘린다.' },
+        genealogyAndRitualToolsAmount: { type: 'number', description: 'itemType이 ancestral_property일 때만 — 시행령§8③3호(족보와 제구) 재산가액 합계(원). 위 금양임야·묘토 한도와는 별개로 1천만원 한도로 자동으로 잘린다.' }
       },
-      required: ['itemType', 'amount']
+      required: ['itemType']
     }
   },
   {
@@ -5516,6 +5520,11 @@ function toolCalculateInheritanceTax(p) {
   p = p || {};
   const taxableEstateAmount = Number(p.taxableEstateAmount);
   if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액(taxableEstateAmount — 총상속재산가액에서 공과금·채무를 빼고 10년 이내 사전증여재산을 가산해 이미 반영한 금액. 장례비용은 빼지 말 것 — funeralCostAmount로 별도 입력하면 자동으로 공제된다. 상속개시전 처분재산 추정액은 포함하지 말 것 — disposalPresumptionItems로 넣으면 자동으로 더해진다)이 필요합니다.' };
+  // §11 — 전쟁 또는 대통령령으로 정하는 공무의 수행 중 사망하거나 그로 인한 부상·질병으로 사망하여
+  // 상속이 개시되는 경우에는 상속세를 전액 부과하지 않는다(다른 공제와 무관하게 전체 비과세).
+  if (p.isWarOrDutyDeath) {
+    return { 과세여부: false, 안내: '전사자 등에 대한 상속세 비과세(§11)에 해당하여 상속세를 부과하지 않습니다.' };
+  }
 
   // 상속개시전 처분재산 등 산입액(§15) — 재산종류별(현금·예금·유가증권/부동산/기타재산, 부담채무)로 각각 계산해 합산한다.
   const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
@@ -5532,7 +5541,11 @@ function toolCalculateInheritanceTax(p) {
   const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
   const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
   const publicTrustAmount = Number(p.publicTrustAmount) || 0;
-  const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal;
+  // §15② — 피상속인이 국가·지방자치단체·금융회사등이 아닌 자(개인 등)에게 부담한 채무로서 상속인이
+  // 변제할 의무가 없는 것으로 추정되는(가공채무로 의심되는) 경우, 그 금액을 §13 과세가액에 다시
+  // 산입한다. taxableEstateAmount 계산시 이미 채무로 공제됐다면 이 값으로 되돌려 넣어야 한다.
+  const presumedFictitiousDebtAmount = Number(p.presumedFictitiousDebtAmount) || 0;
+  const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal + presumedFictitiousDebtAmount;
 
   const hasSpouse = !!p.hasSpouse;
   const childCount = Number(p.childCount) || 0;
@@ -5733,7 +5746,7 @@ function toolCalculateInheritanceTax(p) {
     피상속인_거주구분: isDecedentResident ? '거주자' : '비거주자',
     비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount,
     상속개시전처분재산_추정내역: disposalPresumptionDetail,
-    상속개시전처분재산_추정합계: disposalPresumptionTotal,
+    상속개시전처분재산_추정합계: disposalPresumptionTotal, 가공채무추정_재산입액: presumedFictitiousDebtAmount,
     상속세과세가액_적용값: effectiveEstateAmount,
     인적공제: personalDeduction,
     '기초인적공제_또는_일괄공제': basicOrLumpSum,
@@ -8031,7 +8044,20 @@ function toolCalculateNontaxableInheritanceProperty(p) {
   p = p || {};
   const itemType = p.itemType;
   const meta = NONTAXABLE_INHERITANCE_PROPERTY_LABELS_[itemType];
-  if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief 중에서 선택하세요.' };
+  if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief/post_inheritance_donation 중에서 선택하세요.' };
+  if (itemType === 'ancestral_property') {
+    // 시행령§8③ 단서 — 1호(금양임야, 9,900㎡ 이내)·2호(묘토인 농지, 1,980㎡ 이내) 재산가액 합계는
+    // 2억원 한도, 3호(족보와 제구) 재산가액 합계는 별도로 1천만원 한도다(두 한도는 서로 합산하지 않는다).
+    const graveyardAmount = Math.min(Math.max(0, Number(p.graveyardForestAndPaddyAmount) || 0), 200000000);
+    const genealogyAmount = Math.min(Math.max(0, Number(p.genealogyAndRitualToolsAmount) || 0), 10000000);
+    const total = graveyardAmount + genealogyAmount;
+    if (total <= 0) return { error: '금양임야·묘토인농지 금액(graveyardForestAndPaddyAmount) 또는 족보·제구 금액(genealogyAndRitualToolsAmount) 중 하나 이상이 필요합니다.' };
+    return {
+      비과세여부: true, 근거호: meta.근거호,
+      금양임야_묘토_비과세금액: graveyardAmount, 족보_제구_비과세금액: genealogyAmount, 비과세금액: total,
+      안내: meta.설명 + ' — 시행령§8③ 단서에 따라 금양임야·묘토인농지는 합계 2억원, 족보·제구는 별도로 1천만원까지만 비과세됩니다(한도 초과분은 과세대상). 면적요건(금양임야 9,900㎡·묘토 1,980㎡ 이내)과 "제사를 주재하는 상속인" 요건은 별도로 확인하세요. 이 금액은 calculate_inheritance_tax 도구의 상속재산가액에 포함하지 마세요.'
+    };
+  }
   const amount = Math.max(0, Number(p.amount) || 0);
   if (amount <= 0) return { error: '금액이 필요합니다.' };
   return {

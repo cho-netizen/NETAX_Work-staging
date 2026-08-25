@@ -1729,6 +1729,11 @@
     p = p || {};
     const taxableEstateAmount = Number(p.taxableEstateAmount);
     if (!taxableEstateAmount || taxableEstateAmount <= 0) return { error: '상속세 과세가액이 필요합니다.' };
+    // §11 — 전쟁 또는 대통령령으로 정하는 공무의 수행 중 사망하거나 그로 인한 부상·질병으로 사망하여
+    // 상속이 개시되는 경우에는 상속세를 전액 부과하지 않는다(다른 공제와 무관하게 전체 비과세).
+    if (p.isWarOrDutyDeath) {
+      return { 과세여부: false, 안내: '전사자 등에 대한 상속세 비과세(§11)에 해당하여 상속세를 부과하지 않습니다.' };
+    }
 
     const disposalItems = Array.isArray(p.disposalPresumptionItems) ? p.disposalPresumptionItems : [];
     const disposalPresumptionDetail = disposalItems.map(function (item) {
@@ -1742,7 +1747,11 @@
     const nonTaxableAmount = Number(p.nonTaxableAmount) || 0;
     const publicInterestOrgAmount = Number(p.publicInterestOrgAmount) || 0;
     const publicTrustAmount = Number(p.publicTrustAmount) || 0;
-    const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal;
+    // §15② — 피상속인이 국가·지방자치단체·금융회사등이 아닌 자(개인 등)에게 부담한 채무로서 상속인이
+    // 변제할 의무가 없는 것으로 추정되는(가공채무로 의심되는) 경우, 그 금액을 §13 과세가액에 다시
+    // 산입한다. taxableEstateAmount 계산시 이미 채무로 공제됐다면 이 값으로 되돌려 넣어야 한다.
+    const presumedFictitiousDebtAmount = Number(p.presumedFictitiousDebtAmount) || 0;
+    const effectiveEstateAmount = Math.max(0, taxableEstateAmount - nonTaxableAmount - publicInterestOrgAmount - publicTrustAmount) + disposalPresumptionTotal + presumedFictitiousDebtAmount;
 
     const childCount = Number(p.childCount) || 0;
     // §20①2호·3호 — 미성년자공제·연로자공제는 "상속인(배우자는 제외한다) 및 동거가족"만 대상이므로
@@ -1919,7 +1928,8 @@
       피상속인_거주구분: isDecedentResident ? '거주자' : '비거주자',
       비과세재산가액: nonTaxableAmount, 공익법인출연재산가액: publicInterestOrgAmount, 공익신탁재산가액: publicTrustAmount,
       상속개시전처분재산_추정내역: disposalPresumptionDetail,
-      상속개시전처분재산_추정합계: disposalPresumptionTotal, 상속세과세가액_적용값: effectiveEstateAmount,
+      상속개시전처분재산_추정합계: disposalPresumptionTotal, 가공채무추정_재산입액: presumedFictitiousDebtAmount,
+      상속세과세가액_적용값: effectiveEstateAmount,
       인적공제: personalDeduction, '기초인적공제_또는_일괄공제': basicOrLumpSum,
       배우자공제: spouseDeduction, 배우자공제한도액: Number.isFinite(spouseLimit) ? spouseLimit : null,
       금융재산상속공제: financialDeduction, 동거주택상속공제: cohabitingHouseDeduction,
@@ -3181,6 +3191,19 @@
     const itemType = p.itemType;
     const meta = NONTAXABLE_INHERITANCE_PROPERTY_LABELS[itemType];
     if (!meta) return { error: 'itemType을 government/ancestral_property/political_party/labor_welfare_fund/disaster_relief/post_inheritance_donation 중에서 선택하세요.' };
+    if (itemType === 'ancestral_property') {
+      // 시행령§8③ 단서 — 1호(금양임야, 9,900㎡ 이내)·2호(묘토인 농지, 1,980㎡ 이내) 재산가액 합계는
+      // 2억원 한도, 3호(족보와 제구) 재산가액 합계는 별도로 1천만원 한도다(두 한도는 서로 합산하지 않는다).
+      const graveyardAmount = Math.min(Math.max(0, Number(p.graveyardForestAndPaddyAmount) || 0), 200000000);
+      const genealogyAmount = Math.min(Math.max(0, Number(p.genealogyAndRitualToolsAmount) || 0), 10000000);
+      const total = graveyardAmount + genealogyAmount;
+      if (total <= 0) return { error: '금양임야·묘토인농지 금액(graveyardForestAndPaddyAmount) 또는 족보·제구 금액(genealogyAndRitualToolsAmount) 중 하나 이상이 필요합니다.' };
+      return {
+        비과세여부: true, 근거호: meta.근거호,
+        금양임야_묘토_비과세금액: graveyardAmount, 족보_제구_비과세금액: genealogyAmount, 비과세금액: total,
+        안내: meta.설명 + ' — 시행령§8③ 단서에 따라 금양임야·묘토인농지는 합계 2억원, 족보·제구는 별도로 1천만원까지만 비과세됩니다(한도 초과분은 과세대상). 면적요건(금양임야 9,900㎡·묘토 1,980㎡ 이내)과 "제사를 주재하는 상속인" 요건은 별도로 확인하세요. 이 금액은 상속세 계산기의 상속재산가액에 포함하지 마세요.'
+      };
+    }
     const amount = Math.max(0, Number(p.amount) || 0);
     if (amount <= 0) return { error: '금액이 필요합니다.' };
     return {
