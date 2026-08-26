@@ -12,6 +12,7 @@ const taxCalcView = document.getElementById('taxCalcView');
 const taxCalcTransferPane = document.getElementById('taxCalcTransferPane');
 const taxCalcGiftPane = document.getElementById('taxCalcGiftPane');
 const taxCalcInheritancePane = document.getElementById('taxCalcInheritancePane');
+const taxCalcAcquisitionPane = document.getElementById('taxCalcAcquisitionPane');
 
 function won(n){
   return Number.isFinite(n) ? Math.round(n).toLocaleString('ko-KR') + '원' : '-';
@@ -5155,6 +5156,69 @@ function renderHeirResult(r){
   box.innerHTML = html;
 }
 
+function renderAcquisitionPane(){
+  taxCalcAcquisitionPane.innerHTML =
+    '<div class="taxcalc-hint">지방세법상 취득세(부동산)만 계산합니다. 지방교육세·농어촌특별세는 별도로 부과되며 이 계산기에 포함되지 않습니다(관련 법령 파일 확보 전까지 결과는 취득세 본세 기준입니다). 취득원인·부동산종류를 먼저 선택한 뒤, 그 조합에 해당하는 항목만 채우면 됩니다.</div>' +
+    '<div class="taxcalc-asset">' +
+      '<div class="taxcalc-asset-head"><b>기본 정보</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>취득원인</label><select id="atAcquisitionType">' +
+          '<option value="paid">유상취득(매매 등)</option>' +
+          '<option value="inheritance">상속</option>' +
+          '<option value="gift">무상취득(증여 등, 상속외)</option>' +
+          '<option value="original">원시취득(신축)</option>' +
+          '<option value="division">공유물·합유물 분할</option>' +
+          '<option value="divorce_division">이혼에 따른 재산분할</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>부동산 종류</label><select id="atPropertyType">' +
+          '<option value="house">주택</option>' +
+          '<option value="farmland">농지</option>' +
+          '<option value="other">기타(상가·나대지·건물 등)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>취득세 과세표준(취득당시가액)</label><input type="number" id="atValue" placeholder="원"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[상속·주택만] 1가구1주택자 상속 특례(§15①2호가목)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOneHouseInherit"><label for="atOneHouseInherit">피상속인과 세대별 주민등록표상 같은 가구가 소유한 1가구1주택을 상속받음 (해당시 0.8%로 낮아짐)</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[유상취득·주택만] 법인·다주택 중과(§13의2①)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atCorporation"><label for="atCorporation">취득자가 법인(법인으로 보는 단체 포함) — 해당시 12%</label></div>' +
+        '<div class="taxcalc-field"><label>이번 취득 포함 1세대 소유 주택 수</label><input type="number" id="atHouseCount" placeholder="1 (조합원입주권·분양권·1억초과 오피스텔도 합산, §13의3)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atAdjustedArea"><label for="atAdjustedArea">조정대상지역 소재</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atTemporaryTwoHouse"><label for="atTemporaryTwoHouse">일시적 2주택(종전 주택 소유 상태에서 이사 등 사유로 취득, 3년 이내 종전 주택 처분 예정) — 중과 제외</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLowValueExempt"><label for="atLowValueExempt">저가주택(수도권 시가표준액 1억원 이하 / 수도권 외 2억원 이하, 정비구역 외) — 중과 제외</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[무상취득·주택만] 조정대상지역 고가주택 증여 중과(§13의2②)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atAdjustedAreaGift"><label for="atAdjustedAreaGift">조정대상지역 소재 + 시가표준액 3억원 이상 주택의 무상취득(증여) — 해당시 12%</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atExemptSpouseGift"><label for="atExemptSpouseGift">[위 체크시만] 1세대1주택자가 소유한 주택을 배우자·직계존비속이 무상취득하는 등 예외 해당 — 중과 제외</label></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>사치성재산 중과(§13⑤, 표준세율+8%p)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLuxuryHouse"><label for="atLuxuryHouse">고급주택(연면적 331㎡초과 단독주택·대지 662㎡초과·엘리베이터/에스컬레이터/수영장 설치 등, 시가표준액 9억원 초과)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atGolfCourse"><label for="atGolfCourse">골프장(회원제)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLuxuryEntertainment"><label for="atLuxuryEntertainment">고급오락장(카지노장·도박기설치장소·특수목욕장·일정규모 이상 유흥주점 등)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLuxuryVessel"><label for="atLuxuryVessel">고급선박(비업무용 자가용 선박, 시가표준액 3억원 초과)</label></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-acquisition-tax">취득세 계산하기</button>' +
+      '<div id="taxCalcAcquisitionResult"></div>' +
+    '</div>';
+}
+
+function renderAcquisitionTaxResult(r){
+  const box = document.getElementById('taxCalcAcquisitionResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('과세표준', won(r.과세표준 || 0));
+  html += taxCalcResultRow('적용세율', r.적용세율 + '%');
+  html += taxCalcResultRow('산출세액', won(r.산출세액), { total: true });
+  if (r.적용근거) html += '<div class="taxcalc-result-note">' + r.적용근거 + '</div>';
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 // ---- 화면 전환 및 이벤트 바인딩 ----
 function openTaxCalcView(){
   ensureExplorerVisible();
@@ -5163,6 +5227,7 @@ function openTaxCalcView(){
   renderTransferPane();
   renderGiftPane();
   renderInheritancePane();
+  renderAcquisitionPane();
   updateTaxCalcPaneVisibility();
 }
 
@@ -5174,6 +5239,7 @@ function updateTaxCalcPaneVisibility(){
   taxCalcTransferPane.style.display = which === 'transfer' ? 'block' : 'none';
   taxCalcGiftPane.style.display = which === 'gift' ? 'block' : 'none';
   taxCalcInheritancePane.style.display = which === 'inheritance' ? 'block' : 'none';
+  taxCalcAcquisitionPane.style.display = which === 'acquisition' ? 'block' : 'none';
   taxCalcView.classList.toggle('taxcalc-view-tier-simple', taxCalcTier === 'simple');
 }
 
@@ -5667,6 +5733,25 @@ taxCalcView.addEventListener('click', function(e){
       originalReductionAmount: numVal(document.getElementById('prOriginalReduction').value) || 0
     };
     renderPublicRentalHousingLandResult(calculatePublicRentalHousingLandReductionJS(input));
+  } else if (action === 'run-acquisition-tax'){
+    const input = {
+      acquisitionType: document.getElementById('atAcquisitionType').value,
+      propertyType: document.getElementById('atPropertyType').value,
+      acquisitionValue: numVal(document.getElementById('atValue').value) || 0,
+      isOneHouseholdOneHouseInheritance: document.getElementById('atOneHouseInherit').checked,
+      isCorporation: document.getElementById('atCorporation').checked,
+      houseCountIncludingThis: numVal(document.getElementById('atHouseCount').value) || 1,
+      isAdjustedArea: document.getElementById('atAdjustedArea').checked,
+      isTemporaryTwoHouse: document.getElementById('atTemporaryTwoHouse').checked,
+      isLowValueExemptHousing: document.getElementById('atLowValueExempt').checked,
+      isAdjustedAreaHighValueGift: document.getElementById('atAdjustedAreaGift').checked,
+      isExemptSpouseOrLinealGift: document.getElementById('atExemptSpouseGift').checked,
+      isLuxuryHouse: document.getElementById('atLuxuryHouse').checked,
+      isGolfCourse: document.getElementById('atGolfCourse').checked,
+      isLuxuryEntertainmentVenue: document.getElementById('atLuxuryEntertainment').checked,
+      isLuxuryVessel: document.getElementById('atLuxuryVessel').checked
+    };
+    renderAcquisitionTaxResult(calculateAcquisitionTaxJS(input));
   } else if (action === 'run-industrial-complex-lot'){
     const input = {
       transferDate: document.getElementById('icTransferDate').value,

@@ -897,6 +897,31 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_acquisition_tax',
+    description: '지방세법상 취득세(부동산)를 계산한다. 취득원인(상속·무상취득(증여)·원시취득(신축)·공유물분할·이혼재산분할·유상취득)과 부동산종류(주택·농지·기타)에 따라 §11·§12의 표준세율을 적용하고, 주택 유상취득은 §13의2(법인 12%, 다주택자 8%/12%, 일시적2주택·저가주택 중과제외)를, 주택 무상취득은 §13의2②(조정대상지역 3억원이상 고가주택 증여 12% 중과)를, 사치성재산(골프장·고급주택·고급오락장·고급선박)은 §13⑤(표준세율+8%p)를 반영한다. 지방교육세·농어촌특별세는 별도로 부과되며 이 도구에는 포함되지 않는다(안내로만 표시).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        acquisitionType: { type: 'string', enum: ['inheritance', 'gift', 'original', 'division', 'divorce_division', 'paid'], description: 'inheritance=상속, gift=상속외 무상취득(증여 등), original=원시취득(신축), division=공유물·합유물 분할, divorce_division=이혼에 따른 재산분할(§15①6호), paid=유상취득(매매 등).' },
+        propertyType: { type: 'string', enum: ['house', 'farmland', 'other'], description: 'house=주택(건축물대장·등기부상 주택으로 기재된 주거용 건축물+부속토지), farmland=농지, other=농지외 일반 부동산(상가·나대지·건물 등).' },
+        acquisitionValue: { type: 'number', description: '취득세 과세표준(취득당시가액, 원). 취득가액이 50만원 이하이면 §17①(면세점)에 따라 전액 비과세.' },
+        isOneHouseholdOneHouseInheritance: { type: 'boolean', description: 'acquisitionType이 inheritance이고 propertyType이 house일 때 — 시행령§29의 1가구1주택(피상속인과 세대별 주민등록표상 같은 가구 등 요건)에 해당하는 주택을 상속받는 경우인지. true면 §15①2호가목 특례로 세율이 0.8%(2.8%-중과기준세율2%)로 낮아진다.' },
+        isCorporation: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 취득자가 법인(법인으로 보는 단체·법인아닌 사단재단 포함)인지. true면 §13의2①1호로 12% 중과.' },
+        houseCountIncludingThis: { type: 'integer', description: 'acquisitionType이 paid이고 propertyType이 house이며 개인취득일 때 — 이번 취득 포함 1세대가 소유하게 되는 주택 수(§13의3에 따라 조합원입주권·주택분양권·시가표준액 1억초과 오피스텔도 합산). 1이면 중과 없음, 2 이상이면 조정대상지역 여부에 따라 8%~12% 중과.' },
+        isAdjustedArea: { type: 'boolean', description: 'houseCountIncludingThis 판정시, 또는 gift+house일 때 — 「주택법」§63의2①1호의 조정대상지역에 소재하는지.' },
+        isTemporaryTwoHouse: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의5의 일시적 2주택(종전 주택 등을 소유한 1세대가 이사·취업 등 사유로 신규 주택을 취득한 후 3년 이내에 종전 주택등을 처분 예정)에 해당하는지. true면 houseCountIncludingThis·isAdjustedArea와 무관하게 다주택 중과를 적용하지 않는다.' },
+        isLowValueExemptHousing: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의2 1호의 저가주택(수도권 시가표준액 1억원 이하, 수도권 외 2억원 이하, 정비구역·사업시행구역 외 소재)에 해당하는지. true면 다주택 중과를 적용하지 않는다.' },
+        isAdjustedAreaHighValueGift: { type: 'boolean', description: 'acquisitionType이 gift이고 propertyType이 house일 때 — 조정대상지역에 있고 시가표준액 3억원 이상인 주택의 무상취득(증여)인지(시행령§28의6①). true면 §13의2②로 12% 중과 대상.' },
+        isExemptSpouseOrLinealGift: { type: 'boolean', description: 'isAdjustedAreaHighValueGift가 true일 때 — 1세대1주택자가 소유한 주택을 그 배우자 또는 직계존비속이 무상취득하는 경우 등 시행령§28의6②의 예외에 해당하는지. true면 12% 중과를 적용하지 않고 일반 무상취득세율(3.5%)을 적용한다.' },
+        isLuxuryHouse: { type: 'boolean', description: '§13⑤3호·시행령§28④의 고급주택(연면적 331㎡ 초과 단독주택, 대지 662㎡ 초과, 엘리베이터·에스컬레이터·수영장 설치 등, 시가표준액 9억원 초과)에 해당하는지. true면 위에서 계산된 세율에 8%p(중과기준세율 2%×400%)를 가산한다.' },
+        isGolfCourse: { type: 'boolean', description: '§13⑤2호의 회원제 골프장(체육시설법상 등록·사실상 사용 포함)에 해당하는지. true면 8%p를 가산한다.' },
+        isLuxuryEntertainmentVenue: { type: 'boolean', description: '§13⑤4호·시행령§28⑤의 고급오락장(카지노장·도박기설치장소·특수목욕장·일정 규모 이상 유흥주점영업장 등)에 해당하는지. true면 8%p를 가산한다.' },
+        isLuxuryVessel: { type: 'boolean', description: '§13⑤5호·시행령§28⑥의 고급선박(비업무용 자가용 선박으로 시가표준액 3억원 초과, 실험·실습용 제외)에 해당하는지. true면 8%p를 가산한다.' }
+      },
+      required: ['acquisitionType', 'propertyType', 'acquisitionValue']
+    }
+  },
+  {
     name: 'calculate_related_party_transaction_gift_tax',
     description: '일감몰아주기 증여의제(상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제, [별지 제10호의3서식])를 계산한다. 지배주주와 그 친족이 지분을 보유한 법인(수혜법인)이 특수관계법인에 대한 매출비중이 높고 그 지분율도 높으면, 수혜법인의 세후영업이익(중소·중견·일반기업 공통) 중 일부(배당소득공제 반영)를 지배주주등이 증여받은 것으로 간주해 과세한다. 증여재산공제는 적용되지 않고 일반 누진세율과 신고세액공제만 적용된다. 직접출자관계와 간접출자관계가 함께 있으면 각각 별도로 계산해서 합산해야 한다.',
     input_schema: {
@@ -7976,6 +8001,101 @@ function toolCalculateTaxExclusionPeriod(p) {
   return result;
 }
 
+// 취득세 주택 유상거래 sliding 세율 (지방세법§11①8호) — 6억원이하 1%, 9억원초과 3%,
+// 그 사이는 (취득가액×2/3억원-3)×1/100(소수점 넷째자리까지 반올림).
+function acquisitionTaxHouseSlidingRate_(value) {
+  if (value <= 600000000) return 0.01;
+  if (value > 900000000) return 0.03;
+  return Math.round((((value * 2 / 300000000) - 3) / 100) * 10000) / 10000;
+}
+
+// 취득세(지방세법 — 부동산) 계산. §11(부동산 취득세율)·§12(부동산외)·§13(과밀억제권역·사치성재산 중과)·
+// §13의2(법인·다주택자 중과, 조정대상지역 고가주택 무상취득 중과)·§15(세율의 특례)·§17(면세점)를 반영한다.
+function toolCalculateAcquisitionTax(p) {
+  p = p || {};
+  const acquisitionType = p.acquisitionType;
+  if (['inheritance', 'gift', 'original', 'division', 'divorce_division', 'paid'].indexOf(acquisitionType) === -1) {
+    return { error: 'acquisitionType을 inheritance/gift/original/division/divorce_division/paid 중에서 선택하세요.' };
+  }
+  const propertyType = p.propertyType;
+  if (['house', 'farmland', 'other'].indexOf(propertyType) === -1) {
+    return { error: 'propertyType을 house/farmland/other 중에서 선택하세요.' };
+  }
+  const acquisitionValue = Number(p.acquisitionValue);
+  if (!(acquisitionValue >= 0)) return { error: 'acquisitionValue(취득세 과세표준, 취득당시가액)가 필요합니다.' };
+
+  if (acquisitionValue <= 500000) {
+    return { 적용세율: 0, 산출세액: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' };
+  }
+
+  let rate, basis;
+  if (acquisitionType === 'inheritance') {
+    if (propertyType === 'house' && p.isOneHouseholdOneHouseInheritance) {
+      rate = 0.008; basis = '§15①2호가목·시행령§29(1가구1주택자 상속) — 0.8%(§11①1호나목 2.8%에서 중과기준세율 2%를 뺀 세율)';
+    } else if (propertyType === 'farmland') {
+      rate = 0.023; basis = '§11①1호가목(상속, 농지) 2.3%';
+    } else {
+      rate = 0.028; basis = '§11①1호나목(상속, 농지외) 2.8%';
+    }
+  } else if (acquisitionType === 'divorce_division') {
+    rate = 0.015; basis = '§15①6호(이혼에 따른 재산분할) — §11①2호 무상취득세율(3.5%)에서 중과기준세율(2%)을 뺀 1.5%';
+  } else if (acquisitionType === 'gift') {
+    if (propertyType === 'house' && p.isAdjustedAreaHighValueGift && !p.isExemptSpouseOrLinealGift) {
+      rate = 0.12; basis = '§13의2②·시행령§28의6①(조정대상지역 내 시가표준액 3억원 이상 주택 무상취득 중과) — 4%+8%=12%';
+    } else {
+      rate = 0.035; basis = '§11①2호(무상취득, 상속외) 3.5%';
+    }
+  } else if (acquisitionType === 'original') {
+    rate = 0.028; basis = '§11①3호(원시취득) 2.8%';
+  } else if (acquisitionType === 'division') {
+    rate = 0.023; basis = '§11①5호·6호(공유물·합유물 분할) 2.3%';
+  } else { // paid
+    if (propertyType === 'farmland') {
+      rate = 0.03; basis = '§11①7호가목(유상취득, 농지) 3.0%';
+    } else if (propertyType === 'other') {
+      rate = 0.04; basis = '§11①7호나목(유상취득, 농지외) 4.0%';
+    } else if (p.isCorporation) {
+      rate = 0.12; basis = '§13의2①1호(법인의 주택 유상취득) — 4%+8%=12%';
+    } else if (p.isTemporaryTwoHouse) {
+      rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의5(일시적 2주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%';
+    } else if (p.isLowValueExemptHousing) {
+      rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 1호(저가주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%';
+    } else {
+      const n = Number(p.houseCountIncludingThis) || 1;
+      const adj = !!p.isAdjustedArea;
+      if (n <= 1) {
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '§11①8호(1주택, 유상취득) sliding 세율 ' + (rate * 100) + '%';
+      } else if (n === 2) {
+        if (adj) { rate = 0.08; basis = '§13의2①2호(1세대2주택, 조정대상지역) — 4%+4%=8%'; }
+        else { rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '1세대2주택, 비조정대상지역 — 중과 없음, §11①8호 sliding 세율 ' + (rate * 100) + '%'; }
+      } else if (n === 3) {
+        if (adj) { rate = 0.12; basis = '§13의2①3호(1세대3주택이상, 조정대상지역) — 4%+8%=12%'; }
+        else { rate = 0.08; basis = '§13의2①2호(1세대3주택, 비조정대상지역) — 4%+4%=8%'; }
+      } else {
+        rate = 0.12; basis = '§13의2①3호(1세대4주택이상, 또는 조정대상지역 3주택이상) — 4%+8%=12%';
+      }
+    }
+  }
+
+  const luxuryFlags = [];
+  if (p.isLuxuryHouse) luxuryFlags.push('고급주택(§13⑤3호)');
+  if (p.isGolfCourse) luxuryFlags.push('골프장(§13⑤2호)');
+  if (p.isLuxuryEntertainmentVenue) luxuryFlags.push('고급오락장(§13⑤4호)');
+  if (p.isLuxuryVessel) luxuryFlags.push('고급선박(§13⑤5호)');
+  let luxuryNote = '';
+  if (luxuryFlags.length > 0) {
+    rate = rate + 0.08;
+    luxuryNote = ' §13⑤·§13의2③(사치성재산: ' + luxuryFlags.join(', ') + ') — 위 세율에 중과기준세율(2%)의 100분의 400인 8%p를 가산했습니다.';
+  }
+
+  const tax = Math.round(acquisitionValue * rate);
+  return {
+    적용세율: Math.round(rate * 100000) / 1000, 적용근거: basis + luxuryNote,
+    과세표준: acquisitionValue, 산출세액: tax,
+    안내: '이 세액은 취득세 본세만 계산한 것입니다. 지방교육세(취득세액의 일부, 세율은 별도)와 농어촌특별세(전용면적 85㎡ 초과 주택 등 일부 과세대상)는 이 도구에 포함되지 않으며, 관련 법령 파일(지방교육세법·농어촌특별세법)이 확보되면 별도 반영될 예정입니다. 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16) — 이 도구는 이런 사실판단·사후관리는 반영하지 않습니다.'
+  };
+}
+
 // 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로
 // 거래하면 그 차액에서 일정 기준액을 뺀 금액을 증여받은(또는 증여한) 것으로 본다. 이 결과의 증여재산가액을 그대로
 // calculate_gift_tax의 giftAmount로 넣으면 정상적으로 증여재산공제·누진세율·신고세액공제가 적용된다(§35 자체는 별도 세율이 없음).
@@ -11458,6 +11578,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_filing_penalty_reduction' ||
         b.name === 'check_correction_claim_eligibility' ||
         b.name === 'calculate_tax_exclusion_period' ||
+        b.name === 'calculate_acquisition_tax' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_nominee_trust_gift_tax' ||
@@ -11731,6 +11852,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_tax_exclusion_period') {
         const resultObj = toolCalculateTaxExclusionPeriod(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_acquisition_tax') {
+        const resultObj = toolCalculateAcquisitionTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
