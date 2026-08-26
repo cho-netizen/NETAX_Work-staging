@@ -5177,6 +5177,19 @@ function renderAcquisitionPane(){
         '</select></div>' +
         '<div class="taxcalc-field"><label>취득세 과세표준(취득당시가액)</label><input type="number" id="atValue" placeholder="원"></div>' +
       '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[유상취득만] 특수관계인 간 저가거래 게이트(§7⑪·법§10조의3②·시행령§18의2)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSpouseTransaction"><label for="atSpouseTransaction">배우자·직계존비속으로부터 취득 — 예외 사유 없으면 증여로 재분류(§7⑪)</label></div>' +
+        '<div class="taxcalc-field"><label>[위 체크시] 예외 사유</label><select id="atSpouseExceptionType">' +
+          '<option value="">없음(원칙대로 증여 재분류)</option>' +
+          '<option value="public_auction">1호 공매(경매 포함)</option>' +
+          '<option value="bankruptcy">2호 파산선고로 처분</option>' +
+          '<option value="exchange">3호 등기·등록 필요한 부동산 교환</option>' +
+          '<option value="proven_consideration">4호 대가지급 증명(소득·재산처분대금 등)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOtherRelatedParty"><label for="atOtherRelatedParty">배우자·직계존비속 외 특수관계인으로부터 취득 — 저가취득시 시가인정액으로 재산정(부당행위계산, 법§10조의3②·시행령§18의2)</label></div>' +
+        '<div class="taxcalc-field"><label>[위 둘 중 하나 체크시] 비교 시가인정액</label><input type="number" id="atMarketValueGate" placeholder="원 (30%/3억원 또는 5%/3억원 게이트 판정용)"></div>' +
+      '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[상속·주택만] 1가구1주택자 상속 특례(§15①2호가목)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOneHouseInherit"><label for="atOneHouseInherit">피상속인과 세대별 주민등록표상 같은 가구가 소유한 1가구1주택을 상속받음 (해당시 0.8%로 낮아짐)</label></div>' +
@@ -5219,6 +5232,7 @@ function renderAcquisitionTaxResult(r){
   const box = document.getElementById('taxCalcAcquisitionResult');
   if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
   let html = '<div class="taxcalc-result">';
+  if (r.재분류적용여부) html += taxCalcResultRow('재분류 적용', '취득유형 ' + r.최종적용_취득유형 + ' / 과세표준 ' + won(r.최종적용_과세표준));
   html += taxCalcResultRow('과세표준', won(r.과세표준 || 0));
   html += taxCalcResultRow('적용세율', r.적용세율 + '%');
   html += taxCalcResultRow('취득세 산출세액', won(r.산출세액));
@@ -5752,6 +5766,10 @@ taxCalcView.addEventListener('click', function(e){
       acquisitionType: document.getElementById('atAcquisitionType').value,
       propertyType: document.getElementById('atPropertyType').value,
       acquisitionValue: numVal(document.getElementById('atValue').value) || 0,
+      isSpouseOrLinealRelativeTransaction: document.getElementById('atSpouseTransaction').checked,
+      spouseTransactionExceptionType: document.getElementById('atSpouseExceptionType').value,
+      isOtherRelatedPartyTransaction: document.getElementById('atOtherRelatedParty').checked,
+      marketValueForGateCheck: numVal(document.getElementById('atMarketValueGate').value) || 0,
       isOneHouseholdOneHouseInheritance: document.getElementById('atOneHouseInherit').checked,
       isCorporation: document.getElementById('atCorporation').checked,
       houseCountIncludingThis: numVal(document.getElementById('atHouseCount').value) || 1,

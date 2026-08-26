@@ -898,7 +898,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_acquisition_tax',
-    description: '지방세법상 취득세(부동산)와 그에 부가되는 지방교육세(§151①1호)·농어촌특별세(§5①6호, 농어촌특별세법)를 함께 계산한다. 취득원인(상속·무상취득(증여)·원시취득(신축)·공유물분할·이혼재산분할·유상취득)과 부동산종류(주택·농지·기타)에 따라 §11·§12의 표준세율을 적용하고, 주택 유상취득은 §13의2(법인 12%, 다주택자 8%/12%, 일시적2주택·저가주택 중과제외)를, 주택 무상취득은 §13의2②(조정대상지역 3억원이상 고가주택 증여 12% 중과)를, 사치성재산(골프장·고급주택·고급오락장·고급선박)은 §13⑤(표준세율+8%p)를 반영한다. 지방교육세는 §13의2 해당시 0.4% 고정, §11①8호 주택 유상취득은 적용세율×10%, 그 외는 (표준세율-2%)×20%로 계산되며 사치성재산 가산분은 반영되지 않는다. 농어촌특별세는 과세표준×0.2%가 원칙이나 §15①1~3호 특례(1가구1주택 상속 등)는 비과세다. 지방세특례제한법상 감면은 생애최초 주택 구입(§36의3, isFirstTimeHomeBuyer — 200만원 또는 300만원 한도 공제/면제), 자경농민 농지 감면(§6①, isSelfFarmingFarmer — 50% 경감, 농특세 비과세), 국가유공자등 대부금 감면(§29①, isNationalMeritorious — 85㎡이하 주택은 전액면제, 그 외는 대부금 한도까지 비례면제)만 반영하고, 그 외(다자녀는 자동차만 해당·서민주택 임대·전세사기피해자 등)는 반영하지 않는다.',
+    description: '지방세법상 취득세(부동산)와 그에 부가되는 지방교육세(§151①1호)·농어촌특별세(§5①6호, 농어촌특별세법)를 함께 계산한다. 취득원인(상속·무상취득(증여)·원시취득(신축)·공유물분할·이혼재산분할·유상취득)과 부동산종류(주택·농지·기타)에 따라 §11·§12의 표준세율을 적용하고, 주택 유상취득은 §13의2(법인 12%, 다주택자 8%/12%, 일시적2주택·저가주택 중과제외)를, 주택 무상취득은 §13의2②(조정대상지역 3억원이상 고가주택 증여 12% 중과)를, 사치성재산(골프장·고급주택·고급오락장·고급선박)은 §13⑤(표준세율+8%p)를 반영한다. 지방교육세는 §13의2 해당시 0.4% 고정, §11①8호 주택 유상취득은 적용세율×10%, 그 외는 (표준세율-2%)×20%로 계산되며 사치성재산 가산분은 반영되지 않는다. 농어촌특별세는 과세표준×0.2%가 원칙이나 §15①1~3호 특례(1가구1주택 상속 등)는 비과세다. 지방세특례제한법상 감면은 생애최초 주택 구입(§36의3, isFirstTimeHomeBuyer — 200만원 또는 300만원 한도 공제/면제), 자경농민 농지 감면(§6①, isSelfFarmingFarmer — 50% 경감, 농특세 비과세), 국가유공자등 대부금 감면(§29①, isNationalMeritorious — 85㎡이하 주택은 전액면제, 그 외는 대부금 한도까지 비례면제)만 반영하고, 그 외(다자녀는 자동차만 해당·서민주택 임대·전세사기피해자 등)는 반영하지 않는다. 유상취득에서 특수관계인 간 저가거래는 두 갈래로 게이트를 둔다 — 배우자·직계존비속 간 거래는 §7⑪(isSpouseOrLinealRelativeTransaction)에 따라 원칙 증여로 재분류하되 4호 대가지급증명 예외는 30%/3억원 게이트로 다시 배제하고, 그 외 특수관계인 간 거래는 §10조의3②·시행령§18의2(isOtherRelatedPartyTransaction)에 따라 5%/3억원 게이트로 취득당시가액을 시가인정액으로 재산정한다(marketValueForGateCheck로 판정).',
     input_schema: {
       type: 'object',
       properties: {
@@ -922,7 +922,11 @@ const DRIVE_TOOLS = [
         isSelfFarmingFarmer: { type: 'boolean', description: '지방세특례제한법§6①(자경농민 농지 감면) — acquisitionType이 paid이고 propertyType이 farmland일 때, 2년 이상 영농에 종사한 자경농민(또는 후계농업경영인등)이 직접 경작할 목적으로 취득하는 경우인지. true면 취득세·지방교육세를 50% 경감하고 농어촌특별세는 비과세한다(농특세법§4 10호). 2년 이내 미경작·매각시 추징(§6①단서)되나 이 도구는 그 사후관리를 판정하지 않는다.' },
         isNationalMeritorious: { type: 'boolean', description: '지방세특례제한법§29①(국가유공자등에 대한 감면) — 국가유공자법·보훈보상대상자법·5.18민주유공자법·특수임무유공자법에 따른 대부금을 받은 사람(부동산 취득일부터 60일 이내 대부금 수령 포함)이 부동산을 취득하는 경우인지. propertyType이 house이고 isSmallHouse85sqmOrLess가 true이면 대부금 초과분을 포함해 취득세·지방교육세 전액을 면제하고(§29①1호), 그 외 부동산은 대부금(meritoriousLoanAmount) 한도까지만 비례 면제한다(§29①2호, 초과분은 과세). 2026.12.31까지 취득분에 적용된다.' },
         isSmallHouse85sqmOrLess: { type: 'boolean', description: 'isNationalMeritorious가 true이고 propertyType이 house일 때 — 전용면적 85제곱미터 이하 주택인지. true면 대부금 한도와 무관하게 취득세를 전액 면제한다(§29①1호).' },
-        meritoriousLoanAmount: { type: 'number', description: 'isNationalMeritorious가 true이고(house가 아니거나 85㎡ 초과 주택일 때) — 국가유공자등이 받은 대부금(원). 취득가액 중 이 금액에 해당하는 비율만큼만 취득세가 면제되고 초과분은 과세된다(§29①2호).' }
+        meritoriousLoanAmount: { type: 'number', description: 'isNationalMeritorious가 true이고(house가 아니거나 85㎡ 초과 주택일 때) — 국가유공자등이 받은 대부금(원). 취득가액 중 이 금액에 해당하는 비율만큼만 취득세가 면제되고 초과분은 과세된다(§29①2호).' },
+        isSpouseOrLinealRelativeTransaction: { type: 'boolean', description: '§7⑪ — acquisitionType이 paid일 때, 배우자 또는 직계존비속으로부터 부동산등을 취득하는 거래인지. true이면 원칙적으로 증여로 취득한 것으로 보되(본문), spouseTransactionExceptionType으로 예외 사유를 주장할 수 있다. 예외를 주장하지 않으면 자동으로 acquisitionType이 gift로 재분류되고 과세표준도 marketValueForGateCheck(시가인정액) 기준으로 바뀐다.' },
+        spouseTransactionExceptionType: { type: 'string', enum: ['public_auction', 'bankruptcy', 'exchange', 'proven_consideration'], description: 'isSpouseOrLinealRelativeTransaction이 true일 때 — §7⑪ 각 호의 예외 사유. public_auction=1호(공매, 경매포함), bankruptcy=2호(파산선고로 처분되는 부동산 취득), exchange=3호(등기·등록이 필요한 부동산등의 교환), proven_consideration=4호(취득자의 소득·재산처분대금 등으로 대가를 지급한 사실이 증명되는 경우 — 단, 그 대가가 시가인정액보다 낮고 차액이 3억원 이상이거나 시가인정액의 30% 이상이면(marketValueForGateCheck로 판정) 이 예외가 재배제되어 증여로 재분류된다).' },
+        isOtherRelatedPartyTransaction: { type: 'boolean', description: '법§10조의3②·시행령§18의2(부당행위계산) — acquisitionType이 paid일 때, 배우자·직계존비속이 아닌 그 밖의 특수관계인으로부터 취득하는 거래인지. true이고 실제 취득가액이 marketValueForGateCheck(시가인정액)보다 낮으며 그 차액이 3억원 이상이거나 시가인정액의 5% 이상이면, 취득당시가액을 시가인정액으로 재산정한다(acquisitionType 자체는 유상취득 그대로 유지).' },
+        marketValueForGateCheck: { type: 'number', description: 'isSpouseOrLinealRelativeTransaction(§7⑪4호 30%/3억원 게이트) 또는 isOtherRelatedPartyTransaction(시행령§18의2 5%/3억원 게이트) 판정에 쓰는 비교대상 시가인정액(원, 시가를 산정하기 어려우면 시가표준액).' }
       },
       required: ['acquisitionType', 'propertyType', 'acquisitionValue']
     }
@@ -8048,7 +8052,7 @@ function acquisitionTaxHouseSlidingRate_(value) {
 // §13의2(법인·다주택자 중과, 조정대상지역 고가주택 무상취득 중과)·§15(세율의 특례)·§17(면세점)를 반영한다.
 function toolCalculateAcquisitionTax(p) {
   p = p || {};
-  const acquisitionType = p.acquisitionType;
+  let acquisitionType = p.acquisitionType;
   if (['inheritance', 'gift', 'original', 'division', 'divorce_division', 'paid'].indexOf(acquisitionType) === -1) {
     return { error: 'acquisitionType을 inheritance/gift/original/division/divorce_division/paid 중에서 선택하세요.' };
   }
@@ -8056,11 +8060,49 @@ function toolCalculateAcquisitionTax(p) {
   if (['house', 'farmland', 'other'].indexOf(propertyType) === -1) {
     return { error: 'propertyType을 house/farmland/other 중에서 선택하세요.' };
   }
-  const acquisitionValue = Number(p.acquisitionValue);
+  let acquisitionValue = Number(p.acquisitionValue);
   if (!(acquisitionValue >= 0)) return { error: 'acquisitionValue(취득세 과세표준, 취득당시가액)가 필요합니다.' };
 
+  // §7⑪(배우자·직계존비속 간 거래 — 원칙 증여, 4호 대가지급증명도 30%/3억원 게이트로 재배제)와
+  // §10조의3②·시행령§18의2(그 외 특수관계인 간 저가취득 — 5%/3억원 게이트로 취득당시가액을
+  // 시가인정액으로 재산정하는 부당행위계산)를 유상취득에 한해 반영한다.
+  let relatedPartyGateNote = '';
+  if (acquisitionType === 'paid' && p.isSpouseOrLinealRelativeTransaction) {
+    const exceptionType = p.spouseTransactionExceptionType;
+    const marketValueForGate = Number(p.marketValueForGateCheck);
+    if (['public_auction', 'bankruptcy', 'exchange'].indexOf(exceptionType) !== -1) {
+      const labelMap = { public_auction: '1호(공매)', bankruptcy: '2호(파산선고로 처분)', exchange: '3호(등기·등록이 필요한 부동산등의 교환)' };
+      relatedPartyGateNote = ' §7⑪' + labelMap[exceptionType] + ' — 배우자·직계존비속 간 거래이나 예외 사유에 해당해 유상취득으로 인정됩니다.';
+    } else if (exceptionType === 'proven_consideration') {
+      if (!(marketValueForGate > 0)) {
+        acquisitionType = 'gift';
+        relatedPartyGateNote = ' §7⑪본문 — 대가지급 증명(4호)을 주장했으나 비교할 시가인정액(marketValueForGateCheck)이 입력되지 않아 30%/3억원 게이트를 판정할 수 없어 원칙(증여)으로 처리했습니다.';
+      } else if (acquisitionValue < marketValueForGate && (marketValueForGate - acquisitionValue >= 300000000 || marketValueForGate - acquisitionValue >= marketValueForGate * 0.3)) {
+        const diff = marketValueForGate - acquisitionValue;
+        acquisitionType = 'gift';
+        acquisitionValue = marketValueForGate;
+        relatedPartyGateNote = ' §7⑪4호 단서 — 실제 대가와 시가인정액(' + marketValueForGate + '원)의 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 30% 이상이어서, 대가지급 증명이 있어도 유상취득으로 인정되지 않고 증여(무상취득, 과세표준은 시가인정액 기준)로 재분류되었습니다.';
+      } else {
+        relatedPartyGateNote = ' §7⑪4호(대가지급 증명) — 실제 대가와 시가인정액의 차액이 게이트(3억원 또는 시가인정액의 30%) 미만이거나 대가가 시가인정액 이상이어서 유상취득으로 인정됩니다.';
+      }
+    } else {
+      acquisitionType = 'gift';
+      acquisitionValue = marketValueForGate > 0 ? marketValueForGate : acquisitionValue;
+      relatedPartyGateNote = ' §7⑪본문 — 배우자·직계존비속 간 부동산 취득은 예외 사유(spouseTransactionExceptionType)를 주장하지 않으면 원칙적으로 증여로 취득한 것으로 봅니다.';
+    }
+  } else if (acquisitionType === 'paid' && p.isOtherRelatedPartyTransaction) {
+    const marketValueForGate = Number(p.marketValueForGateCheck);
+    if (marketValueForGate > 0 && acquisitionValue < marketValueForGate) {
+      const diff = marketValueForGate - acquisitionValue;
+      if (diff >= 300000000 || diff >= marketValueForGate * 0.05) {
+        acquisitionValue = marketValueForGate;
+        relatedPartyGateNote = ' 시행령§18의2(부당행위계산, 법§10조의3②) — 특수관계인으로부터 시가인정액(' + marketValueForGate + '원)보다 낮은 가격으로 취득했고 그 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 5% 이상이어서, 취득당시가액을 시가인정액으로 재산정합니다.';
+      }
+    }
+  }
+
   if (acquisitionValue <= 500000) {
-    return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' };
+    return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' + relatedPartyGateNote };
   }
 
   let rate, basis;
@@ -8187,8 +8229,13 @@ function toolCalculateAcquisitionTax(p) {
     적용세율: Math.round(rate * 100000) / 1000, 적용근거: basis + luxuryNote,
     과세표준: acquisitionValue, 산출세액: tax,
     지방교육세: finalEduTax, 농어촌특별세: finalNaTax, 납부세액_합계: finalTax + finalEduTax + finalNaTax,
-    안내: '지방교육세(§151①1호 — 취득 유형별로 세율이 갈립니다: 일반취득은 표준세율에서 중과기준세율 2%를 뺀 세율×20%, §13의2 법인·다주택 중과는 항상 (4%-2%)×20%=0.4% 고정, §11①8호 일반 주택 유상취득은 적용세율(사치성 가산 전)×50%×20%)와 농어촌특별세(§5①6호 — 취득세 과세표준×2%×10%=0.2%, 지방세법§15①1~3호 특례(1가구1주택 상속 등)는 §4 10호의4로 비과세)를 함께 계산했습니다. 사치성재산(§13⑤) 가산분(+8%p)은 지방교육세 근거조문(§151①1호 가·나목)이 §13②③⑥⑦·§13의2만 지정하고 있어 이 계산에는 반영하지 않았습니다.' + reliefNote + ' 위 세 감면 외 지방세특례제한법상 다른 감면(다자녀는 자동차 취득세만 해당해 부동산과 무관·서민임대주택·전세사기피해자 등)은 이 도구가 아직 다루지 않습니다. 재산세 도시지역분과 마찬가지로 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16).'
+    안내: '지방교육세(§151①1호 — 취득 유형별로 세율이 갈립니다: 일반취득은 표준세율에서 중과기준세율 2%를 뺀 세율×20%, §13의2 법인·다주택 중과는 항상 (4%-2%)×20%=0.4% 고정, §11①8호 일반 주택 유상취득은 적용세율(사치성 가산 전)×50%×20%)와 농어촌특별세(§5①6호 — 취득세 과세표준×2%×10%=0.2%, 지방세법§15①1~3호 특례(1가구1주택 상속 등)는 §4 10호의4로 비과세)를 함께 계산했습니다.' + relatedPartyGateNote + ' 사치성재산(§13⑤) 가산분(+8%p)은 지방교육세 근거조문(§151①1호 가·나목)이 §13②③⑥⑦·§13의2만 지정하고 있어 이 계산에는 반영하지 않았습니다.' + reliefNote + ' 위 세 감면 외 지방세특례제한법상 다른 감면(다자녀는 자동차 취득세만 해당해 부동산과 무관·서민임대주택·전세사기피해자 등)은 이 도구가 아직 다루지 않습니다. 재산세 도시지역분과 마찬가지로 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16).'
   };
+  if (acquisitionType !== p.acquisitionType || acquisitionValue !== Number(p.acquisitionValue)) {
+    result.재분류적용여부 = true;
+    result.최종적용_취득유형 = acquisitionType;
+    result.최종적용_과세표준 = acquisitionValue;
+  }
   if (finalTax !== tax) {
     result.감면전_취득세_산출세액 = tax;
     result.취득세_감면세액 = tax - finalTax;
