@@ -2914,6 +2914,7 @@ function renderGiftPane(){
         '<div class="taxcalc-field"><label>인수채무액(부담부증여, 창업자금만)</label><input type="number" id="srDebtAssumed" placeholder="원 (없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>기 과세특례적용분 증여세과세가액</label><input type="number" id="srPriorSpecialGift" placeholder="원 (동일특례 재차증여, 없으면 비움)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="srJobsCreated10Plus"><label for="srJobsCreated10Plus">(창업자금) 창업으로 10명 이상 신규고용 — 한도 100억(아니면 50억)</label></div>' +
+        '<div class="taxcalc-field"><label>(창업자금) 사용명세 미제출·불분명 금액</label><input type="number" id="srUnclearUsage" placeholder="원 (§30의5⑤, 0.3% 가산세 — 없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>(가업승계) 증여자(부모)의 가업영위기간</label><input type="number" id="srBusinessYears" placeholder="년 — 20미만 300억/20~30 400억/30이상 600억" maxlength="2"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="srReSuccession"><label for="srReSuccession">(가업승계) §30의6①단서 — 승계 당시 최대주주등(당초 증여자·수증자 제외)으로부터 재증여</label></div>' +
       '</div>' +
@@ -4188,6 +4189,7 @@ function renderSpecialRateGiftResult(r){
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));
   if (r.납부지연가산세) html += taxCalcResultRow('납부지연가산세', '+' + won(r.납부지연가산세));
+  if (r.창업자금사용명세미제출가산세) html += taxCalcResultRow('창업자금 사용명세 미제출가산세(§30의5⑤)', '+' + won(r.창업자금사용명세미제출가산세));
   html += taxCalcResultRow('납부세액', won(r.납부세액), { total: true });
   if (r.기본세율적용대상_증여재산가액) html += '<div class="taxcalc-result-note">한도를 초과하는 ' + won(r.기본세율적용대상_증여재산가액) + '은 이 결과와 별개로 위 일반 증여세 계산기로 반드시 신고하세요.</div>';
   html += '<div class="taxcalc-result-note">이 특례에는 신고세액공제(3%)가 적용되지 않습니다. 가업영위기간·중소/중견기업 여부 등 자격요건은 별도로 확인하세요. 실제 신고 전 홈택스 모의계산으로 재검증하세요.</div>';
@@ -5859,6 +5861,7 @@ taxCalcView.addEventListener('click', function(e){
       debtAssumedAmount: numVal(document.getElementById('srDebtAssumed').value) || 0,
       priorSpecialGiftAmount: numVal(document.getElementById('srPriorSpecialGift').value) || 0,
       jobsCreated10Plus: document.getElementById('srJobsCreated10Plus').checked,
+      unclearOrUnsubmittedUsageAmount: numVal(document.getElementById('srUnclearUsage').value) || 0,
       businessOwnershipYearsOfParent: numVal(document.getElementById('srBusinessYears').value) || 0,
       totalAssetValue: numVal(document.getElementById('srTotalAsset').value) || 0,
       nonBizAsset55: numVal(document.getElementById('srNonBiz55').value) || 0,
