@@ -3277,6 +3277,56 @@
     };
   };
 
+  // 주식등 이월과세 (소득세법§97의2①, §94①3호 자산은 1년 이내 양도시 적용) — 부동산용
+  // calculateTransferTaxWithCarryoverJS와 같은 원리이나 기간요건이 1년이고, 1세대1주택 비과세 배제·
+  // 수용특례는 주식에 해당사항이 없어 적용하지 않는다.
+  window.calculateStockTransferTaxWithCarryoverJS = function (p) {
+    p = p || {};
+    const giftReceivedDate = p.giftReceivedDate;
+    const donorRelation = p.donorRelation;
+    const isEligibleRelation = donorRelation === 'spouse' || donorRelation === 'lineal';
+    const yearsSinceGift = (giftReceivedDate && p.transferDate) ? fullYearsElapsed(giftReceivedDate, p.transferDate) : Infinity;
+    const isWithinWindow = yearsSinceGift < 1 || (yearsSinceGift === 1 && giftReceivedDate === p.transferDate);
+
+    const withoutCarryoverParams = Object.assign({}, p, {
+      acquisitionPrice: Number(p.doneeOwnAcquisitionPrice) || 0
+    });
+    const withoutResult = window.calculateStockTransferTaxJS(withoutCarryoverParams);
+
+    if (!isEligibleRelation || !isWithinWindow) {
+      if (withoutResult && !withoutResult.error) {
+        withoutResult.이월과세_적용여부 = false;
+        withoutResult.이월과세_미적용사유 = !isEligibleRelation ? '배우자·직계존비속으로부터의 증여가 아님' : '증여일로부터 1년 경과(§94①3호 주식등, §97의2①)';
+      }
+      return withoutResult;
+    }
+
+    const donorAcqPrice = Number(p.donorAcquisitionPrice) || 0;
+    const giftTaxPaid = Number(p.giftTaxPaid) || 0;
+    const giftTaxableValue = Number(p.giftTaxableValue) || 0;
+    const assetGiftTaxableValue = Number(p.doneeOwnAcquisitionPrice) || 0;
+    const giftTaxEquivalent = giftTaxableValue > 0 ? Math.round(giftTaxPaid * assetGiftTaxableValue / giftTaxableValue) : 0;
+    const necessaryExpenseCap = Math.max(0, (Number(p.transferPrice) || 0) - donorAcqPrice);
+    const cappedGiftTaxEquivalent = Math.min(giftTaxEquivalent, necessaryExpenseCap);
+
+    const withCarryoverParams = Object.assign({}, p, {
+      acquisitionPrice: donorAcqPrice,
+      transferExpenses: (Number(p.transferExpenses) || 0) + cappedGiftTaxEquivalent
+    });
+    const withResult = window.calculateStockTransferTaxJS(withCarryoverParams);
+
+    const withTax = (withResult && typeof withResult.납부세액_합계 === 'number') ? withResult.납부세액_합계 : Infinity;
+    const withoutTax = (withoutResult && typeof withoutResult.납부세액_합계 === 'number') ? withoutResult.납부세액_합계 : Infinity;
+
+    const chosen = withTax < withoutTax ? withoutResult : withResult;
+    if (chosen && !chosen.error) {
+      chosen.이월과세_적용여부 = chosen === withResult;
+      if (chosen !== withResult) chosen.이월과세_미적용사유 = '§97의2②3호 — 이월과세를 적용한 세액(' + withTax + '원)이 미적용시 세액(' + withoutTax + '원)보다 적어 미적용';
+      chosen.이월과세_비교 = { 적용시_세액: withTax, 미적용시_세액: withoutTax, 증여세상당액_필요경비산입: cappedGiftTaxEquivalent };
+    }
+    return chosen;
+  };
+
   // 신축주택·미분양주택 취득자 양도소득세 감면(조특법§99,§99의2,§99의3) — 세 조문 모두 취득기간이
   // 정해진 특정 신축주택·미분양주택(§99: 1998.5.22~1999.6.30(국민주택 1999.12.31), §99의2:
   // 2013.4.1~2013.12.31, §99의3: 2001.5.23~2003.6.30)을 취득한 경우, 취득일부터 5년 이내 양도하면

@@ -1998,6 +1998,32 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_stock_transfer_tax_with_carryover',
+    description: '주식등 이월과세(소득세법§97의2①, 2023.12.31 개정으로 §94①3호 주식등이 명시적으로 포함됨) 적용 대상 주식 양도소득세를 계산한다. 거주자가 배우자·직계존비속으로부터 증여받은 주식등을 증여일로부터 1년(부동산은 10년) 이내에 양도하면, 수증자 본인의 취득가액이 아니라 증여자의 원취득가액을 승계하고 수증자가 낸 증여세 상당액을 양도비용에 더한다. 요건(관계·기간)을 충족 못하거나 적용시 세액이 미적용시보다 적으면 이월과세를 적용하지 않고 수증자 본인 값(doneeOwnAcquisitionPrice)으로 계산한다 — 이 판정과 두 시나리오 비교를 이 도구가 전부 자동으로 한다. 부동산용 calculate_transfer_tax_with_carryover와 달리 1세대1주택 비과세 배제(§97의2②2호)·수용 특례(§97의2②1호)는 주식에 해당사항이 없어 적용하지 않는다. calculate_stock_transfer_tax의 모든 입력 필드를 그대로 받으며, 여기 추가되는 필드만 별도로 설명한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        assetCategory: { type: 'string', enum: ['domestic_stock', 'foreign_stock', 'derivative', 'other_asset', 'trust_beneficiary'], description: 'calculate_stock_transfer_tax와 동일.' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        transferDate: { type: 'string', description: '양도일 YYYY-MM-DD' },
+        transferExpenses: { type: 'number', description: '이번 양도 시 수증자가 추가로 지출한 양도비용(원, 증권거래세 등). 이월과세 적용시 여기에 증여세상당액이 자동으로 더해진다.' },
+        isDaejuju: { type: 'boolean', description: 'calculate_stock_transfer_tax와 동일.' },
+        isSmallMediumCompany: { type: 'boolean', description: 'calculate_stock_transfer_tax와 동일.' },
+        holdingMonths: { type: 'integer', description: 'calculate_stock_transfer_tax와 동일 — 이월과세 적용시에도 수증자 본인의 실제 보유기간을 그대로 넣는다(취득일만 세법상 승계되고 시행령상 보유기간 기산일 특례는 별도 규정이 없음).' },
+        priorNetGainOrLoss: { type: 'number', description: 'calculate_stock_transfer_tax와 동일.' },
+        basicDeductionAlreadyUsed: { type: 'number', description: 'calculate_stock_transfer_tax와 동일.' },
+        giftReceivedDate: { type: 'string', description: '증여받은 날 YYYY-MM-DD — 이 날짜와 양도일 사이가 1년을 넘으면 이월과세를 적용하지 않는다(§94①3호 자산 특례, §97의2①).' },
+        donorRelation: { type: 'string', enum: ['spouse', 'lineal'], description: '증여자와의 관계. spouse=배우자, lineal=직계존속 또는 직계비속. 이 둘이 아니면(예: 형제자매) 이월과세를 적용하지 않는다.' },
+        donorAcquisitionPrice: { type: 'number', description: '증여자가 해당 주식등을 취득할 당시의 실지거래가액(원) — 이월과세 적용시 취득가액으로 쓰인다.' },
+        doneeOwnAcquisitionPrice: { type: 'number', description: '수증자 본인 기준 취득가액(원) — 증여 당시 상증세법상 평가액(=증여세 과세가액 산정 기초)을 넣는다. 이월과세 미적용 시나리오의 취득가액이자, 증여세상당액 계산의 분자로도 쓰인다.' },
+        giftTaxPaid: { type: 'number', description: '수증자가 이 주식등에 대해 납부했거나 납부할 증여세 산출세액(원) — 증여세상당액 계산에 쓰인다.' },
+        giftTaxableValue: { type: 'number', description: '수증자의 전체 증여세 과세가액(원) — 이 주식등 외에 함께 증여받은 재산이 있으면 그 합계까지 포함한 전체 금액(이 주식만 증여받았다면 doneeOwnAcquisitionPrice와 같은 값).' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'calculate_stock_transfer_tax와 동일.' }
+      },
+      required: ['assetCategory', 'transferPrice', 'transferDate', 'giftReceivedDate', 'donorRelation', 'doneeOwnAcquisitionPrice']
+    }
+  },
+  {
     name: 'calculate_unlisted_stock_value',
     description: '비상장주식을 상증세법 §63·시행령 §54 보충적평가방법(순손익가치·순자산가치 가중평균)으로 평가한다. 증여재산가액·상속재산가액에 비상장주식이 포함될 때 그 평가액을 구하는 용도다.',
     input_schema: {
@@ -7427,6 +7453,60 @@ function toolCalculateStockTransferTax(p) {
   };
 }
 
+// 주식등 이월과세 (소득세법§97의2①, 2023.12.31 개정으로 §94①3호 주식등이 명시적으로 포함됨) —
+// 배우자·직계존비속으로부터 증여받은 주식등을 증여일로부터 "1년"(부동산은 10년) 이내에 양도하면
+// 수증자 본인 취득가액이 아니라 증여자의 원취득가액을 승계하고 증여세 상당액을 필요경비(양도비용)에
+// 더한다. toolCalculateTransferTaxWithCarryover와 같은 원리이나: (1) 기간요건이 1년으로 다르고,
+// (2) §97의2②2호(적용시 1세대1주택 비과세가 되는 경우 배제)는 주식에는 해당사항이 없어 적용하지 않으며,
+// (3) §97의2②1호(수용 특례)도 부동산 전용이라 여기서는 받지 않는다. §97의2②3호(적용시 세액이 더
+// 낮으면 미적용)만 공통 적용한다.
+function toolCalculateStockTransferTaxWithCarryover(p) {
+  p = p || {};
+  const giftReceivedDate = p.giftReceivedDate;
+  const donorRelation = p.donorRelation; // 'spouse' | 'lineal'
+  const isEligibleRelation = donorRelation === 'spouse' || donorRelation === 'lineal';
+  const yearsSinceGift = (giftReceivedDate && p.transferDate) ? fullYearsElapsed_(giftReceivedDate, p.transferDate) : Infinity;
+  const isWithinWindow = yearsSinceGift < 1 || (yearsSinceGift === 1 && giftReceivedDate === p.transferDate);
+
+  const withoutCarryoverParams = Object.assign({}, p, {
+    acquisitionPrice: Number(p.doneeOwnAcquisitionPrice) || 0
+  });
+  const withoutResult = toolCalculateStockTransferTax(withoutCarryoverParams);
+
+  if (!isEligibleRelation || !isWithinWindow) {
+    if (withoutResult && !withoutResult.error) {
+      withoutResult.이월과세_적용여부 = false;
+      withoutResult.이월과세_미적용사유 = !isEligibleRelation ? '배우자·직계존비속으로부터의 증여가 아님' : '증여일로부터 1년 경과(§94①3호 주식등, §97의2①)';
+    }
+    return withoutResult;
+  }
+
+  const donorAcqPrice = Number(p.donorAcquisitionPrice) || 0;
+  const giftTaxPaid = Number(p.giftTaxPaid) || 0;
+  const giftTaxableValue = Number(p.giftTaxableValue) || 0;
+  const assetGiftTaxableValue = Number(p.doneeOwnAcquisitionPrice) || 0;
+  const giftTaxEquivalent = giftTaxableValue > 0 ? Math.round(giftTaxPaid * assetGiftTaxableValue / giftTaxableValue) : 0;
+  const necessaryExpenseCap = Math.max(0, (Number(p.transferPrice) || 0) - donorAcqPrice);
+  const cappedGiftTaxEquivalent = Math.min(giftTaxEquivalent, necessaryExpenseCap);
+
+  const withCarryoverParams = Object.assign({}, p, {
+    acquisitionPrice: donorAcqPrice,
+    transferExpenses: (Number(p.transferExpenses) || 0) + cappedGiftTaxEquivalent
+  });
+  const withResult = toolCalculateStockTransferTax(withCarryoverParams);
+
+  const withTax = (withResult && typeof withResult.납부세액_합계 === 'number') ? withResult.납부세액_합계 : Infinity;
+  const withoutTax = (withoutResult && typeof withoutResult.납부세액_합계 === 'number') ? withoutResult.납부세액_합계 : Infinity;
+
+  const chosen = withTax < withoutTax ? withoutResult : withResult;
+  if (chosen && !chosen.error) {
+    chosen.이월과세_적용여부 = chosen === withResult;
+    if (chosen !== withResult) chosen.이월과세_미적용사유 = '§97의2②3호 — 이월과세를 적용한 세액(' + withTax + '원)이 미적용시 세액(' + withoutTax + '원)보다 적어 미적용';
+    chosen.이월과세_비교 = { 적용시_세액: withTax, 미적용시_세액: withoutTax, 증여세상당액_필요경비산입: cappedGiftTaxEquivalent };
+  }
+  return chosen;
+}
+
 // 신축주택·미분양주택 취득자 양도소득세 감면(조특법§99,§99의2,§99의3) — 세 조문 모두 취득기간이
 // 정해진 특정 신축주택·미분양주택(§99: 1998.5.22~1999.6.30(국민주택 1999.12.31), §99의2:
 // 2013.4.1~2013.12.31, §99의3: 2001.5.23~2003.6.30)을 취득한 경우, 취득일부터 5년 이내 양도하면
@@ -10559,6 +10639,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_gift_special_provision_overlap' ||
         b.name === 'calculate_interest_free_loan_gift_amount' ||
         b.name === 'calculate_stock_transfer_tax' ||
+        b.name === 'calculate_stock_transfer_tax_with_carryover' ||
         b.name === 'calculate_unlisted_stock_value' ||
         b.name === 'calculate_land_value' ||
         b.name === 'calculate_house_value' ||
@@ -11009,6 +11090,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_stock_transfer_tax') {
         const resultObj = toolCalculateStockTransferTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_stock_transfer_tax_with_carryover') {
+        const resultObj = toolCalculateStockTransferTaxWithCarryover(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

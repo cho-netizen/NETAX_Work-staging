@@ -2082,6 +2082,39 @@ function renderTransferPane(){
       '<div id="taxCalcStockTransferResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>주식등 이월과세(소득세법§97의2①) — 배우자·직계존비속에게 증여받은 주식등을 증여일로부터 1년 이내에 양도할 때. 위 주식 양도세 계산과 별도로 여기서 계산합니다(요건 미충족·세액비교로 배제되면 자동으로 수증자 본인 값으로 계산됩니다)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>자산구분</label><select id="scAssetCategory">' +
+          '<option value="domestic_stock">국내주식등</option><option value="foreign_stock">국외주식등</option>' +
+          '<option value="derivative">파생상품등</option><option value="other_asset">기타자산</option>' +
+          '<option value="trust_beneficiary">신탁 수익권</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="scTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="scTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도비용</label><input type="number" id="scTransferExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="scIsDaejuju"><label for="scIsDaejuju">대주주(국내주식만 해당)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="scIsSmallMedium"><label for="scIsSmallMedium">중소기업 발행주식</label></div>' +
+        '<div class="taxcalc-field"><label>보유기간(대주주만)</label><input type="number" id="scHoldingMonths" placeholder="개월"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>증여·이월과세 판정 정보</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>증여받은 날</label><input type="date" id="scGiftDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>증여자와의 관계</label><select id="scDonorRelation"><option value="spouse">배우자</option><option value="lineal">직계존속·직계비속</option><option value="other">그 밖의 관계(이월과세 대상 아님)</option></select></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>증여자(원소유자) 취득정보 — 이월과세 적용시 취득가액으로 씁니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>증여자의 취득가액</label><input type="number" id="scDonorAcqPrice" placeholder="원"></div>' +
+      '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>수증자 본인 기준 정보 — 이월과세가 배제될 때 대신 쓰이는 값</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>증여 당시 평가액(수증자의 취득가액)</label><input type="number" id="scDoneeAcqPrice" placeholder="원 (=이 자산의 증여세 과세가액)"></div>' +
+        '<div class="taxcalc-field"><label>수증자가 낸 증여세 산출세액</label><input type="number" id="scGiftTaxPaid" placeholder="원 (이 자산분)"></div>' +
+        '<div class="taxcalc-field"><label>수증자의 전체 증여세 과세가액</label><input type="number" id="scGiftTaxableValue" placeholder="원 (이 자산만 증여받았으면 위 평가액과 동일)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-stock-transfer-carryover">이월과세 적용 여부 판정하고 세액 계산하기</button>' +
+      '<div id="taxCalcStockCarryoverResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>국외자산 양도소득세(소득세법§118의2~§118의8) — 국내자산 양도세와 완전히 별도 세목. 양도일까지 계속 5년이상 국내거주자가 국외 토지·건물·부동산에관한권리·기타자산을 양도할 때</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="oaResident5yr"><label for="oaResident5yr">양도일까지 계속 5년 이상 국내에 주소·거소를 둔 거주자</label></div>' +
@@ -2692,6 +2725,31 @@ function renderStockTransferResult(r){
   html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
   html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '<div class="taxcalc-result-note">' + (r.안내 || '') + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderStockCarryoverResult(r){
+  const box = document.getElementById('taxCalcStockCarryoverResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.이월과세_적용여부 === true){
+    html += '<div class="taxcalc-result-note">✅ 이월과세(소득세법§97의2①)를 적용했습니다 — 증여자의 취득가액을 승계했습니다.</div>';
+  } else if (r.이월과세_적용여부 === false){
+    html += '<div class="taxcalc-result-note">⛔ 이월과세를 적용하지 않았습니다(' + (r.이월과세_미적용사유 || '') + ') — 수증자 본인의 취득가액으로 계산했습니다.</div>';
+  }
+  if (r.이월과세_비교){
+    html += taxCalcResultRow('(이월과세 적용시 세액)', won(r.이월과세_비교.적용시_세액));
+    html += taxCalcResultRow('(이월과세 미적용시 세액)', won(r.이월과세_비교.미적용시_세액));
+    if (r.이월과세_비교.증여세상당액_필요경비산입) html += taxCalcResultRow('증여세상당액(양도비용 산입)', won(r.이월과세_비교.증여세상당액_필요경비산입));
+  }
+  html += taxCalcResultRow('양도차익', won(r.양도차익));
+  html += taxCalcResultRow('기본공제', won(r.기본공제));
+  html += taxCalcResultRow('과세표준', won(r.과세표준));
+  html += taxCalcResultRow('적용세율', r.적용세율_설명);
+  html += taxCalcResultRow('산출세액', won(r.산출세액));
+  html += taxCalcResultRow('지방소득세(10%)', won(r.지방소득세));
+  html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계), { total: true });
   html += '</div>';
   box.innerHTML = html;
 }
@@ -5583,6 +5641,24 @@ taxCalcView.addEventListener('click', function(e){
       transactionAmountForBookkeepingPenalty: numVal(document.getElementById('stBookkeepingPenaltyTxAmount').value) || 0
     };
     renderStockTransferResult(calculateStockTransferTaxJS(input));
+  } else if (action === 'run-stock-transfer-carryover'){
+    const scDonorRelationSel = document.getElementById('scDonorRelation').value;
+    const input = {
+      assetCategory: document.getElementById('scAssetCategory').value,
+      transferPrice: numVal(document.getElementById('scTransferPrice').value) || 0,
+      transferDate: document.getElementById('scTransferDate').value,
+      transferExpenses: numVal(document.getElementById('scTransferExpenses').value) || 0,
+      isDaejuju: document.getElementById('scIsDaejuju').checked,
+      isSmallMediumCompany: document.getElementById('scIsSmallMedium').checked,
+      holdingMonths: numVal(document.getElementById('scHoldingMonths').value) || 0,
+      giftReceivedDate: document.getElementById('scGiftDate').value,
+      donorRelation: scDonorRelationSel === 'other' ? '' : scDonorRelationSel,
+      donorAcquisitionPrice: numVal(document.getElementById('scDonorAcqPrice').value) || 0,
+      doneeOwnAcquisitionPrice: numVal(document.getElementById('scDoneeAcqPrice').value) || 0,
+      giftTaxPaid: numVal(document.getElementById('scGiftTaxPaid').value) || 0,
+      giftTaxableValue: numVal(document.getElementById('scGiftTaxableValue').value) || 0
+    };
+    renderStockCarryoverResult(calculateStockTransferTaxWithCarryoverJS(input));
   } else if (action === 'run-overseas-asset-transfer'){
     const input = {
       wasResidentFiveYearsContinuously: document.getElementById('oaResident5yr').checked,
