@@ -673,11 +673,14 @@
       if (!t.isCompletedNewHousing) {
         // ①1호 — 조합원입주권 자체를 준공 전 양도. §95②단서 "관리처분계획인가...전 토지분 또는 건물분의
         // 양도차익으로 한정"에 따라 장기보유특별공제는 인가전양도차익에만 적용되고, 인가후양도차익에는 전혀 적용되지 않는다.
+        // §95②본문 괄호 — "조합원으로부터 취득한 것"(승계조합원)은 이 장특공제 대상에서 아예 제외된다.
         taxableGain = gainBeforeApproval + gainAfterApproval;
-        const ltRateBefore = longTermRate(holdingYearsBeforeApproval);
+        const isOriginalMember = t.isOriginalMember !== false;
+        const ltRateBefore = isOriginalMember ? longTermRate(holdingYearsBeforeApproval) : 0;
         longTermDeductionAmount = Math.round(Math.max(0, gainBeforeApproval) * ltRateBefore);
         incomeAmount = taxableGain - longTermDeductionAmount;
         reconstructionDetail = { 구분: '조합원입주권(준공전) 양도 — §166①1호', 관리처분계획등인가전양도차익: Math.round(gainBeforeApproval), 관리처분계획등인가후양도차익: Math.round(gainAfterApproval), 인가전_보유기간_년: holdingYearsBeforeApproval, 인가전_장특공제율: ltRateBefore };
+        if (!isOriginalMember) reconstructionDetail.안내_승계조합원 = '조합원으로부터 취득한 조합원입주권은 §95②본문 괄호에 따라 장기보유특별공제 대상에서 제외되어 인가전 구간 공제율을 0으로 적용했습니다.';
         // 소득세법§95③ 후단(고가조합원입주권) — 시행령§160①②의 12억초과 비율안분을 유추적용한다(시행령이
         // 조합원입주권 몫을 명시하지 않은 입법미비로 보아, isOneMemberRightOnly 정의부의 근거 주석 참조).
         // 1세대1조합원입주권 비과세 요건 충족을 전제로 했을 때만 적용한다.
@@ -2858,9 +2861,9 @@
   // 시가 인정범위 판정 (상증세법§60②, 시행령§49) — Code.js toolCalculateFairMarketValueRecognitionGate와 동일 로직.
   window.checkFairMarketValueRecognitionJS = function (p) {
     p = p || {};
-    const taxType = p.taxType === 'inheritance' ? 'inheritance' : (p.taxType === 'gift' ? 'gift' : null);
-    if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여) 중에서 선택하세요.' };
-    if (!p.valuationBaseDate) return { error: '평가기준일(상속개시일 또는 증여일)이 필요합니다.' };
+    const taxType = ['inheritance', 'gift', 'transfer'].indexOf(p.taxType) !== -1 ? p.taxType : null;
+    if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여)/transfer(양도소득세 부당행위계산) 중에서 선택하세요.' };
+    if (!p.valuationBaseDate) return { error: '평가기준일(상속개시일·증여일, 또는 양도소득세의 경우 양도일이나 취득일)이 필요합니다.' };
     const evidenceType = p.evidenceType;
     if (['sale', 'appraisal', 'expropriation_auction_public_sale'].indexOf(evidenceType) === -1) {
       return { error: '증거유형을 매매/감정/수용·경매·공매 중에서 선택하세요.' };
@@ -2871,8 +2874,15 @@
     const evidDate = new Date(p.evidenceDate + 'T00:00:00');
     if (isNaN(baseDate.getTime()) || isNaN(evidDate.getTime())) return { error: '날짜 형식이 올바르지 않습니다(YYYY-MM-DD).' };
 
-    const periodStart = new Date(baseDate.getTime()); periodStart.setMonth(periodStart.getMonth() - 6);
-    const periodEnd = new Date(baseDate.getTime()); periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+    const periodStart = new Date(baseDate.getTime());
+    const periodEnd = new Date(baseDate.getTime());
+    if (taxType === 'transfer') {
+      periodStart.setMonth(periodStart.getMonth() - 3);
+      periodEnd.setMonth(periodEnd.getMonth() + 3);
+    } else {
+      periodStart.setMonth(periodStart.getMonth() - 6);
+      periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+    }
     const withinPeriod = evidDate >= periodStart && evidDate <= periodEnd;
     const fmt = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
@@ -2926,6 +2936,53 @@
       평가기간_시작: fmt(periodStart), 평가기간_종료: fmt(periodEnd),
       게이트별_판정: gates,
       안내: periodNote + (recognized ? '' : ' 위 게이트 중 하나라도 통과하지 못하면 이 증거가액은 §60②의 시가로 인정되지 않으므로, 다른 시가 증거를 찾거나 §61~65의 보충적 평가방법을 사용해야 합니다.')
+    };
+  };
+
+  // 양도소득의 부당행위계산 — 특수관계인 간 시가재계산 (소득세법§101①, 시행령§167③④⑤) — Code.js
+  // toolCalculateTransferRelatedPartyPriceAdjustment와 동일 로직.
+  window.calculateTransferRelatedPartyPriceAdjustmentJS = function (p) {
+    p = p || {};
+    if (!p.isRelatedPartyTransaction) {
+      return { 시가재계산적용여부: false, 안내: '특수관계인 간 거래가 아니므로 소득세법§101①(양도소득의 부당행위계산)이 적용되지 않습니다.' };
+    }
+    const role = p.transactionRole;
+    if (['sale', 'purchase'].indexOf(role) === -1) {
+      return { error: 'transactionRole을 sale(특수관계인에게 양도)/purchase(특수관계인으로부터 매입) 중에서 선택하세요.' };
+    }
+    const actualPrice = Number(p.actualPrice);
+    const marketValue = Number(p.marketValue);
+    if (!(actualPrice >= 0)) return { error: '실제 거래가액이 필요합니다.' };
+    if (!(marketValue > 0)) return { error: '시가가 필요합니다.' };
+
+    const diff = Math.abs(marketValue - actualPrice);
+    const threshold = Math.min(300000000, Math.round(marketValue * 0.05));
+    const meetsGate = diff >= threshold;
+    const directionOk = (role === 'sale' && actualPrice < marketValue) || (role === 'purchase' && actualPrice > marketValue);
+
+    if (!directionOk) {
+      return {
+        시가재계산적용여부: false, 시가와거래가액의차액: diff, 차감기준액: threshold,
+        안내: role === 'sale'
+          ? '실제 거래가액이 시가보다 낮지 않아(즉 저가양도가 아니어서) §101①이 적용되지 않습니다.'
+          : '실제 거래가액이 시가보다 높지 않아(즉 고가매입이 아니어서) §101①이 적용되지 않습니다.'
+      };
+    }
+
+    if (!meetsGate) {
+      return {
+        시가재계산적용여부: false, 시가와거래가액의차액: diff, 차감기준액: threshold,
+        안내: '시가와 거래가액의 차액(' + diff + '원)이 기준금액(시가의 5%와 3억원 중 적은 금액, ' + threshold + '원) 미만이어서 §101①(시행령§167③단서)에 따라 부당행위계산부인 대상이 아닙니다.'
+      };
+    }
+
+    return {
+      시가재계산적용여부: true, 시가와거래가액의차액: diff, 차감기준액: threshold,
+      실제거래가액: actualPrice, 시가: marketValue, 재계산가액: marketValue,
+      안내: (role === 'sale'
+        ? '시행령§167④에 따라 이번 거래의 양도가액을 실제 거래가액(' + actualPrice + '원) 대신 시가(' + marketValue + '원)로 계산해 양도차익을 산정하세요(위 일반 양도세 계산기의 양도가액에 이 시가를 넣을 것).'
+        : '시행령§167④에 따라 이 자산을 나중에 다시 양도할 때 취득가액을 실제 지급액(' + actualPrice + '원) 대신 시가(' + marketValue + '원)로 계산해야 합니다(장래 재양도시 취득가액에 이 시가를 넣을 것 — 지금 당장 세액이 발생하는 것이 아니라 장래 취득가액이 조정되는 것입니다).')
+        + ' 시가는 위 "시가 인정범위 판정" 계산기를 taxType=\'transfer\'로 먼저 확인해서 확정하세요.'
     };
   };
 

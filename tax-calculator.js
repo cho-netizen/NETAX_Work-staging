@@ -1688,7 +1688,8 @@ function renderTransferPane(){
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isReconstructionRights" id="rr-' + idx + '"><label for="rr-' + idx + '">해당(위 취득일은 종전 부동산 취득일 그대로 유지)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isCompletedNewHousing" id="rrCompleted-' + idx + '"><label for="rrCompleted-' + idx + '">준공된 신축주택을 양도(체크 안하면 준공 전 조합원입주권 자체 양도로 계산 — 신축주택 양도시 12억 초과 고가주택이면 소득세법시행령§160① 초과분 안분도 자동 적용)</label></div>' +
           (!transferAssets[idx].isCompletedNewHousing ?
-            '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isOneMemberRightOneFamily" id="rrOneMember-' + idx + '"><label for="rrOneMember-' + idx + '">1세대1조합원입주권 비과세 요건 충족 전제(소득세법§89①4호) — 12억 초과분만 과세(§95③ 후단, 시행령§160①②를 유추적용, 확정 조문 아님)</label></div>' : '') +
+            '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isOneMemberRightOneFamily" id="rrOneMember-' + idx + '"><label for="rrOneMember-' + idx + '">1세대1조합원입주권 비과세 요건 충족 전제(소득세법§89①4호) — 12억 초과분만 과세(§95③ 후단, 시행령§160①②를 유추적용, 확정 조문 아님)</label></div>' +
+            '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isSuccessorMember" id="rrSuccessor-' + idx + '"><label for="rrSuccessor-' + idx + '">승계조합원(다른 조합원으로부터 매매 등으로 이 조합원입주권 자체를 취득) — 체크시 §95②본문 괄호에 따라 관리처분계획인가 전 구간 장기보유특별공제를 아예 적용하지 않음(체크 안하면 원조합원으로 간주)</label></div>' : '') +
           '<div class="taxcalc-field"><label>관리처분계획인가일</label><input type="date" data-field="managementDispositionDate" min="1900-01-01" max="2099-12-31"></div>' +
           '<div class="taxcalc-field"><label>권리가액(종전자산평가액)</label><input type="number" data-field="rightsValue" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>청산금 납부액(분담금, 없으면 0)</label><input type="number" data-field="settlementPaid" placeholder="원"></div>' +
@@ -2103,6 +2104,36 @@ function renderTransferPane(){
       '</div>' +
       '<button type="button" class="taxcalc-run-btn" data-action="run-overseas-asset-transfer">세액 계산하기</button>' +
       '<div id="taxCalcOverseasAssetTransferResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>양도소득의 부당행위계산 — 특수관계인 시가재계산(§101①, 시행령§167③④) — 특수관계인 간에 시가보다 낮게 양도했거나(양도가액 재계산) 시가보다 높게 매입했다면(장래 취득가액 재계산) 그 재계산 여부를 판정합니다</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>거래 구분</label><select id="rpaRole">' +
+          '<option value="sale">특수관계인에게 양도(시가보다 낮은지 확인)</option>' +
+          '<option value="purchase">특수관계인으로부터 매입(시가보다 높은지 확인)</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>실제 거래가액</label><input type="number" id="rpaActualPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>시가</label><input type="number" id="rpaMarketValue" placeholder="원 (상증세법§60~66 준용 평가액)"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-transfer-related-party-adjustment">시가재계산 여부 판정하기</button>' +
+      '<div id="taxCalcRelatedPartyAdjustmentResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>시가 인정범위 판정(§60②, 시행령§49·소득세법시행령§167⑤) — 위 시가재계산에 쓸 매매·감정 등 증거가액이 유효한 시가로 인정되는지 확인합니다(평가기간: 양도일·취득일 전후 각 3개월)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>평가기준일(양도일 또는 취득일)</label><input type="date" id="tfvBaseDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>증거 유형</label><select id="tfvEvidenceType">' +
+          '<option value="sale">매매</option>' +
+          '<option value="appraisal">감정</option>' +
+          '<option value="expropriation_auction_public_sale">수용·경매·공매</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field"><label>증거일</label><input type="date" id="tfvEvidenceDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="tfvRelatedParty"><label for="tfvRelatedParty">[매매만] 특수관계인과의 거래</label></div>' +
+        '<div class="taxcalc-field"><label>[감정만] 감정가액 평균</label><input type="number" id="tfvAppraisalAvg" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>[감정만] 보충적평가액</label><input type="number" id="tfvSupplementaryValue" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-transfer-fair-market-value-recognition">시가 인정 여부 판정하기</button>' +
+      '<div id="taxCalcTransferFmvResult"></div>' +
     '</div>';
 
   renderAllocationTool();
@@ -2264,6 +2295,7 @@ function collectTransferInput(vals){
     isReconstructionRights: !!vals.isReconstructionRights,
     isCompletedNewHousing: !!vals.isCompletedNewHousing,
     isOneMemberRightOneFamily: !!vals.isOneMemberRightOneFamily,
+    isOriginalMember: !vals.isSuccessorMember,
     managementDispositionDate: vals.managementDispositionDate || '',
     rightsValue: numVal(vals.rightsValue) || 0,
     settlementPaid: numVal(vals.settlementPaid) || 0,
@@ -4366,6 +4398,35 @@ function renderFmvRecognitionResult(r){
   box.innerHTML = html;
 }
 
+function renderTransferFmvResult(r){
+  const box = document.getElementById('taxCalcTransferFmvResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('시가 인정 여부', r.시가인정여부 ? '인정됨' : '인정 안 됨', { total: true });
+  html += taxCalcResultRow('평가기간', r.평가기간_시작 + ' ~ ' + r.평가기간_종료);
+  html += taxCalcResultRow('평가기간 이내 여부', r.평가기간이내여부 ? '예' : '아니오');
+  (r.게이트별_판정 || []).forEach(function(g){
+    html += taxCalcResultRow(g.항목, g.통과 ? '통과' : '미통과');
+    if (g.사유) html += '<div class="taxcalc-result-note">' + g.사유 + '</div>';
+  });
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderRelatedPartyAdjustmentResult(r){
+  const box = document.getElementById('taxCalcRelatedPartyAdjustmentResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  html += taxCalcResultRow('시가재계산 적용 여부', r.시가재계산적용여부 ? '적용됨' : '적용 안 됨', { total: true });
+  if (r.시가와거래가액의차액 != null) html += taxCalcResultRow('시가와 거래가액의 차액', won(r.시가와거래가액의차액));
+  if (r.차감기준액 != null) html += taxCalcResultRow('기준금액', won(r.차감기준액));
+  if (r.재계산가액 != null) html += taxCalcResultRow('재계산가액(시가)', won(r.재계산가액));
+  html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 function renderLoanGiftResult(r){
   const box = document.getElementById('taxCalcLoanResult');
   if (r.error){ box.innerHTML = '<div class="taxcalc-error">' + r.error + '</div>'; return; }
@@ -5519,6 +5580,25 @@ taxCalcView.addEventListener('click', function(e){
       unpaidTaxAtDesignatedDueDate: numVal(document.getElementById('oaUnpaidAtDesignated').value) || 0
     };
     renderOverseasAssetTransferResult(calculateOverseasAssetTransferTaxJS(input));
+  } else if (action === 'run-transfer-related-party-adjustment'){
+    const input = {
+      isRelatedPartyTransaction: true,
+      transactionRole: document.getElementById('rpaRole').value,
+      actualPrice: numVal(document.getElementById('rpaActualPrice').value) || 0,
+      marketValue: numVal(document.getElementById('rpaMarketValue').value) || 0
+    };
+    renderRelatedPartyAdjustmentResult(calculateTransferRelatedPartyPriceAdjustmentJS(input));
+  } else if (action === 'run-transfer-fair-market-value-recognition'){
+    const input = {
+      taxType: 'transfer',
+      valuationBaseDate: document.getElementById('tfvBaseDate').value,
+      evidenceType: document.getElementById('tfvEvidenceType').value,
+      evidenceDate: document.getElementById('tfvEvidenceDate').value,
+      isRelatedPartyTransaction: document.getElementById('tfvRelatedParty').checked,
+      appraisalValueAverage: numVal(document.getElementById('tfvAppraisalAvg').value) || 0,
+      supplementaryValue: numVal(document.getElementById('tfvSupplementaryValue').value) || 0
+    };
+    renderTransferFmvResult(checkFairMarketValueRecognitionJS(input));
   } else if (action === 'send-debt-to-transfer'){
     // 부담부증여의 인수채무액 상당분은 증여자가 그 지분만큼 대가(채무인수)를 받고 양도한 것으로
     // 과세된다(소득세법§88①). 양도가액=인수채무액, 취득가액·필요경비는 증여자의 전체 재산 기준

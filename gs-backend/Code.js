@@ -382,6 +382,7 @@ const DRIVE_TOOLS = [
         isReconstructionRights: { type: 'boolean', description: '재개발·재건축 조합원이 기존건물과 그 부수토지를 제공하고 취득한 조합원입주권 또는 신축주택을 청산금 납부하고 양도하는 경우(소득세법시행령§166①②③)인지. true면 acquisitionPrice는 무시되고, rightsValue·settlementPaid·managementDispositionDate·originalAssetAcquisitionPrice로 별도 산정한다(acquisitionDate는 기존건물 취득일 그대로, acquisitionPrice는 생략 가능).' },
         isCompletedNewHousing: { type: 'boolean', description: 'isReconstructionRights가 true일 때만 의미 있음 — false(기본값)면 조합원입주권 자체를 준공 전에 양도(§166①1호, 인가전양도차익에만 장특공제), true면 준공된 신축주택을 양도(§166②1호, 인가후양도차익을 청산금납부분·기존건물분으로 재분배해 각각 다른 보유기간으로 장특공제).' },
         isOneMemberRightOneFamily: { type: 'boolean', description: 'isReconstructionRights가 true이고 isCompletedNewHousing이 false(준공 전 조합원입주권 자체 양도)일 때만 의미 있음 — 1세대1조합원입주권 비과세 요건(소득세법§89①4호)을 충족한다는 전제. true면 양도가액 12억 이하는 전액 비과세, 12억 초과분은 고가조합원입주권 비율안분(§95③ 후단, 시행령§160①②를 유추적용)을 적용한다.' },
+        isOriginalMember: { type: 'boolean', description: 'isReconstructionRights가 true이고 isCompletedNewHousing이 false(준공 전 조합원입주권 자체 양도)일 때 — 원조합원(관리처분계획등인가 전부터 기존건물·토지를 직접 보유하다 조합원입주권으로 전환된 경우)이면 true(기본값). 조합원입주권 자체를 다른 조합원으로부터 매매 등으로 승계취득한 경우(승계조합원)는 false로 넣을 것 — §95②본문 괄호("조합원으로부터 취득한 것은 제외한다")에 따라 관리처분계획등인가 전 구간 장기보유특별공제가 전혀 적용되지 않는다.' },
         managementDispositionDate: { type: 'string', description: 'isReconstructionRights가 true일 때 필수 — 관리처분계획등 인가일 YYYY-MM-DD.' },
         rightsValue: { type: 'number', description: 'isReconstructionRights가 true일 때 필수 — 기존건물과 그 부수토지의 평가액(권리가액, 관리처분계획등에 따라 정해진 가격, 원).' },
         settlementPaid: { type: 'number', description: 'isReconstructionRights가 true일 때 — 납부한 청산금(분담금, 원). 청산금을 받은 경우(환급)는 이 도구가 다루지 않으므로 별도 계산이 필요하다.' },
@@ -1874,12 +1875,12 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'check_fair_market_value_recognition',
-    description: '시가 인정범위(상증세법§60②, 시행령§49)를 판정한다. 입력한 시가 증거(매매·감정·수용·경매·공매)가 ①평가기간(상속: 상속개시일 전후 6개월, 증여: 증여일 전 6개월~후 3개월) 이내인지, ②매매의 경우 특수관계인 간 거래가 아닌지, ③비상장주식 매매·경매·공매는 거래(취득)주식 액면가액 합계가 min(발행주식총액×1%, 3억원) 이상인지, ④감정가액은 감정가액평균이 기준금액(보충적평가액과 유사재산시가90% 중 적은 금액) 이상인지를 확인해 시가로 인정되는지 판정한다. 평가기간 이탈·감정가액 미달 시에도 평가심의위원회 심의로 예외 인정될 수 있으나 그 절차는 이 도구가 판정하지 않는다. calculate_gift_tax/calculate_inheritance_tax 등에 "시가"를 입력하기 전에 그 시가 증거가 유효한지 먼저 확인할 때 쓴다.',
+    description: '시가 인정범위(상증세법§60②, 시행령§49 — 양도소득세는 소득세법시행령§167⑤가 이를 준용)를 판정한다. 입력한 시가 증거(매매·감정·수용·경매·공매)가 ①평가기간(상속: 상속개시일 전후 6개월, 증여: 증여일 전 6개월~후 3개월, 양도소득세 부당행위계산: 양도일·취득일 전후 각 3개월) 이내인지, ②매매의 경우 특수관계인 간 거래가 아닌지, ③비상장주식 매매·경매·공매는 거래(취득)주식 액면가액 합계가 min(발행주식총액×1%, 3억원) 이상인지, ④감정가액은 감정가액평균이 기준금액(보충적평가액과 유사재산시가90% 중 적은 금액) 이상인지를 확인해 시가로 인정되는지 판정한다. 평가기간 이탈·감정가액 미달 시에도 평가심의위원회 심의로 예외 인정될 수 있으나 그 절차는 이 도구가 판정하지 않는다. calculate_gift_tax/calculate_inheritance_tax/calculate_transfer_related_party_price_adjustment 등에 "시가"를 입력하기 전에 그 시가 증거가 유효한지 먼저 확인할 때 쓴다.',
     input_schema: {
       type: 'object',
       properties: {
-        taxType: { type: 'string', enum: ['inheritance', 'gift'], description: 'inheritance=상속(평가기준일 전후 6개월), gift=증여(평가기준일 전 6개월~후 3개월).' },
-        valuationBaseDate: { type: 'string', description: '평가기준일(YYYY-MM-DD) — 상속개시일 또는 증여일.' },
+        taxType: { type: 'string', enum: ['inheritance', 'gift', 'transfer'], description: 'inheritance=상속(평가기준일 전후 6개월), gift=증여(평가기준일 전 6개월~후 3개월), transfer=양도소득세 부당행위계산(양도일 또는 취득일 전후 각 3개월, 소득세법시행령§167⑤).' },
+        valuationBaseDate: { type: 'string', description: '평가기준일(YYYY-MM-DD) — 상속개시일·증여일, 또는 양도소득세의 경우 양도일이나 취득일.' },
         evidenceType: { type: 'string', enum: ['sale', 'appraisal', 'expropriation_auction_public_sale'], description: 'sale=매매, appraisal=감정, expropriation_auction_public_sale=수용·경매·공매.' },
         evidenceDate: { type: 'string', description: '증거일(YYYY-MM-DD) — sale이면 매매계약일, appraisal이면 가격산정기준일과 감정평가서작성일 중 나중 날(보수적으로), expropriation_auction_public_sale이면 보상가액·경매가액·공매가액이 결정된 날.' },
         isRelatedPartyTransaction: { type: 'boolean', description: 'evidenceType이 sale일 때 — 특수관계인과의 거래인지. true면 거래가액이 시가에서 제외됩니다(시행령§49①1호가목).' },
@@ -1891,6 +1892,20 @@ const DRIVE_TOOLS = [
         similarAssetMarketValue90pct: { type: 'number', description: 'evidenceType이 appraisal일 때(선택) — 시행령§49④에 따른 유사재산 시가의 100분의 90에 해당하는 가액(원). 있으면 보충적평가액과 비교해 더 작은 쪽을 기준금액으로 쓴다.' }
       },
       required: ['taxType', 'valuationBaseDate', 'evidenceType', 'evidenceDate']
+    }
+  },
+  {
+    name: 'calculate_transfer_related_party_price_adjustment',
+    description: '양도소득의 부당행위계산(소득세법§101①, 시행령§167③④⑤)에 따른 시가재계산 여부를 판정한다. 특수관계인 간에 시가보다 낮은 가격으로 양도(sale)하거나 시가보다 높은 가격으로 매입(purchase)한 경우로서, 시가와 거래가액의 차액이 3억원과 시가의 5% 중 적은 금액 이상이면 그 양도가액(sale) 또는 장래 취득가액(purchase)을 시가로 재계산해야 한다. 시가는 상증세법§60~66을 준용하되 평가기간이 양도일·취득일 전후 각 3개월로 바뀐다(check_fair_market_value_recognition을 taxType=\'transfer\'로 먼저 확인). calculate_transfer_tax를 계산하기 전에 특수관계인 간 저가양도·고가매입 여부가 있으면 먼저 이 도구로 확인해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        isRelatedPartyTransaction: { type: 'boolean', description: '특수관계인 간 거래인지. true가 아니면 §101①이 적용되지 않는다.' },
+        transactionRole: { type: 'string', enum: ['sale', 'purchase'], description: 'sale=특수관계인에게 양도(시가보다 낮은 가격인지 확인), purchase=특수관계인으로부터 매입(시가보다 높은 가격인지 확인).' },
+        actualPrice: { type: 'number', description: '실제 거래가액(원).' },
+        marketValue: { type: 'number', description: '시가(원) — 상증세법§60~66을 준용해 확정. check_fair_market_value_recognition(taxType=\'transfer\')로 그 시가 증거가 유효한지 먼저 확인할 것.' }
+      },
+      required: ['isRelatedPartyTransaction', 'transactionRole', 'actualPrice', 'marketValue']
     }
   },
   {
@@ -4886,10 +4901,16 @@ function transferAssetCore_(t) {
 
     if (!t.isCompletedNewHousing) {
       taxableGain = gainBeforeApproval + gainAfterApproval;
-      const ltRateBefore = longTermHoldingDeductionRate_(holdingYearsBeforeApproval);
+      // §95②본문 괄호 — 장특공제 대상 조합원입주권에서 "조합원으로부터 취득한 것"(승계조합원)은
+      // 제외된다. isOriginalMember를 명시적으로 false로 넣으면(승계취득, 즉 관리처분계획등인가 후에
+      // 조합원입주권 자체를 매매로 취득한 경우) 인가전 구간 장특공제를 아예 적용하지 않는다(생략하면
+      // 원조합원으로 간주해 기존과 동일하게 계산 — 하위호환).
+      const isOriginalMember = t.isOriginalMember !== false;
+      const ltRateBefore = isOriginalMember ? longTermHoldingDeductionRate_(holdingYearsBeforeApproval) : 0;
       longTermDeductionAmount = Math.round(Math.max(0, gainBeforeApproval) * ltRateBefore);
       incomeAmount = taxableGain - longTermDeductionAmount;
       reconstructionDetail = { 구분: '조합원입주권(준공전) 양도 — §166①1호', 관리처분계획등인가전양도차익: Math.round(gainBeforeApproval), 관리처분계획등인가후양도차익: Math.round(gainAfterApproval), 인가전_보유기간_년: holdingYearsBeforeApproval, 인가전_장특공제율: ltRateBefore };
+      if (!isOriginalMember) reconstructionDetail.안내_승계조합원 = '조합원으로부터 취득한 조합원입주권은 §95②본문 괄호에 따라 장기보유특별공제 대상에서 제외되어 인가전 구간 공제율을 0으로 적용했습니다.';
       if (isOneMemberRightOnly && transferPrice > 1200000000) {
         const highValueRatio = (transferPrice - 1200000000) / transferPrice;
         taxableGain = taxableGain * highValueRatio;
@@ -6919,9 +6940,9 @@ function splitDateRangeByRate_(startDateStr, endDateStr) {
 // 행정절차라 이 도구가 판정하지 않고 안내로만 알린다.
 function toolCalculateFairMarketValueRecognitionGate(p) {
   p = p || {};
-  const taxType = p.taxType === 'inheritance' ? 'inheritance' : (p.taxType === 'gift' ? 'gift' : null);
-  if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여) 중에서 선택하세요.' };
-  if (!p.valuationBaseDate) return { error: '평가기준일(valuationBaseDate — 상속개시일 또는 증여일)이 필요합니다.' };
+  const taxType = ['inheritance', 'gift', 'transfer'].indexOf(p.taxType) !== -1 ? p.taxType : null;
+  if (!taxType) return { error: 'taxType을 inheritance(상속)/gift(증여)/transfer(양도소득세 부당행위계산, 소득세법시행령§167⑤) 중에서 선택하세요.' };
+  if (!p.valuationBaseDate) return { error: '평가기준일(valuationBaseDate — 상속개시일·증여일, 또는 양도소득세의 경우 양도일이나 취득일)이 필요합니다.' };
   const evidenceType = p.evidenceType;
   if (['sale', 'appraisal', 'expropriation_auction_public_sale'].indexOf(evidenceType) === -1) {
     return { error: 'evidenceType을 sale(매매)/appraisal(감정)/expropriation_auction_public_sale(수용·경매·공매) 중에서 선택하세요.' };
@@ -6932,8 +6953,17 @@ function toolCalculateFairMarketValueRecognitionGate(p) {
   const evidDate = new Date(p.evidenceDate + 'T00:00:00');
   if (isNaN(baseDate.getTime()) || isNaN(evidDate.getTime())) return { error: '날짜 형식이 올바르지 않습니다(YYYY-MM-DD).' };
 
-  const periodStart = new Date(baseDate.getTime()); periodStart.setMonth(periodStart.getMonth() - 6);
-  const periodEnd = new Date(baseDate.getTime()); periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+  const periodStart = new Date(baseDate.getTime());
+  const periodEnd = new Date(baseDate.getTime());
+  if (taxType === 'transfer') {
+    // 소득세법시행령§167⑤ — 상증세법시행령§49①의 "평가기준일 전후 6개월(증여는 전6개월~후3개월)"을
+    // "양도일 또는 취득일 전후 각 3개월"로 대체해 준용한다.
+    periodStart.setMonth(periodStart.getMonth() - 3);
+    periodEnd.setMonth(periodEnd.getMonth() + 3);
+  } else {
+    periodStart.setMonth(periodStart.getMonth() - 6);
+    periodEnd.setMonth(periodEnd.getMonth() + (taxType === 'gift' ? 3 : 6));
+  }
   const withinPeriod = evidDate >= periodStart && evidDate <= periodEnd;
   const fmt = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
@@ -6987,6 +7017,59 @@ function toolCalculateFairMarketValueRecognitionGate(p) {
     평가기간_시작: fmt(periodStart), 평가기간_종료: fmt(periodEnd),
     게이트별_판정: gates,
     안내: periodNote + (recognized ? '' : ' 위 게이트 중 하나라도 통과하지 못하면 이 증거가액은 §60②의 시가로 인정되지 않으므로, 다른 시가 증거를 찾거나 §61~65의 보충적 평가방법을 사용해야 합니다.')
+  };
+}
+
+// 양도소득의 부당행위계산 — 특수관계인 간 시가재계산 (소득세법§101①, 시행령§167③④⑤) — 특수관계인
+// 간에 시가보다 낮은 가격으로 양도하거나(양도인이 이익 없이 세금만 줄어듦) 시가보다 높은 가격으로
+// 매입하면(매수인의 장래 취득가액이 부풀려짐), 시가와 거래가액의 차액이 3억원 이상이거나 시가의
+// 100분의 5 이상인 경우에 한정해 그 취득가액 또는 양도가액을 시가로 재계산한다. 시가는 상증세법§60~66을
+// 준용하되 평가기간이 "양도일 또는 취득일 전후 각 3개월"로 바뀐다(check_fair_market_value_recognition을
+// taxType='transfer'로 먼저 확인할 것). 시행령§167⑥ — 법인세법§52①이 적용되지 않는 개인·법인간 거래는
+// 원칙적으로 이 조항을 적용하지 않으나(부정한 방법으로 감소시킨 경우는 예외), 이는 사실판단이라 이
+// 도구가 자동판정하지 않는다.
+function toolCalculateTransferRelatedPartyPriceAdjustment(p) {
+  p = p || {};
+  if (!p.isRelatedPartyTransaction) {
+    return { 시가재계산적용여부: false, 안내: '특수관계인 간 거래가 아니므로 소득세법§101①(양도소득의 부당행위계산)이 적용되지 않습니다. isRelatedPartyTransaction을 true로 넣어야 이 도구가 게이트를 판정합니다.' };
+  }
+  const role = p.transactionRole;
+  if (['sale', 'purchase'].indexOf(role) === -1) {
+    return { error: 'transactionRole을 sale(특수관계인에게 시가보다 낮은 가격으로 양도)/purchase(특수관계인으로부터 시가보다 높은 가격으로 매입) 중에서 선택하세요.' };
+  }
+  const actualPrice = Number(p.actualPrice);
+  const marketValue = Number(p.marketValue);
+  if (!(actualPrice >= 0)) return { error: '실제 거래가액(actualPrice)이 필요합니다.' };
+  if (!(marketValue > 0)) return { error: '시가(marketValue — 상증세법§60~66을 준용해 확정할 것)가 필요합니다.' };
+
+  const diff = Math.abs(marketValue - actualPrice);
+  const threshold = Math.min(300000000, Math.round(marketValue * 0.05));
+  const meetsGate = diff >= threshold;
+  const directionOk = (role === 'sale' && actualPrice < marketValue) || (role === 'purchase' && actualPrice > marketValue);
+
+  if (!directionOk) {
+    return {
+      시가재계산적용여부: false, 시가와거래가액의차액: diff, 차감기준액: threshold,
+      안내: role === 'sale'
+        ? '실제 거래가액이 시가보다 낮지 않아(즉 저가양도가 아니어서) §101①이 적용되지 않습니다.'
+        : '실제 거래가액이 시가보다 높지 않아(즉 고가매입이 아니어서) §101①이 적용되지 않습니다.'
+    };
+  }
+
+  if (!meetsGate) {
+    return {
+      시가재계산적용여부: false, 시가와거래가액의차액: diff, 차감기준액: threshold,
+      안내: '시가와 거래가액의 차액(' + diff + '원)이 기준금액(시가의 5%와 3억원 중 적은 금액, ' + threshold + '원) 미만이어서 §101①(시행령§167③단서)에 따라 부당행위계산부인 대상이 아닙니다.'
+    };
+  }
+
+  return {
+    시가재계산적용여부: true, 시가와거래가액의차액: diff, 차감기준액: threshold,
+    실제거래가액: actualPrice, 시가: marketValue, 재계산가액: marketValue,
+    안내: (role === 'sale'
+      ? '시행령§167④에 따라 이번 거래의 양도가액을 실제 거래가액(' + actualPrice + '원) 대신 시가(' + marketValue + '원)로 계산해 양도차익을 산정하세요(calculate_transfer_tax의 transferPrice에 이 시가를 넣을 것).'
+      : '시행령§167④에 따라 이 자산을 나중에 다시 양도할 때 취득가액을 실제 지급액(' + actualPrice + '원) 대신 시가(' + marketValue + '원)로 계산해야 합니다(장래 재양도시 calculate_transfer_tax의 acquisitionPrice에 이 시가를 넣을 것 — 지금 당장 세액이 발생하는 것이 아니라 장래 취득가액이 조정되는 것입니다).')
+      + ' 시가는 check_fair_market_value_recognition 도구를 taxType=\'transfer\'로 먼저 확인해서 확정하세요. 개인·법인간 거래로서 그 대가가 법인세법§52①이 적용되지 않는 시가에 해당하는 경우에는 원칙적으로 이 조항이 적용되지 않으나(시행령§167⑥), 부정한 방법으로 세금을 줄인 것으로 인정되면 예외이므로 그 사실판단은 별도로 확인하세요.'
   };
 }
 
@@ -10369,6 +10452,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_installment_payment_schedule' ||
         b.name === 'calculate_clawback_interest' ||
         b.name === 'check_fair_market_value_recognition' ||
+        b.name === 'calculate_transfer_related_party_price_adjustment' ||
         b.name === 'calculate_low_price_transfer_gift_amount' ||
         b.name === 'calculate_gift_special_provision_overlap' ||
         b.name === 'calculate_interest_free_loan_gift_amount' ||
@@ -10798,6 +10882,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'check_fair_market_value_recognition') {
         const resultObj = toolCalculateFairMarketValueRecognitionGate(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_transfer_related_party_price_adjustment') {
+        const resultObj = toolCalculateTransferRelatedPartyPriceAdjustment(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
