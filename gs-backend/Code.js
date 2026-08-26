@@ -846,6 +846,57 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_filing_penalty_reduction',
+    description: '국세기본법§48(가산세 감면 등)에 따라, 무신고가산세·과소신고가산세 등 다른 계산기(calculate_gift_tax 등)가 이미 계산한 가산세액(penalties.unreportedPenalty 또는 underreportedPenalty)에 감면을 반영한다. hasJustifiableReason(또는 hasDeadlineExtensionReason)이 있으면 해당 가산세를 전액 면제하고(§48①), 그렇지 않고 법정신고기한이 지난 후 자진 수정신고·기한후신고를 했다면 경과 개월수에 따라 §48②의 감면율표(수정신고 90/75/50/30/20/10%, 기한후신고 50/30/20%)를 적용한다. 과세표준·세액을 경정(결정)할 것을 미리 알고 신고한 경우는 감면 대상에서 제외된다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        originalPenaltyAmount: { type: 'number', description: '감면 전 가산세액(원) — 다른 계산기가 돌려준 무신고가산세 또는 과소신고가산세 금액. 납부지연가산세(§47의4)에는 이 감면이 적용되지 않으므로 그 금액은 넣지 말 것.' },
+        hasJustifiableReason: { type: 'boolean', description: '납세자가 의무를 이행하지 못한 데에 정당한 사유가 있는지(§48①2호). true면 originalPenaltyAmount 전액을 면제한다.' },
+        hasDeadlineExtensionReason: { type: 'boolean', description: '국세기본법§6(천재지변 등으로 인한 기한연장) 사유에 해당하는지(§48①1호). true면 originalPenaltyAmount 전액을 면제한다.' },
+        filingType: { type: 'string', enum: ['revised', 'late_filing'], description: "revised=법정신고기한까지 신고했으나 나중에 수정신고(§48②1호, 과소신고가산세만 대상), late_filing=법정신고기한까지 무신고했다가 나중에 기한후신고(§48②2호, 무신고가산세만 대상)." },
+        monthsAfterDeadline: { type: 'number', description: '법정신고기한이 지난 후 수정신고(또는 기한후신고)까지 경과한 개월 수.' },
+        isAmendedAfterAuditNotice: { type: 'boolean', description: '과세표준과 세액을 경정(또는 결정)할 것을 미리 알고 수정신고(또는 기한후신고)를 한 경우인지. true면 §48②의 감면이 적용되지 않는다.' }
+      },
+      required: ['originalPenaltyAmount']
+    }
+  },
+  {
+    name: 'check_correction_claim_eligibility',
+    description: '경정 등의 청구(국세기본법§45의2) 가능 여부와 기한을 확인한다. 법정신고기한이 지난 후 5년 이내가 원칙이며(①본문), 증액경정으로 늘어난 부분은 그 처분을 안 날부터 3개월 이내(단, 2024.12.31 개정으로 이 3개월도 5년 이내로 한정)에 별도로 청구할 수 있다(①단서). 후발적 사유(②, 5가지 유형)에 해당하면 5년 제한과 무관하게 그 사유를 안 날부터 3개월 이내에 청구할 수 있다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        statutoryFilingDeadline: { type: 'string', description: '당초(또는 기한후) 신고의 법정신고기한(YYYY-MM-DD).' },
+        today: { type: 'string', description: '기준일(YYYY-MM-DD). 생략하면 오늘 날짜.' },
+        wasIncreasedByCorrection: { type: 'boolean', description: '과세관청의 결정·경정으로 과세표준·세액이 증가했는지(①단서 적용 여부).' },
+        noticeReceivedDate: { type: 'string', description: 'wasIncreasedByCorrection이 true일 때 — 그 증액 처분의 통지를 받은 날(YYYY-MM-DD).' },
+        subsequentEventType: { type: 'string', enum: ['litigation_result_different', 'income_attribution_changed', 'mutual_agreement_different', 'linked_period_or_item_adjusted', 'other_presidential_decree'], description: '§45의2②의 후발적 경정청구 사유 유형(해당하면).' },
+        subsequentEventKnownDate: { type: 'string', description: 'subsequentEventType에 해당하는 사유가 발생한 것을 안 날(YYYY-MM-DD).' }
+      },
+      required: ['statutoryFilingDeadline']
+    }
+  },
+  {
+    name: 'calculate_tax_exclusion_period',
+    description: '국세의 부과제척기간(국세기본법§26의2) 만료일을 계산한다. 원칙 5년(역외거래 7년), 무신고 7년(역외거래 10년), 부정행위로 포탈·환급·공제 10년(역외거래 15년)이고, 상속세·증여세는 원칙 10년이며 부정행위·무신고·거짓누락신고시 15년이다. 상속세·증여세 부정포탈로서 재산가액 50억원 초과 등 특례 요건을 충족하면 원칙적 제척기간이 지났어도 안 날부터 1년 이내 부과가 가능하다(⑤). "국세를 부과할 수 있는 날"의 정확한 기산일(시행령§12의3)은 세목·상황별로 다르므로 호출 전에 직접 산정해서 exclusionPeriodStartDate에 넣어야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        exclusionPeriodStartDate: { type: 'string', description: '부과제척기간 기산일 — 시행령§12의3에 따른 "국세를 부과할 수 있는 날"(YYYY-MM-DD).' },
+        isOffshoreTransaction: { type: 'boolean', description: '국제거래 또는 국외자산 매매·임대차, 국외제공용역 관련 거래(역외거래)인지. true면 원칙·무신고·부정행위 기간이 각각 2~5년씩 늘어난다.' },
+        isInheritanceOrGiftTax: { type: 'boolean', description: '상속세 또는 증여세인지(true면 §26의2④가 적용되어 원칙 10년/15년 체계로 계산한다).' },
+        isUnreported: { type: 'boolean', description: '법정신고기한까지 과세표준신고서를 제출하지 않았는지(무신고).' },
+        isFraudulent: { type: 'boolean', description: '사기나 그 밖의 부정한 행위로 국세를 포탈·환급·공제받았는지.' },
+        isFalseOrOmittedReport: { type: 'boolean', description: 'isInheritanceOrGiftTax가 true일 때 — 신고는 했으나 상증세법시행령으로 정하는 거짓신고 또는 누락신고에 해당하는지(해당 부분만 15년).' },
+        isSpecialOneYearCaseApplicable: { type: 'boolean', description: 'isInheritanceOrGiftTax와 isFraudulent가 true이고, 명의신탁재산 취득·국외재산 취득 등 §26의2⑤ 각 호의 8가지 유형 중 하나에 해당하며 상속인·증여자·수증자가 모두 생존해 있는지. true면 안 날부터 1년 특례가 적용된다.' },
+        knownDate: { type: 'string', description: 'isSpecialOneYearCaseApplicable이 true일 때 — 해당 재산의 상속 또는 증여가 있음을 안 날(YYYY-MM-DD).' },
+        fraudBasisPropertyValue: { type: 'number', description: 'isSpecialOneYearCaseApplicable이 true일 때 — 포탈세액 산출의 기준이 되는 재산가액 합계(원). 50억원을 초과해야 특례가 적용된다(이하이면 특례 배제).' }
+      },
+      required: ['exclusionPeriodStartDate']
+    }
+  },
+  {
     name: 'calculate_related_party_transaction_gift_tax',
     description: '일감몰아주기 증여의제(상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제, [별지 제10호의3서식])를 계산한다. 지배주주와 그 친족이 지분을 보유한 법인(수혜법인)이 특수관계법인에 대한 매출비중이 높고 그 지분율도 높으면, 수혜법인의 세후영업이익(중소·중견·일반기업 공통) 중 일부(배당소득공제 반영)를 지배주주등이 증여받은 것으로 간주해 과세한다. 증여재산공제는 적용되지 않고 일반 누진세율과 신고세액공제만 적용된다. 직접출자관계와 간접출자관계가 함께 있으면 각각 별도로 계산해서 합산해야 한다.',
     input_schema: {
@@ -1538,7 +1589,9 @@ const DRIVE_TOOLS = [
         directBusinessRevenueAmount: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 해당 과세기간(사업연도)의 직접 공익목적사업과 관련한 수입금액의 총액(원).' },
         unregisteredDays: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 전용계좌를 개설·신고하지 않은 기간의 일수(신고기한 다음날부터 신고일 전날까지).' },
         totalPeriodDays: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 가목 금액을 계산할 때 — 해당 과세기간(사업연도)의 총 일수.' },
-        totalRelevantTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 나목 금액을 계산할 때 — §50의2①1~4호에 따른 거래금액을 합친 금액(원). 가목·나목 중 큰 금액이 적용되므로 둘 다 입력 가능.' }
+        totalRelevantTransactionAmount: { type: 'number', description: 'penaltyType이 dedicated_account_not_opened이고 나목 금액을 계산할 때 — §50의2①1~4호에 따른 거래금액을 합친 금액(원). 가목·나목 중 큰 금액이 적용되므로 둘 다 입력 가능.' },
+        isNonSmeEnterprise: { type: 'boolean', description: 'penaltyType이 report_not_filed/management_violation(violationSubType이 tax_confirmation이 아닐 때만)/report_not_filed_5pct일 때 — 국세기본법§49①4호의 가산세 한도 판정용. 공익법인등이 중소기업기본법상 중소기업이 아닌 기업이면 true(한도 1억원), 아니면 false(한도 5천만원, 기본값).' },
+        isIntentionalViolation: { type: 'boolean', description: '위 세 가지 유형에서 그 의무를 고의적으로 위반한 경우인지. true면 국세기본법§49①의 한도가 적용되지 않는다(단서).' }
       },
       required: ['penaltyType']
     }
@@ -2055,7 +2108,7 @@ const DRIVE_TOOLS = [
         valuationBaseDate: { type: 'string', description: '평가기준일(YYYY-MM-DD) — 상속개시일·증여일, 또는 양도소득세의 경우 양도일이나 취득일.' },
         evidenceType: { type: 'string', enum: ['sale', 'appraisal', 'expropriation_auction_public_sale'], description: 'sale=매매, appraisal=감정, expropriation_auction_public_sale=수용·경매·공매.' },
         evidenceDate: { type: 'string', description: '증거일(YYYY-MM-DD) — sale이면 매매계약일, appraisal이면 가격산정기준일과 감정평가서작성일 중 나중 날(보수적으로), expropriation_auction_public_sale이면 보상가액·경매가액·공매가액이 결정된 날.' },
-        isRelatedPartyTransaction: { type: 'boolean', description: 'evidenceType이 sale일 때 — 특수관계인과의 거래인지. true면 거래가액이 시가에서 제외됩니다(시행령§49①1호가목).' },
+        isRelatedPartyTransaction: { type: 'boolean', description: 'evidenceType이 sale일 때 — 특수관계인과의 거래인지. true면 거래가액이 시가에서 제외됩니다(시행령§49①1호가목). 특수관계인 판정 기준은 상증세법§2조10호·시행령§2의2(국세기본법시행령§1조의2와는 친족범위·경영지배관계 판정기준이 다름)를 따를 것.' },
         isUnlistedStock: { type: 'boolean', description: '평가대상이 비상장주식등인지. true이고 evidenceType이 sale 또는 expropriation_auction_public_sale이면 최소거래규모 요건을 확인한다.' },
         tradedStockFaceValueSum: { type: 'number', description: 'isUnlistedStock이 true일 때 — 이번에 거래(또는 경매·공매로 취득)된 비상장주식의 액면가액 합계(원).' },
         totalIssuedStockFaceValue: { type: 'number', description: 'isUnlistedStock이 true일 때 — 해당 법인의 발행주식총액(또는 출자총액) 액면가액 합계(원).' },
@@ -2072,7 +2125,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        isRelatedPartyTransaction: { type: 'boolean', description: '특수관계인 간 거래인지. true가 아니면 §101①이 적용되지 않는다.' },
+        isRelatedPartyTransaction: { type: 'boolean', description: '특수관계인 간 거래인지. true가 아니면 §101①이 적용되지 않는다. 주의 — 여기서 "특수관계인"은 상증세법시행령§2의2(더 넓은 범위, 기업집단 소속기업·퇴직임원 포함)가 아니라 소득세법시행령§98①이 명시적으로 한정한 국세기본법시행령§1조의2①②③1호 기준(개인이 지배하는 법인 관계까지)이다. 상증세법 계산에서 익숙해진 특수관계인 범위를 그대로 적용하면 판정이 달라질 수 있으니 주의할 것.' },
         transactionRole: { type: 'string', enum: ['sale', 'purchase'], description: 'sale=특수관계인에게 양도(시가보다 낮은 가격인지 확인), purchase=특수관계인으로부터 매입(시가보다 높은 가격인지 확인).' },
         actualPrice: { type: 'number', description: '실제 거래가액(원).' },
         marketValue: { type: 'number', description: '시가(원) — 상증세법§60~66을 준용해 확정. check_fair_market_value_recognition(taxType=\'transfer\')로 그 시가 증거가 유효한지 먼저 확인할 것.' }
@@ -2088,7 +2141,7 @@ const DRIVE_TOOLS = [
       properties: {
         fairMarketValue: { type: 'number', description: '거래재산의 시가(원) — calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
         transferPrice: { type: 'number', description: '실제 거래한 대가(원) — 매매대금 등.' },
-        isSpecialRelation: { type: 'boolean', description: '거래 상대방이 특수관계인인지 여부. true(기본값) — §35① 적용(기준금액=min(시가×30%, 3억원)). false — §35② 적용(비특수관계인 간, 게이트=시가×30%, 차감액=3억원 정액). §35②는 "거래의 관행상 정당한 사유"가 없는 경우에만 적용되므로 그 사실판단은 별도로 확인할 것.' },
+        isSpecialRelation: { type: 'boolean', description: '거래 상대방이 특수관계인인지 여부. true(기본값) — §35① 적용(기준금액=min(시가×30%, 3억원)). false — §35② 적용(비특수관계인 간, 게이트=시가×30%, 차감액=3억원 정액). §35②는 "거래의 관행상 정당한 사유"가 없는 경우에만 적용되므로 그 사실판단은 별도로 확인할 것. 특수관계인 판정 기준은 상증세법§2조10호·시행령§2의2를 따를 것(국세기본법시행령§1조의2와는 범위가 다르다).' },
         priorBenefitsWithinOneYear: { type: 'array', items: { type: 'number' }, description: '§43②·시행령§32의4 — 이번 증여일부터 소급 1년 이내 동일인과의 같은 유형(특수관계인 간 또는 비특수관계인 간) 저가양수·고가양도 거래가 더 있었다면, 그 각각의 시가와 대가의 차액을 배열로 넣는다. 이 도구가 이번 거래 차액과 합산해 기준금액(게이트)을 다시 계산한다. 없으면 생략.' }
       },
       required: ['fairMarketValue', 'transferPrice']
@@ -2205,7 +2258,7 @@ const DRIVE_TOOLS = [
         netProfit3YearsAgo: { type: 'number', description: '평가기준일 3년 전 사업연도의 법인 전체 순손익액(원)' },
         netAssetValue: { type: 'number', description: '평가기준일 현재 법인의 순자산가액(자산총액-부채총액, 상증세법 기준 재평가액, 원)' },
         isRealEstateHeavy: { type: 'boolean', description: '자산총액 중 부동산 등의 비율이 50% 이상인 부동산과다보유법인인지 (가중치가 순손익2:순자산3으로 바뀜, 기본은 순손익3:순자산2)' },
-        isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨). 판정시 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도·증여한 주식등도 보유주식등에 합산해서 판단할 것 — 이 도구는 그 합산을 자동으로 하지 않는다.' },
+        isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨). 판정시 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도·증여한 주식등도 보유주식등에 합산해서 판단할 것 — 이 도구는 그 합산을 자동으로 하지 않는다. 특수관계인 범위는 상증세법§2조10호·시행령§2의2 기준.' },
         isSmallBusiness: { type: 'boolean', description: '평가대상 법인이 중소기업기본법상 중소기업인지 — true면 최대주주 할증평가가 항상 배제된다(§53⑧9호).' },
         isMediumBusinessUnder500B: { type: 'boolean', description: '평가대상 법인이 중견기업이면서 직전 3개 사업연도 매출액 평균이 5천억원 미만인지 — true면 최대주주 할증평가가 배제된다(§53⑧9호).' },
         hasContinuousLossFor3Years: { type: 'boolean', description: '§53⑧1호 — 평가기준일 전 3년 이내 계속하여 결손금이 있는 법인인지. true면 최대주주 할증평가가 배제된다.' },
@@ -2248,7 +2301,7 @@ const DRIVE_TOOLS = [
     input_schema: { type: 'object', properties: {
       averageClosingPrice: { type: 'number', description: '평가기준일 전후 2개월 종가평균(원)' },
       shares: { type: 'number', description: '평가대상 주식수' },
-      isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨). 판정시 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도·증여한 주식등도 보유주식등에 합산해서 판단할 것 — 이 도구는 그 합산을 자동으로 하지 않는다.' },
+      isMajorShareholder: { type: 'boolean', description: '최대주주 및 특수관계인에 해당하는지 (원칙적으로 20% 할증평가, 아래 배제 사유가 있으면 자동으로 배제됨). 판정시 시행령§53⑤에 따라 평가기준일부터 소급 1년 이내에 최대주주등이 양도·증여한 주식등도 보유주식등에 합산해서 판단할 것 — 이 도구는 그 합산을 자동으로 하지 않는다. 특수관계인 범위는 상증세법§2조10호·시행령§2의2 기준.' },
       isSmallBusiness: { type: 'boolean', description: '평가대상 법인이 중소기업기본법상 중소기업인지 — true면 최대주주 할증평가가 항상 배제된다(§53⑧9호).' },
       isMediumBusinessUnder500B: { type: 'boolean', description: '평가대상 법인이 중견기업이면서 직전 3개 사업연도 매출액 평균이 5천억원 미만인지 — true면 최대주주 할증평가가 배제된다(§53⑧9호).' },
       hasContinuousLossFor3Years: { type: 'boolean', description: '§53⑧1호 — 평가기준일 전 3년 이내 계속하여 결손금이 있는 법인인지. true면 최대주주 할증평가가 배제된다.' },
@@ -7758,6 +7811,171 @@ function toolCalculateClawbackInterest(p) {
   };
 }
 
+function formatDateStr_(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function addMonthsToDateStr_(dateStr, months) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + months);
+  return formatDateStr_(d);
+}
+function addYearsToDateStr_(dateStr, years) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  d.setFullYear(d.getFullYear() + years);
+  return formatDateStr_(d);
+}
+
+// 가산세 감면 등 (국세기본법§48) — 다른 계산기가 계산한 무신고·과소신고가산세액에 정당한 사유(①) 또는
+// 법정신고기한 경과 후 자진 수정신고·기한후신고(②)에 따른 감면율표를 적용한다.
+function computeAmendmentPenaltyReductionRate_(months, filingType) {
+  if (!(months >= 0)) return 0;
+  if (filingType === 'revised') {
+    if (months <= 1) return 0.90;
+    if (months <= 3) return 0.75;
+    if (months <= 6) return 0.50;
+    if (months <= 12) return 0.30;
+    if (months <= 18) return 0.20;
+    if (months <= 24) return 0.10;
+    return 0;
+  }
+  if (filingType === 'late_filing') {
+    if (months <= 1) return 0.50;
+    if (months <= 3) return 0.30;
+    if (months <= 6) return 0.20;
+    return 0;
+  }
+  return 0;
+}
+
+function toolCalculateFilingPenaltyReduction(p) {
+  p = p || {};
+  const originalPenaltyAmount = Number(p.originalPenaltyAmount);
+  if (!(originalPenaltyAmount > 0)) return { error: 'originalPenaltyAmount(감면 전 가산세액, 무신고·과소신고가산세 등)이 필요합니다.' };
+
+  if (p.hasJustifiableReason || p.hasDeadlineExtensionReason) {
+    return {
+      적용조문: p.hasDeadlineExtensionReason ? '국세기본법§48①1호(§6 기한연장사유)' : '국세기본법§48①2호(정당한 사유)',
+      감면율: 1, 감면세액: originalPenaltyAmount, 최종가산세액: 0,
+      안내: '기한 연장 사유 또는 의무 불이행에 정당한 사유가 있다고 인정되면 해당 가산세는 전혀 부과되지 않습니다(§48①). 다만 정당한 사유 인정 여부는 사실관계에 따라 과세관청 또는 불복절차에서 최종적으로 판단됩니다.'
+    };
+  }
+
+  const filingType = p.filingType;
+  if (['revised', 'late_filing'].indexOf(filingType) === -1) {
+    return { error: "filingType은 'revised'(법정신고기한까지 신고 후 수정신고, §48②1호) 또는 'late_filing'(무신고 후 기한후신고, §48②2호) 중 하나여야 합니다." };
+  }
+  if (p.isAmendedAfterAuditNotice) {
+    return {
+      적용조문: filingType === 'revised' ? '국세기본법§48②1호 괄호(경정 예지 후 수정신고 — 감면 배제)' : '국세기본법§48②2호 괄호(결정 예지 후 기한후신고 — 감면 배제)',
+      감면율: 0, 감면세액: 0, 최종가산세액: originalPenaltyAmount,
+      안내: '과세표준과 세액을 경정(또는 결정)할 것을 미리 알고 수정신고(또는 기한후신고)를 한 경우로 보아 §48②의 가산세 감면이 적용되지 않습니다.'
+    };
+  }
+  const months = Number(p.monthsAfterDeadline);
+  if (!(months >= 0)) return { error: 'monthsAfterDeadline(법정신고기한이 지난 후 경과한 개월 수)이 필요합니다.' };
+  const rate = computeAmendmentPenaltyReductionRate_(months, filingType);
+  const reductionAmount = Math.round(originalPenaltyAmount * rate);
+  const finalPenalty = originalPenaltyAmount - reductionAmount;
+  return {
+    적용조문: filingType === 'revised' ? '국세기본법§48②1호(수정신고 — 과소신고·초과환급신고가산세만 해당)' : '국세기본법§48②2호(기한후신고 — 무신고가산세만 해당)',
+    경과개월수: months, 감면율: rate, 감면전가산세액: originalPenaltyAmount, 감면세액: reductionAmount, 최종가산세액: finalPenalty,
+    안내: rate === 0
+      ? ('법정신고기한이 지난 후 ' + (filingType === 'revised' ? '2년' : '6개월') + '을 초과하여 §48②에 따른 감면이 적용되지 않습니다.')
+      : ('이 감면은 ' + (filingType === 'revised' ? '과소신고·초과환급신고가산세(§47의3)' : '무신고가산세(§47의2)') + '에만 적용되며, 납부지연가산세(§47의4)에는 적용되지 않습니다.')
+  };
+}
+
+// 경정 등의 청구 (국세기본법§45의2)
+function toolCheckCorrectionClaimEligibility(p) {
+  p = p || {};
+  if (!p.statutoryFilingDeadline) return { error: '법정신고기한(statutoryFilingDeadline, YYYY-MM-DD)이 필요합니다.' };
+  const ordinaryDeadline = addYearsToDateStr_(p.statutoryFilingDeadline, 5);
+  if (!ordinaryDeadline) return { error: '법정신고기한 형식이 올바르지 않습니다.' };
+  const today = p.today || formatDateStr_(new Date());
+
+  const result = {
+    법정신고기한: p.statutoryFilingDeadline,
+    통상경정청구기한_5년: ordinaryDeadline,
+    통상청구가능여부: today <= ordinaryDeadline,
+    안내: ['§45의2①본문 — 당초 신고(또는 수정신고)한 과세표준·세액이 과다하거나 결손금·세액공제·환급세액이 과소한 경우, ' + ordinaryDeadline + '까지 관할 세무서장에게 경정청구할 수 있습니다.']
+  };
+
+  if (p.wasIncreasedByCorrection && p.noticeReceivedDate) {
+    const noticeWindowRaw = addMonthsToDateStr_(p.noticeReceivedDate, 3);
+    const noticeWindow = (noticeWindowRaw && noticeWindowRaw <= ordinaryDeadline) ? noticeWindowRaw : ordinaryDeadline;
+    result.증액경정분_통지일부터3개월 = noticeWindowRaw;
+    result.증액경정분_청구기한_5년상한적용후 = noticeWindow;
+    result.증액경정분_청구가능여부 = today <= noticeWindow;
+    result.안내.push('§45의2①단서 — 결정·경정으로 증가된 과세표준·세액 부분은 처분을 안 날(통지받은 날 ' + p.noticeReceivedDate + ')부터 3개월 이내(' + noticeWindowRaw + ')에 청구할 수 있으나, 2024.12.31 개정으로 이 3개월 기한도 법정신고기한이 지난 후 5년(' + ordinaryDeadline + ') 이내로 한정되므로 실제 기한은 ' + noticeWindow + '입니다.');
+  }
+
+  const subsequentEventLabels = {
+    litigation_result_different: '최초 신고·결정·경정의 계산근거 거래·행위가 그 후 심사청구·심판청구·소송(감사원 심사청구 포함) 결과 다른 것으로 확정된 경우(§45의2②1호)',
+    income_attribution_changed: '소득이나 그 밖의 과세물건의 귀속을 제3자에게 변경시키는 결정·경정이 있는 경우(§45의2②2호)',
+    mutual_agreement_different: '조세조약에 따른 상호합의가 최초 신고·결정·경정과 다르게 이루어진 경우(§45의2②3호)',
+    linked_period_or_item_adjusted: '이 결정·경정과 연동된 다른 세목(같은 과세기간) 또는 다른 과세기간(같은 세목)의 과세표준·세액이 과다하게 된 경우(§45의2②4호)',
+    other_presidential_decree: '위와 유사한 사유로서 대통령령으로 정하는 사유가 법정신고기한이 지난 후 발생한 경우(§45의2②5호)'
+  };
+  if (p.subsequentEventType && p.subsequentEventKnownDate) {
+    if (!subsequentEventLabels[p.subsequentEventType]) {
+      result.안내.push('subsequentEventType 값이 올바르지 않습니다: ' + Object.keys(subsequentEventLabels).join(', ') + ' 중 하나여야 합니다.');
+    } else {
+      const eventWindow = addMonthsToDateStr_(p.subsequentEventKnownDate, 3);
+      result.후발적사유_유형 = subsequentEventLabels[p.subsequentEventType];
+      result.후발적사유_안날 = p.subsequentEventKnownDate;
+      result.후발적사유_청구기한_3개월 = eventWindow;
+      result.후발적사유_청구가능여부 = today <= eventWindow;
+      result.안내.push('§45의2② — ' + subsequentEventLabels[p.subsequentEventType] + '에 해당하면, 통상의 5년 제한과 무관하게 그 사유를 안 날(' + p.subsequentEventKnownDate + ')부터 3개월 이내(' + eventWindow + ')에 경정청구할 수 있습니다.');
+    }
+  }
+  return result;
+}
+
+// 국세의 부과제척기간 (국세기본법§26의2)
+function toolCalculateTaxExclusionPeriod(p) {
+  p = p || {};
+  if (!p.exclusionPeriodStartDate) return { error: '부과제척기간 기산일(exclusionPeriodStartDate, 시행령§12의3에 따른 "국세를 부과할 수 있는 날", YYYY-MM-DD)이 필요합니다.' };
+  const isOffshore = !!p.isOffshoreTransaction;
+  const isInheritanceOrGift = !!p.isInheritanceOrGiftTax;
+  const isUnreported = !!p.isUnreported;
+  const isFraudulent = !!p.isFraudulent;
+  const isFalseOrOmittedReport = !!p.isFalseOrOmittedReport;
+
+  let years, basis;
+  if (isInheritanceOrGift) {
+    if (isFraudulent || isUnreported || isFalseOrOmittedReport) {
+      years = 15; basis = '§26의2④ — 상속세·증여세로서 부정행위 포탈, 무신고, 또는 거짓·누락신고에 해당(15년)';
+    } else {
+      years = 10; basis = '§26의2④ — 상속세·증여세 원칙(10년)';
+    }
+  } else if (isFraudulent) {
+    years = isOffshore ? 15 : 10; basis = '§26의2②2호 — 부정행위로 포탈·환급·공제(' + years + '년, 역외거래 여부 반영)';
+  } else if (isUnreported) {
+    years = isOffshore ? 10 : 7; basis = '§26의2②1호 — 법정신고기한까지 무신고(' + years + '년, 역외거래 여부 반영)';
+  } else {
+    years = isOffshore ? 7 : 5; basis = '§26의2①본문/단서 — 원칙(' + years + '년, 역외거래 여부 반영)';
+  }
+
+  const exclusionDeadline = addYearsToDateStr_(p.exclusionPeriodStartDate, years);
+  const result = {
+    기산일: p.exclusionPeriodStartDate, 적용기간_년: years, 적용근거: basis,
+    부과제척기간_만료일: exclusionDeadline,
+    안내: ['제척기간이 지나면 그 국세는 더 이상 부과(증액경정 포함)할 수 없습니다. "국세를 부과할 수 있는 날"의 정확한 기산일은 국세기본법시행령§12의3에서 세목·상황별로 별도로 정하므로(예: 상속세는 상속세 과세표준 신고기한의 다음 날 등), 이 도구에는 정확한 기산일을 직접 계산해서 넣어야 합니다.']
+  };
+
+  if (isInheritanceOrGift && p.isSpecialOneYearCaseApplicable && p.knownDate && Number(p.fraudBasisPropertyValue) > 5000000000) {
+    const specialDeadline = addYearsToDateStr_(p.knownDate, 1);
+    result.특례_안날부터1년_적용대상재산가액50억초과 = true;
+    result.특례_만료일 = specialDeadline;
+    result.안내.push('§26의2⑤ — 부정행위로 상속세·증여세를 포탈하는 경우로서 명의신탁재산 취득 등 8가지 유형 중 하나에 해당하고 포탈세액 산출기준 재산가액이 50억원을 초과하며 상속인·증여자·수증자가 생존해 있으면, 과세관청은 해당 재산의 상속·증여가 있음을 안 날(' + p.knownDate + ')부터 1년(' + specialDeadline + ') 이내에 상속세·증여세를 부과할 수 있습니다(원칙적 제척기간이 이미 지났어도 적용).');
+  } else if (isInheritanceOrGift && p.isFraudulent) {
+    result.안내.push('§26의2⑤ — 부정행위로 포탈한 경우로서 명의신탁재산 취득 등 8가지 유형에 해당하고 재산가액이 50억원을 초과하며 관련자가 생존해 있으면, 원칙적 제척기간이 지났어도 그 사실을 안 날부터 1년 이내에 특례 부과가 가능합니다. 해당 여부를 판단하려면 isSpecialOneYearCaseApplicable·knownDate·fraudBasisPropertyValue를 함께 입력하세요.');
+  }
+  return result;
+}
+
 // 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로
 // 거래하면 그 차액에서 일정 기준액을 뺀 금액을 증여받은(또는 증여한) 것으로 본다. 이 결과의 증여재산가액을 그대로
 // calculate_gift_tax의 giftAmount로 넣으면 정상적으로 증여재산공제·누진세율·신고세액공제가 적용된다(§35 자체는 별도 세율이 없음).
@@ -10055,6 +10273,18 @@ function toolCalculatePublicInterestOrgPenalty(p) {
     note = '§74⑤에 따라 납세담보를 제공하지 않은 자가 §74⑦에 따른 국가지정문화유산등·천연기념물등의 양도 사실을 신고하지 않아, §78⑮2호에 따라 징수유예 받은 상속세액의 100분의 20을 징수합니다.';
   }
 
+  // 국세기본법§49①4호 — §78③·⑤(제50조①②의무 위반만 해당, 즉 violationSubType이 'tax_confirmation'이
+  // 아닌 경우)·⑭에 따른 가산세는 의무위반 종류별로 5천만원(중소기업이 아닌 기업은 1억원)을 한도로 하며,
+  // 고의적으로 위반한 경우에는 한도가 적용되지 않는다(단서).
+  const cappedTypes = ['report_not_filed', 'management_violation', 'report_not_filed_5pct'];
+  if (cappedTypes.indexOf(penaltyType) !== -1 && !(penaltyType === 'management_violation' && p.violationSubType === 'tax_confirmation') && !p.isIntentionalViolation) {
+    const limit = p.isNonSmeEnterprise ? 100000000 : 50000000;
+    if (penaltyAmount > limit) {
+      note += ' 국세기본법§49①4호에 따라 이 가산세는 의무위반 종류별로 ' + (p.isNonSmeEnterprise ? '1억원(중소기업이 아닌 기업)' : '5천만원(중소기업)') + '을 한도로 하므로, 산출된 ' + penaltyAmount + '원 대신 ' + limit + '원을 가산세액으로 합니다.';
+      penaltyAmount = limit;
+    }
+  }
+
   return { 가산세액: penaltyAmount, 안내: note };
 }
 
@@ -11225,6 +11455,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_holding_company_contribution_deferral' ||
         b.name === 'calculate_project_reit_contribution_deferral' ||
         b.name === 'calculate_farmland_gift_tax_reduction' ||
+        b.name === 'calculate_filing_penalty_reduction' ||
+        b.name === 'check_correction_claim_eligibility' ||
+        b.name === 'calculate_tax_exclusion_period' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_nominee_trust_gift_tax' ||
@@ -11483,6 +11716,21 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_farmland_gift_tax_reduction') {
         const resultObj = toolCalculateFarmlandGiftTaxReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_filing_penalty_reduction') {
+        const resultObj = toolCalculateFilingPenaltyReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'check_correction_claim_eligibility') {
+        const resultObj = toolCheckCorrectionClaimEligibility(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_tax_exclusion_period') {
+        const resultObj = toolCalculateTaxExclusionPeriod(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
