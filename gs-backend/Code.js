@@ -922,6 +922,35 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_registration_license_tax',
+    description: '지방세법상 등록면허세(부동산 등기분)를 계산한다. §23 1호 본문에 따라 취득을 원인으로 하는 등기(일반적인 매매·증여·상속으로 인한 소유권보존·이전등기)는 취득세만 부과되고 등록면허세는 부과되지 않으므로(calculate_acquisition_tax를 쓸 것), 소유권보존·이전등기 세율은 §23 1호 각 목의 예외(광업권등 취득등록·외국인소유물건 연부취득등기·취득세 부과제척기간 경과물건 등기·§17 면세점물건 등기)에 해당할 때만 적용된다(isAcquisitionTaxExemptCase로 확인). 저당권·전세권·지상권·지역권·임차권·경매신청·가압류·가처분·가등기는 애초에 "설정"이라 원칙적으로 항상 등록면허세 대상이다. 지방교육세는 이 도구에 포함되지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        registrationType: { type: 'string', enum: ['ownership_preservation', 'ownership_transfer_paid', 'ownership_transfer_free', 'ownership_transfer_inheritance', 'superficies', 'mortgage', 'easement', 'chonsegwon', 'lease_right', 'auction_or_provisional', 'other'], description: 'ownership_preservation=소유권보존등기, ownership_transfer_paid=유상 소유권이전등기, ownership_transfer_free=무상 소유권이전등기(상속외), ownership_transfer_inheritance=상속으로 인한 소유권이전등기, superficies=지상권, mortgage=저당권(지상권·전세권 목적 포함), easement=지역권, chonsegwon=전세권, lease_right=임차권, auction_or_provisional=경매신청·가압류·가처분·가등기, other=그 밖의 등기(건당 정액).' },
+        isAcquisitionTaxExemptCase: { type: 'boolean', description: 'registrationType이 ownership_preservation/ownership_transfer_paid/ownership_transfer_free/ownership_transfer_inheritance일 때 필수 — 이 등기가 §23 1호 단서 각 목(광업권등 취득등록, 외국인소유물건 연부취득등기, 취득세 부과제척기간 경과물건 등기, §17 면세점물건 등기)의 예외에 해당해 취득세가 아니라 등록면허세 대상인 경우인지. false(또는 생략)면 일반적인 취득 등기로 보아 등록면허세를 계산하지 않고 취득세를 안내한다.' },
+        baseAmount: { type: 'number', description: '과세표준(원) — 유형별로 다르다: 소유권보존·이전=부동산가액, 지상권=토지가액, 저당권·경매신청·가압류·가처분·가등기=채권금액(또는 가등기는 부동산가액), 지역권=요역지가액, 전세권=전세금액, 임차권=월 임대차금액. registrationType이 other이면 불필요.' },
+        isHouseAcquisition: { type: 'boolean', description: 'registrationType이 ownership_transfer_paid일 때 — 지방세법§11①8호(유상거래 주택)에 해당하는 주택의 이전등기인지. true면 houseAcquisitionTaxRate도 함께 넣어야 한다.' },
+        houseAcquisitionTaxRate: { type: 'number', description: 'isHouseAcquisition이 true일 때 — calculate_acquisition_tax로 계산한 그 주택의 취득세율(소수, 예: 0.01=1%). 이 세율의 50%가 등록면허세율이 된다(§28①1호나목1)단서).' }
+      },
+      required: ['registrationType']
+    }
+  },
+  {
+    name: 'calculate_property_tax',
+    description: '지방세법상 재산세(토지·건축물·주택, §104~§111의2, §122)를 계산한다. 과세표준=시가표준액×공정시장가액비율(토지·건축물 70%, 주택 60%, 시행령§109 — 2026년도분 1세대1주택(시가표준액 9억원 이하)은 3억이하 43%/3~6억 44%/6억초과 45%로 특례)이며, 토지는 종합합산·별도합산·분리과세(전답과수원목장및임야 0.07%, 골프장·고급오락장 4%, 그밖의토지 0.2%)로, 건축물은 일반(0.25%)·특정지역공장(0.5%)·골프장고급오락장(4%)으로 세율이 갈린다. 주택은 누진세율(1세대1주택은 §111의2 경감세율)이 적용되고, §122 세부담상한(직전연도세액의 150%)은 주택을 제외한 토지·건축물·선박·항공기에만 적용된다. 재산세 도시지역분(§112, 지자체 조례로 최대 0.23% 추가)·지방교육세는 이 도구에 포함되지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        propertyCategory: { type: 'string', enum: ['house', 'land_comprehensive', 'land_separate', 'land_farmland_forest', 'land_golf_luxury', 'land_other_separate', 'building_general', 'building_factory_special', 'building_luxury', 'ship_general', 'ship_luxury', 'aircraft'], description: 'house=주택, land_comprehensive=토지 종합합산과세대상(나대지 등), land_separate=토지 별도합산과세대상(공장·차고 등 업무용부속토지), land_farmland_forest=분리과세 전ㆍ답ㆍ과수원ㆍ목장용지ㆍ임야, land_golf_luxury=분리과세 골프장ㆍ고급오락장용 토지, land_other_separate=분리과세 그 밖의 토지(공장부지 등), building_general=일반건축물, building_factory_special=특별시등 주거지역 내 특정 공장용건축물, building_luxury=골프장ㆍ고급오락장용 건축물, ship_general/ship_luxury=선박(고급선박 여부), aircraft=항공기.' },
+        standardPriceValue: { type: 'number', description: '재산세 과세기준일(매년 6월 1일) 현재 시가표준액(원). 선박·항공기는 이 값 자체가 과세표준이 되고(§110②), 그 외는 공정시장가액비율을 곱해 과세표준을 산정한다.' },
+        isOneHouseholdOneHouse: { type: 'boolean', description: 'propertyCategory가 house일 때 — 시행령§110의2의 1세대1주택(세대별 주민등록표상 1세대가 국내에 예외 유형이 아닌 주택을 1개만 소유)에 해당하는지. true이고 시가표준액이 9억원 이하이면 §111의2 경감세율과 우대 공정시장가액비율(43~45%)이 적용된다.' },
+        priorYearTaxAmount: { type: 'number', description: '직전 연도 이 재산에 대한 재산세액 상당액(원, 시행령이 정하는 방법으로 계산한 값). propertyCategory가 house가 아닐 때만 §122 세부담상한(150%)을 판정하는 데 사용한다. 없으면 세부담상한을 적용하지 않는다.' }
+      },
+      required: ['propertyCategory', 'standardPriceValue']
+    }
+  },
+  {
     name: 'calculate_related_party_transaction_gift_tax',
     description: '일감몰아주기 증여의제(상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제, [별지 제10호의3서식])를 계산한다. 지배주주와 그 친족이 지분을 보유한 법인(수혜법인)이 특수관계법인에 대한 매출비중이 높고 그 지분율도 높으면, 수혜법인의 세후영업이익(중소·중견·일반기업 공통) 중 일부(배당소득공제 반영)를 지배주주등이 증여받은 것으로 간주해 과세한다. 증여재산공제는 적용되지 않고 일반 누진세율과 신고세액공제만 적용된다. 직접출자관계와 간접출자관계가 함께 있으면 각각 별도로 계산해서 합산해야 한다.',
     input_schema: {
@@ -8096,6 +8125,170 @@ function toolCalculateAcquisitionTax(p) {
   };
 }
 
+// 등록면허세(지방세법 — 부동산 등기분). §23 1호 본문에 따라 "취득을 원인으로 하는 등기"는 원칙적으로
+// 취득세만 부과되고 등록면허세는 부과되지 않으므로, 소유권보존·이전등기 세율(§28①1호가·나목)은 §23
+// 1호 각 목의 예외(광업권등 취득등록·외국인소유물건 연부취득등기·취득세 부과제척기간 경과물건 등기·
+// §17 면세점물건 등기)에 해당할 때만 적용된다. 저당권·전세권·지상권·지역권·임차권·경매신청·가압류·
+// 가처분·가등기는 "설정"이라 원칙적으로 항상 등록면허세 대상이다.
+function toolCalculateRegistrationLicenseTax(p) {
+  p = p || {};
+  const type = p.registrationType;
+  const validTypes = ['ownership_preservation', 'ownership_transfer_paid', 'ownership_transfer_free', 'ownership_transfer_inheritance', 'superficies', 'mortgage', 'easement', 'chonsegwon', 'lease_right', 'auction_or_provisional', 'other'];
+  if (validTypes.indexOf(type) === -1) return { error: 'registrationType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
+
+  if (type === 'other') {
+    return { 산출세액: 6000, 적용근거: '§28①1호마목(그 밖의 등기) — 건당 6,000원', 안내: '이 도구는 등록면허세 본세만 계산합니다. 지방교육세는 포함되지 않습니다.' };
+  }
+
+  const isOwnershipType = ['ownership_preservation', 'ownership_transfer_paid', 'ownership_transfer_free', 'ownership_transfer_inheritance'].indexOf(type) !== -1;
+  if (isOwnershipType && !p.isAcquisitionTaxExemptCase) {
+    return {
+      적용여부: false,
+      안내: '§23 1호 본문 — 취득을 원인으로 하는 등기(일반적인 매매·증여·상속으로 인한 소유권보존·이전등기)는 취득세만 부과되고 등록면허세는 부과되지 않습니다. calculate_acquisition_tax 도구로 취득세를 계산하세요. 이 소유권보존·이전등기 세율은 §23 1호 각 목의 예외(광업권등 취득등록, 외국인소유물건 연부취득등기, 취득세 부과제척기간이 지난 물건의 등기, §17 면세점 물건의 등기)에 해당하는 경우에만 적용되므로, 그 경우라면 isAcquisitionTaxExemptCase를 true로 넣어 다시 호출하세요.'
+    };
+  }
+
+  const baseAmount = Number(p.baseAmount);
+  if (!(baseAmount >= 0)) return { error: 'baseAmount(과세표준 — 유형별 부동산가액·채권금액·요역지가액·전세금액·월임대차금액)가 필요합니다.' };
+
+  let rate, basis;
+  if (type === 'ownership_preservation') {
+    rate = 0.008; basis = '§28①1호가목(소유권보존등기) 0.8%';
+  } else if (type === 'ownership_transfer_paid') {
+    if (p.isHouseAcquisition && Number(p.houseAcquisitionTaxRate) > 0) {
+      rate = Number(p.houseAcquisitionTaxRate) * 0.5;
+      basis = '§28①1호나목1)단서(취득세§11①8호 적용 주택) — 해당 주택 취득세율(' + (Number(p.houseAcquisitionTaxRate) * 100) + '%)의 50%';
+    } else {
+      rate = 0.02; basis = '§28①1호나목1)본문(유상 소유권이전등기) 2.0%';
+    }
+  } else if (type === 'ownership_transfer_free') {
+    rate = 0.015; basis = '§28①1호나목2)본문(무상 소유권이전등기, 상속외) 1.5%';
+  } else if (type === 'ownership_transfer_inheritance') {
+    rate = 0.008; basis = '§28①1호나목2)단서(상속으로 인한 소유권이전등기) 0.8%';
+  } else if (type === 'superficies') {
+    rate = 0.002; basis = '§28①1호다목1)(지상권) 0.2%';
+  } else if (type === 'mortgage') {
+    rate = 0.002; basis = '§28①1호다목2)(저당권, 지상권·전세권 목적 등기 포함) 0.2%';
+  } else if (type === 'easement') {
+    rate = 0.002; basis = '§28①1호다목3)(지역권) 0.2%';
+  } else if (type === 'chonsegwon') {
+    rate = 0.002; basis = '§28①1호다목4)(전세권) 0.2%';
+  } else if (type === 'lease_right') {
+    rate = 0.002; basis = '§28①1호다목5)(임차권, 월 임대차금액 기준) 0.2%';
+  } else { // auction_or_provisional
+    rate = 0.002; basis = '§28①1호라목(경매신청·가압류·가처분·가등기) 0.2%';
+  }
+
+  let tax = Math.round(baseAmount * rate);
+  let minApplied = false;
+  if (tax < 6000) { tax = 6000; minApplied = true; }
+
+  return {
+    과세표준: baseAmount, 적용세율: Math.round(rate * 100000) / 1000, 산출세액: tax,
+    적용근거: basis + (minApplied ? ' (§28①단서 — 산출세액이 그 밖의 등기 세율인 건당 6,000원보다 적어 6,000원을 적용)' : ''),
+    안내: '이 세액은 등록면허세 본세만 계산한 것입니다. 지방교육세(등록면허세액의 20%가 원칙, 법인등기분은 별도 세율)는 이 도구에 포함되지 않으며, 관련 법령 파일(지방교육세법)이 확보되면 별도 반영될 예정입니다.'
+  };
+}
+
+const PROPERTY_TAX_LAND_COMPREHENSIVE_BRACKETS_ = [
+  { max: 50000000, rate: 0.002, deduction: 0 },
+  { max: 100000000, rate: 0.003, deduction: 50000 },
+  { max: Infinity, rate: 0.005, deduction: 250000 }
+];
+const PROPERTY_TAX_LAND_SEPARATE_BRACKETS_ = [
+  { max: 200000000, rate: 0.002, deduction: 0 },
+  { max: 1000000000, rate: 0.003, deduction: 200000 },
+  { max: Infinity, rate: 0.004, deduction: 1200000 }
+];
+const PROPERTY_TAX_HOUSE_GENERAL_BRACKETS_ = [
+  { max: 60000000, rate: 0.001, deduction: 0 },
+  { max: 150000000, rate: 0.0015, deduction: 30000 },
+  { max: 300000000, rate: 0.0025, deduction: 180000 },
+  { max: Infinity, rate: 0.004, deduction: 630000 }
+];
+const PROPERTY_TAX_HOUSE_ONE_BRACKETS_ = [
+  { max: 60000000, rate: 0.0005, deduction: 0 },
+  { max: 150000000, rate: 0.001, deduction: 30000 },
+  { max: 300000000, rate: 0.002, deduction: 180000 },
+  { max: Infinity, rate: 0.0035, deduction: 630000 }
+];
+
+// 재산세(지방세법 §104~§111의2, §122). 과세표준=시가표준액×공정시장가액비율(시행령§109, 2026년도
+// 적용값: 토지·건축물 70%, 주택 60%(1세대1주택 9억원이하는 3억이하43%/3~6억44%/6억초과45% 특례)).
+function toolCalculatePropertyTax(p) {
+  p = p || {};
+  const category = p.propertyCategory;
+  const validCategories = ['house', 'land_comprehensive', 'land_separate', 'land_farmland_forest', 'land_golf_luxury', 'land_other_separate', 'building_general', 'building_factory_special', 'building_luxury', 'ship_general', 'ship_luxury', 'aircraft'];
+  if (validCategories.indexOf(category) === -1) return { error: 'propertyCategory를 ' + validCategories.join('/') + ' 중에서 선택하세요.' };
+  const standardPriceValue = Number(p.standardPriceValue);
+  if (!(standardPriceValue > 0)) return { error: 'standardPriceValue(재산세 과세기준일 현재 시가표준액)가 필요합니다.' };
+
+  const isShipOrAircraft = (category === 'ship_general' || category === 'ship_luxury' || category === 'aircraft');
+  let taxBase, ratioNote;
+  if (isShipOrAircraft) {
+    taxBase = standardPriceValue; ratioNote = '§110②(선박·항공기는 시가표준액 자체가 과세표준)';
+  } else if (category === 'house') {
+    const isOneHouseEligible = !!p.isOneHouseholdOneHouse && standardPriceValue <= 900000000;
+    let ratio;
+    if (isOneHouseEligible) {
+      ratio = standardPriceValue <= 300000000 ? 0.43 : (standardPriceValue <= 600000000 ? 0.44 : 0.45);
+      ratioNote = '시행령§109①2호단서(2026년도 1세대1주택 특례, 시가표준액 9억원이하) — 공정시장가액비율 ' + (ratio * 100) + '%';
+    } else {
+      ratio = 0.60; ratioNote = '시행령§109①2호본문 — 공정시장가액비율 60%';
+    }
+    taxBase = Math.round(standardPriceValue * ratio);
+  } else {
+    taxBase = Math.round(standardPriceValue * 0.70); ratioNote = '시행령§109①1호(토지·건축물) — 공정시장가액비율 70%';
+  }
+
+  let tax, basis;
+  if (category === 'land_comprehensive') {
+    tax = calcProgressiveTax_(taxBase, PROPERTY_TAX_LAND_COMPREHENSIVE_BRACKETS_); basis = '§111①1호가목(토지 종합합산과세대상) 누진세율(0.2%~0.5%)';
+  } else if (category === 'land_separate') {
+    tax = calcProgressiveTax_(taxBase, PROPERTY_TAX_LAND_SEPARATE_BRACKETS_); basis = '§111①1호나목(토지 별도합산과세대상) 누진세율(0.2%~0.4%)';
+  } else if (category === 'land_farmland_forest') {
+    tax = Math.round(taxBase * 0.0007); basis = '§111①1호다목1)(분리과세 전ㆍ답ㆍ과수원ㆍ목장용지 및 임야) 0.07%';
+  } else if (category === 'land_golf_luxury') {
+    tax = Math.round(taxBase * 0.04); basis = '§111①1호다목2)(분리과세 골프장ㆍ고급오락장용 토지) 4%';
+  } else if (category === 'land_other_separate') {
+    tax = Math.round(taxBase * 0.002); basis = '§111①1호다목3)(분리과세 그 밖의 토지) 0.2%';
+  } else if (category === 'building_factory_special') {
+    tax = Math.round(taxBase * 0.005); basis = '§111①2호나목(특별시등 주거지역내 특정 공장용건축물) 0.5%';
+  } else if (category === 'building_luxury') {
+    tax = Math.round(taxBase * 0.04); basis = '§111①2호가목(골프장ㆍ고급오락장용 건축물) 4%';
+  } else if (category === 'building_general') {
+    tax = Math.round(taxBase * 0.0025); basis = '§111①2호다목(그 밖의 건축물) 0.25%';
+  } else if (category === 'ship_luxury') {
+    tax = Math.round(taxBase * 0.05); basis = '§111①4호가목(고급선박) 5%';
+  } else if (category === 'ship_general') {
+    tax = Math.round(taxBase * 0.003); basis = '§111①4호나목(그 밖의 선박) 0.3%';
+  } else if (category === 'aircraft') {
+    tax = Math.round(taxBase * 0.003); basis = '§111①5호(항공기) 0.3%';
+  } else { // house
+    const isOneHouseEligible = !!p.isOneHouseholdOneHouse && standardPriceValue <= 900000000;
+    if (isOneHouseEligible) {
+      tax = calcProgressiveTax_(taxBase, PROPERTY_TAX_HOUSE_ONE_BRACKETS_); basis = '§111의2①(1세대1주택 경감세율) 누진세율(0.05%~0.35%)';
+    } else {
+      tax = calcProgressiveTax_(taxBase, PROPERTY_TAX_HOUSE_GENERAL_BRACKETS_); basis = '§111①3호나목(그 밖의 주택) 누진세율(0.1%~0.4%)';
+    }
+  }
+
+  let capNote = '';
+  if (category !== 'house' && Number(p.priorYearTaxAmount) > 0) {
+    const cap = Math.round(Number(p.priorYearTaxAmount) * 1.5);
+    if (tax > cap) {
+      capNote = ' §122(세부담상한) — 직전연도세액(' + p.priorYearTaxAmount + '원)의 150%인 ' + cap + '원을 초과해 ' + cap + '원으로 감액했습니다.';
+      tax = cap;
+    }
+  }
+
+  return {
+    시가표준액: standardPriceValue, 과세표준: taxBase, 산출세액: tax,
+    적용근거: ratioNote + ' / ' + basis + capNote,
+    안내: '이 세액은 재산세 본세만 계산한 것입니다. 재산세 도시지역분(§112, 지방의회 의결로 고시한 지역에서 조례에 따라 과세표준×최대 0.23%를 추가 부과할 수 있음)과 지방교육세는 이 도구에 포함되지 않으며, 관련 법령 파일이 확보되면 별도 반영될 예정입니다. 토지가 종합합산·별도합산·분리과세 중 어디에 해당하는지는 실제 이용현황에 대한 사실판단이 필요하므로(§106①) 그 판정 자체는 이 도구가 대신하지 않습니다.'
+  };
+}
+
 // 저가양수·고가양도에 따른 이익의 증여의제 (상증세법 §35) — 특수관계인 간 재산을 시가보다 현저히 낮은(또는 높은) 가액으로
 // 거래하면 그 차액에서 일정 기준액을 뺀 금액을 증여받은(또는 증여한) 것으로 본다. 이 결과의 증여재산가액을 그대로
 // calculate_gift_tax의 giftAmount로 넣으면 정상적으로 증여재산공제·누진세율·신고세액공제가 적용된다(§35 자체는 별도 세율이 없음).
@@ -11579,6 +11772,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'check_correction_claim_eligibility' ||
         b.name === 'calculate_tax_exclusion_period' ||
         b.name === 'calculate_acquisition_tax' ||
+        b.name === 'calculate_registration_license_tax' ||
+        b.name === 'calculate_property_tax' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_nominee_trust_gift_tax' ||
@@ -11857,6 +12052,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_acquisition_tax') {
         const resultObj = toolCalculateAcquisitionTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_registration_license_tax') {
+        const resultObj = toolCalculateRegistrationLicenseTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_property_tax') {
+        const resultObj = toolCalculatePropertyTax(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
