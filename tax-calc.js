@@ -3428,6 +3428,26 @@
     let acquisitionValue = Number(p.acquisitionValue);
     if (!(acquisitionValue >= 0)) return { error: 'acquisitionValue(취득세 과세표준, 취득당시가액)가 필요합니다.' };
 
+    if (acquisitionType === 'gift' && Number(p.debtAssumedAmount) > 0) {
+      const debtAmount = Math.min(Number(p.debtAssumedAmount), acquisitionValue);
+      const giftAmount = acquisitionValue - debtAmount;
+      const paidPortionInput = Object.assign({}, p, { acquisitionType: 'paid', acquisitionValue: debtAmount, isFirstTimeHomeBuyer: false, debtAssumedAmount: undefined });
+      const paidResult = debtAmount > 0 ? window.calculateAcquisitionTaxJS(paidPortionInput) : null;
+      const giftPortionInput = Object.assign({}, p, { acquisitionType: 'gift', acquisitionValue: giftAmount, isFirstTimeHomeBuyer: false, debtAssumedAmount: undefined });
+      const giftResult = giftAmount > 0 ? window.calculateAcquisitionTaxJS(giftPortionInput) : null;
+      if ((paidResult && paidResult.error) || (giftResult && giftResult.error)) {
+        return (paidResult && paidResult.error) ? paidResult : giftResult;
+      }
+      const sum = function (key) { return (paidResult ? (Number(paidResult[key]) || 0) : 0) + (giftResult ? (Number(giftResult[key]) || 0) : 0); };
+      return {
+        부담부증여_채무액분: debtAmount, 부담부증여_증여분: giftAmount,
+        채무액분_계산결과: paidResult, 증여분_계산결과: giftResult,
+        과세표준: acquisitionValue, 산출세액: sum('산출세액'),
+        지방교육세: sum('지방교육세'), 농어촌특별세: sum('농어촌특별세'), 납부세액_합계: sum('납부세액_합계'),
+        안내: '§7⑫(부담부증여)에 따라 채무액(' + debtAmount + '원)에 상당하는 부분은 유상취득으로, 나머지(' + giftAmount + '원)는 무상취득(증여)으로 각각 계산해 합산했습니다. §36의3(생애최초 주택 구입 감면)은 "부담부증여는 제외한다"고 법에 명시되어 있어 채무액분에도 적용하지 않았습니다. 배우자·직계존비속 간 부담부증여는 채무액분도 §7⑪이 그대로 적용되어(isSpouseOrLinealRelativeTransaction로 판정) 대가지급 증명 게이트를 통과하지 못하면 그 부분도 증여로 재분류될 수 있습니다.'
+      };
+    }
+
     let relatedPartyGateNote = '';
     if (acquisitionType === 'paid' && p.isSpouseOrLinealRelativeTransaction) {
       const exceptionType = p.spouseTransactionExceptionType;
@@ -3477,8 +3497,13 @@
       }
     }
 
-    if (acquisitionValue <= 500000) {
-      return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' + relatedPartyGateNote };
+    const priorAdjacentValue = Math.max(0, Number(p.priorAdjacentAcquisitionValueWithin1Year) || 0);
+    const combinedValueForExemptionCheck = acquisitionValue + priorAdjacentValue;
+    if (combinedValueForExemptionCheck <= 500000) {
+      return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: (priorAdjacentValue > 0 ? '§17②(인접토지 1년 내 합산) — 1년 이내 인접 취득분(' + priorAdjacentValue + '원)과 합산해도 ' : '§17①(면세점) — ') + '취득가액 합계가 50만원 이하여서 취득세를 부과하지 않습니다.' + relatedPartyGateNote };
+    }
+    if (acquisitionValue <= 500000 && priorAdjacentValue > 0) {
+      relatedPartyGateNote += ' §17②(인접토지 1년 내 합산) — 이번 취득가액은 50만원 이하이지만 1년 이내 인접 취득분(' + priorAdjacentValue + '원)과 합산하면 50만원을 초과해 면세점이 적용되지 않고 정상 과세됩니다.';
     }
 
     let rate, basis;
@@ -3487,6 +3512,9 @@
       if (propertyType === 'house' && p.isOneHouseholdOneHouseInheritance) {
         rate = 0.008; basis = '§15①2호가목·시행령§29(1가구1주택자 상속) — 0.8%(§11①1호나목 2.8%에서 중과기준세율 2%를 뺀 세율)';
         eduStandardRate = 0.028; naTaxExempt = true;
+      } else if (propertyType === 'farmland' && p.isSelfFarmingFarmer) {
+        rate = 0.003; basis = '§15①2호나목(지방세특례제한법§6① 감면대상 농지의 상속) — 0.3%(§11①1호가목 2.3%에서 중과기준세율 2%를 뺀 세율). §15①2호나목이 지방세특례제한법§6①의 50% 경감을 대신하는 특례세율이므로 이 세율 자체가 최종 세액이고, 별도로 50%를 추가 경감하지 않습니다.';
+        eduStandardRate = 0.023; naTaxExempt = true;
       } else if (propertyType === 'farmland') {
         rate = 0.023; basis = '§11①1호가목(상속, 농지) 2.3%'; eduStandardRate = 0.023;
       } else {
@@ -3511,6 +3539,9 @@
         rate = 0.03; basis = '§11①7호가목(유상취득, 농지) 3.0%'; eduStandardRate = 0.03;
       } else if (propertyType === 'other') {
         rate = 0.04; basis = '§11①7호나목(유상취득, 농지외) 4.0%'; eduStandardRate = 0.04;
+      } else if (p.isCorporation && p.isCorporateMergerOrDivision) {
+        rate = 0.04; basis = '§11⑤(법인의 합병·분할에 따른 부동산 취득) — 합병·분할취득은 "유상거래"가 아니라 §11①7호의 그 밖의 원인 취득으로 보아 §13의2①1호(12%)를 적용하지 않고 4.0%를 적용';
+        eduStandardRate = 0.04;
       } else if (p.isCorporation) {
         rate = 0.12; basis = '§13의2①1호(법인의 주택 유상취득) — 4%+8%=12%'; eduMode = 'naMok';
       } else if (p.isTemporaryTwoHouse) {
@@ -3560,7 +3591,7 @@
     } else if (eduMode === 'house118') {
       eduRate = houseRateBeforeLuxury * 0.10;
     } else {
-      eduRate = Math.max(0, eduStandardRate - 0.02);
+      eduRate = Math.max(0, eduStandardRate - 0.02) * 0.2;
     }
     const eduTax = Math.round(acquisitionValue * eduRate);
     const naTax = naTaxExempt ? 0 : Math.round(acquisitionValue * 0.002);
@@ -3570,12 +3601,15 @@
       if (acquisitionValue > 1200000000) {
         reliefNote = ' §36의3(생애최초 주택 구입 감면, 지방세특례제한법)은 취득당시가액이 12억원을 초과해 적용되지 않습니다.';
       } else {
-        const cap = p.isSmallLowValueHousing ? 3000000 : 2000000;
+        const capBase = p.isSmallLowValueHousing ? 3000000 : 2000000;
+        const alreadyUsedByCoOwners = Math.max(0, Number(p.firstTimeBuyerReliefAlreadyUsedByCoOwners) || 0);
+        const cap = Math.max(0, capBase - alreadyUsedByCoOwners);
         const reduction = Math.min(tax, cap);
         finalTax = tax - reduction;
         const reliefRatio = tax > 0 ? reduction / tax : 0;
         finalEduTax = Math.round(eduTax * (1 - reliefRatio));
-        reliefNote = ' §36의3(생애최초 주택 구입 감면, 지방세특례제한법) — 산출세액 ' + tax + '원 중 ' + reduction + '원을 감면해 취득세 ' + finalTax + '원만 납부합니다(지방교육세도 같은 비율로 감면되어 ' + finalEduTax + '원). 취득한 날부터 3년 이내에 매각·증여(배우자 제외)하거나 다른 용도(임대 포함)로 사용하면 감면된 취득세가 추징됩니다(§36의3④) — 이 도구는 그 사후관리를 판정하지 않습니다.';
+        const coOwnerNote = alreadyUsedByCoOwners > 0 ? ' §36의3② — 공동취득이라 다른 공동취득자가 이미 사용한 감면액(' + alreadyUsedByCoOwners + '원)을 뺀 잔여 한도(' + cap + '원)까지만 감면했습니다.' : '';
+        reliefNote = ' §36의3(생애최초 주택 구입 감면, 지방세특례제한법) — 산출세액 ' + tax + '원 중 ' + reduction + '원을 감면해 취득세 ' + finalTax + '원만 납부합니다(지방교육세도 같은 비율로 감면되어 ' + finalEduTax + '원).' + coOwnerNote + ' 취득한 날부터 3년 이내에 매각·증여(배우자 제외)하거나 다른 용도(임대 포함)로 사용하면 감면된 취득세가 추징됩니다(§36의3④) — 이 도구는 그 사후관리를 판정하지 않습니다.';
       }
     } else if (acquisitionType === 'paid' && propertyType === 'farmland' && p.isSelfFarmingFarmer) {
       finalTax = Math.round(tax * 0.5);
@@ -3605,7 +3639,7 @@
       적용세율: Math.round(rate * 100000) / 1000, 적용근거: basis + luxuryNote,
       과세표준: acquisitionValue, 산출세액: tax,
       지방교육세: finalEduTax, 농어촌특별세: finalNaTax, 납부세액_합계: finalTax + finalEduTax + finalNaTax,
-      안내: '지방교육세(§151①1호 — 취득 유형별로 세율이 갈립니다: 일반취득은 표준세율에서 중과기준세율 2%를 뺀 세율×20%, §13의2 법인·다주택 중과는 항상 (4%-2%)×20%=0.4% 고정, §11①8호 일반 주택 유상취득은 적용세율(사치성 가산 전)×50%×20%)와 농어촌특별세(§5①6호 — 취득세 과세표준×2%×10%=0.2%, 지방세법§15①1~3호 특례(1가구1주택 상속 등)는 §4 10호의4로 비과세)를 함께 계산했습니다.' + relatedPartyGateNote + ' 사치성재산(§13⑤) 가산분(+8%p)은 지방교육세 근거조문(§151①1호 가·나목)이 §13②③⑥⑦·§13의2만 지정하고 있어 이 계산에는 반영하지 않았습니다.' + reliefNote + ' 위 세 감면 외 지방세특례제한법상 다른 감면(다자녀는 자동차 취득세만 해당해 부동산과 무관·서민임대주택·전세사기피해자 등)은 이 도구가 아직 다루지 않습니다. 재산세 도시지역분과 마찬가지로 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16).'
+      안내: '지방교육세(§151①1호 — 취득 유형별로 세율이 갈립니다: 일반취득은 표준세율에서 중과기준세율 2%를 뺀 세율×20%, §13의2 법인·다주택 중과는 항상 (4%-2%)×20%=0.4% 고정, §11①8호 일반 주택 유상취득은 적용세율(사치성 가산 전)×50%×20%)와 농어촌특별세(§5①6호 — 취득세 과세표준×2%×10%=0.2%, 지방세법§15①1~3호 특례(1가구1주택 상속 등)는 §4 10호의4로 비과세)를 함께 계산했습니다.' + relatedPartyGateNote + ' 사치성재산(§13⑤) 가산분(+8%p)은 지방교육세 근거조문(§151①1호 가·나목)이 §13②③⑥⑦·§13의2만 지정하고 있어 이 계산에는 반영하지 않았습니다.' + reliefNote + ' 위 세 감면 외 지방세특례제한법상 다른 감면(다자녀는 자동차 취득세만 해당해 부동산과 무관·서민임대주택·전세사기피해자 등)은 이 도구가 아직 다루지 않습니다. 재산세 도시지역분과 마찬가지로 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 본점·주사무소 사업용 부동산·공장 신설증설용 부동산·고급주택·골프장·고급오락장 등으로 용도가 바뀌면 관청이 추징하며(§16), 다주택 여부 등 취득 당시에는 몰랐던 사유로 §13의2① 중과세율 적용대상이 된 경우에는 그 사유가 발생한 날부터 60일 이내에 납세자가 스스로 차액을 신고·납부해야 합니다(§20②).'
     };
     if (finalTax !== tax) {
       result.감면전_취득세_산출세액 = tax;
