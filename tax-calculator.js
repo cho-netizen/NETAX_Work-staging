@@ -5199,6 +5199,9 @@ function renderAcquisitionPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atFirstTimeBuyer"><label for="atFirstTimeBuyer">[유상취득·1주택만] 생애최초 주택 구입(§36의3, 본인·배우자 모두 무주택, 취득당시가액 12억원 이하) — 산출세액 200만원(소형·저가주택은 300만원) 한도 공제</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSmallLowValueHousing"><label for="atSmallLowValueHousing">[위 체크시만] 소형·저가주택(전용 60㎡이하+3억(수도권 6억)이하 등) — 한도 300만원</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSelfFarmingFarmer"><label for="atSelfFarmingFarmer">[유상취득·농지만] 자경농민 농지 감면(§6①, 2년이상 영농종사) — 취득세·지방교육세 50% 경감, 농특세 비과세</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atNationalMeritorious"><label for="atNationalMeritorious">국가유공자등 대부금 감면(§29①, 국가유공자법 등에 따른 대부금 수령자)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSmallHouse85"><label for="atSmallHouse85">[위 체크시·주택만] 전용면적 85㎡ 이하 — 대부금 초과분 포함 전액 면제</label></div>' +
+        '<div class="taxcalc-field"><label>[위 체크시·85㎡초과 주택 또는 그 외 부동산만] 대부금</label><input type="number" id="atMeritoriousLoan" placeholder="원 (대부금 한도까지만 비례 면제)"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>사치성재산 중과(§13⑤, 표준세율+8%p)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5763,7 +5766,10 @@ taxCalcView.addEventListener('click', function(e){
       isLuxuryVessel: document.getElementById('atLuxuryVessel').checked,
       isFirstTimeHomeBuyer: document.getElementById('atFirstTimeBuyer').checked,
       isSmallLowValueHousing: document.getElementById('atSmallLowValueHousing').checked,
-      isSelfFarmingFarmer: document.getElementById('atSelfFarmingFarmer').checked
+      isSelfFarmingFarmer: document.getElementById('atSelfFarmingFarmer').checked,
+      isNationalMeritorious: document.getElementById('atNationalMeritorious').checked,
+      isSmallHouse85sqmOrLess: document.getElementById('atSmallHouse85').checked,
+      meritoriousLoanAmount: numVal(document.getElementById('atMeritoriousLoan').value) || 0
     };
     renderAcquisitionTaxResult(calculateAcquisitionTaxJS(input));
   } else if (action === 'run-industrial-complex-lot'){
