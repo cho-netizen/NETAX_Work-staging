@@ -911,6 +911,9 @@ const DRIVE_TOOLS = [
         isAdjustedArea: { type: 'boolean', description: 'houseCountIncludingThis 판정시, 또는 gift+house일 때 — 「주택법」§63의2①1호의 조정대상지역에 소재하는지.' },
         isTemporaryTwoHouse: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의5의 일시적 2주택(종전 주택 등을 소유한 1세대가 이사·취업 등 사유로 신규 주택을 취득한 후 3년 이내에 종전 주택등을 처분 예정)에 해당하는지. true면 houseCountIncludingThis·isAdjustedArea와 무관하게 다주택 중과를 적용하지 않는다.' },
         isLowValueExemptHousing: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의2 1호의 저가주택(수도권 시가표준액 1억원 이하, 수도권 외 2억원 이하, 정비구역·사업시행구역 외 소재)에 해당하는지. true면 다주택 중과를 적용하지 않는다.' },
+        isCulturalHeritageHouse: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의2 4호의 지정문화유산·등록문화유산·천연기념물등에 해당하는 주택인지. true면 다주택 중과를 적용하지 않는다.' },
+        isHomeDaycareCenter: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 영유아보육법§10조5호의 가정어린이집으로 운영할 목적으로 취득하는 주택인지(시행령§28의2 6호). true면 다주택 중과를 적용하지 않는다. 취득일부터 1년 이내 미사용 또는 3년 미만 사용 후 매각·증여·다른 용도 사용시 추징되나(단서) 이 도구는 그 사후관리를 판정하지 않는다.' },
+        isRuralFarmhouse: { type: 'boolean', description: 'acquisitionType이 paid이고 propertyType이 house일 때 — 시행령§28의2 11호의 농어촌주택(읍·면 지역 소재, 대지 660㎡ 이내·건축물 연면적 150㎡ 이내, 건축물 가액 6,500만원 이내, 광역시 군지역·수도권·도시지역·토지거래허가구역·투기지역 등이 아닌 지역)의 각 호 요건을 모두 충족하는지. true면 다주택 중과를 적용하지 않는다(1주택 소유자가 농어촌주택을 추가로 취득해도 종전 주택 수에 합산하지 않음).' },
         isAdjustedAreaHighValueGift: { type: 'boolean', description: 'acquisitionType이 gift이고 propertyType이 house일 때 — 조정대상지역에 있고 시가표준액 3억원 이상인 주택의 무상취득(증여)인지(시행령§28의6①). true면 §13의2②로 12% 중과 대상.' },
         isExemptSpouseOrLinealGift: { type: 'boolean', description: 'isAdjustedAreaHighValueGift가 true일 때 — 1세대1주택자가 소유한 주택을 그 배우자 또는 직계존비속이 무상취득하는 경우 등 시행령§28의6②의 예외에 해당하는지. true면 12% 중과를 적용하지 않고 일반 무상취득세율(3.5%)을 적용한다.' },
         isLuxuryHouse: { type: 'boolean', description: '§13⑤3호·시행령§28④의 고급주택(연면적 331㎡ 초과 단독주택, 대지 662㎡ 초과, 엘리베이터·에스컬레이터·수영장 설치 등, 시가표준액 9억원 초과)에 해당하는지. true면 위에서 계산된 세율에 8%p(중과기준세율 2%×400%)를 가산한다.' },
@@ -926,7 +929,8 @@ const DRIVE_TOOLS = [
         isSpouseOrLinealRelativeTransaction: { type: 'boolean', description: '§7⑪ — acquisitionType이 paid일 때, 배우자 또는 직계존비속으로부터 부동산등을 취득하는 거래인지. true이면 원칙적으로 증여로 취득한 것으로 보되(본문), spouseTransactionExceptionType으로 예외 사유를 주장할 수 있다. 예외를 주장하지 않으면 자동으로 acquisitionType이 gift로 재분류되고 과세표준도 marketValueForGateCheck(시가인정액) 기준으로 바뀐다.' },
         spouseTransactionExceptionType: { type: 'string', enum: ['public_auction', 'bankruptcy', 'exchange', 'proven_consideration'], description: 'isSpouseOrLinealRelativeTransaction이 true일 때 — §7⑪ 각 호의 예외 사유. public_auction=1호(공매, 경매포함), bankruptcy=2호(파산선고로 처분되는 부동산 취득), exchange=3호(등기·등록이 필요한 부동산등의 교환), proven_consideration=4호(취득자의 소득·재산처분대금 등으로 대가를 지급한 사실이 증명되는 경우 — 단, 그 대가가 시가인정액보다 낮고 차액이 3억원 이상이거나 시가인정액의 30% 이상이면(marketValueForGateCheck로 판정) 이 예외가 재배제되어 증여로 재분류된다).' },
         isOtherRelatedPartyTransaction: { type: 'boolean', description: '법§10조의3②·시행령§18의2(부당행위계산) — acquisitionType이 paid일 때, 배우자·직계존비속이 아닌 그 밖의 특수관계인으로부터 취득하는 거래인지. true이고 실제 취득가액이 marketValueForGateCheck(시가인정액)보다 낮으며 그 차액이 3억원 이상이거나 시가인정액의 5% 이상이면, 취득당시가액을 시가인정액으로 재산정한다(acquisitionType 자체는 유상취득 그대로 유지). 주의 — 배우자·직계존비속 간 거래라도 spouseTransactionExceptionType이 proven_consideration(4호)이어서 유상으로 인정된 경우에는 이 게이트가 자동으로 함께 적용된다(법 조문의 "§7⑪에 따라 증여로 취득한 것으로 보는 경우는 제외한다"는 문언은 실제로 증여로 판정된 부분만 배제하는 것이지 배우자·직계존비속 거래 전체를 배제하는 것이 아님 — 1~3호는 가격이 절차상 객관적으로 정해져 이 게이트에서 제외됨) — isOtherRelatedPartyTransaction을 별도로 true로 넣을 필요는 없다.' },
-        marketValueForGateCheck: { type: 'number', description: 'isSpouseOrLinealRelativeTransaction(§7⑪4호 30%/3억원 게이트) 또는 isOtherRelatedPartyTransaction(시행령§18의2 5%/3억원 게이트) 판정에 쓰는 비교대상 시가인정액(원, 시가를 산정하기 어려우면 시가표준액).' }
+        marketValueForGateCheck: { type: 'number', description: 'isSpouseOrLinealRelativeTransaction(§7⑪4호 30%/3억원 게이트) 또는 isOtherRelatedPartyTransaction(시행령§18의2 5%/3억원 게이트) 판정에 쓰는 비교대상 시가인정액(원, 시가를 산정하기 어려우면 시가표준액).' },
+        standardPriceValueForGiftChoice: { type: 'number', description: '§10조의2②2호·시행령§14의2 — acquisitionType이 gift일 때, 이 부동산의 시가표준액(원). 시가표준액이 1억원 이하이고 acquisitionValue(시가인정액)보다 낮으면, 납세자가 유리한 시가표준액을 과세표준으로 선택한 것으로 보아 자동으로 그 값을 사용한다(상속은 이 특례 대상이 아니므로 acquisitionType이 inheritance일 때는 무시된다).' }
       },
       required: ['acquisitionType', 'propertyType', 'acquisitionValue']
     }
@@ -8111,6 +8115,16 @@ function toolCalculateAcquisitionTax(p) {
     }
   }
 
+  // §10조의2②2호·시행령§14의2 — 시가표준액이 1억원 이하인 부동산등의 무상취득(상속은 제외)은
+  // 시가인정액과 시가표준액 중 납세자가 유리한 쪽(낮은 쪽)을 과세표준으로 선택할 수 있다.
+  if (acquisitionType === 'gift') {
+    const standardPriceForChoice = Number(p.standardPriceValueForGiftChoice);
+    if (standardPriceForChoice > 0 && standardPriceForChoice <= 100000000 && standardPriceForChoice < acquisitionValue) {
+      relatedPartyGateNote += ' §10조의2②2호·시행령§14의2(소액 무상취득 특례) — 시가표준액(' + standardPriceForChoice + '원)이 1억원 이하이고 시가인정액(' + acquisitionValue + '원)보다 낮아, 납세자가 유리한 시가표준액을 과세표준으로 선택했습니다.';
+      acquisitionValue = standardPriceForChoice;
+    }
+  }
+
   if (acquisitionValue <= 500000) {
     return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' + relatedPartyGateNote };
   }
@@ -8155,6 +8169,12 @@ function toolCalculateAcquisitionTax(p) {
       rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의5(일시적 2주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
     } else if (p.isLowValueExemptHousing) {
       rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 1호(저가주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+    } else if (p.isCulturalHeritageHouse) {
+      rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 4호(지정·등록문화유산 또는 천연기념물등 주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+    } else if (p.isHomeDaycareCenter) {
+      rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 6호(가정어린이집 운영목적 취득, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+    } else if (p.isRuralFarmhouse) {
+      rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 11호(농어촌주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
     } else {
       const n = Number(p.houseCountIncludingThis) || 1;
       const adj = !!p.isAdjustedArea;

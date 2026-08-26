@@ -3469,6 +3469,14 @@
       }
     }
 
+    if (acquisitionType === 'gift') {
+      const standardPriceForChoice = Number(p.standardPriceValueForGiftChoice);
+      if (standardPriceForChoice > 0 && standardPriceForChoice <= 100000000 && standardPriceForChoice < acquisitionValue) {
+        relatedPartyGateNote += ' §10조의2②2호·시행령§14의2(소액 무상취득 특례) — 시가표준액(' + standardPriceForChoice + '원)이 1억원 이하이고 시가인정액(' + acquisitionValue + '원)보다 낮아, 납세자가 유리한 시가표준액을 과세표준으로 선택했습니다.';
+        acquisitionValue = standardPriceForChoice;
+      }
+    }
+
     if (acquisitionValue <= 500000) {
       return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' + relatedPartyGateNote };
     }
@@ -3509,6 +3517,12 @@
         rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의5(일시적 2주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
       } else if (p.isLowValueExemptHousing) {
         rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 1호(저가주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+      } else if (p.isCulturalHeritageHouse) {
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 4호(지정·등록문화유산 또는 천연기념물등 주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+      } else if (p.isHomeDaycareCenter) {
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 6호(가정어린이집 운영목적 취득, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
+      } else if (p.isRuralFarmhouse) {
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 11호(농어촌주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
       } else {
         const n = Number(p.houseCountIncludingThis) || 1;
         const adj = !!p.isAdjustedArea;

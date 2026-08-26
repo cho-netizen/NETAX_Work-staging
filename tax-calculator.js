@@ -5190,6 +5190,10 @@ function renderAcquisitionPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOtherRelatedParty"><label for="atOtherRelatedParty">배우자·직계존비속 외 특수관계인으로부터 취득 — 저가취득시 시가인정액으로 재산정(부당행위계산, 법§10조의3②·시행령§18의2). 배우자·직계존비속간 거래(위 4호 대가지급증명으로 유상 인정된 경우)에도 이 5% 게이트가 별도로 추가 적용됩니다.</label></div>' +
         '<div class="taxcalc-field"><label>[위 둘 중 하나 체크시] 비교 시가인정액</label><input type="number" id="atMarketValueGate" placeholder="원 (30%/3억원 또는 5%/3억원 게이트 판정용)"></div>' +
       '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[무상취득만] 소액 부동산 시가표준액 선택(§10조의2②2호·시행령§14의2)</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>시가표준액</label><input type="number" id="atStandardPriceForGift" placeholder="원 (1억원 이하이고 시가인정액보다 낮으면 자동으로 이 값을 과세표준으로 선택, 상속은 제외)"></div>' +
+      '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[상속·주택만] 1가구1주택자 상속 특례(§15①2호가목)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOneHouseInherit"><label for="atOneHouseInherit">피상속인과 세대별 주민등록표상 같은 가구가 소유한 1가구1주택을 상속받음 (해당시 0.8%로 낮아짐)</label></div>' +
@@ -5201,6 +5205,9 @@ function renderAcquisitionPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atAdjustedArea"><label for="atAdjustedArea">조정대상지역 소재</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atTemporaryTwoHouse"><label for="atTemporaryTwoHouse">일시적 2주택(종전 주택 소유 상태에서 이사 등 사유로 취득, 3년 이내 종전 주택 처분 예정) — 중과 제외</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLowValueExempt"><label for="atLowValueExempt">저가주택(수도권 시가표준액 1억원 이하 / 수도권 외 2억원 이하, 정비구역 외) — 중과 제외</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atCulturalHeritage"><label for="atCulturalHeritage">지정·등록문화유산 또는 천연기념물등 주택 — 중과 제외</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atHomeDaycare"><label for="atHomeDaycare">가정어린이집 운영목적 취득 — 중과 제외</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atRuralFarmhouse"><label for="atRuralFarmhouse">농어촌주택(읍·면 소재, 대지660㎡·연면적150㎡·건축물가액6,500만원 이내 등 요건 충족) — 중과 제외</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[무상취득·주택만] 조정대상지역 고가주택 증여 중과(§13의2②)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5770,12 +5777,16 @@ taxCalcView.addEventListener('click', function(e){
       spouseTransactionExceptionType: document.getElementById('atSpouseExceptionType').value,
       isOtherRelatedPartyTransaction: document.getElementById('atOtherRelatedParty').checked,
       marketValueForGateCheck: numVal(document.getElementById('atMarketValueGate').value) || 0,
+      standardPriceValueForGiftChoice: numVal(document.getElementById('atStandardPriceForGift').value) || 0,
       isOneHouseholdOneHouseInheritance: document.getElementById('atOneHouseInherit').checked,
       isCorporation: document.getElementById('atCorporation').checked,
       houseCountIncludingThis: numVal(document.getElementById('atHouseCount').value) || 1,
       isAdjustedArea: document.getElementById('atAdjustedArea').checked,
       isTemporaryTwoHouse: document.getElementById('atTemporaryTwoHouse').checked,
       isLowValueExemptHousing: document.getElementById('atLowValueExempt').checked,
+      isCulturalHeritageHouse: document.getElementById('atCulturalHeritage').checked,
+      isHomeDaycareCenter: document.getElementById('atHomeDaycare').checked,
+      isRuralFarmhouse: document.getElementById('atRuralFarmhouse').checked,
       isAdjustedAreaHighValueGift: document.getElementById('atAdjustedAreaGift').checked,
       isExemptSpouseOrLinealGift: document.getElementById('atExemptSpouseGift').checked,
       isLuxuryHouse: document.getElementById('atLuxuryHouse').checked,
