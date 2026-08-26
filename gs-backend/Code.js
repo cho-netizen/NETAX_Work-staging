@@ -363,7 +363,7 @@ const DRIVE_TOOLS = [
         isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라(다주택자 중과 한시배제가 여러 차례 연장돼왔으니 신고 시점 기준으로 재확인).' },
         isNonBusinessLand: { type: 'boolean', description: '비사업용 토지인지 (기본세율+10%p 가산)' },
         isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
-        isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. §133①1호·2호나목에 따라 §69의2~70 등 아래 다른 감면과 한도를 공유하며, 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
+        isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. §133①1호·2호나목에 따라 §69의2~70 등 아래 다른 감면과 한도를 공유하며, calculate_restructuring_property_reduction(§43)·calculate_national_forest_land_reduction(§85의10)처럼 별도 도구로 계산하는 감면도 같은 1억원/과세기간 풀을 공유하니 함께 확인해야 함. 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
         isLivestockLandExempt: { type: 'boolean', description: '8년 이상 자경 축사용지 폐업 감면(조특법§69의2) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도(연1억/5년합산2억)를 공유한다.' },
         isLivestockRestartedWithin5Years: { type: 'boolean', description: 'isLivestockLandExempt가 true일 때만 — 축사용지 양도 후 5년 이내에 축산업을 다시 했는지(§69의2②). true면(isLivestockRestartException이 아닌 한) 감면세액을 즉시 추징한다.' },
         isLivestockRestartException: { type: 'boolean', description: 'isLivestockRestartedWithin5Years가 true일 때만 — 상속 등 대통령령으로 정하는 부득이한 사유에 해당해 추징 예외를 인정받는지.' },
@@ -8377,7 +8377,7 @@ function toolCalculateRestructuringPropertyReduction(p) {
     return {
       적용여부: true, 적용감면율: 50, 세액감면방식: true,
       전체양도차익: Math.round(totalGain),
-      안내: '취득일로부터 5년 이내 양도이므로 그 양도소득세의 50%에 상당하는 세액을 감면합니다(세액감면). 위 일반 양도세 계산기에 원래 양도차익(전체양도차익, 이 감면 미반영)을 그대로 입력해 감면 적용 전 산출세액을 구한 뒤, 그 산출세액(가산세·다른 세액공제 반영 전 본세)의 50%를 차감한 금액을 최종 납부세액으로 하세요.'
+      안내: '취득일로부터 5년 이내 양도이므로 그 양도소득세의 50%에 상당하는 세액을 감면합니다(세액감면). 위 일반 양도세 계산기에 원래 양도차익(전체양도차익, 이 감면 미반영)을 그대로 입력해 감면 적용 전 산출세액을 구한 뒤, 그 산출세액(가산세·다른 세액공제 반영 전 본세)의 50%를 차감한 금액을 최종 납부세액으로 하세요. 이 감면세액은 조특법§133①1호에 따라 같은 과세기간 중 §69·§69의2~4·§70·§85의10 감면세액과 합산해 1억원을 넘으면 그 초과분을 감면받지 못합니다 — 다른 감면을 함께 적용받는다면 합계액을 직접 확인하세요.'
     };
   }
   let exemptGain, note;
@@ -8397,7 +8397,7 @@ function toolCalculateRestructuringPropertyReduction(p) {
     전체양도차익: Math.round(totalGain),
     감면_비과세대상_양도소득금액: Math.round(exemptGain),
     과세대상양도소득금액: taxableGain,
-    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다). 1999.12.31 이전 취득분만 적용됩니다(§43①).'
+    안내: note + ' 이 결과의 "과세대상양도소득금액"을 calculate_transfer_tax 도구에 그 자산의 양도차익으로 대신 넣어 나머지 세액을 계산하세요(장기보유특별공제·기본공제 등은 그 도구에서 별도 적용됩니다). 1999.12.31 이전 취득분만 적용됩니다(§43①). 이 감면세액은 조특법§133①1호에 따라 같은 과세기간 중 §69·§69의2~4·§70·§85의10 감면세액과 합산해 1억원을 넘으면 그 초과분을 감면받지 못합니다.'
   };
 }
 
@@ -9399,7 +9399,7 @@ function toolCalculateNationalForestLandReduction(p) {
     적용여부: true,
     전체양도차익: Math.round(totalGain),
     세액감면율: 10,
-    안내: '조특법§85의10 — 2년 이상 보유한 산지(도시지역 소재 제외)를 국유림의 경영 및 관리에 관한 법률§18에 따라 국가에 양도할 때는 그 양도소득세 산출세액의 100분의 10을 감면합니다. calculate_transfer_tax로 전체 양도차익 기준 세액을 계산한 뒤, 그 산출세액에서 10%를 차감하세요.'
+    안내: '조특법§85의10 — 2년 이상 보유한 산지(도시지역 소재 제외)를 국유림의 경영 및 관리에 관한 법률§18에 따라 국가에 양도할 때는 그 양도소득세 산출세액의 100분의 10을 감면합니다. calculate_transfer_tax로 전체 양도차익 기준 세액을 계산한 뒤, 그 산출세액에서 10%를 차감하세요. 이 감면세액은 조특법§133①1호에 따라 같은 과세기간 중 §43·§69·§69의2~4·§70 감면세액과 합산해 1억원을 넘으면 그 초과분을 감면받지 못합니다.'
   };
 }
 
