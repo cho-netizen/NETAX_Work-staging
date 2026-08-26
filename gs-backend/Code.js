@@ -377,7 +377,9 @@ const DRIVE_TOOLS = [
         transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 양도 당시 기준시가(원).' },
         pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의14① 연금계좌세액공제. 납입액×10%(산출세액 한도)를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
-        compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
+        compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, cash·bond·bond_3y·bond_5y·land_replacement는 양도일이 2026.12.31, restricted_zone_40/25는 2028.12.31을 넘으면 감면하지 않으며(일몰기한), cash·bond·bond_3y·bond_5y·land_replacement는 추가로 사업인정고시일(publicNoticeDate 미입력시 양도일)로부터 소급 2년 이전 취득분이 아니면 감면하지 않는다(§77①·§77의2①). 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
+        publicNoticeDate: { type: 'string', description: '사업인정고시일(YYYY-MM-DD) — compensationType이 cash·bond·bond_3y·bond_5y·land_replacement일 때 2년 이전 취득 요건(§77①·§77의2①) 판정 기준일. 모르면 생략(양도일을 기준일로 대신 판정하되, 실제 고시일과 다를 수 있음을 안내한다).' },
+        isBondPledgeBreached: { type: 'boolean', description: 'compensationType이 bond_3y 또는 bond_5y일 때, 만기까지 채권을 보유하기로 한 특약을 위반했는지(§77④). true면 즉시 특약 없는 세율(15%, 5년만기특약이었으면 25%)과의 차액을 추징세액에 더한다.' },
         downContractPriceDifference: { type: 'number', description: '다운계약서(업계약서) 등 거짓 계약으로 비과세·감면을 적용받은 경우(소득세법§91②), 계약서상 거래가액과 실지거래가액의 차액(원). 1세대1주택 비과세라면 MIN(비과세 미적용시 산출세액, 이 차액)을, 8년자경농지·수용감면 등을 받았다면 MIN(감면세액, 이 차액)을 배제·추징한다. 정상신고 사안이면 생략.' },
         isReconstructionRights: { type: 'boolean', description: '재개발·재건축 조합원이 기존건물과 그 부수토지를 제공하고 취득한 조합원입주권 또는 신축주택을 청산금 납부하고 양도하는 경우(소득세법시행령§166①②③)인지. true면 acquisitionPrice는 무시되고, rightsValue·settlementPaid·managementDispositionDate·originalAssetAcquisitionPrice로 별도 산정한다(acquisitionDate는 기존건물 취득일 그대로, acquisitionPrice는 생략 가능).' },
         isCompletedNewHousing: { type: 'boolean', description: 'isReconstructionRights가 true일 때만 의미 있음 — false(기본값)면 조합원입주권 자체를 준공 전에 양도(§166①1호, 인가전양도차익에만 장특공제), true면 준공된 신축주택을 양도(§166②1호, 인가후양도차익을 청산금납부분·기존건물분으로 재분배해 각각 다른 보유기간으로 장특공제).' },
@@ -5088,21 +5090,39 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
     land_replacement: 0.40,
     restricted_zone_40: 0.40, restricted_zone_25: 0.25
   };
+  const COMPENSATION_SUNSET_DATE_M = {
+    cash: '2026-12-31', bond: '2026-12-31', bond_3y: '2026-12-31', bond_5y: '2026-12-31',
+    land_replacement: '2026-12-31',
+    restricted_zone_40: '2028-12-31', restricted_zone_25: '2028-12-31'
+  };
   let compensationReductionTotal = 0;
+  let bondBreachClawbackTotal = 0;
   pooled.forEach(function (c) {
     const rate = COMPENSATION_REDUCTION_RATES_M[c.raw.compensationType];
-    if (rate !== undefined && poolIncomeSum > 0) {
-      const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
-      const reduction = Math.min(Math.round(share * rate), 200000000);
-      compensationReductionTotal += reduction;
-      reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
-      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '수용감면(안분)', 감면액: reduction });
+    if (rate === undefined || poolIncomeSum <= 0) return;
+    const isEminentDomainOrReplacement = ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement'].indexOf(c.raw.compensationType) !== -1;
+    if (c.raw.transferDate > COMPENSATION_SUNSET_DATE_M[c.raw.compensationType]) return;
+    if (isEminentDomainOrReplacement && c.raw.acquisitionDate && c.raw.transferDate) {
+      const referenceDate = (c.raw.publicNoticeDate && c.raw.publicNoticeDate <= c.raw.transferDate) ? c.raw.publicNoticeDate : c.raw.transferDate;
+      if (fullYearsElapsed_(c.raw.acquisitionDate, referenceDate) < 2) return;
+    }
+    const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
+    const reduction = Math.min(Math.round(share * rate), 200000000);
+    compensationReductionTotal += reduction;
+    reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
+    assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '수용감면(안분)', 감면액: reduction });
+    // §77④ — 채권 만기보유 특약(3년·5년) 위반시 특약 없는 세율(15%·25%)과의 차액을 즉시 추징한다.
+    if (c.raw.isBondPledgeBreached && (c.raw.compensationType === 'bond_3y' || c.raw.compensationType === 'bond_5y') && reduction > 0) {
+      const baseRate = c.raw.compensationType === 'bond_5y' ? 0.25 : 0.15;
+      const clawback = reduction - Math.round((reduction / rate) * baseRate);
+      bondBreachClawbackTotal += clawback;
+      assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '채권만기특약위반 추징(§77④)', 감면액: -clawback });
     }
   });
   // §133②1호 — 개별 200000000 한도와 별개로, 수용감면 합계액이 과세기간별 2억원을 넘는 부분은
   // 감면하지 않는다(같은 과세기간 여러 건 합산 캡).
   compensationReductionTotal = Math.min(compensationReductionTotal, 200000000);
-  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal);
+  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal + bondBreachClawbackTotal);
 
   let downContractClawbackTotal = 0;
   pooled.forEach(function (c) {
@@ -5200,7 +5220,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
     합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
     기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
     합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
-    합산수용감면액: compensationReductionTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
+    합산수용감면액: compensationReductionTotal, 합산채권만기특약위반_추징액: bondBreachClawbackTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
     합산그룹_산출세액: poolTaxWithSurcharge,
     단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
     산출세액_합계: totalCalculatedTax,
@@ -5359,18 +5379,51 @@ function toolCalculateTransferTax(p) {
     land_replacement: 0.40,
     restricted_zone_40: 0.40, restricted_zone_25: 0.25
   };
+  // §77①·§77의2① 일몰기한 — 2026.12.31까지 양도분만 적용. §77의3①·② — 2028.12.31까지 양도분만 적용.
+  const COMPENSATION_SUNSET_DATE_ = {
+    cash: '2026-12-31', bond: '2026-12-31', bond_3y: '2026-12-31', bond_5y: '2026-12-31',
+    land_replacement: '2026-12-31',
+    restricted_zone_40: '2028-12-31', restricted_zone_25: '2028-12-31'
+  };
   let compensationReduction = 0;
   let compensationReductionLabel = '';
+  let compensationGateNote = '';
   if (COMPENSATION_REDUCTION_RATES_[p.compensationType] !== undefined) {
-    const compRaw = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
-    // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
-    // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
-    // 추적하지 않음).
-    compensationReduction = Math.min(compRaw, 200000000);
-    calculatedTax -= compensationReduction;
-    compensationReductionLabel = (p.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
-      : (p.compensationType === 'restricted_zone_40' || p.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
-      : '공익사업용토지 수용감면(조특법§77①)';
+    const isEminentDomainOrReplacement = ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement'].indexOf(p.compensationType) !== -1;
+    const pastSunset = p.transferDate > COMPENSATION_SUNSET_DATE_[p.compensationType];
+    // §77①·§77의2① — 사업인정고시일(고시 전에 양도하면 양도일)부터 소급 2년 이전 취득분만 대상(시행령상
+    // 요건, 본문에 명시). publicNoticeDate 미입력시 양도일을 기준일로 보아 판정한다(고시일을 모르면
+    // 이 도구의 판정이 실제와 다를 수 있음을 안내).
+    let failsTwoYearGate = false;
+    if (isEminentDomainOrReplacement && p.acquisitionDate && p.transferDate) {
+      const referenceDate = (p.publicNoticeDate && p.publicNoticeDate <= p.transferDate) ? p.publicNoticeDate : p.transferDate;
+      failsTwoYearGate = fullYearsElapsed_(p.acquisitionDate, referenceDate) < 2;
+    }
+    if (pastSunset) {
+      compensationGateNote = '양도일이 감면 적용기한(' + COMPENSATION_SUNSET_DATE_[p.compensationType] + ')을 지나 조특법 감면 대상이 아닙니다.';
+    } else if (failsTwoYearGate) {
+      compensationGateNote = '사업인정고시일(또는 고시 전 양도시 양도일)로부터 소급 2년 이전에 취득한 토지등만 감면 대상인데(§77①·§77의2①), 보유기간이 이에 못 미쳐 감면 대상이 아닙니다. 사업인정고시일을 아신다면 publicNoticeDate로 입력해 다시 확인하세요.';
+    } else {
+      const compRaw = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES_[p.compensationType]);
+      // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
+      // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
+      // 추적하지 않음).
+      compensationReduction = Math.min(compRaw, 200000000);
+      calculatedTax -= compensationReduction;
+      compensationReductionLabel = (p.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
+        : (p.compensationType === 'restricted_zone_40' || p.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
+        : '공익사업용토지 수용감면(조특법§77①)';
+    }
+  }
+  // §77④ — 채권보상시 3년·5년 만기보유 특약을 체결해 35%(45%) 감면을 받고 이후 그 특약을 위반한 경우,
+  // 즉시 특약 없는 기본세율(15%, 만기5년이상 특약이었으면 25%)과의 차액을 추징한다.
+  let bondBreachClawback = 0;
+  if (p.isBondPledgeBreached && (p.compensationType === 'bond_3y' || p.compensationType === 'bond_5y') && compensationReduction > 0) {
+    const baseRate = p.compensationType === 'bond_5y' ? 0.25 : 0.15;
+    const keptReduction = Math.round((compensationReduction / COMPENSATION_REDUCTION_RATES_[p.compensationType]) * baseRate);
+    bondBreachClawback = compensationReduction - keptReduction;
+    calculatedTax += bondBreachClawback;
+    compensationGateNote = (compensationGateNote ? compensationGateNote + ' ' : '') + '채권 만기보유 특약을 위반해(§77④) 감면세액 중 ' + bondBreachClawback + '원을 추징합니다(특약 없었을 때 세율 ' + Math.round(baseRate * 100) + '%와의 차액).';
   }
 
   // 다운계약서(업계약서) 등 거짓 계약으로 위 감면을 적용받은 경우(소득세법 §91②) —
@@ -5420,6 +5473,8 @@ function toolCalculateTransferTax(p) {
     자경농지감면_구분: farmlandReductionLabel,
     수용감면액: compensationReduction,
     수용감면_구분: compensationReductionLabel,
+    수용감면_요건안내: compensationGateNote || undefined,
+    채권만기특약위반_추징액: bondBreachClawback,
     다운계약서_감면배제_추징액: downContractClawback,
     장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
     산출세액: calculatedTax,

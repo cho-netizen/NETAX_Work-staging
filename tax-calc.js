@@ -941,18 +941,45 @@
       land_replacement: 0.40,
       restricted_zone_40: 0.40, restricted_zone_25: 0.25
     };
+    const COMPENSATION_SUNSET_DATE = {
+      cash: '2026-12-31', bond: '2026-12-31', bond_3y: '2026-12-31', bond_5y: '2026-12-31',
+      land_replacement: '2026-12-31',
+      restricted_zone_40: '2028-12-31', restricted_zone_25: '2028-12-31'
+    };
     let compensationReduction = 0;
     let compensationReductionLabel = '';
+    let compensationGateNote = '';
     if (COMPENSATION_REDUCTION_RATES[t.compensationType] !== undefined) {
-      const compRaw = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES[t.compensationType]);
-      // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
-      // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
-      // 추적하지 않음).
-      compensationReduction = Math.min(compRaw, 200000000);
-      calculatedTax -= compensationReduction;
-      compensationReductionLabel = (t.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
-        : (t.compensationType === 'restricted_zone_40' || t.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
-        : '공익사업용토지 수용감면(조특법§77①)';
+      const isEminentDomainOrReplacement = ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement'].indexOf(t.compensationType) !== -1;
+      const pastSunset = t.transferDate > COMPENSATION_SUNSET_DATE[t.compensationType];
+      let failsTwoYearGate = false;
+      if (isEminentDomainOrReplacement && t.acquisitionDate && t.transferDate) {
+        const referenceDate = (t.publicNoticeDate && t.publicNoticeDate <= t.transferDate) ? t.publicNoticeDate : t.transferDate;
+        failsTwoYearGate = fullYearsElapsed(t.acquisitionDate, referenceDate) < 2;
+      }
+      if (pastSunset) {
+        compensationGateNote = '양도일이 감면 적용기한(' + COMPENSATION_SUNSET_DATE[t.compensationType] + ')을 지나 조특법 감면 대상이 아닙니다.';
+      } else if (failsTwoYearGate) {
+        compensationGateNote = '사업인정고시일(또는 고시 전 양도시 양도일)로부터 소급 2년 이전에 취득한 토지등만 감면 대상인데(§77①·§77의2①), 보유기간이 이에 못 미쳐 감면 대상이 아닙니다. 사업인정고시일을 아신다면 publicNoticeDate로 입력해 다시 확인하세요.';
+      } else {
+        const compRaw = Math.round(calculatedTax * COMPENSATION_REDUCTION_RATES[t.compensationType]);
+        // 조특법§133②(2025.3.14 신설) — §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 초과하는
+        // 부분은 감면하지 아니한다(5개 과세기간 합산 3억원 한도는 여러 건에 걸친 것이라 이 도구가
+        // 추적하지 않음).
+        compensationReduction = Math.min(compRaw, 200000000);
+        calculatedTax -= compensationReduction;
+        compensationReductionLabel = (t.compensationType === 'land_replacement') ? '대토보상 감면(조특법§77의2)'
+          : (t.compensationType === 'restricted_zone_40' || t.compensationType === 'restricted_zone_25') ? '개발제한구역 매수 감면(조특법§77의3)'
+          : '공익사업용토지 수용감면(조특법§77①)';
+      }
+    }
+    let bondBreachClawback = 0;
+    if (t.isBondPledgeBreached && (t.compensationType === 'bond_3y' || t.compensationType === 'bond_5y') && compensationReduction > 0) {
+      const baseRate = t.compensationType === 'bond_5y' ? 0.25 : 0.15;
+      const keptReduction = Math.round((compensationReduction / COMPENSATION_REDUCTION_RATES[t.compensationType]) * baseRate);
+      bondBreachClawback = compensationReduction - keptReduction;
+      calculatedTax += bondBreachClawback;
+      compensationGateNote = (compensationGateNote ? compensationGateNote + ' ' : '') + '채권 만기보유 특약을 위반해(§77④) 감면세액 중 ' + bondBreachClawback + '원을 추징합니다(특약 없었을 때 세율 ' + Math.round(baseRate * 100) + '%와의 차액).';
     }
     const downContractDiff2 = Number(t.downContractPriceDifference) || 0;
     let downContractClawback = 0;
@@ -980,7 +1007,8 @@
       양도소득금액: Math.round(core.incomeAmount), 기본공제: basicDeduction, 과세표준: taxBase,
       적용세율_설명: appliedRateNote, 세율가산_내역: surchargeNotes, 자경농지감면액: farmlandReduction,
       자경농지감면_구분: farmlandReductionLabel,
-      수용감면액: compensationReduction, 수용감면_구분: compensationReductionLabel, 다운계약서_감면배제_추징액: downContractClawback,
+      수용감면액: compensationReduction, 수용감면_구분: compensationReductionLabel, 수용감면_요건안내: compensationGateNote || undefined,
+      채권만기특약위반_추징액: bondBreachClawback, 다운계약서_감면배제_추징액: downContractClawback,
       장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
       산출세액: calculatedTax, 연금계좌세액공제: pensionAccountCredit, 전자신고세액공제: eFilingCredit,
       환산취득가액가산세: core.conversionValuePenalty,
@@ -1153,21 +1181,40 @@
       land_replacement: 0.40,
       restricted_zone_40: 0.40, restricted_zone_25: 0.25
     };
+    const COMPENSATION_SUNSET_DATE_M = {
+      cash: '2026-12-31', bond: '2026-12-31', bond_3y: '2026-12-31', bond_5y: '2026-12-31',
+      land_replacement: '2026-12-31',
+      restricted_zone_40: '2028-12-31', restricted_zone_25: '2028-12-31'
+    };
     let compensationReductionTotal = 0;
+    let bondBreachClawbackTotal = 0;
     pooled.forEach(function (c) {
       const rate = COMPENSATION_REDUCTION_RATES_M[c.raw.compensationType];
-      if (rate !== undefined && poolIncomeSum > 0) {
+      if (rate === undefined || poolIncomeSum <= 0) return;
+      const isEminentDomainOrReplacement = ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement'].indexOf(c.raw.compensationType) !== -1;
+      if (c.raw.transferDate > COMPENSATION_SUNSET_DATE_M[c.raw.compensationType]) return;
+      if (isEminentDomainOrReplacement && c.raw.acquisitionDate && c.raw.transferDate) {
+        const referenceDate = (c.raw.publicNoticeDate && c.raw.publicNoticeDate <= c.raw.transferDate) ? c.raw.publicNoticeDate : c.raw.transferDate;
+        if (fullYearsElapsed(c.raw.acquisitionDate, referenceDate) < 2) return;
+      }
+      {
         const share = Math.round(poolTaxWithSurcharge * (c.incomeAmount / poolIncomeSum));
         const reduction = Math.min(Math.round(share * rate), 200000000);
         compensationReductionTotal += reduction;
         reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
         assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: '수용감면(안분)', 감면액: reduction });
+        if (c.raw.isBondPledgeBreached && (c.raw.compensationType === 'bond_3y' || c.raw.compensationType === 'bond_5y') && reduction > 0) {
+          const baseRate = c.raw.compensationType === 'bond_5y' ? 0.25 : 0.15;
+          const clawback = reduction - Math.round((reduction / rate) * baseRate);
+          bondBreachClawbackTotal += clawback;
+          assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '채권만기특약위반 추징(§77④)', 감면액: -clawback });
+        }
       }
     });
     // §133②1호 — 개별 200000000 한도와 별개로, 수용감면 합계액이 과세기간별 2억원을 넘는 부분은
     // 감면하지 않는다(같은 과세기간 여러 건 합산 캡).
     compensationReductionTotal = Math.min(compensationReductionTotal, 200000000);
-    poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal);
+    poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - compensationReductionTotal + bondBreachClawbackTotal);
 
     // 다운계약서 등 거짓 계약으로 위 감면을 받은 경우(소득세법§91②) — 거래별 MIN(그 거래에 배분된 감면액, 계약서·실거래 차액)을 배제·추징한다.
     let downContractClawbackTotal = 0;
@@ -1278,7 +1325,7 @@
       합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
       기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
       합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
-      합산수용감면액: compensationReductionTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
+      합산수용감면액: compensationReductionTotal, 합산채권만기특약위반_추징액: bondBreachClawbackTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
       합산그룹_산출세액: poolTaxWithSurcharge,
       단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
       산출세액_합계: totalCalculatedTax,
