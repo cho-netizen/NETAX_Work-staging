@@ -627,9 +627,11 @@
       necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
     }
 
-    const assetType = t.assetType === 'house' ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
-    const isPresaleRight = assetType === 'presale_right';
     const isReconstruction = !!t.isReconstructionRights;
+    // §104①2호·3호 — 단기양도세율은 "주택·조합원입주권·분양권"을 한 그룹으로 묶으므로 조합원입주권
+    // (isReconstructionRights)도 자동으로 'house'로 취급한다.
+    const assetType = (t.assetType === 'house' || isReconstruction) ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
+    const isPresaleRight = assetType === 'presale_right';
     const isOneHouse = !isPresaleRight && !isReconstruction && !!t.isOneHouseOneFamily;
     // 소득세법§95③은 §89①3호 단서의 고가주택뿐 아니라 §89①4호 각목외 단서의 "고가조합원입주권"
     // (1세대가 1조합원입주권만 보유하는 등 원래는 전액 비과세 요건을 충족하나 양도가액이 12억원을 초과하는

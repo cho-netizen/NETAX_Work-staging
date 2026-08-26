@@ -4915,9 +4915,12 @@ function transferAssetCore_(t) {
     necessaryExpenses = Math.round(acquisitionStandardPriceForConversion * estimatedExpenseRate);
   }
 
-  const assetType = t.assetType === 'house' ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
-  const isPresaleRight = assetType === 'presale_right';
   const isReconstruction = !!t.isReconstructionRights;
+  // §104①2호·3호 — 단기양도세율(1년미만70%/1년이상2년미만60%, 그 외 자산은 50%/40%)은 "주택·조합원
+  // 입주권·분양권"을 한 그룹으로 묶는다. 조합원입주권(재건축·재개발, isReconstructionRights)도 이
+  // 그룹에 속하므로 assetType을 별도로 넣지 않아도 자동으로 'house'로 취급한다.
+  const assetType = (t.assetType === 'house' || isReconstruction) ? 'house' : (t.assetType === 'presale_right' ? 'presale_right' : 'other');
+  const isPresaleRight = assetType === 'presale_right';
   const isOneHouse = !isPresaleRight && !isReconstruction && !!t.isOneHouseOneFamily;
   const isOneMemberRightOnly = isReconstruction && !t.isCompletedNewHousing && !!t.isOneMemberRightOneFamily;
   const isUnregistered = !!t.isUnregisteredTransfer;
