@@ -3429,57 +3429,62 @@
     if (!(acquisitionValue >= 0)) return { error: 'acquisitionValue(취득세 과세표준, 취득당시가액)가 필요합니다.' };
 
     if (acquisitionValue <= 500000) {
-      return { 적용세율: 0, 산출세액: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' };
+      return { 적용세율: 0, 산출세액: 0, 지방교육세: 0, 농어촌특별세: 0, 안내: '§17①(면세점) — 취득가액이 50만원 이하여서 취득세를 부과하지 않습니다.' };
     }
 
     let rate, basis;
+    let eduMode = 'standard', eduStandardRate = 0, naTaxExempt = false;
     if (acquisitionType === 'inheritance') {
       if (propertyType === 'house' && p.isOneHouseholdOneHouseInheritance) {
         rate = 0.008; basis = '§15①2호가목·시행령§29(1가구1주택자 상속) — 0.8%(§11①1호나목 2.8%에서 중과기준세율 2%를 뺀 세율)';
+        eduStandardRate = 0.028; naTaxExempt = true;
       } else if (propertyType === 'farmland') {
-        rate = 0.023; basis = '§11①1호가목(상속, 농지) 2.3%';
+        rate = 0.023; basis = '§11①1호가목(상속, 농지) 2.3%'; eduStandardRate = 0.023;
       } else {
-        rate = 0.028; basis = '§11①1호나목(상속, 농지외) 2.8%';
+        rate = 0.028; basis = '§11①1호나목(상속, 농지외) 2.8%'; eduStandardRate = 0.028;
       }
     } else if (acquisitionType === 'divorce_division') {
       rate = 0.015; basis = '§15①6호(이혼에 따른 재산분할) — §11①2호 무상취득세율(3.5%)에서 중과기준세율(2%)을 뺀 1.5%';
+      eduStandardRate = 0.035;
     } else if (acquisitionType === 'gift') {
       if (propertyType === 'house' && p.isAdjustedAreaHighValueGift && !p.isExemptSpouseOrLinealGift) {
         rate = 0.12; basis = '§13의2②·시행령§28의6①(조정대상지역 내 시가표준액 3억원 이상 주택 무상취득 중과) — 4%+8%=12%';
+        eduMode = 'naMok';
       } else {
-        rate = 0.035; basis = '§11①2호(무상취득, 상속외) 3.5%';
+        rate = 0.035; basis = '§11①2호(무상취득, 상속외) 3.5%'; eduStandardRate = 0.035;
       }
     } else if (acquisitionType === 'original') {
-      rate = 0.028; basis = '§11①3호(원시취득) 2.8%';
+      rate = 0.028; basis = '§11①3호(원시취득) 2.8%'; eduStandardRate = 0.028;
     } else if (acquisitionType === 'division') {
-      rate = 0.023; basis = '§11①5호·6호(공유물·합유물 분할) 2.3%';
+      rate = 0.023; basis = '§11①5호·6호(공유물·합유물 분할) 2.3%'; eduStandardRate = 0.023;
     } else { // paid
       if (propertyType === 'farmland') {
-        rate = 0.03; basis = '§11①7호가목(유상취득, 농지) 3.0%';
+        rate = 0.03; basis = '§11①7호가목(유상취득, 농지) 3.0%'; eduStandardRate = 0.03;
       } else if (propertyType === 'other') {
-        rate = 0.04; basis = '§11①7호나목(유상취득, 농지외) 4.0%';
+        rate = 0.04; basis = '§11①7호나목(유상취득, 농지외) 4.0%'; eduStandardRate = 0.04;
       } else if (p.isCorporation) {
-        rate = 0.12; basis = '§13의2①1호(법인의 주택 유상취득) — 4%+8%=12%';
+        rate = 0.12; basis = '§13의2①1호(법인의 주택 유상취득) — 4%+8%=12%'; eduMode = 'naMok';
       } else if (p.isTemporaryTwoHouse) {
-        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의5(일시적 2주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%';
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의5(일시적 2주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
       } else if (p.isLowValueExemptHousing) {
-        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 1호(저가주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%';
+        rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '시행령§28의2 1호(저가주택, 중과 제외) — §11①8호 일반 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
       } else {
         const n = Number(p.houseCountIncludingThis) || 1;
         const adj = !!p.isAdjustedArea;
         if (n <= 1) {
-          rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '§11①8호(1주택, 유상취득) sliding 세율 ' + (rate * 100) + '%';
+          rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '§11①8호(1주택, 유상취득) sliding 세율 ' + (rate * 100) + '%'; eduMode = 'house118';
         } else if (n === 2) {
-          if (adj) { rate = 0.08; basis = '§13의2①2호(1세대2주택, 조정대상지역) — 4%+4%=8%'; }
-          else { rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '1세대2주택, 비조정대상지역 — 중과 없음, §11①8호 sliding 세율 ' + (rate * 100) + '%'; }
+          if (adj) { rate = 0.08; basis = '§13의2①2호(1세대2주택, 조정대상지역) — 4%+4%=8%'; eduMode = 'naMok'; }
+          else { rate = acquisitionTaxHouseSlidingRate_(acquisitionValue); basis = '1세대2주택, 비조정대상지역 — 중과 없음, §11①8호 sliding 세율 ' + (rate * 100) + '%'; eduMode = 'house118'; }
         } else if (n === 3) {
-          if (adj) { rate = 0.12; basis = '§13의2①3호(1세대3주택이상, 조정대상지역) — 4%+8%=12%'; }
-          else { rate = 0.08; basis = '§13의2①2호(1세대3주택, 비조정대상지역) — 4%+4%=8%'; }
+          if (adj) { rate = 0.12; basis = '§13의2①3호(1세대3주택이상, 조정대상지역) — 4%+8%=12%'; eduMode = 'naMok'; }
+          else { rate = 0.08; basis = '§13의2①2호(1세대3주택, 비조정대상지역) — 4%+4%=8%'; eduMode = 'naMok'; }
         } else {
-          rate = 0.12; basis = '§13의2①3호(1세대4주택이상, 또는 조정대상지역 3주택이상) — 4%+8%=12%';
+          rate = 0.12; basis = '§13의2①3호(1세대4주택이상, 또는 조정대상지역 3주택이상) — 4%+8%=12%'; eduMode = 'naMok';
         }
       }
     }
+    const houseRateBeforeLuxury = rate;
 
     const luxuryFlags = [];
     if (p.isLuxuryHouse) luxuryFlags.push('고급주택(§13⑤3호)');
@@ -3493,11 +3498,50 @@
     }
 
     const tax = Math.round(acquisitionValue * rate);
-    return {
+
+    let eduRate;
+    if (eduMode === 'naMok') {
+      eduRate = 0.004;
+    } else if (eduMode === 'house118') {
+      eduRate = houseRateBeforeLuxury * 0.10;
+    } else {
+      eduRate = Math.max(0, eduStandardRate - 0.02);
+    }
+    const eduTax = Math.round(acquisitionValue * eduRate);
+    const naTax = naTaxExempt ? 0 : Math.round(acquisitionValue * 0.002);
+
+    let finalTax = tax, finalEduTax = eduTax, finalNaTax = naTax, reliefNote = '';
+    if (acquisitionType === 'paid' && propertyType === 'house' && p.isFirstTimeHomeBuyer && eduMode === 'house118') {
+      if (acquisitionValue > 1200000000) {
+        reliefNote = ' §36의3(생애최초 주택 구입 감면, 지방세특례제한법)은 취득당시가액이 12억원을 초과해 적용되지 않습니다.';
+      } else {
+        const cap = p.isSmallLowValueHousing ? 3000000 : 2000000;
+        const reduction = Math.min(tax, cap);
+        finalTax = tax - reduction;
+        const reliefRatio = tax > 0 ? reduction / tax : 0;
+        finalEduTax = Math.round(eduTax * (1 - reliefRatio));
+        reliefNote = ' §36의3(생애최초 주택 구입 감면, 지방세특례제한법) — 산출세액 ' + tax + '원 중 ' + reduction + '원을 감면해 취득세 ' + finalTax + '원만 납부합니다(지방교육세도 같은 비율로 감면되어 ' + finalEduTax + '원). 취득한 날부터 3년 이내에 매각·증여(배우자 제외)하거나 다른 용도(임대 포함)로 사용하면 감면된 취득세가 추징됩니다(§36의3④) — 이 도구는 그 사후관리를 판정하지 않습니다.';
+      }
+    } else if (acquisitionType === 'paid' && propertyType === 'farmland' && p.isSelfFarmingFarmer) {
+      finalTax = Math.round(tax * 0.5);
+      finalEduTax = Math.round(eduTax * 0.5);
+      finalNaTax = 0;
+      reliefNote = ' §6①(자경농민 농지 감면, 지방세특례제한법) — 산출세액의 50%를 경감해 취득세 ' + finalTax + '원만 납부합니다(지방교육세도 50% 감면). 농어촌특별세는 농어촌특별세법§4 10호에 따라 비과세됩니다. 취득일부터 2년 이내 직접 경작을 시작하지 않거나 2년 미만 경작 상태에서 매각·증여·다른 용도 사용시 감면된 취득세가 추징됩니다(§6①단서) — 이 도구는 그 사후관리를 판정하지 않습니다.';
+    }
+
+    const result = {
       적용세율: Math.round(rate * 100000) / 1000, 적용근거: basis + luxuryNote,
       과세표준: acquisitionValue, 산출세액: tax,
-      안내: '이 세액은 취득세 본세만 계산한 것입니다. 지방교육세(취득세액의 일부, 세율은 별도)와 농어촌특별세(전용면적 85㎡ 초과 주택 등 일부 과세대상)는 이 도구에 포함되지 않으며, 관련 법령 파일(지방교육세법·농어촌특별세법)이 확보되면 별도 반영될 예정입니다. 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16) — 이 도구는 이런 사실판단·사후관리는 반영하지 않습니다.'
+      지방교육세: finalEduTax, 농어촌특별세: finalNaTax, 납부세액_합계: finalTax + finalEduTax + finalNaTax,
+      안내: '지방교육세(§151①1호 — 취득 유형별로 세율이 갈립니다: 일반취득은 표준세율에서 중과기준세율 2%를 뺀 세율×20%, §13의2 법인·다주택 중과는 항상 (4%-2%)×20%=0.4% 고정, §11①8호 일반 주택 유상취득은 적용세율(사치성 가산 전)×50%×20%)와 농어촌특별세(§5①6호 — 취득세 과세표준×2%×10%=0.2%, 지방세법§15①1~3호 특례(1가구1주택 상속 등)는 §4 10호의4로 비과세)를 함께 계산했습니다. 사치성재산(§13⑤) 가산분(+8%p)은 지방교육세 근거조문(§151①1호 가·나목)이 §13②③⑥⑦·§13의2만 지정하고 있어 이 계산에는 반영하지 않았습니다.' + reliefNote + ' 위 두 감면 외 지방세특례제한법상 다른 감면(다자녀·국가유공자·서민주택 등)은 이 도구가 아직 다루지 않습니다. 재산세 도시지역분과 마찬가지로 지방자치단체 조례로 세율의 100분의 50 범위에서 가감될 수 있고(§14), 취득 후 5년 이내 사업용도 변경·다주택 요건 미충족 등이 발생하면 추징될 수 있습니다(§16).'
     };
+    if (finalTax !== tax) {
+      result.감면전_취득세_산출세액 = tax;
+      result.취득세_감면세액 = tax - finalTax;
+      result.취득세_최종납부액 = finalTax;
+      result.납부세액_합계 = finalTax + finalEduTax + finalNaTax;
+    }
+    return result;
   };
 
   // 등록면허세(지방세법 — 부동산 등기분) — Code.js toolCalculateRegistrationLicenseTax와 동일 로직.
@@ -3508,7 +3552,7 @@
     if (validTypes.indexOf(type) === -1) return { error: 'registrationType을 ' + validTypes.join('/') + ' 중에서 선택하세요.' };
 
     if (type === 'other') {
-      return { 산출세액: 6000, 적용근거: '§28①1호마목(그 밖의 등기) — 건당 6,000원', 안내: '이 도구는 등록면허세 본세만 계산합니다. 지방교육세는 포함되지 않습니다.' };
+      return { 산출세액: 6000, 지방교육세: 1200, 적용근거: '§28①1호마목(그 밖의 등기) — 건당 6,000원', 안내: '지방교육세(§151①2호 — 등록면허세액의 20%)를 함께 계산했습니다.' };
     }
 
     const isOwnershipType = ['ownership_preservation', 'ownership_transfer_paid', 'ownership_transfer_free', 'ownership_transfer_inheritance'].indexOf(type) !== -1;
@@ -3553,11 +3597,12 @@
     let tax = Math.round(baseAmount * rate);
     let minApplied = false;
     if (tax < 6000) { tax = 6000; minApplied = true; }
+    const eduTax = Math.round(tax * 0.20);
 
     return {
-      과세표준: baseAmount, 적용세율: Math.round(rate * 100000) / 1000, 산출세액: tax,
+      과세표준: baseAmount, 적용세율: Math.round(rate * 100000) / 1000, 산출세액: tax, 지방교육세: eduTax, 납부세액_합계: tax + eduTax,
       적용근거: basis + (minApplied ? ' (§28①단서 — 산출세액이 그 밖의 등기 세율인 건당 6,000원보다 적어 6,000원을 적용)' : ''),
-      안내: '이 세액은 등록면허세 본세만 계산한 것입니다. 지방교육세(등록면허세액의 20%가 원칙, 법인등기분은 별도 세율)는 이 도구에 포함되지 않으며, 관련 법령 파일(지방교육세법)이 확보되면 별도 반영될 예정입니다.'
+      안내: '지방교육세(§151①2호 — 등록면허세액의 20%)를 함께 계산했습니다. 농어촌특별세는 감면을 받는 경우에만 그 감면세액의 20%로 부과되는데(§5①1호), 이 도구는 지방세특례제한법상 감면 여부를 판단하지 않으므로 포함하지 않았습니다.'
     };
   };
 
@@ -3652,10 +3697,12 @@
       }
     }
 
+    const eduTax = Math.round(tax * 0.20);
+
     return {
-      시가표준액: standardPriceValue, 과세표준: taxBase, 산출세액: tax,
+      시가표준액: standardPriceValue, 과세표준: taxBase, 산출세액: tax, 지방교육세: eduTax, 납부세액_합계: tax + eduTax,
       적용근거: ratioNote + ' / ' + basis + capNote,
-      안내: '이 세액은 재산세 본세만 계산한 것입니다. 재산세 도시지역분(§112, 지방의회 의결로 고시한 지역에서 조례에 따라 과세표준×최대 0.23%를 추가 부과할 수 있음)과 지방교육세는 이 도구에 포함되지 않으며, 관련 법령 파일이 확보되면 별도 반영될 예정입니다. 토지가 종합합산·별도합산·분리과세 중 어디에 해당하는지는 실제 이용현황에 대한 사실판단이 필요하므로(§106①) 그 판정 자체는 이 도구가 대신하지 않습니다.'
+      안내: '지방교육세(§151①6호 — 재산세액의 20%, 재산세 도시지역분은 제외)를 함께 계산했습니다. 재산세 도시지역분(§112, 지방의회 의결로 고시한 지역에서 조례에 따라 과세표준×최대 0.23%를 추가 부과할 수 있음)과 농어촌특별세(감면을 받는 경우에만 그 감면세액의 20%로 부과, §5①1호 — 이 도구는 지방세특례제한법상 감면 여부를 판단하지 않아 미포함)는 이 도구에 포함되지 않습니다. 토지가 종합합산·별도합산·분리과세 중 어디에 해당하는지는 실제 이용현황에 대한 사실판단이 필요하므로(§106①) 그 판정 자체는 이 도구가 대신하지 않습니다.'
     };
   };
 

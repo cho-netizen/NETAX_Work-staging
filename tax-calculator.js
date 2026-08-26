@@ -5194,6 +5194,12 @@ function renderAcquisitionPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atAdjustedAreaGift"><label for="atAdjustedAreaGift">조정대상지역 소재 + 시가표준액 3억원 이상 주택의 무상취득(증여) — 해당시 12%</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atExemptSpouseGift"><label for="atExemptSpouseGift">[위 체크시만] 1세대1주택자가 소유한 주택을 배우자·직계존비속이 무상취득하는 등 예외 해당 — 중과 제외</label></div>' +
       '</div>' +
+      '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>지방세특례제한법상 감면</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atFirstTimeBuyer"><label for="atFirstTimeBuyer">[유상취득·1주택만] 생애최초 주택 구입(§36의3, 본인·배우자 모두 무주택, 취득당시가액 12억원 이하) — 산출세액 200만원(소형·저가주택은 300만원) 한도 공제</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSmallLowValueHousing"><label for="atSmallLowValueHousing">[위 체크시만] 소형·저가주택(전용 60㎡이하+3억(수도권 6억)이하 등) — 한도 300만원</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSelfFarmingFarmer"><label for="atSelfFarmingFarmer">[유상취득·농지만] 자경농민 농지 감면(§6①, 2년이상 영농종사) — 취득세·지방교육세 50% 경감, 농특세 비과세</label></div>' +
+      '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>사치성재산 중과(§13⑤, 표준세율+8%p)</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atLuxuryHouse"><label for="atLuxuryHouse">고급주택(연면적 331㎡초과 단독주택·대지 662㎡초과·엘리베이터/에스컬레이터/수영장 설치 등, 시가표준액 9억원 초과)</label></div>' +
@@ -5212,7 +5218,12 @@ function renderAcquisitionTaxResult(r){
   let html = '<div class="taxcalc-result">';
   html += taxCalcResultRow('과세표준', won(r.과세표준 || 0));
   html += taxCalcResultRow('적용세율', r.적용세율 + '%');
-  html += taxCalcResultRow('산출세액', won(r.산출세액), { total: true });
+  html += taxCalcResultRow('취득세 산출세액', won(r.산출세액));
+  if (r.취득세_감면세액 != null) html += taxCalcResultRow('취득세 감면세액', '-' + won(r.취득세_감면세액));
+  if (r.취득세_최종납부액 != null) html += taxCalcResultRow('취득세 최종납부액', won(r.취득세_최종납부액));
+  if (r.지방교육세 != null) html += taxCalcResultRow('지방교육세', won(r.지방교육세));
+  if (r.농어촌특별세 != null) html += taxCalcResultRow('농어촌특별세', won(r.농어촌특별세));
+  html += taxCalcResultRow('납부세액 합계', won(r.납부세액_합계 != null ? r.납부세액_합계 : r.산출세액), { total: true });
   if (r.적용근거) html += '<div class="taxcalc-result-note">' + r.적용근거 + '</div>';
   if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
   html += '</div>';
@@ -5749,7 +5760,10 @@ taxCalcView.addEventListener('click', function(e){
       isLuxuryHouse: document.getElementById('atLuxuryHouse').checked,
       isGolfCourse: document.getElementById('atGolfCourse').checked,
       isLuxuryEntertainmentVenue: document.getElementById('atLuxuryEntertainment').checked,
-      isLuxuryVessel: document.getElementById('atLuxuryVessel').checked
+      isLuxuryVessel: document.getElementById('atLuxuryVessel').checked,
+      isFirstTimeHomeBuyer: document.getElementById('atFirstTimeBuyer').checked,
+      isSmallLowValueHousing: document.getElementById('atSmallLowValueHousing').checked,
+      isSelfFarmingFarmer: document.getElementById('atSelfFarmingFarmer').checked
     };
     renderAcquisitionTaxResult(calculateAcquisitionTaxJS(input));
   } else if (action === 'run-industrial-complex-lot'){
