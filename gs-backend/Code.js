@@ -625,7 +625,7 @@ const DRIVE_TOOLS = [
               name: { type: 'string', description: '상속인 성명' },
               actualInheritedValue: { type: 'number', description: '이 상속인이 실제 상속받는(협의분할·유언 등에 따른) 재산가액(원, 사전증여 가산분 제외한 순수 상속분).' },
               priorGiftAmount: { type: 'number', description: '이 상속인이 10년 이내 사전증여로 받아 taxableEstateAmount에 가산된 증여재산가액(원, 증여 당시 원본 가액 — 증여세 과세표준이 아니다). 없으면 0.' },
-              priorGiftTaxableBase: { type: 'number', description: '위 사전증여재산의 증여세 과세표준(원, 증여자 관계별공제 등을 뺀 후의 금액). 없으면 0.' },
+              priorGiftTaxableBase: { type: 'number', description: '위 사전증여재산의 증여세 과세표준(원, 증여자 관계별공제 등을 뺀 후의 금액). 없으면 0. 주의(조특법§30의5⑨후단·§30의6⑤준용) — 창업자금·가업승계 증여세 과세특례(calculate_special_rate_gift_tax)를 적용받은 사전증여재산은 taxableEstateAmount(상속세 과세가액)에는 그대로 가산하되, 상증세법§24(상속공제 종합한도) 계산에는 "가산한 증여재산가액으로 보지 아니한다"고 명시돼 있으므로 이 필드(priorGiftTaxableBase)에는 절대 포함하지 말 것 — 넣으면 §24 한도가 부당하게 축소되어 상속세가 과다계산된다.' },
               priorGiftTaxPaid: { type: 'number', description: '위 사전증여 당시 이미 납부한 증여세산출세액(원). 없으면 0.' }
             }
           }
