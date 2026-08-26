@@ -705,6 +705,9 @@ const DRIVE_TOOLS = [
         isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위(무신고·과소신고)에 해당하는지 — true면 가산세율이 40%(국내)가 아니라 60%로 적용된다.' },
         specialType: { type: 'string', enum: ['startup', 'business_succession'], description: 'startup=조특법§30의5 창업자금 특례, business_succession=조특법§30의6 가업승계 주식등 특례.' },
         giftAmount: { type: 'number', description: '해당 증여재산가액(원) — 창업자금이면 증여받은 현금·자산 총액, 가업승계면 증여받은 가업법인 주식등의 가액(시가). 시가 확인은 calculate_gift_tax와 동일한 순서(사건폴더 문서→매매실례가→공시가격→보충적평가)로 먼저 확정할 것.' },
+        doneeAge: { type: 'number', description: '수증자의 나이(만, 증여일 기준) — §30의5①·§30의6①은 18세 이상인 거주자만 대상이다. 18세 미만이면 에러를 반환한다. 모르면 생략(게이트를 판정하지 않음).' },
+        donorAge: { type: 'number', description: '증여자(부모)의 나이(만, 증여일 기준) — §30의5①·§30의6①은 60세 이상의 부모로부터 증여받는 경우만 대상이다(증여 당시 부모 중 한 명이 사망했으면 그 사망한 부모의 부모(조부모)도 인정되나 이 경우 나이 요건 적용 방식은 별도 확인). 60세 미만이면 에러를 반환한다. 모르면 생략.' },
+        isReceivedFromMajorShareholderAfterSuccession: { type: 'boolean', description: 'specialType이 business_succession일 때만 — §30의6①단서. 가업 승계 후, 그 승계 당시 상증세법§22②에 따른 최대주주·최대출자자에 해당하는 자(당초 그 주식등의 증여자·수증자는 제외)로부터 증여받는 경우인지. true면 이 특례를 적용받을 수 없다(2차 승계 배제).' },
         debtAssumedAmount: { type: 'number', description: '부담부증여로 수증자가 인수한 채무액(원, 창업자금 특례에서만 의미가 있음). 없으면 생략.' },
         priorSpecialGiftAmount: { type: 'number', description: '이전에 이미 같은 특례(§30의5 또는 §30의6)를 적용받은 증여재산에 대한 과세가액(원, 동일인 합산). 없으면 생략.' },
         jobsCreated10Plus: { type: 'boolean', description: 'specialType이 startup일 때만 — 창업을 통하여 10명 이상을 신규 고용했는지. true면 총한도 100억원, 아니면 50억원.' },
@@ -6312,6 +6315,20 @@ function toolCalculateSpecialRateGiftTax(p) {
   }
   const giftAmount = Number(p.giftAmount);
   if (!giftAmount || giftAmount <= 0) return { error: '증여재산가액(giftAmount)이 필요합니다.' };
+
+  // §30의5①·§30의6① — 둘 다 "18세 이상인 거주자가... 60세 이상의 부모로부터" 증여받는 경우로
+  // 한정한다. 나이 요건이 없으면 이 특례 자체를 적용받을 수 없다.
+  const doneeAge = Number(p.doneeAge);
+  const donorAge = Number(p.donorAge);
+  if (Number.isFinite(doneeAge) && doneeAge < 18) {
+    return { error: '수증자가 18세 미만이면 이 특례(조특법§30의5·§30의6)를 적용받을 수 없습니다.' };
+  }
+  if (Number.isFinite(donorAge) && donorAge < 60) {
+    return { error: '증여자(부모)가 60세 미만이면 이 특례(조특법§30의5·§30의6)를 적용받을 수 없습니다.' };
+  }
+  if (specialType === 'business_succession' && p.isReceivedFromMajorShareholderAfterSuccession) {
+    return { error: '조특법§30의6①단서 — 가업 승계 후 그 승계 당시 최대주주등에 해당하는 자(당초 증여자·수증자 제외)로부터 증여받는 경우에는 이 특례를 적용받을 수 없습니다.' };
+  }
 
   // 조특법§30의5①후단·§30의6 — 같은 특례를 2회 이상(또는 부모 각각으로부터) 받으면 과세가액을
   // 합산한다(priorSpecialGiftAmount). priorPaidTax는 그 이전 특례증여분에 대해 이미 낸 산출세액을

@@ -2897,10 +2897,13 @@ function renderGiftPane(){
         '</select></div>' +
         '<div class="taxcalc-field"><label>해당 증여재산가액</label><input type="number" id="srGiftAmount" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>증여일자</label><input type="date" id="srGiftDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>수증자 나이(만)</label><input type="number" id="srDoneeAge" placeholder="18세 이상만 대상" maxlength="3"></div>' +
+        '<div class="taxcalc-field"><label>증여자(부모) 나이(만)</label><input type="number" id="srDonorAge" placeholder="60세 이상만 대상" maxlength="3"></div>' +
         '<div class="taxcalc-field"><label>인수채무액(부담부증여, 창업자금만)</label><input type="number" id="srDebtAssumed" placeholder="원 (없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>기 과세특례적용분 증여세과세가액</label><input type="number" id="srPriorSpecialGift" placeholder="원 (동일특례 재차증여, 없으면 비움)"></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="srJobsCreated10Plus"><label for="srJobsCreated10Plus">(창업자금) 창업으로 10명 이상 신규고용 — 한도 100억(아니면 50억)</label></div>' +
         '<div class="taxcalc-field"><label>(가업승계) 증여자(부모)의 가업영위기간</label><input type="number" id="srBusinessYears" placeholder="년 — 20미만 300억/20~30 400억/30이상 600억" maxlength="2"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="srReSuccession"><label for="srReSuccession">(가업승계) §30의6①단서 — 승계 당시 최대주주등(당초 증여자·수증자 제외)으로부터 재증여</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>(가업승계 주식등만) 사업관련자산가액 비율 — 비워두면 주식가액 전체를 가업자산으로 간주</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5838,6 +5841,9 @@ taxCalcView.addEventListener('click', function(e){
     const input = {
       specialType: document.getElementById('srGiftType').value,
       giftAmount: numVal(document.getElementById('srGiftAmount').value) || 0,
+      doneeAge: numVal(document.getElementById('srDoneeAge').value) || undefined,
+      donorAge: numVal(document.getElementById('srDonorAge').value) || undefined,
+      isReceivedFromMajorShareholderAfterSuccession: document.getElementById('srReSuccession').checked,
       debtAssumedAmount: numVal(document.getElementById('srDebtAssumed').value) || 0,
       priorSpecialGiftAmount: numVal(document.getElementById('srPriorSpecialGift').value) || 0,
       jobsCreated10Plus: document.getElementById('srJobsCreated10Plus').checked,

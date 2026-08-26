@@ -2159,6 +2159,19 @@
     const giftAmount = Number(p.giftAmount);
     if (!giftAmount || giftAmount <= 0) return { error: '증여재산가액이 필요합니다.' };
 
+    // §30의5①·§30의6① — "18세 이상인 거주자가...60세 이상의 부모로부터" 증여받는 경우만 대상.
+    const doneeAge = Number(p.doneeAge);
+    const donorAge = Number(p.donorAge);
+    if (Number.isFinite(doneeAge) && doneeAge < 18) {
+      return { error: '수증자가 18세 미만이면 이 특례(조특법§30의5·§30의6)를 적용받을 수 없습니다.' };
+    }
+    if (Number.isFinite(donorAge) && donorAge < 60) {
+      return { error: '증여자(부모)가 60세 미만이면 이 특례(조특법§30의5·§30의6)를 적용받을 수 없습니다.' };
+    }
+    if (specialType === 'business_succession' && p.isReceivedFromMajorShareholderAfterSuccession) {
+      return { error: '조특법§30의6①단서 — 가업 승계 후 그 승계 당시 최대주주등에 해당하는 자(당초 증여자·수증자 제외)로부터 증여받는 경우에는 이 특례를 적용받을 수 없습니다.' };
+    }
+
     // 조특법§30의5①후단·§30의6 — 같은 특례를 2회 이상(또는 부모 각각으로부터) 받으면 과세가액을
     // 합산한다(priorSpecialGiftAmount). priorPaidTax는 그 이전 특례증여분에 대해 이미 낸 산출세액을
     // 그대로 차감하는 것으로, 상증세법§58(§47②합산에 대한 기납부세액공제)과는 별개다 — §30의5⑪이
