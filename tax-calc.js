@@ -3359,6 +3359,18 @@
       rate = 50;
     }
 
+    if (provision === 'sect98_7' && Number(p.acquisitionPrice) > 900000000) {
+      return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의7① — 취득가액이 9억원을 초과하는 주택은 "미분양주택"의 정의에서 제외되어 이 특례를 적용받을 수 없습니다.' };
+    }
+    if (provision === 'sect98_8') {
+      if (Number(p.acquisitionPrice) > 600000000) {
+        return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의8① — 취득 당시 취득가액이 6억원을 초과하는 주택은 이 특례를 적용받을 수 없습니다.' };
+      }
+      if (p.exclusiveAreaSqm !== undefined && p.exclusiveAreaSqm !== null && p.exclusiveAreaSqm !== '' && Number(p.exclusiveAreaSqm) > 135) {
+        return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의8① — 주택의 연면적(공동주택은 전용면적)이 135제곱미터를 초과하면 이 특례를 적용받을 수 없습니다.' };
+      }
+    }
+
     const acquisitionDate = p.acquisitionDate;
     const transferDate = p.transferDate;
     if (!acquisitionDate || !transferDate) return { error: '취득일과 양도일이 필요합니다.' };

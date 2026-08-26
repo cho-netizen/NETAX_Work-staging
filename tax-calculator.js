@@ -1909,7 +1909,8 @@ function renderTransferPane(){
         '<div class="taxcalc-field"><label>[§98의5만] 분양가격 인하율</label><input type="number" step="0.1" id="uhDiscountRate" placeholder="%"></div>' +
         '<div class="taxcalc-field"><label>취득일</label><input type="date" id="uhAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
         '<div class="taxcalc-field"><label>양도일</label><input type="date" id="uhTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
-        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="uhAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="uhAcquisitionPrice" placeholder="원 (§98의7=9억원, §98의8=6억원 초과시 특례 적용불가)"></div>' +
+        '<div class="taxcalc-field"><label>[§98의8만] 연면적(공동주택은 전용면적)</label><input type="number" id="uhExclusiveAreaSqm" placeholder="㎡ (135㎡ 초과시 특례 적용불가)"></div>' +
         '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="uhTransferPrice" placeholder="원"></div>' +
         '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="uhNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
         '<div class="taxcalc-field"><label>취득일로부터 5년 시점 평가액(5년 초과보유, 근사치용)</label><input type="number" id="uhFiveYearMarkValue" placeholder="원 (아래 기준시가 3종이 없을 때만 사용)"></div>' +
@@ -5469,6 +5470,7 @@ taxCalcView.addEventListener('click', function(e){
       acquisitionDate: document.getElementById('uhAcquisitionDate').value,
       transferDate: document.getElementById('uhTransferDate').value,
       acquisitionPrice: numVal(document.getElementById('uhAcquisitionPrice').value) || 0,
+      exclusiveAreaSqm: numVal(document.getElementById('uhExclusiveAreaSqm').value) || undefined,
       transferPrice: numVal(document.getElementById('uhTransferPrice').value) || 0,
       necessaryExpenses: numVal(document.getElementById('uhNecessaryExpenses').value) || 0,
       fiveYearMarkValue: numVal(document.getElementById('uhFiveYearMarkValue').value) || 0,

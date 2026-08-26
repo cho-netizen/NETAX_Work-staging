@@ -1018,7 +1018,8 @@ const DRIVE_TOOLS = [
         acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD). sect98_4는 불필요.' },
         transferDate: { type: 'string', description: '양도일(YYYY-MM-DD). sect98_4는 불필요.' },
         transferPrice: { type: 'number', description: '양도가액(원).' },
-        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원). sect98_7은 9억원 초과시, sect98_8은 6억원 초과시 이 특례 자체를 적용받지 못한다(각 조 ①항 정의).' },
+        exclusiveAreaSqm: { type: 'number', description: 'provision이 sect98_8일 때만 — 주택의 연면적(공동주택은 전용면적, ㎡). 135㎡ 초과시 이 특례를 적용받지 못한다(§98의8①). 생략하면 이 게이트를 판정하지 않는다.' },
         necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
         fiveYearMarkValue: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득일로부터 5년이 되는 시점의 평가액(원). acquisitionStandardPrice·fiveYearStandardPrice·transferStandardPrice가 없을 때의 근사치 계산에만 쓰인다.' },
         acquisitionStandardPrice: { type: 'number', description: '보유기간이 5년을 초과할 때만 — 취득 당시 기준시가(원). fiveYearStandardPrice·transferStandardPrice와 함께 셋 다 입력하면 원문대로(기준시가 비율) 5년간 발생분을 정확히 계산한다(없으면 fiveYearMarkValue 등으로 근사치 계산).' },
@@ -7492,6 +7493,20 @@ function toolCalculateUnsoldHouseAcquisitionReduction(p) {
     rate = 100;
   } else { // sect98_8
     rate = 50;
+  }
+
+  // §98의7① — 취득가액 9억원 이하인 미분양주택만 대상. §98의8① — 취득 당시 취득가액 6억원 이하
+  // + 전용(연)면적 135㎡ 이하인 준공후미분양주택만 대상. 둘 다 넘으면 이 특례 자체를 적용받지 못한다.
+  if (provision === 'sect98_7' && Number(p.acquisitionPrice) > 900000000) {
+    return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의7① — 취득가액이 9억원을 초과하는 주택은 "미분양주택"의 정의에서 제외되어 이 특례를 적용받을 수 없습니다.' };
+  }
+  if (provision === 'sect98_8') {
+    if (Number(p.acquisitionPrice) > 600000000) {
+      return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의8① — 취득 당시 취득가액이 6억원을 초과하는 주택은 이 특례를 적용받을 수 없습니다.' };
+    }
+    if (p.exclusiveAreaSqm !== undefined && p.exclusiveAreaSqm !== null && p.exclusiveAreaSqm !== '' && Number(p.exclusiveAreaSqm) > 135) {
+      return { 적용여부: false, 감면율: 0, 감면소득금액: 0, 안내: '조특법§98의8① — 주택의 연면적(공동주택은 전용면적)이 135제곱미터를 초과하면 이 특례를 적용받을 수 없습니다.' };
+    }
   }
 
   const acquisitionDate = p.acquisitionDate;
