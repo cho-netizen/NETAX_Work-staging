@@ -1972,7 +1972,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'calculate_stock_transfer_tax',
-    description: '주식등 양도소득세를 계산한다(소득세법 §94·§104①11,12,13, [별지 제62호서식] 등 기준) — 부동산 양도세(calculate_transfer_tax)와는 완전히 별도 세목으로, 장기보유특별공제가 없고 대주주/소액주주·국내/국외·중소기업 여부에 따라 세율이 다르다. 국내주식(대주주 1년미만30%, 대주주 3억이하20%·초과25%, 소액주주 중소기업10%/그외20%), 국외주식(중소기업10%/그외20%), 파생상품(10%), 기타자산(특정주식·부동산과다보유법인, 누진세율 6~45%)로 구분한다. 기본공제(연250만원)는 국내·국외주식 손익통산 후 1회만 적용된다.',
+    description: '주식등 양도소득세를 계산한다(소득세법 §94·§104①11,12,13, [별지 제62호서식] 등 기준) — 부동산 양도세(calculate_transfer_tax)와는 완전히 별도 세목으로, 장기보유특별공제가 없고 대주주/소액주주·국내/국외·중소기업 여부에 따라 세율이 다르다. 국내주식(대주주 1년미만30%, 대주주 3억이하20%·초과25%, 소액주주 중소기업10%/그외20%), 국외주식(중소기업10%/그외20%), 파생상품(10%), 기타자산(특정주식·부동산과다보유법인, 누진세율 6~45%)로 구분한다. 기본공제(연250만원, §103①)는 소득 구분별로 각각 별도 풀이다 — (1)domestic_stock·foreign_stock(§94①3호)은 서로 합산해 1회, (2)derivative(§94①5호)는 단독으로 1회, (3)trust_beneficiary(§94①6호)는 단독으로 1회, (4)other_asset(§94①4호, 기타자산)은 이 도구가 아니라 calculate_transfer_tax가 다루는 부동산(§94①1호)·부동산에관한권리(§94①2호)와 같은 풀을 공유하므로 other_asset을 계산할 때 basicDeductionAlreadyUsed에는 이 도구 내부가 아니라 같은 과세기간 부동산·분양권 양도에서 이미 쓴 금액까지 넣어야 한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1986,7 +1986,7 @@ const DRIVE_TOOLS = [
         isSmallMediumCompany: { type: 'boolean', description: '발행법인이 중소기업(조특법§5① 요건)인지. 국내주식(소액주주)·국외주식 세율 판정에 쓰인다.' },
         holdingMonths: { type: 'integer', description: 'assetCategory가 domestic_stock이고 isDaejuju가 true일 때만 — 보유기간(개월). 12개월 미만이면 30% 단일세율이 적용된다.' },
         priorNetGainOrLoss: { type: 'number', description: '같은 과세기간 중 다른 국내·국외주식 양도에서 발생한 순손익(원, 이익은 양수/손실은 음수) — 2020.1.1. 이후 양도분부터 국내·국외주식 손익통산이 허용되므로 이 값과 합산해서 과세표준을 계산한다. 없으면 생략.' },
-        basicDeductionAlreadyUsed: { type: 'number', description: '같은 과세기간에 이미 다른 주식 양도에서 사용한 기본공제액(원) — 기본공제(연 250만원)는 국내·국외주식 합산 1회만 적용되므로 중복 적용을 막기 위해 넣는다. 없으면 생략(0).' },
+        basicDeductionAlreadyUsed: { type: 'number', description: '같은 과세기간에 이미 같은 소득구분 풀에서 사용한 기본공제액(원, §103①) — assetCategory가 domestic_stock·foreign_stock이면 국내·국외주식 합산 풀, derivative·trust_beneficiary면 각각 단독 풀, other_asset이면 calculate_transfer_tax가 다루는 부동산·부동산에관한권리와 공유하는 풀이므로 그쪽에서 이미 쓴 금액까지 포함해서 넣는다. 없으면 생략(0).' },
         foreignTaxPaidAmount: { type: 'number', description: '국외주식등 양도소득에 대해 외국에서 이미 납부한 세액(원, 외국납부세액공제). 없으면 생략.' },
         filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상(기한내 또는 사후 자진)신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
         isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지 — 가산세율이 일반(20%/10%)보다 높은 40%로 적용된다.' },
@@ -7482,7 +7482,7 @@ function toolCalculateStockTransferTax(p) {
     기장불성실가산세: bookkeepingPenalty,
     지방소득세: localIncomeTax,
     납부세액_합계: totalTax,
-    안내: '장기보유특별공제는 주식등에는 적용되지 않습니다. 기본공제(연 250만원)는 국내·국외주식 합산 1회이며, 같은 과세기간에 이미 다른 주식양도에서 기본공제를 썼다면 basicDeductionAlreadyUsed에 넣어야 중복 적용을 막을 수 있습니다. 대주주 판정기준(지분율·시가총액)은 이 도구가 검증하지 않으므로 별도로 확인한 뒤 isDaejuju를 넣으세요. 예정신고(반기별, 파생상품은 생략)와 확정신고(다음해 5월) 의무는 자산 종류별로 다르니 별도로 확인하세요.'
+    안내: '장기보유특별공제는 주식등에는 적용되지 않습니다. 기본공제(연 250만원, §103①)는 소득구분별 별도 풀입니다 — domestic_stock·foreign_stock은 서로 합산 1회, derivative·trust_beneficiary는 각각 단독 1회, other_asset(기타자산)은 calculate_transfer_tax가 다루는 부동산·부동산에관한권리와 같은 풀을 공유합니다(같은 과세기간에 부동산을 함께 양도했다면 그쪽에서 쓴 금액까지 basicDeductionAlreadyUsed에 포함하세요). 대주주 판정기준(지분율·시가총액)은 이 도구가 검증하지 않으므로 별도로 확인한 뒤 isDaejuju를 넣으세요. 예정신고(반기별, 파생상품은 생략)와 확정신고(다음해 5월) 의무는 자산 종류별로 다르니 별도로 확인하세요.'
   };
 }
 
