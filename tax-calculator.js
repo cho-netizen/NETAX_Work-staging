@@ -1752,7 +1752,11 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 취득 당시 기준시가</label><input type="number" data-field="acquisitionStandardPrice" placeholder="원 (임대기간중 양도차익 안분용, 3종 모두 없으면 계산 불가)"></div>' +
           '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 등록일 당시 기준시가</label><input type="number" data-field="registrationStandardPrice" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>[§97의3 선택시 필수] 양도 당시 기준시가</label><input type="number" data-field="transferStandardPrice" placeholder="원"></div>' +
-          '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의14, 양도대금 중 6개월 내 납입액 — 기초연금수급자·1주택 또는 무주택 세대구성원만 해당)"></div>' +
+          '<div class="taxcalc-field"><label>연금계좌 납입액</label><input type="number" data-field="pensionAccountContribution" placeholder="원 (조특법§99의14, 10년이상보유+2027.12.31까지 양도만 해당)"></div>' +
+          '<div class="taxcalc-field"><label>연금계좌 납입일</label><input type="date" data-field="pensionContributionDate" min="1900-01-01" max="2099-12-31" placeholder="양도일로부터 6개월 이내"></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isBasicPensionRecipient" id="pensionRecipient-' + idx + '"><label for="pensionRecipient-' + idx + '">[연금계좌공제] 양도 당시 기초연금 수급자</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isOneHouseOrNoHouseHousehold" id="pensionOneHouse-' + idx + '"><label for="pensionOneHouse-' + idx + '">[연금계좌공제] 양도 당시 1주택 또는 무주택 세대구성원</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isPensionWithdrawnWithin5Years" id="pensionWithdrawn-' + idx + '"><label for="pensionWithdrawn-' + idx + '">[연금계좌공제] 납입일부터 5년 이내 연금외수령(§99의14②, 공제세액 추징)</label></div>' +
           '<div class="taxcalc-field"><label>공익사업용토지 수용감면</label><select data-field="compensationType">' +
             '<option value="">해당없음</option>' +
             '<option value="cash">현금보상(조특법§77①, 15%)</option>' +
@@ -2342,6 +2346,10 @@ function collectTransferInput(vals){
     registrationStandardPrice: numVal(vals.registrationStandardPrice) || 0,
     transferStandardPrice: numVal(vals.transferStandardPrice) || 0,
     pensionAccountContribution: numVal(vals.pensionAccountContribution) || 0,
+    pensionContributionDate: vals.pensionContributionDate || '',
+    isBasicPensionRecipient: !!vals.isBasicPensionRecipient,
+    isOneHouseOrNoHouseHousehold: !!vals.isOneHouseOrNoHouseHousehold,
+    isPensionWithdrawnWithin5Years: !!vals.isPensionWithdrawnWithin5Years,
     compensationType: vals.compensationType || '',
     publicNoticeDate: vals.publicNoticeDate || '',
     isBondPledgeBreached: !!vals.isBondPledgeBreached,
@@ -2412,6 +2420,7 @@ function buildTransferCalcBasisLines(r){
   if (r.채권만기특약위반_추징액) lines.push('채권 만기특약 위반 추징(조특법§77④) = +' + won(r.채권만기특약위반_추징액));
   if (r.다운계약서_감면배제_추징액) lines.push('다운계약서 감면배제 추징(소득세법§91②) = +' + won(r.다운계약서_감면배제_추징액));
   if (r.연금계좌세액공제) lines.push('연금계좌세액공제(조특법§99의14) = -' + won(r.연금계좌세액공제));
+  if (r.연금계좌세액공제_추징액) lines.push('연금계좌세액공제 추징(§99의14②, 5년내 연금외수령) = +' + won(r.연금계좌세액공제_추징액));
   if (r.전자신고세액공제) lines.push('전자신고세액공제 = -' + won(r.전자신고세액공제));
   if (r.환산취득가액가산세) lines.push('환산취득가액가산세(소득세법§114의2) = +' + won(r.환산취득가액가산세));
   if (r.무신고가산세) lines.push('무신고가산세 = +' + won(r.무신고가산세));
@@ -2453,6 +2462,7 @@ function renderTransferResult(r){
   if (r.단기거래_산출세액_합계) html += taxCalcResultRow('단기양도 산출세액 합계', won(r.단기거래_산출세액_합계));
   if (r.미등기거래_산출세액_합계) html += taxCalcResultRow('미등기양도 산출세액 합계', won(r.미등기거래_산출세액_합계));
   if (r.연금계좌세액공제_합계) html += taxCalcResultRow('연금계좌세액공제(조특법§99의14)', '-' + won(r.연금계좌세액공제_합계));
+  if (r.연금계좌세액공제_추징액) html += taxCalcResultRow('연금계좌세액공제 추징(§99의14②)', '+' + won(r.연금계좌세액공제_추징액));
   if (r.전자신고세액공제) html += taxCalcResultRow('전자신고세액공제', '-' + won(r.전자신고세액공제));
   if (r.환산취득가액가산세_합계) html += taxCalcResultRow('환산취득가액 가산세', '+' + won(r.환산취득가액가산세_합계));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
@@ -2477,6 +2487,7 @@ function renderTransferResult(r){
     (r.미등기거래_산출세액_합계 ? '<div class="taxcalc-calcbasis-line">+ 미등기양도 산출세액 합계(건별 계산) = ' + won(r.미등기거래_산출세액_합계) + '</div>' : '') +
     (r.비과세거래_다운계약서_추징액 ? '<div class="taxcalc-calcbasis-line">+ 다운계약서 비과세배제 추징액(별건) = ' + won(r.비과세거래_다운계약서_추징액) + '</div>' : '') +
     (r.연금계좌세액공제_합계 ? '<div class="taxcalc-calcbasis-line">- 연금계좌세액공제 = ' + won(r.연금계좌세액공제_합계) + '</div>' : '') +
+    (r.연금계좌세액공제_추징액 ? '<div class="taxcalc-calcbasis-line">+ 연금계좌세액공제 추징(§99의14②) = ' + won(r.연금계좌세액공제_추징액) + '</div>' : '') +
     (r.전자신고세액공제 ? '<div class="taxcalc-calcbasis-line">- 전자신고세액공제 = ' + won(r.전자신고세액공제) + '</div>' : '') +
     '<div class="taxcalc-calcbasis-line">지방소득세(10%) = ' + won(r.지방소득세) + '</div>' +
     '<div class="taxcalc-calcbasis-line">납부세액 합계 = ' + won(r.납부세액_합계) + '</div>' +
@@ -2545,6 +2556,7 @@ function renderCarryoverResult(r){
   if (r.자경농지감면액) html += taxCalcResultRow(r.자경농지감면_구분 || '8년자경농지 감면', '-' + won(r.자경농지감면액));
   if (r.자경농지감면_추징액) html += taxCalcResultRow('자경농지등 감면 사후관리 추징', '+' + won(r.자경농지감면_추징액));
   if (r.연금계좌세액공제) html += taxCalcResultRow('연금계좌세액공제', '-' + won(r.연금계좌세액공제));
+  if (r.연금계좌세액공제_추징액) html += taxCalcResultRow('연금계좌세액공제 추징', '+' + won(r.연금계좌세액공제_추징액));
   if (r.전자신고세액공제) html += taxCalcResultRow('전자신고세액공제', '-' + won(r.전자신고세액공제));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));
   if (r.과소신고가산세) html += taxCalcResultRow('과소신고가산세', '+' + won(r.과소신고가산세));

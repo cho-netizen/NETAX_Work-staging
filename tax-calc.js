@@ -555,6 +555,23 @@
     if (t.saleContractDate > '2026-05-09') return false;
     return t.transferDate <= contractPlusMonths;
   }
+  // 연금계좌세액공제 요건 게이트(조특법§99의14①, 시행령§99의14①) — Code.js의
+  // isPensionAccountCreditEligible_와 1:1 대응.
+  function isPensionAccountCreditEligible(t, holdingYears) {
+    if (!(Number(t.pensionAccountContribution) > 0)) return false;
+    if (t.isBasicPensionRecipient === false) return false;
+    if (t.isOneHouseOrNoHouseHousehold === false) return false;
+    if (Number.isFinite(holdingYears) && holdingYears < 10) return false;
+    if (t.transferDate && t.transferDate > '2027-12-31') return false;
+    if (t.pensionContributionDate && t.transferDate) {
+      if (t.pensionContributionDate < t.transferDate) return false;
+      const deadline = new Date(t.transferDate + 'T00:00:00');
+      deadline.setMonth(deadline.getMonth() + 6);
+      const deadlineStr = deadline.getFullYear() + '-' + String(deadline.getMonth() + 1).padStart(2, '0') + '-' + String(deadline.getDate()).padStart(2, '0');
+      if (t.pensionContributionDate > deadlineStr) return false;
+    }
+    return true;
+  }
   function transferAssetCore(t) {
     const transferPrice = Number(t.transferPrice);
     let necessaryExpenses = Number(t.necessaryExpenses) || 0;
@@ -1027,14 +1044,16 @@
     // 조특법§99의14①(2024.12.31 신설) — "연금계좌 납입액의 100분의 10에 상당하는 금액을...공제하며,
     // 공제세액은 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다.
     const pensionAccountCreditRaw = core.pensionAccountContribution > 0 ? Math.round(Number(core.pensionAccountContribution) * 0.1) : 0;
-    const pensionAccountCredit = Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax));
+    const pensionEligible = isPensionAccountCreditEligible(t, core.holdingYears);
+    const pensionAccountCredit = pensionEligible ? Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax)) : 0;
+    const pensionAccountClawback = (t.isPensionWithdrawnWithin5Years && pensionAccountCredit > 0) ? pensionAccountCredit : 0;
     const eFilingCredit = t.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
 
     const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(t.filingStatus) !== -1 ? t.filingStatus : 'ontime';
     const penalties = giftFilingPenalties(calculatedTax, filingStatus, !!t.isFraudulent, t.underreportedTaxAmount, t.unpaidDays, Number(t.unpaidTaxForLatePenalty), !!t.isOffshoreTransaction, t.monthsAfterDesignatedDueDate, Number(t.unpaidTaxAtDesignatedDueDate), t.fraudulentUnderreportedTaxAmount);
     const localIncomeTax = Math.round(calculatedTax * 0.1);
     const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + core.conversionValuePenalty
-      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + pensionAccountClawback);
     return {
       입력값: { 양도가액: core.transferPrice, 취득가액: core.acquisitionPrice, 필요경비: core.necessaryExpenses, 보유기간_년: core.holdingYears },
       취득가액_산정방법: core.acquisitionPriceMethodNote || undefined,
@@ -1047,7 +1066,7 @@
       수용감면액: compensationReduction, 수용감면_구분: compensationReductionLabel, 수용감면_요건안내: compensationGateNote || undefined,
       채권만기특약위반_추징액: bondBreachClawback, 다운계약서_감면배제_추징액: downContractClawback,
       장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
-      산출세액: calculatedTax, 연금계좌세액공제: pensionAccountCredit, 전자신고세액공제: eFilingCredit,
+      산출세액: calculatedTax, 연금계좌세액공제: pensionAccountCredit, 연금계좌세액공제_추징액: pensionAccountClawback, 전자신고세액공제: eFilingCredit,
       환산취득가액가산세: core.conversionValuePenalty,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       지방소득세: localIncomeTax, 납부세액_합계: totalTax
@@ -1350,9 +1369,16 @@
     // 조특법§99의14① — "연금계좌 납입액의 100분의 10에 상당하는 금액을...공제하며, 공제세액은
     // 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다 — 납입액×10%를 먼저 구하고,
     // 그 합계를 (풀 전체) 산출세액으로 한 번만 캡한다(개별 거래별 산출세액이 따로 없는 합산 구조이므로).
-    const pensionAccountCreditRaw = active.reduce(function (s, c) {
-      return s + (c.pensionAccountContribution > 0 ? Math.round(Number(c.pensionAccountContribution) * 0.1) : 0);
-    }, 0);
+    let pensionAccountCreditRaw = 0;
+    let pensionAccountClawbackTotal = 0;
+    active.forEach(function (c) {
+      const raw = Math.round(Number(c.pensionAccountContribution) * 0.1) || 0;
+      if (raw <= 0) return;
+      const eligible = isPensionAccountCreditEligible(c.raw || {}, c.holdingYears);
+      const credit = eligible ? raw : 0;
+      pensionAccountCreditRaw += credit;
+      if (c.raw && c.raw.isPensionWithdrawnWithin5Years && credit > 0) pensionAccountClawbackTotal += credit;
+    });
 
     // exemptClawbackTotal(다운계약서 비과세배제 추징액)은 calculateTransferTaxSingleJS의 완전 계산 결과(지방소득세 포함)를
     // 상한으로 삼아 MIN한 값이라 이미 지방소득세가 녹아 있으므로, 아래 totalCalculatedTax에는 포함하지 않고
@@ -1364,7 +1390,7 @@
     const penalties = giftFilingPenalties(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate), filingParams.fraudulentUnderreportedTaxAmount);
     const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
     const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
-      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
+      + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal + pensionAccountClawbackTotal);
 
     return {
       거래건수: transactions.length, 비과세건수: exempt.length,
@@ -1375,7 +1401,7 @@
       합산그룹_산출세액: poolTaxWithSurcharge,
       단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
       산출세액_합계: totalCalculatedTax,
-      연금계좌세액공제_합계: pensionAccountCreditTotal, 전자신고세액공제: eFilingCredit,
+      연금계좌세액공제_합계: pensionAccountCreditTotal, 연금계좌세액공제_추징액: pensionAccountClawbackTotal, 전자신고세액공제: eFilingCredit,
       환산취득가액가산세_합계: conversionValuePenaltyTotal,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       지방소득세: localIncomeTax, 납부세액_합계: grandTotal,

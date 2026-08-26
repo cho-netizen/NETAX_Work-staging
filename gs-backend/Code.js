@@ -383,7 +383,11 @@ const DRIVE_TOOLS = [
         acquisitionStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 취득 당시 기준시가(원). registrationStandardPrice·transferStandardPrice와 셋 다 있어야 조특법시행령§97의3⑤ 원문대로 "임대기간중 발생한 양도차익"을 기준시가 비율로 안분해 70%를 그 부분에만 적용한다(셋 중 하나라도 없으면 임대개시전 발생분까지 과다공제되므로 에러를 반환한다).' },
         registrationStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 장기일반민간임대주택등 등록일 현재 기준시가(원).' },
         transferStandardPrice: { type: 'number', description: 'rentalSpecialType=rental_general일 때 필수 — 양도 당시 기준시가(원).' },
-        pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의14① 연금계좌세액공제. 납입액×10%(산출세액 한도)를 세액공제한다(양도일로부터 6개월 이내 납입 요건 등은 검증하지 않음). 없으면 생략.' },
+        pensionAccountContribution: { type: 'number', description: '이번 양도대금 중 연금계좌에 납입한 금액(원) — 조특법§99의14① 연금계좌세액공제. 납입액×10%(산출세액 한도)를 세액공제한다. 요건: 국내 소재 토지·건물을 10년 이상 보유(holdingYears로 자동 판정), 2027.12.31까지 양도, isBasicPensionRecipient(기초연금 수급자)·isOneHouseOrNoHouseHousehold(1주택 또는 무주택 세대구성원) true, pensionContributionDate가 양도일로부터 6개월 이내. 이 요건 중 하나라도 명시적으로 false거나 기한을 벗어나면 공제를 적용하지 않는다. 없으면 생략.' },
+        isBasicPensionRecipient: { type: 'boolean', description: 'pensionAccountContribution 사용시 — 양도 당시 기초연금법상 기초연금 수급자인지(§99의14①1호). false면 공제를 적용하지 않는다.' },
+        isOneHouseOrNoHouseHousehold: { type: 'boolean', description: 'pensionAccountContribution 사용시 — 양도 당시 1주택 또는 무주택 세대의 구성원인지(§99의14①2호). false면 공제를 적용하지 않는다.' },
+        pensionContributionDate: { type: 'string', description: '연금계좌 납입일(YYYY-MM-DD) — 양도일로부터 6개월 이내여야 한다(§99의14①). 생략하면 이 기한 요건은 판정하지 않는다.' },
+        isPensionWithdrawnWithin5Years: { type: 'boolean', description: '이미 이 공제를 받은 뒤, 납입일부터 5년 이내에 그 연금계좌에서 연금수령 외의 방식으로 인출했는지(§99의14②·시행령§99의14③). true면 공제받은 세액 상당액을 양도소득세로 추징한다(과거 신고분을 재계산할 때만 사용).' },
         isSelfElectronicFiling: { type: 'boolean', description: '납세자 본인이 직접 전자신고했는지 — true면 전자신고세액공제 2만원(조특법§104의8) 적용. 세무대리인이 대리신고하면 적용되지 않으므로 false/생략.' },
         compensationType: { type: 'string', enum: ['cash', 'bond', 'bond_3y', 'bond_5y', 'land_replacement', 'restricted_zone_40', 'restricted_zone_25'], description: '공익사업용 토지 등 수용감면 — cash=현금보상(조특법§77①, 15%), bond=채권보상 만기특약 없음(20%), bond_3y=3년만기특약(35%), bond_5y=5년만기특약(45%), land_replacement=대토보상(조특법§77의2, 40% — 과세이연 선택지는 별도 구조라 계산하지 않음), restricted_zone_40=개발제한구역 매수·지정일 이전 취득분(조특법§77의3, 40%), restricted_zone_25=개발제한구역 매수·매수청구일(또는 사업인정고시일)로부터 20년 이전 취득분(조특법§77의3, 25%). 산출세액에서 이 비율만큼 감면하되, cash·bond·bond_3y·bond_5y·land_replacement는 양도일이 2026.12.31, restricted_zone_40/25는 2028.12.31을 넘으면 감면하지 않으며(일몰기한), cash·bond·bond_3y·bond_5y·land_replacement는 추가로 사업인정고시일(publicNoticeDate 미입력시 양도일)로부터 소급 2년 이전 취득분이 아니면 감면하지 않는다(§77①·§77의2①). 조특법§133②(2025.3.14 신설)에 따라 §77·§77의2·§77의3 감면세액 합계가 과세기간별 2억원을 넘는 부분은 감면하지 않는다(5개 과세기간 합산 3억원 한도는 이 도구가 추적하지 않는다). 해당 없으면 생략.' },
         publicNoticeDate: { type: 'string', description: '사업인정고시일(YYYY-MM-DD) — compensationType이 cash·bond·bond_3y·bond_5y·land_replacement일 때 2년 이전 취득 요건(§77①·§77의2①) 판정 기준일. 모르면 생략(양도일을 기준일로 대신 판정하되, 실제 고시일과 다를 수 있음을 안내한다).' },
@@ -4895,6 +4899,29 @@ function computeMultiHouseSurchargeExclusion_(t, holdingYears) {
   return t.transferDate <= contractPlusMonths;
 }
 
+// 연금계좌세액공제 요건 게이트(조특법§99의14①, 시행령§99의14①) — (1) 국내 소재 토지·건물을 10년
+// 이상 보유, (2) 2027.12.31까지 양도, (3) 양도 당시 기초연금 수급자, (4) 양도 당시 1주택 또는
+// 무주택 세대의 구성원, (5) 양도일부터 6개월 이내 연금계좌 납입. 다섯 요건을 모두 충족해야 공제
+// 대상이며, 어느 하나라도 입력이 없으면(모른다면) 그 요건은 판정하지 않고 통과시킨다(값이 명시적으로
+// 들어온 요건만 걸러낸다 — 기존 하위호환 유지).
+function isPensionAccountCreditEligible_(t, holdingYears) {
+  if (!(Number(t.pensionAccountContribution) > 0)) return false;
+  if (t.isBasicPensionRecipient === false) return false;
+  if (t.isOneHouseOrNoHouseHousehold === false) return false;
+  // 시행령§99의14① — "10년 이상 보유"한 부동산만 대상. holdingYears는 acquisitionDate·transferDate로
+  // 항상 계산되는 값이라(사실판단 여지가 없음) 예외 없이 그대로 판정한다.
+  if (Number.isFinite(holdingYears) && holdingYears < 10) return false;
+  if (t.transferDate && t.transferDate > '2027-12-31') return false;
+  if (t.pensionContributionDate && t.transferDate) {
+    if (t.pensionContributionDate < t.transferDate) return false;
+    const deadline = new Date(t.transferDate + 'T00:00:00');
+    deadline.setMonth(deadline.getMonth() + 6);
+    const deadlineStr = deadline.getFullYear() + '-' + String(deadline.getMonth() + 1).padStart(2, '0') + '-' + String(deadline.getDate()).padStart(2, '0');
+    if (t.pensionContributionDate > deadlineStr) return false;
+  }
+  return true;
+}
+
 // 거래(자산) 1건의 "소득금액 단계까지"만 계산하는 building block — toolCalculateTransferTaxMulti(다건 합산)
 // 전용. toolCalculateTransferTax(단일거래, 기본공제 전액 적용)와 별개 함수로 둔 것은 기존에 이미 검증된
 // 단일거래 계산 로직을 건드리지 않기 위해서다. tax-calc.js의 transferAssetCore와 1:1 대응.
@@ -5315,9 +5342,17 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
 
   const conversionValuePenaltyTotal = active.reduce(function (s, c) { return s + (c.conversionValuePenalty || 0); }, 0);
 
-  const pensionAccountCreditRaw = active.reduce(function (s, c) {
-    return s + (c.pensionAccountContribution > 0 ? Math.round(Number(c.pensionAccountContribution) * 0.1) : 0);
-  }, 0);
+  let pensionAccountCreditTotal_ = 0;
+  let pensionAccountClawbackTotal = 0;
+  active.forEach(function (c) {
+    const raw = Math.round(Number(c.pensionAccountContribution) * 0.1) || 0;
+    if (raw <= 0) return;
+    const eligible = isPensionAccountCreditEligible_(c.raw || {}, c.holdingYears);
+    const credit = eligible ? raw : 0;
+    pensionAccountCreditTotal_ += credit;
+    if (c.raw && c.raw.isPensionWithdrawnWithin5Years && credit > 0) pensionAccountClawbackTotal += credit;
+  });
+  const pensionAccountCreditRaw = pensionAccountCreditTotal_;
 
   const totalCalculatedTax = poolTaxWithSurcharge + shortTaxTotal + unregisteredTaxTotal;
   const pensionAccountCreditTotal = Math.min(pensionAccountCreditRaw, Math.max(0, totalCalculatedTax));
@@ -5326,7 +5361,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   const penalties = giftFilingPenalties_(totalCalculatedTax, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate), filingParams.fraudulentUnderreportedTaxAmount);
   const localIncomeTax = Math.round(totalCalculatedTax * 0.1);
   const grandTotal = Math.max(0, totalCalculatedTax - pensionAccountCreditTotal - eFilingCredit + conversionValuePenaltyTotal
-    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal);
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + exemptClawbackTotal + pensionAccountClawbackTotal);
 
   return {
     거래건수: transactions.length, 비과세건수: exempt.length,
@@ -5337,7 +5372,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
     합산그룹_산출세액: poolTaxWithSurcharge,
     단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
     산출세액_합계: totalCalculatedTax,
-    연금계좌세액공제_합계: pensionAccountCreditTotal, 전자신고세액공제: eFilingCredit,
+    연금계좌세액공제_합계: pensionAccountCreditTotal, 연금계좌세액공제_추징액: pensionAccountClawbackTotal, 전자신고세액공제: eFilingCredit,
     환산취득가액가산세_합계: conversionValuePenaltyTotal,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     지방소득세: localIncomeTax, 납부세액_합계: grandTotal,
@@ -5568,8 +5603,13 @@ function toolCalculateTransferTax(p) {
 
   // 연금계좌세액공제(조특법§99의14①, 2024.12.31 신설) — "연금계좌 납입액의 100분의 10에 상당하는
   // 금액을...공제하며, 공제세액은 산출세액을 한도로 한다." 양도차익이나 1억원 한도는 법 조문에 없다.
+  // 요건(기초연금수급자·1주택또는무주택세대·10년이상보유·2027.12.31까지 양도·6개월이내 납입)은
+  // isPensionAccountCreditEligible_로 판정하고, 납입일부터 5년 이내 연금외수령시(§99의14②·시행령③)
+  // 공제받은 세액 상당액을 추징한다.
   const pensionAccountCreditRaw = core.pensionAccountContribution > 0 ? Math.round(Number(core.pensionAccountContribution) * 0.1) : 0;
-  const pensionAccountCredit = Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax));
+  const pensionEligible = isPensionAccountCreditEligible_(p, core.holdingYears);
+  const pensionAccountCredit = pensionEligible ? Math.min(pensionAccountCreditRaw, Math.max(0, calculatedTax)) : 0;
+  const pensionAccountClawback = (p.isPensionWithdrawnWithin5Years && pensionAccountCredit > 0) ? pensionAccountCredit : 0;
 
   // 전자신고세액공제(조특법 §104의8①) — 납세자 본인이 직접 전자신고하면 2만원 정액공제(세무대리인 대리신고 시 미적용)
   const eFilingCredit = p.isSelfElectronicFiling ? Math.min(20000, Math.max(0, calculatedTax - pensionAccountCredit)) : 0;
@@ -5580,7 +5620,7 @@ function toolCalculateTransferTax(p) {
   // 지방소득세(개인지방소득세, 지방세법)는 국세 산출세액(가산세 제외)의 10%가 원칙이며, 가산세에는 부가되지 않는다.
   const localIncomeTax = Math.round(calculatedTax * 0.1);
   const totalTax = Math.max(0, calculatedTax - pensionAccountCredit - eFilingCredit + core.conversionValuePenalty
-    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+    + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax + pensionAccountClawback);
 
   return {
     입력값: {
@@ -5611,7 +5651,7 @@ function toolCalculateTransferTax(p) {
     다운계약서_감면배제_추징액: downContractClawback,
     장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
     산출세액: calculatedTax,
-    연금계좌세액공제: pensionAccountCredit,
+    연금계좌세액공제: pensionAccountCredit, 연금계좌세액공제_추징액: pensionAccountClawback,
     전자신고세액공제: eFilingCredit,
     환산취득가액가산세: core.conversionValuePenalty,
     무신고가산세: penalties.unreportedPenalty,
