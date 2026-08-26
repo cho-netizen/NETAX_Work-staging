@@ -2280,6 +2280,41 @@
     };
   };
 
+  // 창업자금·가업승계 증여세 과세특례 사후관리 위반 재과세 (조특법§30의5⑥·§30의6③) — Code.js
+  // toolCalculateSpecialRateGiftTaxClawback와 1:1 대응.
+  window.calculateSpecialRateGiftTaxClawbackJS = function (p) {
+    p = p || {};
+    const specialType = p.specialType;
+    if (['startup', 'business_succession'].indexOf(specialType) === -1) {
+      return { error: '특례 종류를 창업자금(startup) 또는 가업승계(business_succession) 중에서 선택하세요.' };
+    }
+    const clawbackAmount = Number(p.clawbackAmount);
+    if (!(clawbackAmount > 0)) {
+      return { error: '재과세 대상 금액(clawbackAmount)이 필요합니다.' };
+    }
+
+    const normalGiftParams = Object.assign({}, p.donorDoneeContext || {}, { giftAmount: clawbackAmount });
+    const normalTaxResult = window.calculateGiftTaxJS(normalGiftParams);
+    if (normalTaxResult.error) {
+      return { error: '일반 증여세 재계산 실패: ' + normalTaxResult.error };
+    }
+
+    const alreadyPaidSpecialTax = Number(p.alreadyPaidSpecialTax) || 0;
+    const additionalTax = Math.max(0, (normalTaxResult.납부세액 || 0) - alreadyPaidSpecialTax);
+
+    return {
+      specialType,
+      재과세대상금액: clawbackAmount,
+      일반증여세_재계산결과: normalTaxResult,
+      기존납부한특례세액: alreadyPaidSpecialTax,
+      추가납부할세액: additionalTax,
+      안내: (specialType === 'startup'
+        ? '조특법§30의5⑥ — 창업자금 특례 위반사유가 발생하여 특례세율(10%) 대신 일반 증여세율로 재과세합니다. '
+        : '조특법§30의6③ — 가업승계 특례 위반사유가 발생하여 특례세율(10%/20%) 대신 일반 증여세율로 재과세합니다. ')
+        + '여기에 이자상당액(당초 증여세 신고기한 다음날부터 추징사유 발생일까지)을 가산해야 합니다. 사유발생일이 속하는 달의 말일부터 3개월 이내 신고·납부해야 합니다(§30의5⑦).'
+    };
+  };
+
   // 영농자녀등 증여 농지등 감면 (조특법§71) — Code.js toolCalculateFarmlandGiftTaxReduction와 1:1 대응.
   const FARMLAND_GIFT_AREA_CAP_SQM = {
     farmland: 40000, pasture: 148500, fishing_right: 100000, fishing_land: 40000, salt_farm: 60000

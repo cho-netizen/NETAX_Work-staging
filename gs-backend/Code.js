@@ -746,6 +746,27 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_special_rate_gift_tax_clawback',
+    description: '창업자금·가업승계 증여세 과세특례(calculate_special_rate_gift_tax) 사후관리 위반시 재과세를 계산한다(조특법§30의5⑥, §30의6③). 위반사유(창업자금: 미창업/업종외사용/목적외사용/4년내미사용/10년내용도외사용/10년내폐업등/50억초과+고용미달 — §30의5⑥1~7호. 가업승계: 미승계/가업미종사·폐업/지분감소/고용유지요건미달 — §30의6③1~4호)가 발생하면 그 관련 금액에 특례세율(10%/20%)이 아니라 일반 증여세를 다시 부과하고(calculate_gift_tax와 동일 방식으로 재계산), 이자상당액도 가산해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        specialType: { type: 'string', enum: ['startup', 'business_succession'], description: 'startup=창업자금(§30의5⑥), business_succession=가업승계(§30의6③).' },
+        clawbackAmount: { type: 'number', description: '재과세 대상 금액(원) — 위반사유별로 법이 정한 "그 각 호의 구분에 따른 금액". 예: 미창업이면 창업자금 전액, 업종외사용이면 업종외에 사용된 금액, 목적외사용이면 그 목적외사용분, 폐업등이면 창업자금등(가치증가분 포함) 전액.' },
+        alreadyPaidSpecialTax: { type: 'number', description: '당초 특례세율(10%/20%)로 이미 납부한 증여세액 중 이 clawbackAmount에 해당하는 부분(원). 일반 증여세 재계산 결과에서 이 금액을 뺀 차액이 추가납부세액이 된다. 없으면 0(전액 추가납부).' },
+        donorDoneeContext: {
+          type: 'object', description: 'calculate_gift_tax를 그대로 호출하기 위한 나머지 입력(관계·10년내합산·기존공제 등) — giftAmount만 이 도구가 clawbackAmount로 자동 대체하고 나머지는 calculate_gift_tax와 동일하게 넣는다.',
+          properties: {
+            relation: { type: 'string', enum: ['배우자', '직계존속', '직계비속', '기타친족', '기타'], description: '증여자와 수증자의 관계(당초 창업자금·가업승계 증여 당시 관계).' },
+            priorGiftAmount: { type: 'number', description: '10년 이내 동일인 기증여합산액(원). 없으면 생략.' }
+          },
+          required: ['relation']
+        }
+      },
+      required: ['specialType', 'clawbackAmount']
+    }
+  },
+  {
     name: 'calculate_farmland_gift_tax_reduction',
     description: '영농자녀등이 증여받는 농지등에 대한 증여세 감면(조특법§71)을 계산한다. 농지·초지·산림지·축사용지·어선·어업권·어업용토지·염전 중 유형별 면적한도(①1호) 이내분만 감면 대상이며, 도시지역(주거·상업·공업)·택지개발지구등 내에 소재하면(①2·3호) 전혀 감면받지 못한다. 감면세액은 이 농지등이 포함된 전체 증여재산 기준 증여세 산출세액 중 이 농지등 가액이 차지하는 비율로 안분해서 구하므로, calculate_gift_tax를 먼저 전체 증여재산으로 계산해 그 산출세액(할증전)과 전체 증여재산가액을 넣어야 한다. §133④(5년간 1억원 한도)와 §71②③ 사후관리(5년이내 양도·미영농 또는 조세포탈·회계부정 확정시 감면세액+이자상당액 추징)도 반영한다.',
     input_schema: {
@@ -6520,6 +6541,49 @@ function toolCalculateSpecialRateGiftTax(p) {
   };
 }
 
+// 창업자금·가업승계 증여세 과세특례 사후관리 위반 재과세 (조특법§30의5⑥·§30의6③, 시행령§27의5⑨) —
+// 특례 위반사유(창업자금: 미창업/업종외사용/목적외사용/4년내미사용/10년내용도외사용/10년내폐업등/
+// 50억초과+고용미달 — §30의5⑥1~7호. 가업승계: 미승계/가업미종사·폐업/지분감소/고용유지요건미달 —
+// §30의6③1~4호)가 발생하면, "그 각 호의 구분에 따른 금액"(위반과 관련된 재산가액)에 대해 특례세율
+// (10%/20%)이 아니라 일반 증여세(§53·§53의2·§56 등, calculate_gift_tax와 동일 방식)를 다시 부과한다.
+// 이자상당액(시행령§27의5⑨)은 "그렇게 결정한 일반 증여세액"에 당초 증여세 신고기한 다음날부터
+// 추징사유 발생일까지의 기간과 이율을 곱해 계산하므로, calculate_clawback_interest 도구에 이 결과의
+// 일반증여세_재계산결과.납부세액을 clawedBackTaxAmount로 넣어 별도 계산해야 한다. 수증자가 사망해
+// 상속인이 지위를 승계하는 예외적인 경우(시행령§27의5⑩1호단서 등) 등 상속세 쪽 해석이 필요한 사안은
+// 이 도구가 다루지 않으니 별도로 검토해야 한다.
+function toolCalculateSpecialRateGiftTaxClawback(p) {
+  p = p || {};
+  const specialType = p.specialType;
+  if (['startup', 'business_succession'].indexOf(specialType) === -1) {
+    return { error: 'specialType은 "startup"(창업자금, §30의5⑥) 또는 "business_succession"(가업승계, §30의6③) 중 하나여야 합니다.' };
+  }
+  const clawbackAmount = Number(p.clawbackAmount);
+  if (!(clawbackAmount > 0)) {
+    return { error: '재과세 대상 금액(clawbackAmount — 위반사유별로 법이 정한 "그 각 호의 구분에 따른 금액", 예: 미창업이면 창업자금 전액, 목적외사용이면 그 목적외사용분)이 필요합니다.' };
+  }
+
+  const normalGiftParams = Object.assign({}, p.donorDoneeContext || {}, { giftAmount: clawbackAmount });
+  const normalTaxResult = toolCalculateGiftTax(normalGiftParams);
+  if (normalTaxResult.error) {
+    return { error: '일반 증여세 재계산 실패: ' + normalTaxResult.error + ' (donorDoneeContext에 relation 등 calculate_gift_tax 필수 입력을 넣었는지 확인하세요.)' };
+  }
+
+  const alreadyPaidSpecialTax = Number(p.alreadyPaidSpecialTax) || 0;
+  const additionalTax = Math.max(0, (normalTaxResult.납부세액 || 0) - alreadyPaidSpecialTax);
+
+  return {
+    specialType,
+    재과세대상금액: clawbackAmount,
+    일반증여세_재계산결과: normalTaxResult,
+    기존납부한특례세액: alreadyPaidSpecialTax,
+    추가납부할세액: additionalTax,
+    안내: (specialType === 'startup'
+      ? '조특법§30의5⑥ — 창업자금 특례 위반사유가 발생하여 특례세율(10%) 대신 일반 증여세율로 재과세합니다. '
+      : '조특법§30의6③ — 가업승계 특례 위반사유가 발생하여 특례세율(10%/20%) 대신 일반 증여세율로 재과세합니다. ')
+      + '일반증여세_재계산결과.납부세액(' + (normalTaxResult.납부세액 || 0) + '원)에서 기존납부한특례세액(' + alreadyPaidSpecialTax + '원)을 뺀 ' + additionalTax + '원이 추가납부할세액이며, 여기에 이자상당액(시행령§27의5⑨ — 당초 증여세 신고기한 다음날부터 추징사유 발생일까지)을 가산해야 합니다. calculate_clawback_interest 도구에 clawedBackTaxAmount=' + (normalTaxResult.납부세액 || 0) + '을 넣어 이자상당액을 별도로 계산하세요. 사유발생일이 속하는 달의 말일부터 3개월 이내 신고·납부해야 합니다(§30의5⑦). 수증자 사망 등으로 상속인이 지위를 승계하는 예외 사유에 해당하는지는 이 도구가 판정하지 않으니 별도로 확인하세요.'
+  };
+}
+
 // 영농자녀등 증여 농지등 감면 (조특법§71, 시행령§68의9~11 등) — ①1호 각목이 정하는 유형별 면적한도
 // (농지 4만㎡·초지 14.85만㎡·산림지 조림기간별 29.7만/99만㎡·축사용지 건축면적÷건폐율·어선 20톤미만·
 // 어업권 10만㎡·어업용토지 4만㎡·염전 6만㎡) 이내분만 "농지등"에 해당해 그 가액에 대한 증여세를 100%
@@ -10953,6 +11017,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_inheritance_tax' ||
         b.name === 'allocate_inheritance_tax_by_heir' ||
         b.name === 'calculate_special_rate_gift_tax' ||
+        b.name === 'calculate_special_rate_gift_tax_clawback' ||
         b.name === 'calculate_farmland_gift_tax_reduction' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
@@ -11187,6 +11252,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_special_rate_gift_tax') {
         const resultObj = toolCalculateSpecialRateGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_special_rate_gift_tax_clawback') {
+        const resultObj = toolCalculateSpecialRateGiftTaxClawback(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
