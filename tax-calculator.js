@@ -2026,6 +2026,20 @@ function renderTransferPane(){
       '<div id="taxCalcNationalForestLandResult"></div>' +
     '</div>' +
     '<div class="taxcalc-asset" style="margin-top:20px;">' +
+      '<div class="taxcalc-asset-head"><b>공공매입임대주택 건설목적 토지양도 감면(조특법§97의10, 2027.12.31까지 양도분, 현재 시행중) — 공공주택사업자와 건설·양도 약정을 맺은 주택건설사업자에게 토지를 양도할 때 10% 세액감면</b></div>' +
+      '<div class="taxcalc-grid">' +
+        '<div class="taxcalc-field"><label>양도일</label><input type="date" id="prTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
+        '<div class="taxcalc-field"><label>양도가액</label><input type="number" id="prTransferPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>취득가액</label><input type="number" id="prAcquisitionPrice" placeholder="원"></div>' +
+        '<div class="taxcalc-field"><label>필요경비</label><input type="number" id="prNecessaryExpenses" placeholder="원 (없으면 0)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="prNotBuilt"><label for="prNotBuilt">양도받은 날부터 3년 이내 공공매입임대주택을 건설해 공공주택사업자에게 양도하지 않음(§97의10③, 추징대상)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="prJustifiable"><label for="prJustifiable">[위 체크시만] 인허가 지연 등 부득이한 사유 있음(추징 예외)</label></div>' +
+        '<div class="taxcalc-field"><label>[추징대상만] 이미 감면받은 세액</label><input type="number" id="prOriginalReduction" placeholder="원"></div>' +
+      '</div>' +
+      '<button type="button" class="taxcalc-run-btn" data-action="run-public-rental-housing-land">감면대상 양도소득금액 계산하기</button>' +
+      '<div id="taxCalcPublicRentalHousingLandResult"></div>' +
+    '</div>' +
+    '<div class="taxcalc-asset" style="margin-top:20px;">' +
       '<div class="taxcalc-asset-head"><b>산업단지 이주택지 세율특례(조특법§104의20, 2012.12.31 적용기한 만료 — 과거 거래용) — 세액은 계산하지 않고 적용 가능 여부만 판정합니다</b></div>' +
       '<div class="taxcalc-grid">' +
         '<div class="taxcalc-field"><label>양도일</label><input type="date" id="icTransferDate" min="1900-01-01" max="2099-12-31"></div>' +
@@ -2683,6 +2697,22 @@ function renderNationalForestLandResult(r){
   let html = '<div class="taxcalc-result">';
   if (r.적용여부 === false){
     html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+  } else {
+    html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
+    html += taxCalcResultRow('세액감면율', r.세액감면율 + '%', { total: true });
+  }
+  if (r.안내) html += '<div class="taxcalc-result-note">' + r.안내 + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+function renderPublicRentalHousingLandResult(r){
+  const box = document.getElementById('taxCalcPublicRentalHousingLandResult');
+  if (!r || r.error){ box.innerHTML = '<div class="taxcalc-error">' + ((r && r.error) || '계산 결과가 없습니다.') + '</div>'; return; }
+  let html = '<div class="taxcalc-result">';
+  if (r.적용여부 === false){
+    html += taxCalcResultRow('적용 여부', '적용 안 됨', { total: true });
+    if (r.추징액) html += taxCalcResultRow('추징액', won(r.추징액));
   } else {
     html += taxCalcResultRow('전체 양도차익', won(r.전체양도차익));
     html += taxCalcResultRow('세액감면율', r.세액감면율 + '%', { total: true });
@@ -5626,6 +5656,17 @@ taxCalcView.addEventListener('click', function(e){
       necessaryExpenses: numVal(document.getElementById('nfNecessaryExpenses').value) || 0
     };
     renderNationalForestLandResult(calculateNationalForestLandReductionJS(input));
+  } else if (action === 'run-public-rental-housing-land'){
+    const input = {
+      transferDate: document.getElementById('prTransferDate').value,
+      transferPrice: numVal(document.getElementById('prTransferPrice').value) || 0,
+      acquisitionPrice: numVal(document.getElementById('prAcquisitionPrice').value) || 0,
+      necessaryExpenses: numVal(document.getElementById('prNecessaryExpenses').value) || 0,
+      isNotBuiltWithin3Years: document.getElementById('prNotBuilt').checked,
+      hasJustifiableDelayReason: document.getElementById('prJustifiable').checked,
+      originalReductionAmount: numVal(document.getElementById('prOriginalReduction').value) || 0
+    };
+    renderPublicRentalHousingLandResult(calculatePublicRentalHousingLandReductionJS(input));
   } else if (action === 'run-industrial-complex-lot'){
     const input = {
       transferDate: document.getElementById('icTransferDate').value,

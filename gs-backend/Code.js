@@ -1485,6 +1485,23 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_public_rental_housing_land_reduction',
+    description: '공공매입임대주택 건설을 목적으로 양도한 토지에 대한 양도소득세 과세특례(조특법§97의10, 2027.12.31까지 양도분, 현재 시행중)를 계산한다. 공공주택사업자와 공공매입임대주택을 건설·양도하기로 약정한 주택건설사업자에게 주택건설용 토지를 양도하면 그 양도소득세의 10%를 감면한다. 토지를 양도받은 날부터 3년 이내에 공공매입임대주택을 건설해 공공주택사업자에게 양도하지 않으면(인허가 지연 등 부득이한 사유 제외) 감면세액+이자상당액을 추징한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        transferDate: { type: 'string', description: '양도일(YYYY-MM-DD, 2027.12.31까지).' },
+        transferPrice: { type: 'number', description: '양도가액(원).' },
+        acquisitionPrice: { type: 'number', description: '취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        isNotBuiltWithin3Years: { type: 'boolean', description: '주택건설사업자가 토지를 양도받은 날(또는 인허가 지연 등 사유 해소일)부터 3년 이내에 공공매입임대주택을 건설해 공공주택사업자에게 양도하지 않았는지(§97의10③). true면 hasJustifiableDelayReason이 아닌 한 감면세액을 추징한다 — 이 경우 originalReductionAmount(이미 감면받은 세액)도 함께 넣어야 한다.' },
+        hasJustifiableDelayReason: { type: 'boolean', description: 'isNotBuiltWithin3Years가 true일 때만 — 인허가 지연 등 대통령령으로 정하는 부득이한 사유가 있는지. true면 추징하지 않는다.' },
+        originalReductionAmount: { type: 'number', description: 'isNotBuiltWithin3Years가 true일 때 — 애초에 이 특례로 감면받았던 세액(원). 추징액 산정에 쓰인다.' }
+      },
+      required: ['transferDate']
+    }
+  },
+  {
     name: 'calculate_industrial_complex_relocation_lot_rate',
     description: '산업단지 개발사업 시행에 따른 이주택지 양도소득세 세율특례(조특법§104의20)를 판정한다. 산업단지 이주자가 분양받은 이주택지(분양가 1억원 이하)를 2012.12.31까지 양도하면 다주택중과세율 대신 기본세율을 적용한다(적용기한 만료로 과거 거래에만 적용 가능). 세액 자체는 계산하지 않고 적용 가능 여부만 판정한다.',
     input_schema: {
@@ -9804,6 +9821,37 @@ function toolCalculateNationalForestLandReduction(p) {
   };
 }
 
+// 공공매입임대주택 건설을 목적으로 양도한 토지에 대한 과세특례 (조특법§97의10, 2027.12.31까지
+// 양도분, 현재 시행중) — 공공주택사업자와 공공매입임대주택을 건설·양도하기로 약정한 주택건설
+// 사업자에게 주택건설용 토지를 양도하면 그 양도소득세의 10%를 감면한다. 토지를 양도받은 날(인허가
+// 지연 등 부득이한 사유가 있으면 그 사유 해소일)부터 3년 이내에 공공매입임대주택을 건설해 공공
+// 주택사업자에게 양도하지 않으면 감면세액+이자상당액을 추징한다(③④, §63③ 준용).
+function toolCalculatePublicRentalHousingLandReduction(p) {
+  p = p || {};
+  const transferDate = p.transferDate;
+  if (!transferDate) return { error: '양도일이 필요합니다.' };
+  if (transferDate > '2027-12-31') {
+    return { 적용여부: false, 안내: '양도일이 2027.12.31을 초과하여 조특법§97의10의 적용대상이 아닙니다(적용기한 만료).' };
+  }
+  if (p.isNotBuiltWithin3Years && !p.hasJustifiableDelayReason) {
+    const originalReductionAmount = Number(p.originalReductionAmount) || 0;
+    return {
+      적용여부: false, 감면유지여부: false, 추징액: originalReductionAmount,
+      안내: '주택건설사업자가 토지를 양도받은 날부터 3년 이내에 공공매입임대주택을 건설하여 공공주택사업자에게 양도하지 않아(조특법§97의10③) 감면세액 ' + originalReductionAmount + '원을 이자상당액과 함께 추징합니다(제63조③ 준용). 이자상당액은 calculate_clawback_interest 도구로 별도 계산하세요.'
+    };
+  }
+  const transferPrice = Number(p.transferPrice) || 0;
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const necessaryExpenses = Number(p.necessaryExpenses) || 0;
+  const totalGain = transferPrice - acquisitionPrice - necessaryExpenses;
+  return {
+    적용여부: true,
+    전체양도차익: Math.round(totalGain),
+    세액감면율: 10,
+    안내: '조특법§97의10 — 공공매입임대주택을 건설할 주택건설사업자(공공주택사업자와 건설·양도 약정을 체결한 자)에게 2027.12.31까지 주택건설용 토지를 양도하면 그 양도소득세 산출세액의 100분의 10을 감면합니다. calculate_transfer_tax로 전체 양도차익 기준 세액을 계산한 뒤 그 산출세액에서 10%를 차감하세요. 감면신청(②)을 해야 하고, 토지를 양도받은 날부터 3년 이내에 공공매입임대주택을 건설해 공공주택사업자에게 양도하지 않으면(인허가 지연 등 부득이한 사유 제외) 감면세액과 이자상당액을 추징합니다(③④) — 추후 이 사유가 발생하면 isNotBuiltWithin3Years와 originalReductionAmount(이미 감면받은 세액)를 넣어 다시 호출하세요.'
+  };
+}
+
 // 산업단지 개발사업 시행에 따른 이주택지 양도소득세 세율특례 (조특법§104의20) — 세액 자체는 일반 양도세
 // 계산기에서 다주택 중과 옵션을 끄고 계산하면 되므로, 이 함수는 적용 가능 여부만 판정한다.
 function toolCalculateIndustrialComplexRelocationLotRate(p) {
@@ -10935,6 +10983,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_charity_donation_tax_exclusion' ||
         b.name === 'calculate_public_interest_org_penalty' ||
         b.name === 'calculate_national_forest_land_reduction' ||
+        b.name === 'calculate_public_rental_housing_land_reduction' ||
         b.name === 'calculate_industrial_complex_relocation_lot_rate' ||
         b.name === 'calculate_museum_relocation_installment' ||
         b.name === 'calculate_farmland_repurchase_refund' ||
@@ -11289,6 +11338,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_national_forest_land_reduction') {
         const resultObj = toolCalculateNationalForestLandReduction(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_public_rental_housing_land_reduction') {
+        const resultObj = toolCalculatePublicRentalHousingLandReduction(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
