@@ -1723,6 +1723,11 @@ function renderTransferPane(){
           '<div class="taxcalc-field" data-show-if="isOneHouseOneFamily" style="display:none;"><label>거주연수</label><input type="number" data-field="residenceYears" placeholder="년" maxlength="2"></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isAdjustedArea" id="adj-' + idx + '"><label for="adj-' + idx + '">조정대상지역(2026.5.9까지 양도분은 시행령§167조의3①12호의2 등에 따라 중과 한시배제 자동 적용, 이후 재연장 여부는 별도 확인)</label></div>' +
           '<div class="taxcalc-field"><label>다주택중과 판정용 주택수</label><select data-field="multiHouseCount"><option value="0">해당없음/1주택</option><option value="2">2주택</option><option value="3">3주택 이상</option></select></div>' +
+          '<div class="taxcalc-field"><label>[중과배제 연장] 매매계약체결일</label><input type="date" data-field="saleContractDate" min="1900-01-01" max="2099-12-31" placeholder="양도일이 2026.5.9 이후여도 이 날짜 기준 중과배제 연장특례(나목·다목) 판정용"></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLandTransactionPermitArea" id="ltpa-' + idx + '"><label for="ltpa-' + idx + '">[연장특례] 토지거래허가구역 내 주택(나목 — 미체크시 다목 적용)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isPermitApplicationFiledByDeadline" id="permitApp-' + idx + '"><label for="permitApp-' + idx + '">[나목만] 2026.5.9까지 토지거래허가 신청함</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isPermitObtained" id="permitOk-' + idx + '"><label for="permitOk-' + idx + '">[나목만] 허가를 받음</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isExtendedDeadlineRegion" id="extRegion-' + idx + '"><label for="extRegion-' + idx + '">[연장특례] 6개월 유예지역(시행령이 별도 열거한 특정지역, 직접 확인 필요)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isNonBusinessLand" id="nbl-' + idx + '"><label for="nbl-' + idx + '">비사업용토지</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isUnregisteredTransfer" id="unreg-' + idx + '"><label for="unreg-' + idx + '">미등기양도</label></div>' +
           '<div class="taxcalc-field"><label>가업상속공제 적용률(0~1, 해당시)</label><input type="number" step="0.01" min="0" max="1" data-field="businessSuccessionDeductionRatio" placeholder="예: 0.5"></div>' +
@@ -2314,6 +2319,11 @@ function collectTransferInput(vals){
     residenceYears: numVal(vals.residenceYears) || 0,
     isAdjustedArea: !!vals.isAdjustedArea,
     multiHouseCount: numVal(vals.multiHouseCount) || 0,
+    saleContractDate: vals.saleContractDate || '',
+    isLandTransactionPermitArea: !!vals.isLandTransactionPermitArea,
+    isPermitApplicationFiledByDeadline: !!vals.isPermitApplicationFiledByDeadline,
+    isPermitObtained: !!vals.isPermitObtained,
+    isExtendedDeadlineRegion: !!vals.isExtendedDeadlineRegion,
     isNonBusinessLand: !!vals.isNonBusinessLand,
     isUnregisteredTransfer: !!vals.isUnregisteredTransfer,
     isEightYearFarmland: !!vals.isEightYearFarmland,

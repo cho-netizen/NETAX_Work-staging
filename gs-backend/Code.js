@@ -360,7 +360,12 @@ const DRIVE_TOOLS = [
         isOneHouseOneFamily: { type: 'boolean', description: '1세대1주택 비과세 요건을 충족한다고 전제할지 여부(요건 자체는 이 도구가 검증하지 않음)' },
         residenceYears: { type: 'number', description: '1세대1주택(고가주택) 장기보유특별공제 계산용 거주기간(년). isOneHouseOneFamily일 때만 사용.' },
         multiHouseCount: { type: 'integer', description: '조정대상지역 다주택 중과 판정용 소유 주택 수(2 또는 3 이상). isOneHouseOneFamily가 아닐 때만 의미가 있다.' },
-        isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 조정대상지역 지정·중과 한시배제 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라(다주택자 중과 한시배제가 여러 차례 연장돼왔으니 신고 시점 기준으로 재확인).' },
+        isAdjustedArea: { type: 'boolean', description: '양도 주택이 조정대상지역에 있는지 — true이고 multiHouseCount>=2이면 중과세율(+20%p/+30%p)이 적용되고 장기보유특별공제가 배제된다. 2년 이상 보유하고 2026.5.9까지 양도하면 자동으로 중과가 배제되며(시행령§167조의3①12의2호가목), 그 이후 양도라도 saleContractDate 등을 넣으면 토지거래허가구역 특례(나목·다목)로 배제되는지까지 판정한다. 조정대상지역 지정 현황은 수시로 바뀌므로 반드시 최신 여부를 확인하고 넣어라.' },
+        saleContractDate: { type: 'string', description: '다주택중과 한시배제 나목·다목 판정용(시행령§167조의3①12의2호) — 매매계약체결일(YYYY-MM-DD). 양도일이 2026.5.9를 넘겨도, 2년 이상 보유한 주택을 이 날짜에 매매계약(계약금 지급 포함)했다면 계약체결일로부터 4개월(isExtendedDeadlineRegion이면 6개월, 단 2026.5.10 이후 계약시에는 각각 2026.9.9·11.9까지) 이내 양도시 중과가 배제될 수 있다. 해당 없으면 생략.' },
+        isLandTransactionPermitArea: { type: 'boolean', description: '위 saleContractDate를 넣을 때만 — 토지거래허가구역 내 주택부수토지인지(나목). true면 isPermitApplicationFiledByDeadline·isPermitObtained도 함께 충족해야 하고, false면(다목) saleContractDate 자체가 2026.5.9까지여야 한다.' },
+        isPermitApplicationFiledByDeadline: { type: 'boolean', description: 'isLandTransactionPermitArea가 true일 때만 — 2026.5.9까지 토지거래허가를 신청했는지.' },
+        isPermitObtained: { type: 'boolean', description: 'isLandTransactionPermitArea가 true일 때만 — 그 신청에 대해 실제로 허가를 받았는지.' },
+        isExtendedDeadlineRegion: { type: 'boolean', description: '시행령이 별도로 열거한 특정지역(6개월 유예 적용 지역, 원문 표 이미지 결손으로 이 도구가 자동판정 불가)에 해당하는지 — true면 계약체결일로부터 4개월이 아니라 6개월(고정 기한도 2026.9.9이 아니라 2026.11.9)을 적용한다. 직접 확인 후 넣어라.' },
         isNonBusinessLand: { type: 'boolean', description: '비사업용 토지인지 (기본세율+10%p 가산)' },
         isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
         isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. §133①1호·2호나목에 따라 §69의2~70 등 아래 다른 감면과 한도를 공유하며, calculate_restructuring_property_reduction(§43)·calculate_national_forest_land_reduction(§85의10)처럼 별도 도구로 계산하는 감면도 같은 1억원/과세기간 풀을 공유하니 함께 확인해야 함. 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
@@ -4826,6 +4831,31 @@ function toolCalculateProportionalAllocation(p) {
   };
 }
 
+// 다주택중과 한시배제(시행령§167조의3①12의2호·§167조의10①12의2호, 2026.1.1 개정) — 원칙은 2년
+// 이상 보유+2026.5.9까지 양도(가목)면 배제. 추가로 토지거래허가구역 내 주택(나목)은 2026.5.9까지
+// 허가신청·허가완료+계약금 지급 확인시 계약체결일로부터 4개월(특정지역 6개월) 이내(단 2026.5.10
+// 이후 계약체결시에는 각각 2026.9.9·11.9까지) 양도해도 배제 인정. 허가구역이 아닌 주택(다목)은
+// 2026.5.9까지 매매계약+계약금 지급 확인시 계약체결일로부터 4개월(특정지역 6개월) 이내 양도하면
+// 배제 인정. "특정지역"(6개월 적용) 표는 이미지(img161845131)로 결손되어 이 도구가 직접 판정할 수
+// 없어 isExtendedDeadlineRegion으로 사용자가 판정해서 넣어야 한다.
+function computeMultiHouseSurchargeExclusion_(t, holdingYears) {
+  if (!(holdingYears >= 2) || !t.transferDate) return false;
+  if (t.transferDate <= '2026-05-09') return true;
+  if (!t.saleContractDate) return false;
+  const months = t.isExtendedDeadlineRegion ? 6 : 4;
+  const cd = new Date(t.saleContractDate + 'T00:00:00');
+  if (isNaN(cd.getTime())) return false;
+  cd.setMonth(cd.getMonth() + months);
+  const contractPlusMonths = cd.getFullYear() + '-' + String(cd.getMonth() + 1).padStart(2, '0') + '-' + String(cd.getDate()).padStart(2, '0');
+  if (t.isLandTransactionPermitArea) {
+    if (!t.isPermitApplicationFiledByDeadline || !t.isPermitObtained) return false;
+    const deadline = t.saleContractDate >= '2026-05-10' ? (t.isExtendedDeadlineRegion ? '2026-11-09' : '2026-09-09') : contractPlusMonths;
+    return t.transferDate <= deadline;
+  }
+  if (t.saleContractDate > '2026-05-09') return false;
+  return t.transferDate <= contractPlusMonths;
+}
+
 // 거래(자산) 1건의 "소득금액 단계까지"만 계산하는 building block — toolCalculateTransferTaxMulti(다건 합산)
 // 전용. toolCalculateTransferTax(단일거래, 기본공제 전액 적용)와 별개 함수로 둔 것은 기존에 이미 검증된
 // 단일거래 계산 로직을 건드리지 않기 위해서다. tax-calc.js의 transferAssetCore와 1:1 대응.
@@ -4992,7 +5022,7 @@ function transferAssetCore_(t) {
     isRentalSpecial = rentalRate !== null;
     if (isRentalSpecial) ltRate = rentalRate;
 
-    const isMultiHouseSurchargeExcluded = !!t.transferDate && t.transferDate <= '2026-05-09' && holdingYears >= 2;
+    const isMultiHouseSurchargeExcluded = computeMultiHouseSurchargeExclusion_(t, holdingYears);
     isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
     if (isMultiHouseSurcharge) ltRate = 0;
   }

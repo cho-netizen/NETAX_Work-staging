@@ -536,6 +536,25 @@
   function deemedAcquisitionDate(dateStr) {
     return dateStr && dateStr < '1985-01-01' ? '1985-01-01' : dateStr;
   }
+  // 다주택중과 한시배제(시행령§167조의3①12의2호·§167조의10①12의2호, 2026.1.1 개정) — Code.js의
+  // computeMultiHouseSurchargeExclusion_와 1:1 대응.
+  function computeMultiHouseSurchargeExclusion(t, holdingYears) {
+    if (!(holdingYears >= 2) || !t.transferDate) return false;
+    if (t.transferDate <= '2026-05-09') return true;
+    if (!t.saleContractDate) return false;
+    const months = t.isExtendedDeadlineRegion ? 6 : 4;
+    const cd = new Date(t.saleContractDate + 'T00:00:00');
+    if (isNaN(cd.getTime())) return false;
+    cd.setMonth(cd.getMonth() + months);
+    const contractPlusMonths = cd.getFullYear() + '-' + String(cd.getMonth() + 1).padStart(2, '0') + '-' + String(cd.getDate()).padStart(2, '0');
+    if (t.isLandTransactionPermitArea) {
+      if (!t.isPermitApplicationFiledByDeadline || !t.isPermitObtained) return false;
+      const deadline = t.saleContractDate >= '2026-05-10' ? (t.isExtendedDeadlineRegion ? '2026-11-09' : '2026-09-09') : contractPlusMonths;
+      return t.transferDate <= deadline;
+    }
+    if (t.saleContractDate > '2026-05-09') return false;
+    return t.transferDate <= contractPlusMonths;
+  }
   function transferAssetCore(t) {
     const transferPrice = Number(t.transferPrice);
     let necessaryExpenses = Number(t.necessaryExpenses) || 0;
@@ -746,7 +765,7 @@
       // 요건을 갖춘 "2026년 5월 9일까지 양도하는 주택"만 한시적으로 중과(세율가산+장특공제배제)를
       // 적용하지 않는다. 보유기간 2년 미만이면 이 한시배제 대상이 아니므로 중과 여부를 그대로 판정해야
       // 한다(양도일만 보고 보유기간을 확인하지 않으면 단기양도인데도 잘못 배제될 수 있음).
-      const isMultiHouseSurchargeExcluded = !!t.transferDate && t.transferDate <= '2026-05-09' && holdingYears >= 2;
+      const isMultiHouseSurchargeExcluded = computeMultiHouseSurchargeExclusion(t, holdingYears);
       isMultiHouseSurcharge = !isOneHouse && !isRentalSpecial && !!t.isAdjustedArea && multiHouseCount >= 2 && !isMultiHouseSurchargeExcluded;
       if (isMultiHouseSurcharge) ltRate = 0;
     }
