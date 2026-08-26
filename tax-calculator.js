@@ -1728,10 +1728,13 @@ function renderTransferPane(){
           '<div class="taxcalc-field"><label>가업상속공제 적용률(0~1, 해당시)</label><input type="number" step="0.01" min="0" max="1" data-field="businessSuccessionDeductionRatio" placeholder="예: 0.5"></div>' +
           '<div class="taxcalc-field"><label>피상속인 취득가액(위와 함께 입력, §97의2④)</label><input type="number" data-field="decedentAcquisitionValue" placeholder="원"></div>' +
           '<div class="taxcalc-field"><label>피상속인 취득일(위와 함께 입력, §95④단서)</label><input type="date" data-field="decedentAcquisitionDate" min="1900-01-01" max="2099-12-31"></div>' +
-          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isEightYearFarmland" id="farm-' + idx + '"><label for="farm-' + idx + '">8년 자경농지 감면(§69)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isEightYearFarmland" id="farm-' + idx + '"><label for="farm-' + idx + '">8년 자경농지 감면(§69, 농지소재지 재촌+8년 자경 요건 모두 충족 전제)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLivestockLandExempt" id="livestock-' + idx + '"><label for="livestock-' + idx + '">8년 이상 자경 축사용지 폐업 감면(§69의2)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLivestockRestartedWithin5Years" id="livestockRestart-' + idx + '"><label for="livestockRestart-' + idx + '">[§69의2만] 양도 후 5년 이내 축산업 재개(§69의2②, 감면세액 추징)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isLivestockRestartException" id="livestockRestartExc-' + idx + '"><label for="livestockRestartExc-' + idx + '">[재개 체크시만] 상속 등 부득이한 사유(추징 예외)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isFisheryLandExempt" id="fishery-' + idx + '"><label for="fishery-' + idx + '">8년 이상 자영 어업용토지 감면(§69의3)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isFarmlandSubstitutionExempt" id="farmsub-' + idx + '"><label for="farmsub-' + idx + '">농지대토 감면(§70)</label></div>' +
+          '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isFarmlandSubstitutionRequirementFailed" id="farmsubFail-' + idx + '"><label for="farmsubFail-' + idx + '">[§70만] 사후에 요건 미충족(§70④, 감면세액+이자상당액 추징)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isForestManagementExempt" id="forest-' + idx + '"><label for="forest-' + idx + '">자경산지 감면(§69의4, 10년 이상 직접경영 — 경영기간별 10~50%)</label></div>' +
           '<div class="taxcalc-field checkbox"><input type="checkbox" data-field="isNewBuildingWithin5Years" id="newbldg-' + idx + '"><label for="newbldg-' + idx + '">신축(증축, 85㎡초과분) 후 5년 이내 양도 + 감정가액 또는 환산취득가액을 취득가액으로 사용</label></div>' +
           '<div class="taxcalc-field"><label>감정가액·환산취득가액 중 건물분</label><input type="number" data-field="convertedBuildingAcquisitionValueForPenalty" placeholder="원 (위 체크 시, 가산세 5%, 소득세법§114의2)"></div>' +
@@ -2282,8 +2285,11 @@ function collectTransferInput(vals){
     isUnregisteredTransfer: !!vals.isUnregisteredTransfer,
     isEightYearFarmland: !!vals.isEightYearFarmland,
     isLivestockLandExempt: !!vals.isLivestockLandExempt,
+    isLivestockRestartedWithin5Years: !!vals.isLivestockRestartedWithin5Years,
+    isLivestockRestartException: !!vals.isLivestockRestartException,
     isFisheryLandExempt: !!vals.isFisheryLandExempt,
     isFarmlandSubstitutionExempt: !!vals.isFarmlandSubstitutionExempt,
+    isFarmlandSubstitutionRequirementFailed: !!vals.isFarmlandSubstitutionRequirementFailed,
     isForestManagementExempt: !!vals.isForestManagementExempt,
     isNewBuildingWithin5Years: !!vals.isNewBuildingWithin5Years,
     convertedBuildingAcquisitionValueForPenalty: numVal(vals.convertedBuildingAcquisitionValueForPenalty) || 0,
@@ -2356,6 +2362,8 @@ function buildTransferCalcBasisLines(r){
   lines.push('산출세액(' + r.적용세율_설명 + ') = ' + won(r.산출세액));
   (r.세율가산_내역 || []).forEach(function(n){ lines.push('· ' + n); });
   if (r.자경농지감면액) lines.push((r.자경농지감면_구분 || '8년 자경농지 감면(조특법§69)') + ' = -' + won(r.자경농지감면액));
+  if (r.자경농지감면_요건안내) lines.push('※ ' + r.자경농지감면_요건안내);
+  if (r.자경농지감면_추징액) lines.push('자경농지등 감면 사후관리 추징(§69의2②·§70④) = +' + won(r.자경농지감면_추징액));
   if (r.수용감면액) lines.push((r.수용감면_구분 || '공익사업용토지 수용감면(조특법§77①)') + ' = -' + won(r.수용감면액));
   if (r.수용감면_요건안내) lines.push('※ ' + r.수용감면_요건안내);
   if (r.채권만기특약위반_추징액) lines.push('채권 만기특약 위반 추징(조특법§77④) = +' + won(r.채권만기특약위반_추징액));
@@ -2393,6 +2401,7 @@ function renderTransferResult(r){
   html += taxCalcResultRow('합산과세표준', won(r.합산과세표준));
   if (r.합산가산액) html += taxCalcResultRow('다주택중과·비사업용토지 가산', won(r.합산가산액));
   if (r.합산자경감면액) html += taxCalcResultRow('8년자경농지 감면', '-' + won(r.합산자경감면액));
+  if (r.합산자경감면_추징액) html += taxCalcResultRow('자경농지등 감면 사후관리 추징(§69의2②·§70④)', '+' + won(r.합산자경감면_추징액));
   if (r.합산수용감면액) html += taxCalcResultRow('공익사업용토지 수용감면(조특법§77)', '-' + won(r.합산수용감면액));
   if (r.합산채권만기특약위반_추징액) html += taxCalcResultRow('채권 만기특약 위반 추징(조특법§77④)', '+' + won(r.합산채권만기특약위반_추징액));
   if (r.다운계약서_감면배제_추징액) html += taxCalcResultRow('다운계약서 감면배제 추징액', '+' + won(r.다운계약서_감면배제_추징액));
@@ -2416,6 +2425,7 @@ function renderTransferResult(r){
     '<div class="taxcalc-calcbasis-line">합산기본세액(누진세율) = ' + won(r.합산기본세액) + '</div>' +
     (r.합산가산액 ? '<div class="taxcalc-calcbasis-line">다주택중과·비사업용토지 가산 = +' + won(r.합산가산액) + '</div>' : '') +
     (r.합산자경감면액 ? '<div class="taxcalc-calcbasis-line">8년자경농지 감면 = -' + won(r.합산자경감면액) + '</div>' : '') +
+    (r.합산자경감면_추징액 ? '<div class="taxcalc-calcbasis-line">자경농지등 감면 사후관리 추징(§69의2②·§70④) = +' + won(r.합산자경감면_추징액) + '</div>' : '') +
     (r.합산수용감면액 ? '<div class="taxcalc-calcbasis-line">공익사업용토지 수용감면 = -' + won(r.합산수용감면액) + '</div>' : '') +
     (r.합산채권만기특약위반_추징액 ? '<div class="taxcalc-calcbasis-line">채권 만기특약 위반 추징(§77④) = +' + won(r.합산채권만기특약위반_추징액) + '</div>' : '') +
     (r.다운계약서_감면배제_추징액 ? '<div class="taxcalc-calcbasis-line">다운계약서 감면배제 추징 = +' + won(r.다운계약서_감면배제_추징액) + '</div>' : '') +
@@ -2490,6 +2500,7 @@ function renderCarryoverResult(r){
   html += taxCalcResultRow('적용세율', r.적용세율_설명);
   (r.세율가산_내역 || []).forEach(function(note){ html += '<div class="taxcalc-result-note">' + note + '</div>'; });
   if (r.자경농지감면액) html += taxCalcResultRow(r.자경농지감면_구분 || '8년자경농지 감면', '-' + won(r.자경농지감면액));
+  if (r.자경농지감면_추징액) html += taxCalcResultRow('자경농지등 감면 사후관리 추징', '+' + won(r.자경농지감면_추징액));
   if (r.연금계좌세액공제) html += taxCalcResultRow('연금계좌세액공제', '-' + won(r.연금계좌세액공제));
   if (r.전자신고세액공제) html += taxCalcResultRow('전자신고세액공제', '-' + won(r.전자신고세액공제));
   if (r.무신고가산세) html += taxCalcResultRow('무신고가산세', '+' + won(r.무신고가산세));

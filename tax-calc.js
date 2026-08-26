@@ -913,6 +913,8 @@
     }
     let farmlandReduction = 0;
     let farmlandReductionLabel = '';
+    let farmlandGateNote = '';
+    let farmlandClawback = 0;
     if (core.isEightYearFarmland || core.isLivestockLandExempt || core.isFisheryLandExempt || core.isFarmlandSubstitutionExempt) {
       farmlandReduction = Math.min(calculatedTax, 100000000);
       calculatedTax -= farmlandReduction;
@@ -920,6 +922,18 @@
         : core.isLivestockLandExempt ? '축사용지 감면(조특법§69의2)'
         : core.isFisheryLandExempt ? '어업용토지 감면(조특법§69의3)'
         : '농지대토 감면(조특법§70)';
+      if (core.isEightYearFarmland) {
+        farmlandGateNote = '§69①은 "농지 소재지에 거주하는" 거주자의 8년 이상 직접경작만 감면 대상입니다(재촌+자경 요건을 모두 충족해야 함). 경영이양 직접지불보조금 대상 농지를 한국농어촌공사·농업법인에 2026.12.31까지 양도하는 경우는 예외적으로 3년 이상 경작만으로도 충족됩니다.';
+      }
+      if (core.isLivestockLandExempt && t.isLivestockRestartedWithin5Years && !t.isLivestockRestartException) {
+        farmlandClawback = farmlandReduction;
+        farmlandGateNote = (farmlandGateNote ? farmlandGateNote + ' ' : '') + '축사용지 양도 후 5년 이내에 축산업을 다시 하여(§69의2②) 감면세액 ' + farmlandClawback + '원을 추징합니다(이자상당액은 calculate_clawback_interest 도구로 별도 계산하세요).';
+      }
+      if (core.isFarmlandSubstitutionExempt && t.isFarmlandSubstitutionRequirementFailed) {
+        farmlandClawback = farmlandReduction;
+        farmlandGateNote = (farmlandGateNote ? farmlandGateNote + ' ' : '') + '농지대토 요건을 사후에 충족하지 못하여(§70④) 감면세액 ' + farmlandClawback + '원을 사유발생일이 속하는 달의 말일부터 2개월 이내 추징합니다(이자상당액 가산, §70⑤ — calculate_clawback_interest 도구로 별도 계산하세요).';
+      }
+      calculatedTax += farmlandClawback;
     } else if (core.isForestManagementExempt) {
       // 조특법§69의4① — 10년 이상 직접 경영해야 하며(미만이면 감면 없음), 경영기간 구간별로 감면율이
       // 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%.
@@ -1006,7 +1020,7 @@
       장기보유특별공제율: core.longTermRate, 장기보유특별공제액: core.longTermDeductionAmount,
       양도소득금액: Math.round(core.incomeAmount), 기본공제: basicDeduction, 과세표준: taxBase,
       적용세율_설명: appliedRateNote, 세율가산_내역: surchargeNotes, 자경농지감면액: farmlandReduction,
-      자경농지감면_구분: farmlandReductionLabel,
+      자경농지감면_구분: farmlandReductionLabel, 자경농지감면_요건안내: farmlandGateNote || undefined, 자경농지감면_추징액: farmlandClawback,
       수용감면액: compensationReduction, 수용감면_구분: compensationReductionLabel, 수용감면_요건안내: compensationGateNote || undefined,
       채권만기특약위반_추징액: bondBreachClawback, 다운계약서_감면배제_추징액: downContractClawback,
       장기임대주택특례_적용여부: core.isRentalSpecial, 장기임대주택특례_임대기간중분리상세: core.rentalPeriodSplit,
@@ -1141,6 +1155,7 @@
     let poolTaxWithSurcharge = poolBaseTax + poolSurchargeTotal;
 
     let farmlandReductionTotal = 0;
+    let farmlandClawbackTotal = 0;
     const reductionByIdx_ = {};
     pooled.forEach(function (c) {
       const specialExemptLabel = c.isEightYearFarmland ? '8년자경농지감면(안분)'
@@ -1153,6 +1168,14 @@
         farmlandReductionTotal += reduction;
         reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
         assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: specialExemptLabel, 감면액: reduction });
+        if (c.isLivestockLandExempt && c.raw.isLivestockRestartedWithin5Years && !c.raw.isLivestockRestartException) {
+          farmlandClawbackTotal += reduction;
+          assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '축사용지 재축산 추징(§69의2②)', 감면액: -reduction });
+        }
+        if (c.isFarmlandSubstitutionExempt && c.raw.isFarmlandSubstitutionRequirementFailed) {
+          farmlandClawbackTotal += reduction;
+          assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '농지대토 요건미충족 추징(§70④)', 감면액: -reduction });
+        }
       } else if (c.isForestManagementExempt && poolIncomeSum > 0) {
         const yrs = c.forestManagementYears;
         const forestRate = yrs >= 50 ? 0.50 : yrs >= 40 ? 0.40 : yrs >= 30 ? 0.30 : yrs >= 20 ? 0.20 : yrs >= 10 ? 0.10 : 0;
@@ -1171,7 +1194,7 @@
     // 있으므로 최종적으로 한 번 더 캡한다(개별 거래별 감면액 재배분은 하지 않음 — 다운계약 추징 비교용
     // reductionByIdx_는 이 캡 전 값을 유지한다).
     farmlandReductionTotal = Math.min(farmlandReductionTotal, 100000000);
-    poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal);
+    poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal + farmlandClawbackTotal);
 
     // 공익사업용 토지 등 수용감면(조특법§77①·§77의2·§77의3, 안분) — 소득금액 비중으로 배분한 세액에
     // 보상유형별 비율을 곱한다. §133②(2025.3.14 신설)에 따라 건별 감면액은 과세기간별 2억원을 한도로
@@ -1324,7 +1347,7 @@
       거래건수: transactions.length, 비과세건수: exempt.length,
       합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
       기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
-      합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
+      합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal, 합산자경감면_추징액: farmlandClawbackTotal,
       합산수용감면액: compensationReductionTotal, 합산채권만기특약위반_추징액: bondBreachClawbackTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
       합산그룹_산출세액: poolTaxWithSurcharge,
       단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,

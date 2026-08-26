@@ -365,8 +365,11 @@ const DRIVE_TOOLS = [
         isUnregisteredTransfer: { type: 'boolean', description: '미등기양도자산인지 — true면 다른 옵션과 무관하게 70% 단일세율, 장특공제·기본공제 전부 배제' },
         isEightYearFarmland: { type: 'boolean', description: '8년 이상 자경농지 감면(조특법 §69) 대상인지 — 산출세액 전액 감면(연간 1억원, 5년 합산 2억원 한도. §133①1호·2호나목에 따라 §69의2~70 등 아래 다른 감면과 한도를 공유하며, 5년 합산 한도는 이 도구가 추적하지 않으므로 다른 감면 이력과 합산 확인 필요)' },
         isLivestockLandExempt: { type: 'boolean', description: '8년 이상 자경 축사용지 폐업 감면(조특법§69의2) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도(연1억/5년합산2억)를 공유한다.' },
+        isLivestockRestartedWithin5Years: { type: 'boolean', description: 'isLivestockLandExempt가 true일 때만 — 축사용지 양도 후 5년 이내에 축산업을 다시 했는지(§69의2②). true면(isLivestockRestartException이 아닌 한) 감면세액을 즉시 추징한다.' },
+        isLivestockRestartException: { type: 'boolean', description: 'isLivestockRestartedWithin5Years가 true일 때만 — 상속 등 대통령령으로 정하는 부득이한 사유에 해당해 추징 예외를 인정받는지.' },
         isFisheryLandExempt: { type: 'boolean', description: '8년 이상 자영 어업용 토지등 감면(조특법§69의3) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도를 공유한다.' },
         isFarmlandSubstitutionExempt: { type: 'boolean', description: '농지대토 감면(조특법§70) 대상인지 — 산출세액 전액 감면. isEightYearFarmland와 한도를 공유한다.' },
+        isFarmlandSubstitutionRequirementFailed: { type: 'boolean', description: 'isFarmlandSubstitutionExempt가 true일 때만 — 감면 적용 후 대통령령으로 정하는 사유로 §70① 요건(3년 이상 경작 등)을 사후에 충족하지 못하게 됐는지(§70④). true면 감면세액을 사유발생일이 속하는 달의 말일부터 2개월 이내 이자상당액과 함께 추징한다.' },
         isForestManagementExempt: { type: 'boolean', description: '자경산지 감면(조특법§69의4) 대상인지 — 10년 이상 산림경영계획인가받아 직접 경영해야 하며(미만이면 감면 없음), 직접 경영한 기간(취득일~양도일, 의제취득일 의제 미적용) 구간별로 감면율이 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%. isEightYearFarmland 등과 한도를 공유한다(단, 이들과 동시에 적용될 수는 없으므로 isEightYearFarmland 등이 true면 이 필드는 무시된다).' },
         isNewBuildingWithin5Years: { type: 'boolean', description: '건물을 신축 또는 증축(증축은 바닥면적합계 85㎡ 초과분만 해당)하고 그 취득일·증축일로부터 5년 이내에 양도하면서, 그 취득가액을 감정가액 또는 환산취득가액으로 적용했는지(소득세법§97①1호나목) — true면 해당 건물분(증축이면 증축부분만) 감정가액 또는 환산취득가액의 5% 가산세(소득세법§114의2, 산출세액이 0이어도 부과)가 부과된다.' },
         convertedBuildingAcquisitionValueForPenalty: { type: 'number', description: 'isNewBuildingWithin5Years가 true일 때, 취득가액으로 사용한 감정가액 또는 환산취득가액 중 건물분 가액(원, 증축이면 증축부분만). 가산세 = 이 금액×5%.' },
@@ -5054,6 +5057,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   let poolTaxWithSurcharge = poolBaseTax + poolSurchargeTotal;
 
   let farmlandReductionTotal = 0;
+  let farmlandClawbackTotal = 0;
   const reductionByIdx_ = {};
   pooled.forEach(function (c) {
     const specialExemptLabel = c.isEightYearFarmland ? '8년자경농지감면(안분)'
@@ -5066,6 +5070,14 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
       farmlandReductionTotal += reduction;
       reductionByIdx_[c.idx] = (reductionByIdx_[c.idx] || 0) + reduction;
       assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 소득금액: Math.round(c.incomeAmount), 특례: specialExemptLabel, 감면액: reduction });
+      if (c.isLivestockLandExempt && c.raw.isLivestockRestartedWithin5Years && !c.raw.isLivestockRestartException) {
+        farmlandClawbackTotal += reduction;
+        assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '축사용지 재축산 추징(§69의2②)', 감면액: -reduction });
+      }
+      if (c.isFarmlandSubstitutionExempt && c.raw.isFarmlandSubstitutionRequirementFailed) {
+        farmlandClawbackTotal += reduction;
+        assetNotes.push({ idx: c.idx, 구분: '합산(장기)', 특례: '농지대토 요건미충족 추징(§70④)', 감면액: -reduction });
+      }
     } else if (c.isForestManagementExempt && poolIncomeSum > 0) {
       const yrs = c.forestManagementYears;
       const forestRate = yrs >= 50 ? 0.50 : yrs >= 40 ? 0.40 : yrs >= 30 ? 0.30 : yrs >= 20 ? 0.20 : yrs >= 10 ? 0.10 : 0;
@@ -5084,7 +5096,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
   // 있으므로 최종적으로 한 번 더 캡한다(개별 거래별 감면액 재배분은 하지 않음 — 다운계약 추징 비교용
   // reductionByIdx_는 이 캡 전 값을 유지한다).
   farmlandReductionTotal = Math.min(farmlandReductionTotal, 100000000);
-  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal);
+  poolTaxWithSurcharge = Math.max(0, poolTaxWithSurcharge - farmlandReductionTotal + farmlandClawbackTotal);
 
   const COMPENSATION_REDUCTION_RATES_M = {
     cash: 0.15, bond: 0.20, bond_3y: 0.35, bond_5y: 0.45,
@@ -5220,7 +5232,7 @@ function toolCalculateTransferTaxMulti(transactions, filingParams) {
     거래건수: transactions.length, 비과세건수: exempt.length,
     합산대상_장기거래건수: pooled.length, 합산소득금액: Math.round(poolIncomeSum),
     기본공제: basicDeductionUsedInPool ? 2500000 : (usedBasicOnShort && shortTerm.length ? 2500000 : 0),
-    합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal,
+    합산과세표준: poolTaxBase, 합산기본세액: poolBaseTax, 합산가산액: poolSurchargeTotal, 합산자경감면액: farmlandReductionTotal, 합산자경감면_추징액: farmlandClawbackTotal,
     합산수용감면액: compensationReductionTotal, 합산채권만기특약위반_추징액: bondBreachClawbackTotal, 다운계약서_감면배제_추징액: downContractClawbackTotal, 비과세거래_다운계약서_추징액: exemptClawbackTotal,
     합산그룹_산출세액: poolTaxWithSurcharge,
     단기거래_산출세액_합계: shortTaxTotal, 미등기거래_산출세액_합계: unregisteredTaxTotal,
@@ -5351,6 +5363,8 @@ function toolCalculateTransferTax(p) {
   // 이 도구가 추적하지 않음).
   let farmlandReduction = 0;
   let farmlandReductionLabel = '';
+  let farmlandGateNote = '';
+  let farmlandClawback = 0;
   if (p.isEightYearFarmland || p.isLivestockLandExempt || p.isFisheryLandExempt || p.isFarmlandSubstitutionExempt) {
     farmlandReduction = Math.min(calculatedTax, 100000000);
     calculatedTax -= farmlandReduction;
@@ -5358,6 +5372,22 @@ function toolCalculateTransferTax(p) {
       : p.isLivestockLandExempt ? '축사용지 감면(조특법§69의2)'
       : p.isFisheryLandExempt ? '어업용토지 감면(조특법§69의3)'
       : '농지대토 감면(조특법§70)';
+    if (p.isEightYearFarmland) {
+      farmlandGateNote = '§69①은 "농지 소재지에 거주하는" 거주자의 8년 이상 직접경작만 감면 대상입니다(재촌+자경 요건을 모두 충족해야 함). 경영이양 직접지불보조금 대상 농지를 한국농어촌공사·농업법인에 2026.12.31까지 양도하는 경우는 예외적으로 3년 이상 경작만으로도 충족됩니다.';
+    }
+    // §69의2② — 축사용지 감면을 받은 후 양도일로부터 5년 이내에 축산업을 다시 하면(상속 등 예외 제외)
+    // 감면세액을 추징한다.
+    if (p.isLivestockLandExempt && p.isLivestockRestartedWithin5Years && !p.isLivestockRestartException) {
+      farmlandClawback = farmlandReduction;
+      farmlandGateNote = (farmlandGateNote ? farmlandGateNote + ' ' : '') + '축사용지 양도 후 5년 이내에 축산업을 다시 하여(§69의2②) 감면세액 ' + farmlandClawback + '원을 추징합니다(이자상당액은 calculate_clawback_interest 도구로 별도 계산하세요).';
+    }
+    // §70④⑤ — 농지대토 감면 요건(3년 이상 경작 등)을 사후에 충족하지 못하게 되면 그 사유발생일이
+    // 속하는 달의 말일부터 2개월 이내 감면세액 + 이자상당액을 납부해야 한다.
+    if (p.isFarmlandSubstitutionExempt && p.isFarmlandSubstitutionRequirementFailed) {
+      farmlandClawback = farmlandReduction;
+      farmlandGateNote = (farmlandGateNote ? farmlandGateNote + ' ' : '') + '농지대토 요건을 사후에 충족하지 못하여(§70④) 감면세액 ' + farmlandClawback + '원을 사유발생일이 속하는 달의 말일부터 2개월 이내 추징합니다(이자상당액 가산, §70⑤ — calculate_clawback_interest 도구로 별도 계산하세요).';
+    }
+    calculatedTax += farmlandClawback;
   } else if (p.isForestManagementExempt) {
     // 조특법§69의4① — 10년 이상 직접 경영해야 하며(미만이면 감면 없음), 경영기간 구간별로 감면율이
     // 다르다: 10~20년 10%, 20~30년 20%, 30~40년 30%, 40~50년 40%, 50년 이상 50%.
@@ -5472,6 +5502,8 @@ function toolCalculateTransferTax(p) {
     세율가산_내역: surchargeNotes,
     자경농지감면액: farmlandReduction,
     자경농지감면_구분: farmlandReductionLabel,
+    자경농지감면_요건안내: farmlandGateNote || undefined,
+    자경농지감면_추징액: farmlandClawback,
     수용감면액: compensationReduction,
     수용감면_구분: compensationReductionLabel,
     수용감면_요건안내: compensationGateNote || undefined,
