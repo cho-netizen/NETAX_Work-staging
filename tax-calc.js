@@ -2277,6 +2277,97 @@
     };
   };
 
+  // 영농자녀등 증여 농지등 감면 (조특법§71) — Code.js toolCalculateFarmlandGiftTaxReduction와 1:1 대응.
+  const FARMLAND_GIFT_AREA_CAP_SQM = {
+    farmland: 40000, pasture: 148500, fishing_right: 100000, fishing_land: 40000, salt_farm: 60000
+  };
+  window.calculateFarmlandGiftTaxReductionJS = function (p) {
+    p = p || {};
+    const assetType = p.assetType;
+    const validTypes = ['farmland', 'pasture', 'forest_land', 'livestock_land', 'fishing_boat', 'fishing_right', 'fishing_land', 'salt_farm'];
+    if (validTypes.indexOf(assetType) === -1) {
+      return { error: '농지등 유형을 선택하세요.' };
+    }
+    if (p.isInZoningRestrictedArea) {
+      return { 적용여부: false, 감면세액: 0, 안내: '§71①2호 — 주거지역·상업지역·공업지역에 소재하는 농지등은 감면 대상이 아닙니다.' };
+    }
+    if (p.isInDevelopmentRestrictedZone) {
+      return { 적용여부: false, 감면세액: 0, 안내: '§71①3호 — 택지개발지구 등 개발사업지구로 지정된 지역 내 농지등은 감면 대상이 아닙니다.' };
+    }
+    const giftValue = Number(p.giftValue);
+    if (!(giftValue > 0)) return { error: '농지등의 증여재산가액이 필요합니다.' };
+
+    let qualifyingRatio = 1;
+    let capNote = '';
+    if (assetType === 'fishing_boat') {
+      const tonnage = Number(p.tonnage);
+      if (!(tonnage < 20)) {
+        return { 적용여부: false, 감면세액: 0, 안내: '§71①1호마목 — 어선은 총톤수 20톤 미만인 것만 감면 대상입니다.' };
+      }
+      capNote = '어선(총톤수 20톤 미만 요건 충족)';
+    } else if (assetType === 'livestock_land') {
+      const buildingArea = Number(p.buildingArea) || 0;
+      const buildingCoverageRatio = Number(p.buildingCoverageRatio) || 0;
+      if (!(buildingArea > 0 && buildingCoverageRatio > 0)) {
+        return { error: '축사용지는 건축면적과 건폐율이 필요합니다.' };
+      }
+      const cap = buildingArea / buildingCoverageRatio;
+      const actualArea = Number(p.areaSqm) || cap;
+      qualifyingRatio = Math.min(1, cap / actualArea);
+      capNote = '축사용지 면적한도(건축면적÷건폐율) ' + Math.round(cap) + '㎡, 실제면적 ' + actualArea + '㎡';
+    } else if (assetType === 'forest_land') {
+      const afforestationYears = Number(p.afforestationYears) || 0;
+      if (afforestationYears < 5) {
+        return { 적용여부: false, 감면세액: 0, 안내: '§71①1호다목 — 조림한 기간이 5년 이상이어야 합니다.' };
+      }
+      const cap = afforestationYears >= 20 ? 990000 : 297000;
+      const actualArea = Number(p.areaSqm) || cap;
+      qualifyingRatio = Math.min(1, cap / actualArea);
+      capNote = '산림지 면적한도(조림기간 ' + afforestationYears + '년) ' + cap + '㎡, 실제면적 ' + actualArea + '㎡';
+    } else {
+      const cap = FARMLAND_GIFT_AREA_CAP_SQM[assetType];
+      const actualArea = Number(p.areaSqm) || cap;
+      qualifyingRatio = Math.min(1, cap / actualArea);
+      capNote = '면적한도 ' + cap + '㎡, 실제면적 ' + actualArea + '㎡';
+    }
+
+    const qualifyingGiftValue = Math.round(giftValue * qualifyingRatio);
+    const totalGiftCalculatedTax = Number(p.totalGiftCalculatedTax);
+    const totalGiftPropertyValue = Number(p.totalGiftPropertyValue);
+    if (!(totalGiftCalculatedTax > 0) || !(totalGiftPropertyValue > 0)) {
+      return { error: '전체 증여재산 기준 증여세 산출세액과 전체 증여재산가액이 필요합니다.' };
+    }
+    const rawReduction = Math.round(totalGiftCalculatedTax * (qualifyingGiftValue / totalGiftPropertyValue));
+
+    const priorReductionWithinFiveYears = Number(p.priorReductionWithinFiveYears) || 0;
+    const fiveYearLimitRemaining = Math.max(0, 100000000 - priorReductionWithinFiveYears);
+    const reductionAmount = Math.min(rawReduction, fiveYearLimitRemaining);
+    const limitExceededNote = rawReduction > fiveYearLimitRemaining
+      ? ' §133④(5년간 1억원 한도)에 따라 계산상 감면세액(' + rawReduction + '원) 중 ' + (rawReduction - reductionAmount) + '원은 감면하지 못합니다.'
+      : '';
+
+    let clawback = 0;
+    let clawbackNote = '';
+    if ((p.isTransferredOrStoppedFarmingWithin5Years && !p.hasJustifiableReason) || p.isCriminalConvictionConfirmedAfterReduction) {
+      clawback = reductionAmount;
+      clawbackNote = (p.isCriminalConvictionConfirmedAfterReduction
+        ? '영농자녀등 또는 자경농민등이 영농 관련 조세포탈·회계부정으로 형이 확정되어(§71③2호) '
+        : '증여받은 날부터 5년 이내에 정당한 사유 없이 양도하거나 직접 영농에 종사하지 않게 되어(§71②) ')
+        + '감면세액 ' + clawback + '원을 이자상당액과 함께 추징합니다(사유발생일이 속하는 달의 말일부터 3개월 이내 신고·납부, §71④).';
+    }
+
+    return {
+      적용여부: true,
+      농지등유형: assetType, 면적한도_안내: capNote,
+      감면대상비율: Math.round(qualifyingRatio * 10000) / 10000,
+      감면대상_농지등가액: qualifyingGiftValue,
+      계산상_감면세액: rawReduction,
+      최종_감면세액: reductionAmount,
+      사후관리_추징액: clawback,
+      안내: '이 감면세액을 증여세 계산기의 농지등 감면(farmlandGiftTaxExemptionAmount)에 넣어 최종 증여세를 계산하세요.' + limitExceededNote + (clawbackNote ? ' ' + clawbackNote : '')
+    };
+  };
+
   // 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 증여재산공제 없이 일반 누진세율+신고세액공제(3%)만 적용.
   // flatDeduction: §55①3호("제1호 및 제2호를 제외한 합산배제증여재산: 그 증여재산가액에서 3천만원을
   // 공제한 금액") 전용 — §45(재산취득자금 증여추정)처럼 §55①1호(§45의2)·2호(§45의3·45의4)에 속하지

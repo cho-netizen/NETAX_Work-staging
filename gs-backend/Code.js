@@ -745,6 +745,31 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_farmland_gift_tax_reduction',
+    description: '영농자녀등이 증여받는 농지등에 대한 증여세 감면(조특법§71)을 계산한다. 농지·초지·산림지·축사용지·어선·어업권·어업용토지·염전 중 유형별 면적한도(①1호) 이내분만 감면 대상이며, 도시지역(주거·상업·공업)·택지개발지구등 내에 소재하면(①2·3호) 전혀 감면받지 못한다. 감면세액은 이 농지등이 포함된 전체 증여재산 기준 증여세 산출세액 중 이 농지등 가액이 차지하는 비율로 안분해서 구하므로, calculate_gift_tax를 먼저 전체 증여재산으로 계산해 그 산출세액(할증전)과 전체 증여재산가액을 넣어야 한다. §133④(5년간 1억원 한도)와 §71②③ 사후관리(5년이내 양도·미영농 또는 조세포탈·회계부정 확정시 감면세액+이자상당액 추징)도 반영한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        assetType: { type: 'string', enum: ['farmland', 'pasture', 'forest_land', 'livestock_land', 'fishing_boat', 'fishing_right', 'fishing_land', 'salt_farm'], description: 'farmland=농지(4만㎡), pasture=초지(14만8500㎡), forest_land=산림지(조림기간 5~20년 미만 29만7000㎡, 20년이상 99만㎡ — afforestationYears 필요), livestock_land=축사용지(건축면적÷건폐율 — buildingArea·buildingCoverageRatio 필요), fishing_boat=어선(총톤수 20톤미만 — tonnage 필요, 면적한도 없음), fishing_right=어업권(10만㎡), fishing_land=어업용토지(4만㎡), salt_farm=염전(6만㎡).' },
+        giftValue: { type: 'number', description: '이 농지등의 증여재산가액(원, 상증세법상 평가액).' },
+        areaSqm: { type: 'number', description: '이 농지등의 실제 면적(㎡). livestock_land·forest_land·그 외 면적기준 유형에서 실제 면적이 한도를 초과하는지 판정하는 데 쓰인다. 생략하면 한도 이내인 것으로 간주(비율 100%).' },
+        afforestationYears: { type: 'number', description: 'assetType이 forest_land일 때 필수 — 산림경영계획 인가(또는 특수산림사업지구 지정) 후 새로 조림한 기간(년). 5년 미만이면 이 특례 자체를 적용받을 수 없다.' },
+        buildingArea: { type: 'number', description: 'assetType이 livestock_land일 때 필수 — 축사의 실제 건축면적(㎡).' },
+        buildingCoverageRatio: { type: 'number', description: 'assetType이 livestock_land일 때 필수 — 건축법§55에 따른 건폐율(0~1, 예: 0.6). 면적한도 = buildingArea÷buildingCoverageRatio.' },
+        tonnage: { type: 'number', description: 'assetType이 fishing_boat일 때 필수 — 어선의 총톤수. 20톤 이상이면 감면 대상이 아니다.' },
+        isInZoningRestrictedArea: { type: 'boolean', description: '「국토의 계획 및 이용에 관한 법률」제36조에 따른 주거지역·상업지역·공업지역에 소재하는지(§71①2호). true면 감면을 전혀 받지 못한다.' },
+        isInDevelopmentRestrictedZone: { type: 'boolean', description: '「택지개발촉진법」에 따른 택지개발지구나 그 밖에 대통령령으로 정하는 개발사업지구로 지정된 지역 내에 소재하는지(§71①3호). true면 감면을 전혀 받지 못한다.' },
+        totalGiftCalculatedTax: { type: 'number', description: '이 농지등을 포함한 전체 증여재산 기준으로 calculate_gift_tax를 먼저 계산했을 때의 "산출세액_할증전" 값(원). 이 농지등 가액이 차지하는 비율만큼을 감면세액으로 안분하는 데 필요하다.' },
+        totalGiftPropertyValue: { type: 'number', description: '이 농지등을 포함한 전체 증여재산가액 합계(원). 이 농지등만 증여받았다면 giftValue와 같은 값이다.' },
+        priorReductionWithinFiveYears: { type: 'number', description: '조특법§133④ — 이 증여일 전 5년 이내에 이미 §71에 따라 감면받은 증여세액의 합계(원). 이 값과 이번 계산상 감면세액의 합이 1억원을 넘으면 그 초과분은 감면하지 않는다. 없으면 생략.' },
+        isTransferredOrStoppedFarmingWithin5Years: { type: 'boolean', description: '증여받은 날부터 5년 이내에 이 농지등을 양도했거나 직접 영농에 종사하지 않게 되었는지(§71②). hasJustifiableReason이 true가 아닌 한 감면세액+이자상당액을 추징한다.' },
+        hasJustifiableReason: { type: 'boolean', description: 'isTransferredOrStoppedFarmingWithin5Years가 true일 때만 — 영농자녀등의 사망, 질병·취학 등 대통령령으로 정하는 정당한 사유가 있는지. true면 추징하지 않는다.' },
+        isCriminalConvictionConfirmedAfterReduction: { type: 'boolean', description: '감면을 받은 후에 영농자녀등 또는 자경농민등이 영농 관련 조세포탈·회계부정으로 징역형 또는 벌금형을 선고받고 그 형이 확정되었는지(§71③2호). true면 감면세액+이자상당액을 추징한다(과세표준·세율 결정 전에 형이 확정된 경우는 §71③1호로 애초에 감면 자체를 적용하지 않으므로 이 도구를 호출하지 말 것).' }
+      },
+      required: ['assetType', 'giftValue']
+    }
+  },
+  {
     name: 'calculate_related_party_transaction_gift_tax',
     description: '일감몰아주기 증여의제(상증세법 §45의3, 특수관계법인과의 거래를 통한 이익의 증여의제, [별지 제10호의3서식])를 계산한다. 지배주주와 그 친족이 지분을 보유한 법인(수혜법인)이 특수관계법인에 대한 매출비중이 높고 그 지분율도 높으면, 수혜법인의 세후영업이익(중소·중견·일반기업 공통) 중 일부(배당소득공제 반영)를 지배주주등이 증여받은 것으로 간주해 과세한다. 증여재산공제는 적용되지 않고 일반 누진세율과 신고세액공제만 적용된다. 직접출자관계와 간접출자관계가 함께 있으면 각각 별도로 계산해서 합산해야 한다.',
     input_schema: {
@@ -6473,6 +6498,108 @@ function toolCalculateSpecialRateGiftTax(p) {
   };
 }
 
+// 영농자녀등 증여 농지등 감면 (조특법§71, 시행령§68의9~11 등) — ①1호 각목이 정하는 유형별 면적한도
+// (농지 4만㎡·초지 14.85만㎡·산림지 조림기간별 29.7만/99만㎡·축사용지 건축면적÷건폐율·어선 20톤미만·
+// 어업권 10만㎡·어업용토지 4만㎡·염전 6만㎡) 이내분만 "농지등"에 해당해 그 가액에 대한 증여세를 100%
+// 감면한다. ①2호(도시지역외)·3호(택지개발지구외)도 모두 충족해야 한다. 감면세액은 전체 증여세
+// 산출세액(할증전) 중 이 농지등 가액이 차지하는 비율로 안분해서 구한다(다른 재산과 함께 증여받은
+// 경우를 포함한 전체 그림이 필요 — totalGiftCalculatedTax·totalGiftPropertyValue를 calculate_gift_tax
+// 결과에서 가져와 넣어야 한다). §133④에 따라 5년간 감면세액 합계 1억원 한도. 사후관리(②③, 5년이내
+// 양도·미영농 또는 조세포탈·회계부정 형확정시 감면세액+이자상당액 추징, 정당한 사유는 예외)도 반영.
+const FARMLAND_GIFT_AREA_CAP_SQM_ = {
+  farmland: 40000, pasture: 148500, fishing_right: 100000, fishing_land: 40000, salt_farm: 60000
+};
+function toolCalculateFarmlandGiftTaxReduction(p) {
+  p = p || {};
+  const assetType = p.assetType;
+  const validTypes = ['farmland', 'pasture', 'forest_land', 'livestock_land', 'fishing_boat', 'fishing_right', 'fishing_land', 'salt_farm'];
+  if (validTypes.indexOf(assetType) === -1) {
+    return { error: 'assetType을 farmland(농지)/pasture(초지)/forest_land(산림지)/livestock_land(축사용지)/fishing_boat(어선)/fishing_right(어업권)/fishing_land(어업용토지)/salt_farm(염전) 중에서 선택하세요.' };
+  }
+  if (p.isInZoningRestrictedArea) {
+    return { 적용여부: false, 감면세액: 0, 안내: '§71①2호 — 「국토의 계획 및 이용에 관한 법률」제36조에 따른 주거지역·상업지역·공업지역에 소재하는 농지등은 감면 대상이 아닙니다.' };
+  }
+  if (p.isInDevelopmentRestrictedZone) {
+    return { 적용여부: false, 감면세액: 0, 안내: '§71①3호 — 「택지개발촉진법」에 따른 택지개발지구나 그 밖에 대통령령으로 정하는 개발사업지구로 지정된 지역 내 농지등은 감면 대상이 아닙니다.' };
+  }
+  const giftValue = Number(p.giftValue);
+  if (!(giftValue > 0)) return { error: '농지등의 증여재산가액(giftValue)이 필요합니다.' };
+
+  let qualifyingRatio = 1;
+  let capNote = '';
+  if (assetType === 'fishing_boat') {
+    const tonnage = Number(p.tonnage);
+    if (!(tonnage < 20)) {
+      return { 적용여부: false, 감면세액: 0, 안내: '§71①1호마목 — 어선은 「어선법」§13의2에 따른 총톤수 20톤 미만인 것만 감면 대상입니다.' };
+    }
+    capNote = '어선(총톤수 20톤 미만 요건 충족)';
+  } else if (assetType === 'livestock_land') {
+    const buildingArea = Number(p.buildingArea) || 0;
+    const buildingCoverageRatio = Number(p.buildingCoverageRatio) || 0;
+    if (!(buildingArea > 0 && buildingCoverageRatio > 0)) {
+      return { error: '축사용지는 축사의 실제 건축면적(buildingArea, ㎡)과 건폐율(buildingCoverageRatio, 예: 0.6)이 필요합니다(§71①1호라목 — 면적한도 = 건축면적÷건폐율).' };
+    }
+    const cap = buildingArea / buildingCoverageRatio;
+    const actualArea = Number(p.areaSqm) || cap;
+    qualifyingRatio = Math.min(1, cap / actualArea);
+    capNote = '축사용지 면적한도(건축면적÷건폐율) ' + Math.round(cap) + '㎡, 실제면적 ' + actualArea + '㎡';
+  } else if (assetType === 'forest_land') {
+    const afforestationYears = Number(p.afforestationYears) || 0;
+    if (afforestationYears < 5) {
+      return { 적용여부: false, 감면세액: 0, 안내: '§71①1호다목 — 산림경영계획 인가(또는 특수산림사업지구 지정)를 받아 새로 조림한 기간이 5년 이상이어야 합니다.' };
+    }
+    const cap = afforestationYears >= 20 ? 990000 : 297000;
+    const actualArea = Number(p.areaSqm) || cap;
+    qualifyingRatio = Math.min(1, cap / actualArea);
+    capNote = '산림지 면적한도(조림기간 ' + afforestationYears + '년) ' + cap + '㎡, 실제면적 ' + actualArea + '㎡';
+  } else {
+    const cap = FARMLAND_GIFT_AREA_CAP_SQM_[assetType];
+    const actualArea = Number(p.areaSqm) || cap;
+    qualifyingRatio = Math.min(1, cap / actualArea);
+    capNote = '면적한도 ' + cap + '㎡, 실제면적 ' + actualArea + '㎡';
+  }
+
+  const qualifyingGiftValue = Math.round(giftValue * qualifyingRatio);
+  const totalGiftCalculatedTax = Number(p.totalGiftCalculatedTax);
+  const totalGiftPropertyValue = Number(p.totalGiftPropertyValue);
+  if (!(totalGiftCalculatedTax > 0) || !(totalGiftPropertyValue > 0)) {
+    return { error: '이 농지등을 포함한 전체 증여재산 기준 증여세 산출세액(totalGiftCalculatedTax, calculate_gift_tax의 산출세액_할증전)과 전체 증여재산가액(totalGiftPropertyValue)이 필요합니다 — 다른 재산과 함께 증여받았다면 그 재산까지 포함한 전체 그림에서 이 농지등이 차지하는 비율로 감면세액을 안분하기 때문입니다.' };
+  }
+  const rawReduction = Math.round(totalGiftCalculatedTax * (qualifyingGiftValue / totalGiftPropertyValue));
+
+  // §133④ — 제71조에 따라 감면받을 증여세액의 5년간 합계(증여세감면한도액)가 1억원을 초과하면
+  // 그 초과분은 감면하지 않는다.
+  const priorReductionWithinFiveYears = Number(p.priorReductionWithinFiveYears) || 0;
+  const fiveYearLimitRemaining = Math.max(0, 100000000 - priorReductionWithinFiveYears);
+  const reductionAmount = Math.min(rawReduction, fiveYearLimitRemaining);
+  const limitExceededNote = rawReduction > fiveYearLimitRemaining
+    ? ' §133④(5년간 1억원 한도)에 따라 계산상 감면세액(' + rawReduction + '원) 중 ' + (rawReduction - reductionAmount) + '원은 감면하지 못합니다.'
+    : '';
+
+  // §71②③ 사후관리 — 5년 이내 양도·미영농(정당한 사유 없이) 또는 조세포탈·회계부정 형확정시
+  // 감면세액에 이자상당액을 가산해 추징한다.
+  let clawback = 0;
+  let clawbackNote = '';
+  if ((p.isTransferredOrStoppedFarmingWithin5Years && !p.hasJustifiableReason) || p.isCriminalConvictionConfirmedAfterReduction) {
+    clawback = reductionAmount;
+    clawbackNote = (p.isCriminalConvictionConfirmedAfterReduction
+      ? '영농자녀등 또는 자경농민등이 영농 관련 조세포탈·회계부정으로 형이 확정되어(§71③2호) '
+      : '증여받은 날부터 5년 이내에 정당한 사유 없이 양도하거나 직접 영농에 종사하지 않게 되어(§71②) ')
+      + '감면세액 ' + clawback + '원을 이자상당액과 함께 추징합니다(사유발생일이 속하는 달의 말일부터 3개월 이내 신고·납부, §71④). 이자상당액은 calculate_clawback_interest 도구로 별도 계산하세요.';
+  }
+
+  return {
+    적용여부: true,
+    농지등유형: assetType, 면적한도_안내: capNote,
+    감면대상비율: Math.round(qualifyingRatio * 10000) / 10000,
+    감면대상_농지등가액: qualifyingGiftValue,
+    계산상_감면세액: rawReduction,
+    최종_감면세액: reductionAmount,
+    사후관리_추징액: clawback,
+    안내: '이 감면세액(최종_감면세액, 추징액이 있으면 그만큼 가산)을 calculate_gift_tax 도구의 farmlandGiftTaxExemptionAmount에 넣어 최종 증여세를 계산하세요.' + limitExceededNote + (clawbackNote ? ' ' + clawbackNote : '') + ' 증여받은 날부터 5년 이내 감면신청(§71⑧)을 해야 하고, 이 농지등을 나중에 양도할 때는 취득시기·필요경비가 자경농민등 기준으로 승계됩니다(§71⑤).'
+  };
+}
+
 // 증여의제이익(일감몰아주기·일감떼어주기 등)에 대한 세액 계산 — 상증세법 §45의3·§45의4는 증여재산공제가 적용되지 않고
 // (과세표준 = 증여의제이익 그대로), 일반 누진세율과 신고세액공제(3%)만 적용된다.
 // flatDeduction: §55①3호("제1호 및 제2호를 제외한 합산배제증여재산: 그 증여재산가액에서 3천만원을
@@ -10773,6 +10900,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_inheritance_tax' ||
         b.name === 'allocate_inheritance_tax_by_heir' ||
         b.name === 'calculate_special_rate_gift_tax' ||
+        b.name === 'calculate_farmland_gift_tax_reduction' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
         b.name === 'calculate_nominee_trust_gift_tax' ||
@@ -11005,6 +11133,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_special_rate_gift_tax') {
         const resultObj = toolCalculateSpecialRateGiftTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_farmland_gift_tax_reduction') {
+        const resultObj = toolCalculateFarmlandGiftTaxReduction(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
