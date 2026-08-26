@@ -925,7 +925,7 @@ const DRIVE_TOOLS = [
         meritoriousLoanAmount: { type: 'number', description: 'isNationalMeritorious가 true이고(house가 아니거나 85㎡ 초과 주택일 때) — 국가유공자등이 받은 대부금(원). 취득가액 중 이 금액에 해당하는 비율만큼만 취득세가 면제되고 초과분은 과세된다(§29①2호).' },
         isSpouseOrLinealRelativeTransaction: { type: 'boolean', description: '§7⑪ — acquisitionType이 paid일 때, 배우자 또는 직계존비속으로부터 부동산등을 취득하는 거래인지. true이면 원칙적으로 증여로 취득한 것으로 보되(본문), spouseTransactionExceptionType으로 예외 사유를 주장할 수 있다. 예외를 주장하지 않으면 자동으로 acquisitionType이 gift로 재분류되고 과세표준도 marketValueForGateCheck(시가인정액) 기준으로 바뀐다.' },
         spouseTransactionExceptionType: { type: 'string', enum: ['public_auction', 'bankruptcy', 'exchange', 'proven_consideration'], description: 'isSpouseOrLinealRelativeTransaction이 true일 때 — §7⑪ 각 호의 예외 사유. public_auction=1호(공매, 경매포함), bankruptcy=2호(파산선고로 처분되는 부동산 취득), exchange=3호(등기·등록이 필요한 부동산등의 교환), proven_consideration=4호(취득자의 소득·재산처분대금 등으로 대가를 지급한 사실이 증명되는 경우 — 단, 그 대가가 시가인정액보다 낮고 차액이 3억원 이상이거나 시가인정액의 30% 이상이면(marketValueForGateCheck로 판정) 이 예외가 재배제되어 증여로 재분류된다).' },
-        isOtherRelatedPartyTransaction: { type: 'boolean', description: '법§10조의3②·시행령§18의2(부당행위계산) — acquisitionType이 paid일 때, 배우자·직계존비속이 아닌 그 밖의 특수관계인으로부터 취득하는 거래인지. true이고 실제 취득가액이 marketValueForGateCheck(시가인정액)보다 낮으며 그 차액이 3억원 이상이거나 시가인정액의 5% 이상이면, 취득당시가액을 시가인정액으로 재산정한다(acquisitionType 자체는 유상취득 그대로 유지).' },
+        isOtherRelatedPartyTransaction: { type: 'boolean', description: '법§10조의3②·시행령§18의2(부당행위계산) — acquisitionType이 paid일 때, 배우자·직계존비속이 아닌 그 밖의 특수관계인으로부터 취득하는 거래인지. true이고 실제 취득가액이 marketValueForGateCheck(시가인정액)보다 낮으며 그 차액이 3억원 이상이거나 시가인정액의 5% 이상이면, 취득당시가액을 시가인정액으로 재산정한다(acquisitionType 자체는 유상취득 그대로 유지). 주의 — 배우자·직계존비속 간 거래라도 spouseTransactionExceptionType이 proven_consideration(4호)이어서 유상으로 인정된 경우에는 이 게이트가 자동으로 함께 적용된다(법 조문의 "§7⑪에 따라 증여로 취득한 것으로 보는 경우는 제외한다"는 문언은 실제로 증여로 판정된 부분만 배제하는 것이지 배우자·직계존비속 거래 전체를 배제하는 것이 아님 — 1~3호는 가격이 절차상 객관적으로 정해져 이 게이트에서 제외됨) — isOtherRelatedPartyTransaction을 별도로 true로 넣을 필요는 없다.' },
         marketValueForGateCheck: { type: 'number', description: 'isSpouseOrLinealRelativeTransaction(§7⑪4호 30%/3억원 게이트) 또는 isOtherRelatedPartyTransaction(시행령§18의2 5%/3억원 게이트) 판정에 쓰는 비교대상 시가인정액(원, 시가를 산정하기 어려우면 시가표준액).' }
       },
       required: ['acquisitionType', 'propertyType', 'acquisitionValue']
@@ -8090,13 +8090,23 @@ function toolCalculateAcquisitionTax(p) {
       acquisitionValue = marketValueForGate > 0 ? marketValueForGate : acquisitionValue;
       relatedPartyGateNote = ' §7⑪본문 — 배우자·직계존비속 간 부동산 취득은 예외 사유(spouseTransactionExceptionType)를 주장하지 않으면 원칙적으로 증여로 취득한 것으로 봅니다.';
     }
-  } else if (acquisitionType === 'paid' && p.isOtherRelatedPartyTransaction) {
+  }
+  // 법§10조의3②·시행령§18의2(부당행위계산, 5%/3억원 게이트) — "특수관계인 간의 거래(§7⑪에 따라
+  // 증여로 취득한 것으로 보는 경우는 제외한다)"라는 문언은 §7⑪ 본문에 의해 실제로 증여로 판정된
+  // 부분만 배제하는 것이지, 배우자·직계존비속 거래 전체를 배제하는 것이 아니다 — 즉 §7⑪ 단서(1~4호)로
+  // 유상 인정되어 살아남은 배우자·직계존비속 거래도 여전히 "특수관계인 간 거래"이므로 이 5% 게이트가
+  // 순차적으로(추가로) 적용된다. 다만 1~3호(공매·파산선고처분·교환)는 가격이 절차상 객관적으로
+  // 정해지는 방식이라 저가매매로 조세를 부당히 감소시켰다고 볼 여지가 없어 이 게이트를 적용하지 않고,
+  // 4호(대가지급 증명, 일반 매매 성격)로 유상 인정된 경우에만 적용한다.
+  const eligibleForFivePercentGate = p.isOtherRelatedPartyTransaction ||
+    (p.isSpouseOrLinealRelativeTransaction && p.spouseTransactionExceptionType === 'proven_consideration');
+  if (acquisitionType === 'paid' && eligibleForFivePercentGate) {
     const marketValueForGate = Number(p.marketValueForGateCheck);
     if (marketValueForGate > 0 && acquisitionValue < marketValueForGate) {
       const diff = marketValueForGate - acquisitionValue;
       if (diff >= 300000000 || diff >= marketValueForGate * 0.05) {
         acquisitionValue = marketValueForGate;
-        relatedPartyGateNote = ' 시행령§18의2(부당행위계산, 법§10조의3②) — 특수관계인으로부터 시가인정액(' + marketValueForGate + '원)보다 낮은 가격으로 취득했고 그 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 5% 이상이어서, 취득당시가액을 시가인정액으로 재산정합니다.';
+        relatedPartyGateNote += ' 시행령§18의2(부당행위계산, 법§10조의3②) — 특수관계인으로부터 시가인정액(' + marketValueForGate + '원)보다 낮은 가격으로 취득했고 그 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 5% 이상이어서, 취득당시가액을 시가인정액으로 재산정합니다. (배우자·직계존비속 거래도 §7⑪로 유상 인정된 이상 이 게이트가 추가로 적용됩니다.)';
       }
     }
   }

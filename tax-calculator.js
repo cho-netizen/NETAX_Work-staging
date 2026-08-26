@@ -5187,7 +5187,7 @@ function renderAcquisitionPane(){
           '<option value="exchange">3호 등기·등록 필요한 부동산 교환</option>' +
           '<option value="proven_consideration">4호 대가지급 증명(소득·재산처분대금 등)</option>' +
         '</select></div>' +
-        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOtherRelatedParty"><label for="atOtherRelatedParty">배우자·직계존비속 외 특수관계인으로부터 취득 — 저가취득시 시가인정액으로 재산정(부당행위계산, 법§10조의3②·시행령§18의2)</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atOtherRelatedParty"><label for="atOtherRelatedParty">배우자·직계존비속 외 특수관계인으로부터 취득 — 저가취득시 시가인정액으로 재산정(부당행위계산, 법§10조의3②·시행령§18의2). 배우자·직계존비속간 거래(위 4호 대가지급증명으로 유상 인정된 경우)에도 이 5% 게이트가 별도로 추가 적용됩니다.</label></div>' +
         '<div class="taxcalc-field"><label>[위 둘 중 하나 체크시] 비교 시가인정액</label><input type="number" id="atMarketValueGate" placeholder="원 (30%/3억원 또는 5%/3억원 게이트 판정용)"></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>[상속·주택만] 1가구1주택자 상속 특례(§15①2호가목)</b></div>' +

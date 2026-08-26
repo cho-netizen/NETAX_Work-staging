@@ -3452,13 +3452,19 @@
         acquisitionValue = marketValueForGate > 0 ? marketValueForGate : acquisitionValue;
         relatedPartyGateNote = ' §7⑪본문 — 배우자·직계존비속 간 부동산 취득은 예외 사유(spouseTransactionExceptionType)를 주장하지 않으면 원칙적으로 증여로 취득한 것으로 봅니다.';
       }
-    } else if (acquisitionType === 'paid' && p.isOtherRelatedPartyTransaction) {
+    }
+    // 법§10조의3②·시행령§18의2(부당행위계산, 5%/3억원 게이트) — §7⑪ 단서로 유상 인정되어 살아남은
+    // 배우자·직계존비속 거래(4호만 해당, 1~3호는 가격이 절차상 객관적으로 정해져 제외)도 여전히
+    // "특수관계인 간 거래"이므로 이 게이트가 순차적으로(추가로) 적용된다.
+    const eligibleForFivePercentGate = p.isOtherRelatedPartyTransaction ||
+      (p.isSpouseOrLinealRelativeTransaction && p.spouseTransactionExceptionType === 'proven_consideration');
+    if (acquisitionType === 'paid' && eligibleForFivePercentGate) {
       const marketValueForGate = Number(p.marketValueForGateCheck);
       if (marketValueForGate > 0 && acquisitionValue < marketValueForGate) {
         const diff = marketValueForGate - acquisitionValue;
         if (diff >= 300000000 || diff >= marketValueForGate * 0.05) {
           acquisitionValue = marketValueForGate;
-          relatedPartyGateNote = ' 시행령§18의2(부당행위계산, 법§10조의3②) — 특수관계인으로부터 시가인정액(' + marketValueForGate + '원)보다 낮은 가격으로 취득했고 그 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 5% 이상이어서, 취득당시가액을 시가인정액으로 재산정합니다.';
+          relatedPartyGateNote += ' 시행령§18의2(부당행위계산, 법§10조의3②) — 특수관계인으로부터 시가인정액(' + marketValueForGate + '원)보다 낮은 가격으로 취득했고 그 차액(' + diff + '원)이 3억원 이상이거나 시가인정액의 5% 이상이어서, 취득당시가액을 시가인정액으로 재산정합니다. (배우자·직계존비속 거래도 §7⑪로 유상 인정된 이상 이 게이트가 추가로 적용됩니다.)';
         }
       }
     }
