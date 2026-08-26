@@ -1293,6 +1293,42 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_overseas_asset_transfer_tax_multi',
+    description: '같은 과세기간에 국외자산을 2건 이상 양도한 경우 합산해서 계산한다(소득세법§118의7①). calculate_overseas_asset_transfer_tax(단일거래)는 거래마다 기본공제(연250만원)를 각각 적용해버리는데, §118의7①은 국외자산 전체를 통틀어 과세기간당 1회만 인정하므로 2건 이상이면 반드시 이 도구를 써야 한다. 외국납부세액공제 한도(§118의6①)도 전체 국외자산 양도소득 합계 기준으로 한 번만 계산한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        transactions: {
+          type: 'array', description: '국외자산 거래 목록(2건 이상). 각 원소는 { wasResidentFiveYearsContinuously, transferPrice, acquisitionPrice, capitalExpenditure, transferExpenses, foreignTaxCreditMethod, foreignTaxPaidAmount } — calculate_overseas_asset_transfer_tax와 동일한 필드.',
+          items: {
+            type: 'object',
+            properties: {
+              wasResidentFiveYearsContinuously: { type: 'boolean', description: '양도일까지 계속 5년 이상 국내에 주소 또는 거소를 둔 거주자인지(§118의2 적용요건). false면 이 거래는 애초에 이 세목 대상이 아니므로 에러를 반환한다.' },
+              transferPrice: { type: 'number', description: '양도가액(원, 실지거래가액 원칙).' },
+              acquisitionPrice: { type: 'number', description: '취득가액(원, 실지거래가액 원칙).' },
+              capitalExpenditure: { type: 'number', description: '자본적지출액(원). 없으면 생략.' },
+              transferExpenses: { type: 'number', description: '양도비(원). 없으면 생략.' },
+              foreignTaxCreditMethod: { type: 'string', enum: ['credit', 'expense'], description: 'credit=외국납부세액공제(기본값), expense=필요경비산입방법(이미 위 금액에 포함해 입력했다면 선택).' },
+              foreignTaxPaidAmount: { type: 'number', description: 'foreignTaxCreditMethod가 credit일 때 — 이 거래의 양도소득에 대해 외국에 납부한 세액(원).' }
+            },
+            required: ['wasResidentFiveYearsContinuously', 'transferPrice']
+          }
+        },
+        domesticTransferIncomeAmount: { type: 'number', description: '같은 과세기간에 국내자산 양도소득금액도 함께 있는 경우 그 금액(원, §118의6① 세액공제한도 계산용). 없으면 생략(비율=1로 계산).' },
+        filingStatus: { type: 'string', enum: ['ontime', 'unreported', 'underreported'], description: 'ontime=정상신고, unreported=무신고, underreported=과소신고. 기본값 ontime.' },
+        isFraudulent: { type: 'boolean', description: '무신고·과소신고가 부정행위에 해당하는지.' },
+        isOffshoreTransaction: { type: 'boolean', description: '국세기본법§47의2·§47의3의 역외거래 부정행위에 해당하는지 — true면 가산세율이 60%로 적용된다.' },
+        underreportedTaxAmount: { type: 'number', description: '과소신고분 세액.' },
+        fraudulentUnderreportedTaxAmount: { type: 'number', description: 'underreportedTaxAmount 중 부정행위로 인한 과소신고분만의 금액(원). 생략하면 전액 부정행위분으로 계산된다.' },
+        unpaidDays: { type: 'integer', description: '납부지연일수. 없으면 0.' },
+        unpaidTaxForLatePenalty: { type: 'number', description: '납부지연가산세 계산 기준 미납세액.' },
+        monthsAfterDesignatedDueDate: { type: 'number', description: '세무서 고지 후에도 계속 체납된 경우 경과 개월 수(국세기본법§47의4①1의2호). 고지 전 자진납부만 하는 경우는 생략.' },
+        unpaidTaxAtDesignatedDueDate: { type: 'number', description: '지정납부기한까지 납부하지 않은 세액(원). monthsAfterDesignatedDueDate와 함께 입력.' }
+      },
+      required: ['transactions']
+    }
+  },
+  {
     name: 'calculate_capital_reduction_gift_tax',
     description: '감자에 따른 이익의 증여(상증세법§39의2, 시행령§29의2)를 계산한다. low_price(저가소각 — 시가보다 낮은 대가로 소각, 다른 대주주등이 이익을 얻음): (1주당평가액-지급액)×총감자주식수×대주주등의감자후지분비율×(특수관계인감자주식수÷총감자주식수). high_price(고가소각 — 시가보다 높은 대가로 소각, 1주당평가액이 액면가에 미달하는 경우만, 소각된 주주 본인이 이익을 얻음): (지급액-1주당평가액)×해당주주등의감자주식수. 게이트: 기준금액 3억원, 다만 차액비율이 30%이상이면 기준금액은 0(무조건 과세).',
     input_schema: {
@@ -9189,7 +9225,64 @@ function toolCalculateOverseasAssetTransferTax(p) {
     산출세액: calculatedTax, 외국납부세액공제한도: foreignTaxCreditLimit, 외국납부세액공제: foreignTaxCredit,
     무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
     지방소득세: localIncomeTax, 납부세액_합계: totalTax,
-    안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다.'
+    안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다. 같은 과세기간에 국외자산을 2건 이상 양도했다면 이 도구 대신 calculate_overseas_asset_transfer_tax_multi로 합산 계산해야 기본공제(§118의7①) 중복적용을 막을 수 있습니다.'
+  };
+}
+
+// 국외자산 양도소득세 다건 합산 (소득세법§118의7①) — §118의7①은 국외자산 전체를 통틀어 과세기간당
+// 연250만원 기본공제를 "1회만" 인정한다(자산 종류별로 나누지 않음, §103①의 국내자산 4분할 풀과
+// 다른 구조). toolCalculateOverseasAssetTransferTax(단일거래)는 거래마다 250만원을 각각 적용해
+// 버리므로, 같은 과세기간에 국외자산을 2건 이상 양도하면 이 도구로 합산해야 정확하다. 외국납부세액
+// 공제한도(§118의6①)도 전체 국외자산 양도소득 합계 기준으로 한 번만 계산한다.
+function toolCalculateOverseasAssetTransferTaxMulti(transactions, filingParams) {
+  filingParams = filingParams || {};
+  if (!Array.isArray(transactions) || !transactions.length) return { error: '거래 목록(transactions)이 1건 이상 필요합니다.' };
+
+  let totalGain = 0;
+  let totalForeignTaxPaid = 0;
+  const perTxn = [];
+  for (let i = 0; i < transactions.length; i++) {
+    const t = transactions[i] || {};
+    if (!t.wasResidentFiveYearsContinuously) {
+      return { error: (i + 1) + '번째 거래: 양도일까지 계속 5년 이상 국내에 주소·거소를 둔 거주자가 아니어서 §118의2 적용대상이 아닙니다.' };
+    }
+    const transferPrice = Number(t.transferPrice) || 0;
+    if (transferPrice <= 0) return { error: (i + 1) + '번째 거래: 양도가액이 필요합니다.' };
+    const acquisitionPrice = Number(t.acquisitionPrice) || 0;
+    const capitalExpenditure = Number(t.capitalExpenditure) || 0;
+    const transferExpenses = Number(t.transferExpenses) || 0;
+    const gain = transferPrice - acquisitionPrice - capitalExpenditure - transferExpenses;
+    totalGain += gain;
+    const method = t.foreignTaxCreditMethod === 'expense' ? 'expense' : 'credit';
+    const paid = method === 'credit' ? (Number(t.foreignTaxPaidAmount) || 0) : 0;
+    totalForeignTaxPaid += paid;
+    perTxn.push({ idx: i, 양도차익: Math.round(gain), 외국납부세액_공제신청액: paid });
+  }
+
+  const basicDeduction = Math.min(2500000, Math.max(0, totalGain));
+  const taxBase = Math.max(0, totalGain - basicDeduction);
+  const calculatedTax = calcProgressiveTax_(taxBase, TRANSFER_TAX_BRACKETS);
+
+  const domesticTransferIncomeAmount = Math.max(0, Number(filingParams.domesticTransferIncomeAmount) || 0);
+  const totalIncomeAmountForRatio = Math.max(0, totalGain) + domesticTransferIncomeAmount;
+  const creditRatio = totalIncomeAmountForRatio > 0 ? Math.max(0, totalGain) / totalIncomeAmountForRatio : 1;
+  const foreignTaxCreditLimit = Math.round(calculatedTax * creditRatio);
+  const foreignTaxCredit = Math.min(totalForeignTaxPaid, foreignTaxCreditLimit);
+  const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
+
+  const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
+  const penalties = giftFilingPenalties_(taxAfterCredit, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate), filingParams.fraudulentUnderreportedTaxAmount);
+  const localIncomeTax = Math.round(taxAfterCredit * 0.1);
+  const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+
+  return {
+    거래건수: transactions.length,
+    거래별_내역: perTxn,
+    합산양도차익: Math.round(totalGain), 기본공제: basicDeduction, 과세표준: taxBase,
+    산출세액: calculatedTax, 외국납부세액공제한도: foreignTaxCreditLimit, 외국납부세액공제: foreignTaxCredit,
+    무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+    지방소득세: localIncomeTax, 납부세액_합계: totalTax,
+    안내: '국외자산은 §118의7①에 따라 여러 건을 양도해도 기본공제(연250만원)를 통틀어 1회만 적용합니다(국내자산처럼 자산 종류별로 나누지 않음). 장기보유특별공제는 국외자산에 적용되지 않습니다. foreignTaxCreditMethod가 expense인 거래는 이미 필요경비에 포함해 입력했다고 보아 세액공제 대상에서 제외했습니다.'
   };
 }
 
@@ -10642,6 +10735,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_convertible_bond_gift_tax' ||
         b.name === 'calculate_in_kind_contribution_gift_tax' ||
         b.name === 'calculate_overseas_asset_transfer_tax' ||
+        b.name === 'calculate_overseas_asset_transfer_tax_multi' ||
         b.name === 'calculate_capital_reduction_gift_tax' ||
         b.name === 'calculate_disabled_person_trust_exclusion' ||
         b.name === 'calculate_charity_donation_tax_exclusion' ||
@@ -10965,6 +11059,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_overseas_asset_transfer_tax') {
         const resultObj = toolCalculateOverseasAssetTransferTax(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_overseas_asset_transfer_tax_multi') {
+        const input = block.input || {};
+        const resultObj = toolCalculateOverseasAssetTransferTaxMulti(input.transactions, input);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

@@ -4051,7 +4051,62 @@
       산출세액: calculatedTax, 외국납부세액공제한도: foreignTaxCreditLimit, 외국납부세액공제: foreignTaxCredit,
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       지방소득세: localIncomeTax, 납부세액_합계: totalTax,
-      안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다.'
+      안내: '장기보유특별공제는 국외자산에는 적용되지 않습니다(§118의8단서). 기본공제(연250만원)는 국내자산 양도소득과 별도로 적용됩니다(§118의7). 양도가액·취득가액은 원칙적으로 실지거래가액이며, 확인 안 되면 소재국 시가(그래도 안되면 대통령령이 정하는 방법)를 씁니다. 국외전출자 국내주식등 출국세(§118의9~118의18)는 2027.1.1 시행 예정이라 아직 시행 전이며 핵심 세율표도 확인되지 않아 이 계산기가 다루지 않습니다. 같은 과세기간에 국외자산을 2건 이상 양도했다면 이 함수 대신 calculateOverseasAssetTransferTaxMultiJS로 합산 계산해야 기본공제(§118의7①) 중복적용을 막을 수 있습니다.'
+    };
+  };
+
+  // 국외자산 양도소득세 다건 합산 (소득세법§118의7①) — calculateOverseasAssetTransferTaxJS(단일거래)는
+  // 거래마다 기본공제(연250만원)를 각각 적용해버리므로, 같은 과세기간에 국외자산을 2건 이상 양도하면
+  // 이 함수로 합산해야 §118의7①(전체 통틀어 1회)을 정확히 반영한다.
+  window.calculateOverseasAssetTransferTaxMultiJS = function (transactions, filingParams) {
+    filingParams = filingParams || {};
+    if (!Array.isArray(transactions) || !transactions.length) return { error: '거래 목록(transactions)이 1건 이상 필요합니다.' };
+
+    let totalGain = 0;
+    let totalForeignTaxPaid = 0;
+    const perTxn = [];
+    for (let i = 0; i < transactions.length; i++) {
+      const t = transactions[i] || {};
+      if (!t.wasResidentFiveYearsContinuously) {
+        return { error: (i + 1) + '번째 거래: 양도일까지 계속 5년 이상 국내에 주소·거소를 둔 거주자가 아니어서 §118의2 적용대상이 아닙니다.' };
+      }
+      const transferPrice = Number(t.transferPrice) || 0;
+      if (transferPrice <= 0) return { error: (i + 1) + '번째 거래: 양도가액이 필요합니다.' };
+      const acquisitionPrice = Number(t.acquisitionPrice) || 0;
+      const capitalExpenditure = Number(t.capitalExpenditure) || 0;
+      const transferExpenses = Number(t.transferExpenses) || 0;
+      const gain = transferPrice - acquisitionPrice - capitalExpenditure - transferExpenses;
+      totalGain += gain;
+      const method = t.foreignTaxCreditMethod === 'expense' ? 'expense' : 'credit';
+      const paid = method === 'credit' ? (Number(t.foreignTaxPaidAmount) || 0) : 0;
+      totalForeignTaxPaid += paid;
+      perTxn.push({ idx: i, 양도차익: Math.round(gain), 외국납부세액_공제신청액: paid });
+    }
+
+    const basicDeduction = Math.min(2500000, Math.max(0, totalGain));
+    const taxBase = Math.max(0, totalGain - basicDeduction);
+    const calculatedTax = progressiveTax(taxBase, TRANSFER_TAX_BRACKETS);
+
+    const domesticTransferIncomeAmount = Math.max(0, Number(filingParams.domesticTransferIncomeAmount) || 0);
+    const totalIncomeAmountForRatio = Math.max(0, totalGain) + domesticTransferIncomeAmount;
+    const creditRatio = totalIncomeAmountForRatio > 0 ? Math.max(0, totalGain) / totalIncomeAmountForRatio : 1;
+    const foreignTaxCreditLimit = Math.round(calculatedTax * creditRatio);
+    const foreignTaxCredit = Math.min(totalForeignTaxPaid, foreignTaxCreditLimit);
+    const taxAfterCredit = Math.max(0, calculatedTax - foreignTaxCredit);
+
+    const filingStatus = ['ontime', 'unreported', 'underreported'].indexOf(filingParams.filingStatus) !== -1 ? filingParams.filingStatus : 'ontime';
+    const penalties = giftFilingPenalties(taxAfterCredit, filingStatus, !!filingParams.isFraudulent, filingParams.underreportedTaxAmount, filingParams.unpaidDays, Number(filingParams.unpaidTaxForLatePenalty), !!filingParams.isOffshoreTransaction, filingParams.monthsAfterDesignatedDueDate, Number(filingParams.unpaidTaxAtDesignatedDueDate), filingParams.fraudulentUnderreportedTaxAmount);
+    const localIncomeTax = Math.round(taxAfterCredit * 0.1);
+    const totalTax = Math.max(0, taxAfterCredit + penalties.unreportedPenalty + penalties.underreportedPenalty + penalties.latePenalty + localIncomeTax);
+
+    return {
+      거래건수: transactions.length,
+      거래별_내역: perTxn,
+      합산양도차익: Math.round(totalGain), 기본공제: basicDeduction, 과세표준: taxBase,
+      산출세액: calculatedTax, 외국납부세액공제한도: foreignTaxCreditLimit, 외국납부세액공제: foreignTaxCredit,
+      무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
+      지방소득세: localIncomeTax, 납부세액_합계: totalTax,
+      안내: '국외자산은 §118의7①에 따라 여러 건을 양도해도 기본공제(연250만원)를 통틀어 1회만 적용합니다(국내자산처럼 자산 종류별로 나누지 않음). 장기보유특별공제는 국외자산에 적용되지 않습니다. foreignTaxCreditMethod가 expense인 거래는 이미 필요경비에 포함해 입력했다고 보아 세액공제 대상에서 제외했습니다.'
     };
   };
 
