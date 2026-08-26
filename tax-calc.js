@@ -642,7 +642,9 @@
     // §160① 문언 그대로 적용된다). 다른 비과세 요건 없이 무조건 적용하면 정책 취지에 반하므로, 원래
     // §89①4호 요건(1세대1조합원입주권)을 충족한다는 전제가 있을 때만(isOneMemberRightOneFamily) 적용한다.
     const isOneMemberRightOnly = isReconstruction && !t.isCompletedNewHousing && !!t.isOneMemberRightOneFamily;
-    const isUnregistered = !!t.isUnregisteredTransfer;
+    // 시행령§168①3호 — 조특법§69①(8년자경농지)·§70①(농지대토) 감면 대상 토지는 미등기양도자산의
+    // 가혹한 취급(70% 단일세율·공제 전부 배제)에서 제외된다.
+    const isUnregistered = !!t.isUnregisteredTransfer && !(t.isEightYearFarmland || t.isFarmlandSubstitutionExempt);
     const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
 
     if (isUnregistered) {

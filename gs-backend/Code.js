@@ -4923,7 +4923,9 @@ function transferAssetCore_(t) {
   const isPresaleRight = assetType === 'presale_right';
   const isOneHouse = !isPresaleRight && !isReconstruction && !!t.isOneHouseOneFamily;
   const isOneMemberRightOnly = isReconstruction && !t.isCompletedNewHousing && !!t.isOneMemberRightOneFamily;
-  const isUnregistered = !!t.isUnregisteredTransfer;
+  // 시행령§168①3호 — 조특법§69①(8년자경농지)·§70①(농지대토) 감면 대상 토지는 미등기양도자산의
+  // 가혹한 취급(70% 단일세율·공제 전부 배제)에서 제외된다. 두 감면 플래그가 이미 있으므로 그대로 반영.
+  const isUnregistered = !!t.isUnregisteredTransfer && !(t.isEightYearFarmland || t.isFarmlandSubstitutionExempt);
   const gainBeforeDeduction = transferPrice - acquisitionPrice - necessaryExpenses;
 
   if (isUnregistered) {
