@@ -767,6 +767,39 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_share_swap_gain_recognition',
+    description: '주식의 포괄적 교환·이전에 대한 개인주주 과세특례(조특법§38, 시행령§35의2③④)를 계산한다. 완전자회사 개인주주가 요건(양사 1년이상 사업, 교환대가의 80%이상이 완전모회사 주식, 완전자회사 사업계속)을 충족하면 전체양도차익 중 MIN(전체양도차익, 대가 중 주식 외 재산가액)만 지금 과세하고 나머지는 완전모회사등주식 처분시까지 이연한다. 사후관리(2년이내 사업폐지·주식처분시 이연세액 추징)도 판정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        bothCompaniesOperated1YearOrMore: { type: 'boolean', description: '주식의 포괄적 교환·이전일 현재 양 법인(완전자회사·완전모회사)이 1년 이상 계속 사업을 했는지(§38①1호, 주식이전으로 신설되는 완전모회사는 이 요건에서 제외). false면 이연 자체를 받을 수 없다.' },
+        acquisitionPrice: { type: 'number', description: '양도한 완전자회사 주식의 취득가액(원).' },
+        stockConsiderationValue: { type: 'number', description: '교환·이전대가 중 완전모회사(또는 그 완전모회사의 완전모회사) 주식의 가액(원).' },
+        otherConsiderationValue: { type: 'number', description: '교환·이전대가 중 주식 외 금전, 그 밖의 재산가액(원, "boot"). 없으면 0.' },
+        willHoldUntilFiscalYearEnd: { type: 'boolean', description: '완전모회사(및 일정 지분 이상의 완전자회사 주주)가 취득한 주식을 교환·이전일이 속하는 사업연도의 종료일까지 보유할 것인지(§38①2호). false면 이연을 받을 수 없다.' },
+        targetWillContinueBusiness: { type: 'boolean', description: '완전자회사가 교환·이전일이 속하는 사업연도의 종료일까지 사업을 계속할 것인지(§38①3호). false면 이연을 받을 수 없다.' },
+        isClawbackTriggeredWithin2Years: { type: 'boolean', description: '완전자회사의 사업폐지 또는 완전모회사(일정 주주)의 취득주식 처분 사유가 교환·이전일이 속하는 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생했는지(§38②, 시행령⑪). true면 이연되는_양도소득 전액을 추징한다.' }
+      },
+      required: ['stockConsiderationValue']
+    }
+  },
+  {
+    name: 'calculate_holding_company_contribution_deferral',
+    description: '주식의 현물출자에 의한 지주회사 설립 등에 대한 개인주주 과세특례(조특법§38의2, 2026.12.31까지, 시행령§35의4①)를 계산한다. 요건(지주회사·주주가 사업연도종료일까지 보유, 자회사가 사업연도종료일까지 사업계속)을 충족하면 현물출자로 발생한 양도소득 전액(§38의 boot 즉시과세와 달리 전액)을 지금 과세하지 않고, 장래 지주회사 주식을 처분할 때의 취득가액을 재조정하는 방식으로 이연한다. 사후관리(2년이내 요건상실·사업폐지·주식처분시 이연세액 추징)도 판정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contributionDate: { type: 'string', description: '현물출자일(YYYY-MM-DD, 2026.12.31까지).' },
+        originalAcquisitionPrice: { type: 'number', description: '현물출자한 원래 주식(자회사가 될 법인의 주식)의 취득가액(원).' },
+        holdingCoStockValue: { type: 'number', description: '현물출자로 취득한 지주회사(전환지주회사) 주식의 가액(원, 시가).' },
+        willHoldUntilFiscalYearEnd: { type: 'boolean', description: '지주회사(전환지주회사) 및 현물출자한 주주가 취득한 주식을 현물출자일이 속하는 사업연도의 종료일까지 보유할 것인지(§38의2①1호). false면 이연을 받을 수 없다.' },
+        subsidiaryWillContinueBusiness: { type: 'boolean', description: '자회사가 현물출자일이 속하는 사업연도의 종료일까지 사업을 계속할 것인지(§38의2①2호). false면 이연을 받을 수 없다.' },
+        isClawbackTriggeredWithin2Years: { type: 'boolean', description: '지주회사 요건상실·자회사 사업폐지·주식처분 등의 사유가 현물출자일이 속하는 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생했는지(§38의2③, 시행령⑦). true면 이연되는_양도소득 전액을 추징한다.' }
+      },
+      required: ['holdingCoStockValue']
+    }
+  },
+  {
     name: 'calculate_farmland_gift_tax_reduction',
     description: '영농자녀등이 증여받는 농지등에 대한 증여세 감면(조특법§71)을 계산한다. 농지·초지·산림지·축사용지·어선·어업권·어업용토지·염전 중 유형별 면적한도(①1호) 이내분만 감면 대상이며, 도시지역(주거·상업·공업)·택지개발지구등 내에 소재하면(①2·3호) 전혀 감면받지 못한다. 감면세액은 이 농지등이 포함된 전체 증여재산 기준 증여세 산출세액 중 이 농지등 가액이 차지하는 비율로 안분해서 구하므로, calculate_gift_tax를 먼저 전체 증여재산으로 계산해 그 산출세액(할증전)과 전체 증여재산가액을 넣어야 한다. §133④(5년간 1억원 한도)와 §71②③ 사후관리(5년이내 양도·미영농 또는 조세포탈·회계부정 확정시 감면세액+이자상당액 추징)도 반영한다.',
     input_schema: {
@@ -6584,6 +6617,100 @@ function toolCalculateSpecialRateGiftTaxClawback(p) {
   };
 }
 
+// 주식의 포괄적 교환·이전에 대한 개인주주 과세특례 (조특법§38, 시행령§35의2③④) — 완전자회사
+// 주주인 개인(거주자등)이 요건(①1호 양사 1년이상 사업, 2호 대가의 80%이상 주식+사업연도종료일까지
+// 보유, 3호 완전자회사 사업계속)을 충족하면, 전체양도차익 중 "MIN(전체양도차익, 대가 중 주식 외
+// 금전등 재산가액)"만 지금 양도소득으로 과세하고 나머지는 이연한다(시행령§35의2③ — 개인은 boot만
+// 즉시과세). 사후관리(②, 시행령⑪) — 완전자회사 사업폐지 또는 완전모회사·주주의 취득주식 처분이
+// 교환·이전일이 속하는 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생하면, 이연받은 세액을
+// 그 사유발생일이 속하는 반기의 말일부터 2개월 이내 납부해야 한다(시행령⑫1호).
+function toolCalculateShareSwapGainRecognition(p) {
+  p = p || {};
+  if (p.bothCompaniesOperated1YearOrMore === false) {
+    return { 이연적용여부: false, 안내: '조특법§38①1호 — 주식의 포괄적 교환·이전일 현재 1년 이상 계속하여 사업을 하던 내국법인 간의 교환등이어야 합니다(주식의 포괄적 이전으로 신설되는 완전모회사는 이 요건에서 제외).' };
+  }
+  const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+  const stockConsiderationValue = Number(p.stockConsiderationValue) || 0;
+  const otherConsiderationValue = Number(p.otherConsiderationValue) || 0;
+  const totalConsideration = stockConsiderationValue + otherConsiderationValue;
+  if (!(totalConsideration > 0)) return { error: '교환·이전대가(완전모회사등주식가액 stockConsiderationValue + 그 외 재산가액 otherConsiderationValue)가 필요합니다.' };
+  const stockRatio = stockConsiderationValue / totalConsideration;
+  if (stockRatio < 0.8) {
+    return { 이연적용여부: false, 안내: '조특법§38①2호 — 교환·이전대가 중 완전모회사(또는 그 완전모회사의 완전모회사) 주식가액이 100분의 80 이상이어야 이연을 받을 수 있습니다(현재 비율 ' + (Math.round(stockRatio * 10000) / 100) + '%).' };
+  }
+  if (p.willHoldUntilFiscalYearEnd === false) {
+    return { 이연적용여부: false, 안내: '조특법§38①2호 — 완전모회사(및 대통령령으로 정하는 완전자회사의 주주)가 취득한 주식을 교환·이전일이 속하는 사업연도의 종료일까지 보유해야 합니다.' };
+  }
+  if (p.targetWillContinueBusiness === false) {
+    return { 이연적용여부: false, 안내: '조특법§38①3호 — 완전자회사가 교환·이전일이 속하는 사업연도의 종료일까지 사업을 계속해야 합니다.' };
+  }
+
+  const totalGain = totalConsideration - acquisitionPrice;
+  const recognizedGainNow = Math.max(0, Math.min(totalGain, otherConsiderationValue));
+  const deferredGain = Math.max(0, totalGain - recognizedGainNow);
+
+  let clawback = 0;
+  let clawbackNote = '';
+  if (p.isClawbackTriggeredWithin2Years) {
+    clawback = deferredGain;
+    clawbackNote = '완전자회사가 사업을 폐지했거나 완전모회사(또는 일정 주주)가 취득주식을 처분하는 사유가 교환·이전일이 속하는 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생하여(§38②, 시행령⑪), 이연받은 세액에 상당하는 이연되는_양도소득(' + deferredGain + '원)을 그 사유발생일이 속하는 반기의 말일부터 2개월 이내에 양도소득세로 납부해야 합니다(시행령⑫1호). 이 경우 완전모회사등주식의 취득가액은 교환·이전일 현재 시가로 재조정됩니다.';
+  }
+
+  return {
+    이연적용여부: true,
+    전체양도차익: Math.round(totalGain),
+    이번에_과세되는_양도소득: Math.round(recognizedGainNow),
+    이연되는_양도소득: Math.round(deferredGain),
+    사후관리_추징액: clawback,
+    안내: '이번에_과세되는_양도소득(' + Math.round(recognizedGainNow) + '원, 시행령§35의2③ — MIN(전체양도차익, 주식외 재산가액))을 calculate_transfer_tax 등의 양도차익으로 넣어 세액을 계산하세요. 나머지 이연되는_양도소득(' + Math.round(deferredGain) + '원)은 나중에 완전모회사등주식을 처분할 때 정산되는데, 그 처분시 정확한 취득가액 계산식(시행령§35의2④)은 법령 원문이 수식 이미지로 결손되어 이 도구가 확보하지 못했습니다 — 실제 처분 시점에 별도로 확인하세요.' + (clawbackNote ? ' ' + clawbackNote : '')
+  };
+}
+
+// 주식의 현물출자에 의한 지주회사 설립에 대한 개인주주 과세특례 (조특법§38의2, 2026.12.31까지,
+// 시행령§35의4①) — 요건(①1호 지주회사·주주가 사업연도종료일까지 보유, 2호 자회사가 사업연도종료일
+// 까지 사업계속)을 충족하면 현물출자로 발생한 양도소득 전액을 지금 과세하지 않고(전액 이연 — §38과
+// 달리 boot 즉시과세 규정이 없음), 장래 지주회사(전환지주회사) 주식을 처분할 때 "그 주식의 취득가액
+// (시가)에서 이연금액을 뺀 금액"을 취득가액으로 보아 과세한다(사실상 원래 취득가액이 그대로 이월됨).
+// 사후관리(③, 시행령⑦) — 지주회사 요건상실·자회사 사업폐지·주식처분 등이 현물출자일이 속하는
+// 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생하면 이연세액을 추징한다.
+function toolCalculateHoldingCompanyContributionDeferral(p) {
+  p = p || {};
+  const contributionDate = p.contributionDate;
+  if (contributionDate && contributionDate > '2026-12-31') {
+    return { 이연적용여부: false, 안내: '조특법§38의2① — 2026.12.31까지 주식을 현물출자한 경우에만 적용됩니다.' };
+  }
+  if (p.willHoldUntilFiscalYearEnd === false) {
+    return { 이연적용여부: false, 안내: '조특법§38의2①1호 — 지주회사(전환지주회사) 및 현물출자한 주주가 취득한 주식을 현물출자일이 속하는 사업연도의 종료일까지 보유해야 합니다.' };
+  }
+  if (p.subsidiaryWillContinueBusiness === false) {
+    return { 이연적용여부: false, 안내: '조특법§38의2①2호 — 자회사가 현물출자일이 속하는 사업연도의 종료일까지 사업을 계속해야 합니다.' };
+  }
+  const originalAcquisitionPrice = Number(p.originalAcquisitionPrice) || 0;
+  const holdingCoStockValue = Number(p.holdingCoStockValue);
+  if (!(holdingCoStockValue > 0)) return { error: '현물출자로 취득한 지주회사(전환지주회사) 주식가액(holdingCoStockValue, 시가)이 필요합니다.' };
+
+  const deferredGain = Math.max(0, holdingCoStockValue - originalAcquisitionPrice);
+  // 시행령§35의4① — 장래 처분시 취득가액 = 지주회사주식 취득가액(시가) - 주식과세이연금액. 대수적으로는
+  // 결국 원래의 취득가액(originalAcquisitionPrice)이 그대로 이월되는 것과 같다.
+  const futureSaleBasis = Math.max(0, holdingCoStockValue - deferredGain);
+
+  let clawback = 0;
+  let clawbackNote = '';
+  if (p.isClawbackTriggeredWithin2Years) {
+    clawback = deferredGain;
+    clawbackNote = '지주회사(전환지주회사)가 지주회사 요건을 상실했거나, 자회사가 사업을 폐지했거나, 지주회사·주주가 취득주식을 처분하는 사유가 현물출자일이 속하는 사업연도의 다음 사업연도 개시일부터 2년 이내에 발생하여(§38의2③, 시행령⑦), 이연되는_양도소득(' + deferredGain + '원)을 그 사유발생일이 속하는 반기의 말일부터 2개월 이내에 양도소득세로 납부해야 합니다.';
+  }
+
+  return {
+    이연적용여부: true,
+    이연되는_양도소득: Math.round(deferredGain),
+    지주회사주식_취득가액_시가: holdingCoStockValue,
+    장래처분시_적용할_취득가액: Math.round(futureSaleBasis),
+    사후관리_추징액: clawback,
+    안내: '지금은 양도소득세를 과세하지 않습니다(시행령§35의4①). 나중에 이 지주회사(전환지주회사) 주식을 처분할 때는 실제 시가가 아니라 장래처분시_적용할_취득가액(' + Math.round(futureSaleBasis) + '원)을 calculate_transfer_tax의 acquisitionPrice에 넣어 양도소득세를 계산하세요(결과적으로 원래 취득가액이 그대로 이월되는 것과 같습니다).' + (clawbackNote ? ' ' + clawbackNote : '')
+  };
+}
+
 // 영농자녀등 증여 농지등 감면 (조특법§71, 시행령§68의9~11 등) — ①1호 각목이 정하는 유형별 면적한도
 // (농지 4만㎡·초지 14.85만㎡·산림지 조림기간별 29.7만/99만㎡·축사용지 건축면적÷건폐율·어선 20톤미만·
 // 어업권 10만㎡·어업용토지 4만㎡·염전 6만㎡) 이내분만 "농지등"에 해당해 그 가액에 대한 증여세를 100%
@@ -11018,6 +11145,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'allocate_inheritance_tax_by_heir' ||
         b.name === 'calculate_special_rate_gift_tax' ||
         b.name === 'calculate_special_rate_gift_tax_clawback' ||
+        b.name === 'calculate_share_swap_gain_recognition' ||
+        b.name === 'calculate_holding_company_contribution_deferral' ||
         b.name === 'calculate_farmland_gift_tax_reduction' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
@@ -11257,6 +11386,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_special_rate_gift_tax_clawback') {
         const resultObj = toolCalculateSpecialRateGiftTaxClawback(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_share_swap_gain_recognition') {
+        const resultObj = toolCalculateShareSwapGainRecognition(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_holding_company_contribution_deferral') {
+        const resultObj = toolCalculateHoldingCompanyContributionDeferral(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

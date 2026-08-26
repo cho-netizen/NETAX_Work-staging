@@ -2315,6 +2315,82 @@
     };
   };
 
+  // 주식의 포괄적 교환·이전에 대한 개인주주 과세특례 (조특법§38) — Code.js
+  // toolCalculateShareSwapGainRecognition와 1:1 대응.
+  window.calculateShareSwapGainRecognitionJS = function (p) {
+    p = p || {};
+    if (p.bothCompaniesOperated1YearOrMore === false) {
+      return { 이연적용여부: false, 안내: '조특법§38①1호 — 양 법인이 1년 이상 계속 사업해야 합니다.' };
+    }
+    const acquisitionPrice = Number(p.acquisitionPrice) || 0;
+    const stockConsiderationValue = Number(p.stockConsiderationValue) || 0;
+    const otherConsiderationValue = Number(p.otherConsiderationValue) || 0;
+    const totalConsideration = stockConsiderationValue + otherConsiderationValue;
+    if (!(totalConsideration > 0)) return { error: '교환·이전대가가 필요합니다.' };
+    const stockRatio = stockConsiderationValue / totalConsideration;
+    if (stockRatio < 0.8) {
+      return { 이연적용여부: false, 안내: '조특법§38①2호 — 교환·이전대가 중 완전모회사 주식가액이 80% 이상이어야 합니다(현재 ' + (Math.round(stockRatio * 10000) / 100) + '%).' };
+    }
+    if (p.willHoldUntilFiscalYearEnd === false) {
+      return { 이연적용여부: false, 안내: '조특법§38①2호 — 사업연도 종료일까지 보유해야 합니다.' };
+    }
+    if (p.targetWillContinueBusiness === false) {
+      return { 이연적용여부: false, 안내: '조특법§38①3호 — 완전자회사가 사업연도 종료일까지 사업을 계속해야 합니다.' };
+    }
+    const totalGain = totalConsideration - acquisitionPrice;
+    const recognizedGainNow = Math.max(0, Math.min(totalGain, otherConsiderationValue));
+    const deferredGain = Math.max(0, totalGain - recognizedGainNow);
+    let clawback = 0;
+    let clawbackNote = '';
+    if (p.isClawbackTriggeredWithin2Years) {
+      clawback = deferredGain;
+      clawbackNote = '사업폐지·주식처분 사유가 2년 이내에 발생하여 이연되는_양도소득(' + deferredGain + '원)을 그 사유발생일이 속하는 반기의 말일부터 2개월 이내에 납부해야 합니다.';
+    }
+    return {
+      이연적용여부: true,
+      전체양도차익: Math.round(totalGain),
+      이번에_과세되는_양도소득: Math.round(recognizedGainNow),
+      이연되는_양도소득: Math.round(deferredGain),
+      사후관리_추징액: clawback,
+      안내: '이번에_과세되는_양도소득을 위 일반 양도세 계산기의 양도차익으로 넣어 세액을 계산하세요(시행령§35의2③ — MIN(전체양도차익, 주식외 재산가액)). 나머지는 완전모회사등주식 처분시 정산됩니다.' + (clawbackNote ? ' ' + clawbackNote : '')
+    };
+  };
+
+  // 주식의 현물출자에 의한 지주회사 설립에 대한 개인주주 과세특례 (조특법§38의2) — Code.js
+  // toolCalculateHoldingCompanyContributionDeferral와 1:1 대응.
+  window.calculateHoldingCompanyContributionDeferralJS = function (p) {
+    p = p || {};
+    const contributionDate = p.contributionDate;
+    if (contributionDate && contributionDate > '2026-12-31') {
+      return { 이연적용여부: false, 안내: '조특법§38의2① — 2026.12.31까지 현물출자한 경우에만 적용됩니다.' };
+    }
+    if (p.willHoldUntilFiscalYearEnd === false) {
+      return { 이연적용여부: false, 안내: '조특법§38의2①1호 — 사업연도 종료일까지 보유해야 합니다.' };
+    }
+    if (p.subsidiaryWillContinueBusiness === false) {
+      return { 이연적용여부: false, 안내: '조특법§38의2①2호 — 자회사가 사업연도 종료일까지 사업을 계속해야 합니다.' };
+    }
+    const originalAcquisitionPrice = Number(p.originalAcquisitionPrice) || 0;
+    const holdingCoStockValue = Number(p.holdingCoStockValue);
+    if (!(holdingCoStockValue > 0)) return { error: '현물출자로 취득한 지주회사 주식가액이 필요합니다.' };
+    const deferredGain = Math.max(0, holdingCoStockValue - originalAcquisitionPrice);
+    const futureSaleBasis = Math.max(0, holdingCoStockValue - deferredGain);
+    let clawback = 0;
+    let clawbackNote = '';
+    if (p.isClawbackTriggeredWithin2Years) {
+      clawback = deferredGain;
+      clawbackNote = '요건상실·사업폐지·주식처분 사유가 2년 이내에 발생하여 이연되는_양도소득(' + deferredGain + '원)을 그 사유발생일이 속하는 반기의 말일부터 2개월 이내에 납부해야 합니다.';
+    }
+    return {
+      이연적용여부: true,
+      이연되는_양도소득: Math.round(deferredGain),
+      지주회사주식_취득가액_시가: holdingCoStockValue,
+      장래처분시_적용할_취득가액: Math.round(futureSaleBasis),
+      사후관리_추징액: clawback,
+      안내: '지금은 과세하지 않습니다. 나중에 지주회사 주식을 처분할 때 장래처분시_적용할_취득가액을 취득가액으로 보아 양도소득세를 계산하세요.' + (clawbackNote ? ' ' + clawbackNote : '')
+    };
+  };
+
   // 영농자녀등 증여 농지등 감면 (조특법§71) — Code.js toolCalculateFarmlandGiftTaxReduction와 1:1 대응.
   const FARMLAND_GIFT_AREA_CAP_SQM = {
     farmland: 40000, pasture: 148500, fishing_right: 100000, fishing_land: 40000, salt_farm: 60000
