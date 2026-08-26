@@ -800,6 +800,27 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'calculate_project_reit_contribution_deferral',
+    description: '프로젝트 부동산투자회사의 현물출자자에 대한 과세특례(조특법§97의9, 2025.12.23 신설, 2028.12.31까지, 시행령§97의9①⑤⑦)를 계산한다. 거주자가 프로젝트리츠 설립신고 수리일부터 5년 이내에 토지·건물을 현물출자하면, 그 현물출자 자산을 그 과세기간의 유일한 양도자산으로 가정해 계산한 양도소득 산출세액(=이연세액)의 납부를 리츠주식 처분시까지 이연받는다(다른 §38 계열과 달리 "가액"이 아니라 "세액" 자체를 이연). 사후관리로 리츠주식을 처분·증여·상속하거나 리츠가 해산·미공모되면 이연세액의 전부 또는 일부(누적처분비율 기준)를 납부해야 한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contributionDate: { type: 'string', description: '현물출자일(YYYY-MM-DD, 2028.12.31까지).' },
+        isBeyond5YearsFromReitEstablishment: { type: 'boolean', description: '현물출자일이 프로젝트 부동산투자회사 설립 신고 수리일부터 5년을 넘겼는지. true면 적용대상이 아니다.' },
+        transferPrice: { type: 'number', description: '현물출자한 토지·건물의 가액(원, 시가).' },
+        acquisitionPrice: { type: 'number', description: '현물출자한 토지·건물의 취득가액(원).' },
+        necessaryExpenses: { type: 'number', description: '필요경비(원). 없으면 생략.' },
+        acquisitionDate: { type: 'string', description: '취득일(YYYY-MM-DD).' },
+        assetType: { type: 'string', enum: ['house', 'presale_right', 'other'], description: 'calculate_transfer_tax와 동일. 기본값 other.' },
+        triggerType: { type: 'string', enum: ['partial_sale', 'full_sale', 'partial_gift', 'full_gift_or_inheritance', 'reit_dissolved', 'undersubscribed'], description: '사후관리 사유(§97의9②) — partial_sale/full_sale=주식 일부·전부 처분, partial_gift/full_gift_or_inheritance=주식 일부·전부 증여 또는 상속, reit_dissolved=리츠 해산, undersubscribed=설립신고수리일부터 5년 이내 발행주식총수의 30% 이상을 일반청약에 제공하지 못함. 없으면 사후관리를 판정하지 않는다.' },
+        cumulativeDisposalRatio: { type: 'number', description: 'triggerType이 partial_sale/partial_gift일 때 — 이 현물출자로 취득한 주식 중 지금까지(이번 처분·증여분 포함) 누적으로 처분·증여한 비율(0~1). 0.5 이상이면 잔액 전부를 추징한다(시행령⑤1호가목).' },
+        thisYearDisposalRatio: { type: 'number', description: 'triggerType이 partial_sale/partial_gift이고 cumulativeDisposalRatio가 0.5 미만일 때 — 이번 과세연도에 처분·증여한 주식 수를 그 현물출자 대가로 받은 주식 수로 나눈 비율(0~1). 이연세액×이 비율만큼만 추징한다.' },
+        alreadyPaidAmount: { type: 'number', description: '이 이연세액 중 이전에 이미 납부한 금액(원, 있으면). 추징액 계산시 차감한다. 없으면 0.' }
+      },
+      required: ['transferPrice']
+    }
+  },
+  {
     name: 'calculate_farmland_gift_tax_reduction',
     description: '영농자녀등이 증여받는 농지등에 대한 증여세 감면(조특법§71)을 계산한다. 농지·초지·산림지·축사용지·어선·어업권·어업용토지·염전 중 유형별 면적한도(①1호) 이내분만 감면 대상이며, 도시지역(주거·상업·공업)·택지개발지구등 내에 소재하면(①2·3호) 전혀 감면받지 못한다. 감면세액은 이 농지등이 포함된 전체 증여재산 기준 증여세 산출세액 중 이 농지등 가액이 차지하는 비율로 안분해서 구하므로, calculate_gift_tax를 먼저 전체 증여재산으로 계산해 그 산출세액(할증전)과 전체 증여재산가액을 넣어야 한다. §133④(5년간 1억원 한도)와 §71②③ 사후관리(5년이내 양도·미영농 또는 조세포탈·회계부정 확정시 감면세액+이자상당액 추징)도 반영한다.',
     input_schema: {
@@ -6711,6 +6732,61 @@ function toolCalculateHoldingCompanyContributionDeferral(p) {
   };
 }
 
+// 프로젝트 부동산투자회사의 현물출자자에 대한 과세특례 (조특법§97의9, 2025.12.23 신설, 2028.12.31까지,
+// 시행령§97의9①⑤⑦) — 거주자가 프로젝트리츠 설립신고 수리일부터 5년 이내에 토지·건물을 현물출자하면,
+// "다른 양도자산이 없다고 보아 §104로 계산한 양도소득 산출세액"(=이연세액)의 납부를 주식 처분시까지
+// 이연받는다(이연되는 것은 "가액"이 아니라 "세액" 자체 — §38 계열과 다른 구조). 사후관리(②, 시행령⑤
+// ①1호) — 일부처분시 그 해 누적처분비율이 50% 미만이면 이연세액×해당연도처분비율만, 50%이상이거나
+// 전부처분·리츠해산·미공모(30%미만)면 잔액 전액을 납부해야 한다(증여도 처분과 동일 취급, 전부증여·
+// 상속은 전액). 이자상당액(⑦1호)은 예정신고납부기한 다음날부터 납부일까지 계산한다.
+function toolCalculateProjectReitContributionDeferral(p) {
+  p = p || {};
+  const contributionDate = p.contributionDate;
+  if (contributionDate && contributionDate > '2028-12-31') {
+    return { 이연적용여부: false, 안내: '조특법§97의9① — 2028.12.31까지 현물출자한 경우에만 적용됩니다.' };
+  }
+  if (p.isBeyond5YearsFromReitEstablishment) {
+    return { 이연적용여부: false, 안내: '조특법§97의9① — 프로젝트 부동산투자회사 설립 신고가 수리된 날부터 5년 이내의 현물출자만 적용됩니다.' };
+  }
+
+  // 시행령§97의9①1호 — 현물출자한 날이 속하는 과세기간에 다른 양도자산이 없다고 보아 계산한 산출세액.
+  const isolatedTransferResult = toolCalculateTransferTax({
+    transferPrice: p.transferPrice, acquisitionPrice: p.acquisitionPrice, necessaryExpenses: p.necessaryExpenses,
+    acquisitionDate: p.acquisitionDate, transferDate: contributionDate, assetType: p.assetType || 'other'
+  });
+  if (isolatedTransferResult.error) return isolatedTransferResult;
+  const deferredTaxAmount = isolatedTransferResult.산출세액 || 0;
+
+  let clawback = 0;
+  let clawbackNote = '';
+  const alreadyPaidAmount = Number(p.alreadyPaidAmount) || 0;
+  if (p.triggerType) {
+    const fullPayoutTypes = ['full_sale', 'reit_dissolved', 'undersubscribed', 'full_gift_or_inheritance'];
+    if (fullPayoutTypes.indexOf(p.triggerType) !== -1) {
+      clawback = Math.max(0, deferredTaxAmount - alreadyPaidAmount);
+      clawbackNote = '전부처분·리츠해산·미공모(발행주식 30% 미만 일반청약)·전부증여·상속에 해당해(§97의9②·시행령⑤1호나~라목) 이연세액 잔액 전부를 납부해야 합니다.';
+    } else if (p.triggerType === 'partial_sale' || p.triggerType === 'partial_gift') {
+      const cumulativeDisposalRatio = Number(p.cumulativeDisposalRatio) || 0;
+      const thisYearDisposalRatio = Number(p.thisYearDisposalRatio) || 0;
+      if (cumulativeDisposalRatio >= 0.5) {
+        clawback = Math.max(0, deferredTaxAmount - alreadyPaidAmount);
+        clawbackNote = '누적 주식처분(증여)비율이 100분의 50 이상이 되어(시행령⑤1호가목나)) 이연세액 잔액 전부를 납부해야 합니다.';
+      } else {
+        clawback = Math.round(deferredTaxAmount * thisYearDisposalRatio);
+        clawbackNote = '해당 연도 주식처분(증여)비율(' + Math.round(thisYearDisposalRatio * 10000) / 100 + '%)만큼만 납부합니다(누적비율 50% 미만, 시행령⑤1호가목1)가)).';
+      }
+    }
+  }
+
+  return {
+    이연적용여부: true,
+    이연세액: deferredTaxAmount,
+    계산근거: isolatedTransferResult,
+    사후관리_추징액: clawback,
+    안내: '이연세액(' + deferredTaxAmount + '원)은 이 현물출자 자산을 그 과세기간의 유일한 양도자산으로 가정해 계산한 양도소득 산출세액입니다(시행령§97의9①1호) — 실제로 다른 자산 양도가 함께 있어도 이 금액은 별도이며 합산신고하지 않습니다. 프로젝트 부동산투자회사 주식을 처분(증여·상속 포함)하거나 리츠가 해산·미공모 사유에 해당하면 사후관리로 이연세액을 납부해야 하며(triggerType 입력), 이자상당액(예정신고납부기한 다음날부터 납부일까지)은 calculate_clawback_interest로 별도 계산하세요.' + (clawbackNote ? ' ' + clawbackNote : '')
+  };
+}
+
 // 영농자녀등 증여 농지등 감면 (조특법§71, 시행령§68의9~11 등) — ①1호 각목이 정하는 유형별 면적한도
 // (농지 4만㎡·초지 14.85만㎡·산림지 조림기간별 29.7만/99만㎡·축사용지 건축면적÷건폐율·어선 20톤미만·
 // 어업권 10만㎡·어업용토지 4만㎡·염전 6만㎡) 이내분만 "농지등"에 해당해 그 가액에 대한 증여세를 100%
@@ -11147,6 +11223,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'calculate_special_rate_gift_tax_clawback' ||
         b.name === 'calculate_share_swap_gain_recognition' ||
         b.name === 'calculate_holding_company_contribution_deferral' ||
+        b.name === 'calculate_project_reit_contribution_deferral' ||
         b.name === 'calculate_farmland_gift_tax_reduction' ||
         b.name === 'calculate_related_party_transaction_gift_tax' ||
         b.name === 'calculate_business_opportunity_gift_tax' ||
@@ -11396,6 +11473,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
       if (block.name === 'calculate_holding_company_contribution_deferral') {
         const resultObj = toolCalculateHoldingCompanyContributionDeferral(block.input || {});
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'calculate_project_reit_contribution_deferral') {
+        const resultObj = toolCalculateProjectReitContributionDeferral(block.input || {});
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

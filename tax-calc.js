@@ -2391,6 +2391,54 @@
     };
   };
 
+  // 프로젝트 부동산투자회사의 현물출자자에 대한 과세특례 (조특법§97의9) — Code.js
+  // toolCalculateProjectReitContributionDeferral와 1:1 대응.
+  window.calculateProjectReitContributionDeferralJS = function (p) {
+    p = p || {};
+    const contributionDate = p.contributionDate;
+    if (contributionDate && contributionDate > '2028-12-31') {
+      return { 이연적용여부: false, 안내: '조특법§97의9① — 2028.12.31까지 현물출자한 경우에만 적용됩니다.' };
+    }
+    if (p.isBeyond5YearsFromReitEstablishment) {
+      return { 이연적용여부: false, 안내: '조특법§97의9① — 설립 신고가 수리된 날부터 5년 이내의 현물출자만 적용됩니다.' };
+    }
+    const isolatedTransferResult = window.calculateTransferTaxSingleJS({
+      transferPrice: p.transferPrice, acquisitionPrice: p.acquisitionPrice, necessaryExpenses: p.necessaryExpenses,
+      acquisitionDate: p.acquisitionDate, transferDate: contributionDate, assetType: p.assetType || 'other'
+    });
+    if (isolatedTransferResult.error) return isolatedTransferResult;
+    const deferredTaxAmount = isolatedTransferResult.산출세액 || 0;
+
+    let clawback = 0;
+    let clawbackNote = '';
+    const alreadyPaidAmount = Number(p.alreadyPaidAmount) || 0;
+    if (p.triggerType) {
+      const fullPayoutTypes = ['full_sale', 'reit_dissolved', 'undersubscribed', 'full_gift_or_inheritance'];
+      if (fullPayoutTypes.indexOf(p.triggerType) !== -1) {
+        clawback = Math.max(0, deferredTaxAmount - alreadyPaidAmount);
+        clawbackNote = '전부처분·리츠해산·미공모·전부증여·상속에 해당해 이연세액 잔액 전부를 납부해야 합니다.';
+      } else if (p.triggerType === 'partial_sale' || p.triggerType === 'partial_gift') {
+        const cumulativeDisposalRatio = Number(p.cumulativeDisposalRatio) || 0;
+        const thisYearDisposalRatio = Number(p.thisYearDisposalRatio) || 0;
+        if (cumulativeDisposalRatio >= 0.5) {
+          clawback = Math.max(0, deferredTaxAmount - alreadyPaidAmount);
+          clawbackNote = '누적 처분(증여)비율이 50% 이상이 되어 이연세액 잔액 전부를 납부해야 합니다.';
+        } else {
+          clawback = Math.round(deferredTaxAmount * thisYearDisposalRatio);
+          clawbackNote = '해당 연도 처분(증여)비율만큼만 납부합니다.';
+        }
+      }
+    }
+
+    return {
+      이연적용여부: true,
+      이연세액: deferredTaxAmount,
+      계산근거: isolatedTransferResult,
+      사후관리_추징액: clawback,
+      안내: '이연세액은 이 현물출자 자산을 그 과세기간의 유일한 양도자산으로 가정해 계산한 양도소득 산출세액입니다.' + (clawbackNote ? ' ' + clawbackNote : '')
+    };
+  };
+
   // 영농자녀등 증여 농지등 감면 (조특법§71) — Code.js toolCalculateFarmlandGiftTaxReduction와 1:1 대응.
   const FARMLAND_GIFT_AREA_CAP_SQM = {
     farmland: 40000, pasture: 148500, fishing_right: 100000, fishing_land: 40000, salt_farm: 60000
