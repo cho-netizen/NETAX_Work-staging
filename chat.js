@@ -2201,6 +2201,7 @@
     try{
       currentChatAbortController = new AbortController();
 
+      console.log('[NX Gem 진단]', { geminiWebEligible, geminiEcosystemRoute, autoMode: aiSettings.model === 'auto', extraBlocks: extraBlocks.length, openFileCtx: !!openFileCtx, nxExtConnected: nxExtConnected });
       if (geminiWebEligible){
         thinkingBubble.textContent = geminiEcosystemRoute
           ? ('🔮 먼저 무료로 확인 중 (Gemini·' + geminiEcosystemRoute.label + ')…')
@@ -2210,7 +2211,9 @@
           // 제미니웹의 앱 연동 자동완성을 트리거해서 실제 원문을 가져오게 하기 위함
           // (2026-08-27 캘린더로 실사용 확인됨, 나머지 앱도 같은 방식으로 확장).
           const gemQuestion = geminiEcosystemRoute ? ('@' + text) : text;
+          console.log('[NX Gem 진단] askGemSilent_ 호출 시작:', gemQuestion);
           const gemResult = await askGemSilent_(gemQuestion, 20000);
+          console.log('[NX Gem 진단] askGemSilent_ 결과:', gemResult);
           const gemAnswer = gemResult && gemResult.answer;
           const gemSources = (gemResult && gemResult.sources) || [];
           // 생태계 라우팅(캘린더·Gmail·드라이브 조회)인데 확장프로그램이 실제 출처 카드를
@@ -2231,8 +2234,10 @@
             return;
           }
           // 빈 답은 실패로 취급하고 아래 Haiku 경로로 넘어간다.
+          console.log('[NX Gem 진단] gemTrustworthy=false — sources 없음 또는 빈 답이라 Haiku로 넘어감');
         }catch(err){
           // 미연결·시간초과·확장프로그램 오류 — 조용히 원래 경로(Haiku)로 이어간다.
+          console.log('[NX Gem 진단] askGemSilent_ 실패:', err && err.message);
         }
         thinkingBubble.textContent = '생각 중…';
       }
