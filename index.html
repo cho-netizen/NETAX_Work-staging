@@ -66,7 +66,6 @@
      (경과지/계산기 등 각 창의 ✕ 닫기버튼, 패널 제목, 첨부칩의 ✕ 등). 다크모드에서는 밝은
      var(--ink)로 바꿔서 항상 보이게 한다. */
   body.dark-mode .modal-label,
-  body.dark-mode .tax-feature-title,
   body.dark-mode .scan-section-title,
   body.dark-mode .panel-head,
   body.dark-mode .breadcrumb b,
@@ -351,11 +350,6 @@
 
   .voice-command-list{ display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height:220px; overflow-y:auto; }
 
-  .tax-feature-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
-  .tax-feature-item{ border:1px solid var(--line); border-radius:8px; padding:9px 11px; background:var(--panel); }
-  .tax-feature-title{ font-size:13px; font-weight:700; color:var(--navy); margin-bottom:3px; }
-  .tax-feature-desc{ font-size:11.5px; color:var(--ink); line-height:1.5; }
-  .tax-feature-example{ font-size:11px; color:var(--sub); margin-top:4px; font-style:italic; }
   .voice-command-row{
     display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:8px;
   }
@@ -1076,7 +1070,6 @@
     .note-tb-page,
     .modal-label, .modal-hint, .modal-checkrow,
     .modal-body select, .modal-body input[type="number"], .modal-body textarea,
-    .tax-feature-title, .tax-feature-desc, .tax-feature-example,
     .voice-command-row .vc-label, .voice-command-row input[type="text"],
     .scan-section-title, .scan-controls, .scan-btn-row .scan-action-btn,
     .scan-tray-item .name, .scan-hint, .scan-name-input, .scan-action-btn,
@@ -1209,29 +1202,8 @@
         </div>
         <div class="modal-hint">화면 크기를 보고 자동으로 배치를 정하는데, 기기에 따라 이 판단이 잘 안 맞으면 여기서 직접 지정할 수 있습니다.</div>
 
-        <label class="modal-label">🧾 세무 특화 기능 (AI가 채팅 중 알아서 사용)</label>
-        <div class="modal-hint">아래는 파일탐색·처리일지·계산기 같은 범용 도구와 별도로, 세무자문 업무를 위해 추가된 전용 기능입니다. 버튼을 누르는 게 아니라, 채팅에서 필요할 때 자연스럽게 물어보시면 AI가 알아서 사용합니다.</div>
-        <div class="tax-feature-list">
-          <div class="tax-feature-item">
-            <div class="tax-feature-title">🏠 부동산 실거래가 조회</div>
-            <div class="tax-feature-desc">국토교통부 공공데이터. 아파트(기본·상세)·오피스텔·연립다세대·단독다가구·토지·상업업무용·분양권전매·공장창고 9개 유형. 법정동코드+계약년월 필요.</div>
-            <div class="tax-feature-example">예) "서울 종로구 아파트 2026년 1월 실거래가 알려줘"</div>
-          </div>
-          <div class="tax-feature-item">
-            <div class="tax-feature-title">🏢 건축물대장 조회</div>
-            <div class="tax-feature-desc">건축HUB(국토교통부). 표제부·총괄표제부·층별개요·전유공용면적·주택가격 등 10종. 시군구코드+법정동코드+번지 필요.</div>
-            <div class="tax-feature-example">예) "이 건물 건축물대장 표제부 조회해줘"</div>
-          </div>
-          <div class="tax-feature-item">
-            <div class="tax-feature-title">🏷 사업자등록 상태조회·진위확인</div>
-            <div class="tax-feature-desc">국세청. 사업자번호로 계속사업자/휴업/폐업 상태와 과세유형 확인(상태조회), 대표자명·개업일 등으로 등록정보 일치 여부 확인(진위확인).</div>
-            <div class="tax-feature-example">예) "사업자번호 123-45-67890 상태 확인해줘"</div>
-          </div>
-          <div class="tax-feature-item">
-            <div class="tax-feature-title">🧮 건물 기준시가 계산 (양도·상속·증여)</div>
-            <div class="tax-feature-desc">국세청 2026.1.1. 시행 고시 기준. 구조·용도·위치(공시지가)·신축연도·면적을 알려주면 정확한 공식으로 계산. 공동주택·상업용건물·오피스텔은 대상 아님(별도 고시가액 있음).</div>
-            <div class="tax-feature-example">예) "철근콘크리트조 사무실, 공시지가 ㎡당 200만원, 2010년 신축, 300㎡, 양도소득세 기준시가 계산해줘"</div>
-          </div>
+        <div class="modal-checkrow">
+          <a href="/manual.html" target="_blank" class="modal-label" style="text-decoration:none; display:inline-block;">📖 넥스 사용 설명서 (세무 특화 기능 안내) →</a>
         </div>
 
         <label class="modal-label">🗣 음성명령 (AI 안 거치고 바로 처리)</label>

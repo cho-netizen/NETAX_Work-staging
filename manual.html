@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2a41'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='34' font-weight='700' fill='%23c9a227' text-anchor='middle'%3EN%3C/text%3E%3C/svg%3E">
+<title>넥스 사용 설명서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0D1B3D; --gold:#C8A244;
+    --bg:#e9eaee; --panel:#ffffff; --line:#d8dce3; --ink:#1b2430; --sub:#6b7280;
+  }
+  body.dark-mode{
+    --bg:#0f1117; --panel:#1b1f29; --line:#333947; --ink:#e6e8ee; --sub:#9aa0ad;
+    color-scheme: dark;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Noto Sans KR', sans-serif; line-height:1.6;
+  }
+  .manual-header{
+    background:var(--navy); color:#fff; padding:18px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .manual-header h1{
+    margin:0; font-family:'Noto Serif KR', serif; font-size:19px; font-weight:700;
+  }
+  .manual-header .back-link{
+    color:var(--gold); text-decoration:none; font-size:13.5px; white-space:nowrap;
+    border:1px solid var(--gold); border-radius:8px; padding:6px 12px;
+  }
+  .manual-header .back-link:hover{ background:rgba(200,162,68,0.15); }
+  main{ max-width:720px; margin:0 auto; padding:20px 16px 60px; }
+  .section-title{
+    font-size:15px; font-weight:700; margin:28px 0 6px; color:var(--navy);
+  }
+  body.dark-mode .section-title{ color:var(--ink); }
+  .section-hint{ font-size:12.5px; color:var(--sub); margin-bottom:12px; }
+  .feature-list{ display:flex; flex-direction:column; gap:10px; }
+  .feature-item{
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:var(--panel);
+  }
+  .feature-title{ font-size:14px; font-weight:700; color:var(--navy); margin-bottom:4px; }
+  body.dark-mode .feature-title{ color:var(--ink); }
+  .feature-desc{ font-size:12.5px; color:var(--ink); line-height:1.55; }
+  .feature-example{ font-size:12px; color:var(--sub); margin-top:6px; font-style:italic; }
+</style>
+</head>
+<body>
+
+<div class="manual-header">
+  <h1>📖 넥스 사용 설명서</h1>
+  <a class="back-link" href="/">← 작업실로 돌아가기</a>
+</div>
+
+<main>
+  <div class="section-title">🧾 세무 특화 기능</div>
+  <div class="section-hint">아래는 파일탐색·처리일지·계산기 같은 범용 도구와 별도로, 세무자문 업무를 위해 추가된 전용 기능입니다. 버튼을 누르는 게 아니라, 채팅에서 필요할 때 자연스럽게 물어보시면 AI가 알아서 사용합니다.</div>
+  <div class="feature-list">
+    <div class="feature-item">
+      <div class="feature-title">🏠 부동산 실거래가 조회</div>
+      <div class="feature-desc">국토교통부 공공데이터. 아파트(기본·상세)·오피스텔·연립다세대·단독다가구·토지·상업업무용·분양권전매·공장창고 9개 유형. 법정동코드+계약년월 필요.</div>
+      <div class="feature-example">예) "서울 종로구 아파트 2026년 1월 실거래가 알려줘"</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-title">🏢 건축물대장 조회</div>
+      <div class="feature-desc">건축HUB(국토교통부). 표제부·총괄표제부·층별개요·전유공용면적·주택가격 등 10종. 시군구코드+법정동코드+번지 필요.</div>
+      <div class="feature-example">예) "이 건물 건축물대장 표제부 조회해줘"</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-title">🏷 사업자등록 상태조회·진위확인</div>
+      <div class="feature-desc">국세청. 사업자번호로 계속사업자/휴업/폐업 상태와 과세유형 확인(상태조회), 대표자명·개업일 등으로 등록정보 일치 여부 확인(진위확인).</div>
+      <div class="feature-example">예) "사업자번호 123-45-67890 상태 확인해줘"</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-title">🧮 건물 기준시가 계산 (양도·상속·증여)</div>
+      <div class="feature-desc">국세청 2026.1.1. 시행 고시 기준. 구조·용도·위치(공시지가)·신축연도·면적을 알려주면 정확한 공식으로 계산. 공동주택·상업용건물·오피스텔은 대상 아님(별도 고시가액 있음).</div>
+      <div class="feature-example">예) "철근콘크리트조 사무실, 공시지가 ㎡당 200만원, 2010년 신축, 300㎡, 양도소득세 기준시가 계산해줘"</div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // index.html과 같은 다크모드 설정(localStorage)을 그대로 따라간다.
+  (function(){
+    var DARK_MODE_KEY = 'nx_dark_mode';
+    var saved = localStorage.getItem(DARK_MODE_KEY);
+    var on = saved === null ? window.matchMedia('(prefers-color-scheme: dark)').matches : saved === '1';
+    document.body.classList.toggle('dark-mode', on);
+  })();
+</script>
+</body>
+</html>
