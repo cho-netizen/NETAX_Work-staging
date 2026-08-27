@@ -2753,6 +2753,12 @@ function doPost(e) {
       return jsonResponse(desk_doPost(body));
     }
 
+    // [2026.08] report 모듈 — 자문보고서 열람 시스템 이관
+    const REPORT_ACTIONS = ['admin_list', 'create_report', 'clear_password', 'delete_report', 'get_statute_mst', 'report_access'];
+    if (REPORT_ACTIONS.indexOf(body.action) !== -1) {
+      return jsonResponse(report_doPost(body));
+    }
+
     if (body.action === 'listFolder') {
       return jsonResponse(handleListFolder(body));
     }
@@ -3366,47 +3372,33 @@ function toolRegisterReportToRpt(customerName, title, docType, link, permission)
   if (!customerName || !String(customerName).trim()) return { error: '고객명이 없습니다.' };
   if (!link || !String(link).trim()) return { error: '등록할 파일 링크가 없습니다.' };
 
-  const props = PropertiesService.getScriptProperties();
-  const adminCode = props.getProperty('RPT_ADMIN_CODE');
-  const apiUrl = props.getProperty('RPT_API_URL') || 'https://script.google.com/macros/s/AKfycbyg0gDbzPPkpZs2Gnsuw7Qh_qszYy1_8f2Q-SN7Ffreoc3GfHzIZ7B5UXNidT5ale_b/exec';
+  const adminCode = PropertiesService.getScriptProperties().getProperty('RPT_ADMIN_CODE');
   if (!adminCode) return { error: 'RPT_ADMIN_CODE(rpt.netax.kr 관리자 비밀번호)가 스크립트 속성에 설정되어 있지 않습니다.' };
 
   // 등록 전에 먼저 "링크가 있는 모든 사용자·보기"로 공유설정을 걸어둔다 — 이걸 안 하면
   // 열람번호는 발급돼도 고객이 실제로 그 파일을 못 여는 상황이 생긴다.
   const shareResult = ensureLinkShareable_(link);
 
-  try {
-    const res = UrlFetchApp.fetch(apiUrl, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'create_report',
-        admin_code: adminCode,
-        name: String(customerName).trim(),
-        title: title || '',
-        type: docType || '',
-        link: String(link).trim(),
-        permission: permission || '허용'
-      }),
-      muteHttpExceptions: true
-    });
-    if (res.getResponseCode() !== 200) {
-      return { error: 'rpt.netax.kr 등록 API 호출 실패 (status ' + res.getResponseCode() + ')' };
-    }
-    const data = JSON.parse(res.getContentText('UTF-8'));
-    if (!data.success) {
-      return { error: data.message || '등록에 실패했습니다.' };
-    }
-    return {
-      success: true,
-      report_id: data.report_id,
-      고객명: data.name,
-      열람링크: 'https://rpt.netax.kr/?report_id=' + data.report_id,
-      공유설정: shareResult.shared ? '링크가 있는 모든 사용자·보기로 자동 설정됨' : (shareResult.warning || '')
-    };
-  } catch (err) {
-    return { error: 'rpt.netax.kr 등록 중 오류: ' + err.message };
+  // [2026.08] rpt.netax.kr이 이 프로젝트로 이관되면서, 예전엔 별도 프로젝트로 HTTP 호출하던 걸
+  // 이제 같은 프로젝트 안의 report_handleCreateReport를 직접 호출하도록 정리함(왕복 없이 즉시 처리).
+  const data = report_handleCreateReport({
+    admin_code: adminCode,
+    name: String(customerName).trim(),
+    title: title || '',
+    type: docType || '',
+    link: String(link).trim(),
+    permission: permission || '허용'
+  });
+  if (!data.success) {
+    return { error: data.message || '등록에 실패했습니다.' };
   }
+  return {
+    success: true,
+    report_id: data.report_id,
+    고객명: data.name,
+    열람링크: 'https://rpt.netax.kr/?report_id=' + data.report_id,
+    공유설정: shareResult.shared ? '링크가 있는 모든 사용자·보기로 자동 설정됨' : (shareResult.warning || '')
+  };
 }
 
 const OFFICE_MIME_TO_GOOGLE = {
@@ -13776,6 +13768,442 @@ function desk_doPost(body) {
     case 'reorderLinks':   return desk_handleReorderLinks(body);
     case 'moveLink':       return desk_handleMoveLink(body);
     default: return { error: '알 수 없는 action: ' + body.action };
+  }
+}
+
+// =========================================================
+// report 모듈 — 자문보고서 열람 시스템(rpt.netax.kr, admin.netax.kr 보고서관리) 이관 (2026.08)
+// admin_code 스크립트 속성은 My 모듈과 이름 충돌을 피하려고 RPT_ADMIN_CODE로 통일했다
+// (마침 이 프로젝트의 AI 도구 toolRegisterReportToRpt가 이미 이 이름을 쓰고 있어서 그대로 재사용).
+// =========================================================
+const REPORT_SHEET_ID = '1fE0Vm33n8ivSzO0bFV6xwK6Bxav-Xdi92yHvYVpqZOc';
+const REPORT_SHEET_CUSTOMER = 'Reports';
+const REPORT_SHEET_LOG = 'AccessLog';
+const REPORT_ID_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const REPORT_ID_LENGTH = 4;
+const REPORT_LAW_OC = 'netax';
+
+function report_isValidAdminCode(inputCode) {
+  const storedAdminCode = PropertiesService.getScriptProperties().getProperty('RPT_ADMIN_CODE');
+  if (!storedAdminCode || !inputCode) return false;
+  return String(inputCode).toLowerCase() === String(storedAdminCode).toLowerCase();
+}
+
+function report_handleReportAccess(params) {
+  const reportId = (params.report_id || '').trim();
+  const passwordHash = params.password_hash || '';
+  const adminCode = params.admin_code || '';
+
+  if (!reportId) {
+    return { success: false, message: 'report_id가 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return { success: false, message: '동시 접속이 많아 처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(REPORT_SHEET_ID);
+    const sheet = ss.getSheetByName(REPORT_SHEET_CUSTOMER);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+
+    const colName = headers.indexOf('고객명');
+    const colReportId = headers.indexOf('report_id');
+    const colHash = headers.indexOf('비밀번호해시');
+    const colExpiry = headers.indexOf('만료일');
+    const colLink = headers.indexOf('자료링크');
+    const colPermission = headers.indexOf('권한');
+
+    let targetRow = null;
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][colReportId]).trim() === reportId) {
+        targetRow = data[i];
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (!targetRow) {
+      return { success: false, message: '존재하지 않는 report_id입니다.' };
+    }
+
+    const isAdmin = report_isValidAdminCode(adminCode);
+
+    const storedHash = String(targetRow[colHash]).trim();
+    const hasPassword = storedHash.length > 0;
+
+    if (!isAdmin) {
+      const expiry = new Date(targetRow[colExpiry]);
+      expiry.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (today > expiry) {
+        return { success: false, message: '열람 기간이 만료되었습니다.' };
+      }
+
+      if (!hasPassword) {
+        if (!passwordHash) {
+          return { success: false, needs_setup: true, customer_name: targetRow[colName], message: '최초 접속입니다. 비밀번호를 설정해주세요.' };
+        }
+        sheet.getRange(rowIndex, colHash + 1).setValue(passwordHash);
+        SpreadsheetApp.flush();
+      } else {
+        if (!passwordHash) {
+          return { success: false, needs_login: true, customer_name: targetRow[colName], message: '비밀번호를 입력해주세요.' };
+        }
+        if (passwordHash !== storedHash) {
+          return { success: false, message: '비밀번호가 일치하지 않습니다.' };
+        }
+      }
+    }
+
+    if (!isAdmin) {
+      report_logAccess(ss, reportId);
+    }
+
+    const link = targetRow[colLink];
+    const permission = colPermission >= 0 ? String(targetRow[colPermission]).trim() : '허용';
+    const response = {
+      success: true,
+      customer_name: targetRow[colName],
+      is_admin: isAdmin,
+      download_allowed: permission !== '차단'
+    };
+
+    const file = report_tryReadReportFile(link);
+    if (file && file.type === 'html') {
+      response.report_html = file.content;
+    } else if (file && file.type === 'md') {
+      response.report_content = file.content;
+    } else {
+      response.material_link = link;
+    }
+    return response;
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function report_handleAdminList(adminCode) {
+  if (!report_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+
+  const ss = SpreadsheetApp.openById(REPORT_SHEET_ID);
+  const sheet = ss.getSheetByName(REPORT_SHEET_CUSTOMER);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const colName = headers.indexOf('고객명');
+  const colReportId = headers.indexOf('report_id');
+  const colIssued = headers.indexOf('발급일');
+  const colTitle = headers.indexOf('명칭');
+  const colExpiry = headers.indexOf('만료일');
+  const colHash = headers.indexOf('비밀번호해시');
+
+  const accessMap = {};
+  const logSheet = ss.getSheetByName(REPORT_SHEET_LOG);
+  const logData = logSheet.getDataRange().getValues();
+  for (let i = 0; i < logData.length; i++) {
+    const rid = logData[i][0];
+    const ts = new Date(logData[i][1]);
+    if (!rid || isNaN(ts.getTime())) continue;
+    if (!accessMap[rid]) accessMap[rid] = { count: 0, first: ts, last: ts };
+    accessMap[rid].count++;
+    if (ts < accessMap[rid].first) accessMap[rid].first = ts;
+    if (ts > accessMap[rid].last) accessMap[rid].last = ts;
+  }
+
+  const customers = [];
+  for (let i = 1; i < data.length; i++) {
+    const reportId = data[i][colReportId];
+    if (!reportId) continue;
+    const expiryDate = colExpiry >= 0 ? data[i][colExpiry] : '';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isExpired = expiryDate ? (new Date(expiryDate) < today) : false;
+    const access = accessMap[reportId] || null;
+    customers.push({
+      name: data[i][colName],
+      report_id: reportId,
+      title: colTitle >= 0 ? data[i][colTitle] : '',
+      issued: colIssued >= 0 ? data[i][colIssued] : '',
+      expiry: expiryDate,
+      is_expired: isExpired,
+      has_accessed: colHash >= 0 ? String(data[i][colHash]).trim().length > 0 : false,
+      access_count: access ? access.count : 0,
+      first_access: access ? access.first.toISOString() : '',
+      last_access: access ? access.last.toISOString() : ''
+    });
+  }
+
+  return { success: true, customers: customers };
+}
+
+function report_handleCreateReport(params) {
+  const adminCode = params.admin_code || '';
+  if (!report_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+
+  const name = String(params.name || '').trim();
+  const title = String(params.title || '').trim();
+  const type = String(params.type || '').trim();
+  const link = String(params.link || '').trim();
+  const permission = String(params.permission || '허용').trim();
+
+  if (!name) return { success: false, message: '고객명은 필수입니다.' };
+  if (!link) return { success: false, message: '자료링크는 필수입니다.' };
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return { success: false, message: '처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(REPORT_SHEET_ID);
+    const sheet = ss.getSheetByName(REPORT_SHEET_CUSTOMER);
+    const totalCols = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, totalCols).getValues()[0];
+
+    const colName = headers.indexOf('고객명');
+    const colReportId = headers.indexOf('report_id');
+    const colIssued = headers.indexOf('발급일');
+    const colHash = headers.indexOf('비밀번호해시');
+    const colLink = headers.indexOf('자료링크');
+    const colTitle = headers.indexOf('명칭');
+    const colType = headers.indexOf('유형');
+    const colPermission = headers.indexOf('권한');
+    const colExpiry = headers.indexOf('만료일');
+
+    const reportId = report_generateReportId(sheet, headers);
+    const today = new Date();
+
+    const rowValues = new Array(totalCols).fill('');
+    if (colName >= 0) rowValues[colName] = name;
+    if (colReportId >= 0) rowValues[colReportId] = reportId;
+    if (colIssued >= 0) rowValues[colIssued] = today;
+    if (colHash >= 0) rowValues[colHash] = '';
+    if (colLink >= 0) rowValues[colLink] = link;
+    if (colTitle >= 0) rowValues[colTitle] = title;
+    if (colType >= 0) rowValues[colType] = type;
+    if (colPermission >= 0) rowValues[colPermission] = permission;
+
+    const newRow = sheet.getLastRow() + 1;
+    sheet.getRange(newRow, 1, 1, totalCols).setValues([rowValues]);
+
+    if (colExpiry >= 0 && colIssued >= 0) {
+      const issuedCellA1 = sheet.getRange(newRow, colIssued + 1).getA1Notation();
+      sheet.getRange(newRow, colExpiry + 1).setFormula('=' + issuedCellA1 + '+30');
+    }
+
+    SpreadsheetApp.flush();
+    return { success: true, report_id: reportId, name: name };
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function report_handleClearPassword(params) {
+  const adminCode = params.admin_code || '';
+  if (!report_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+
+  const reportId = String(params.report_id || '').trim();
+  if (!reportId) return { success: false, message: 'report_id가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return { success: false, message: '처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(REPORT_SHEET_ID);
+    const sheet = ss.getSheetByName(REPORT_SHEET_CUSTOMER);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const colReportId = headers.indexOf('report_id');
+    const colHash = headers.indexOf('비밀번호해시');
+
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][colReportId]).trim() === reportId) { rowIndex = i + 1; break; }
+    }
+
+    if (rowIndex === -1) return { success: false, message: '존재하지 않는 report_id입니다.' };
+    if (colHash === -1) return { success: false, message: '비밀번호해시 컬럼을 찾을 수 없습니다.' };
+
+    sheet.getRange(rowIndex, colHash + 1).setValue('');
+    SpreadsheetApp.flush();
+    return { success: true };
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function report_handleDeleteReport(params) {
+  const adminCode = params.admin_code || '';
+  if (!report_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+
+  const reportId = String(params.report_id || '').trim();
+  if (!reportId) return { success: false, message: 'report_id가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return { success: false, message: '처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(REPORT_SHEET_ID);
+    const sheet = ss.getSheetByName(REPORT_SHEET_CUSTOMER);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const colReportId = headers.indexOf('report_id');
+
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][colReportId]).trim() === reportId) { rowIndex = i + 1; break; }
+    }
+
+    if (rowIndex === -1) return { success: false, message: '존재하지 않는 report_id입니다.' };
+
+    sheet.deleteRow(rowIndex);
+    SpreadsheetApp.flush();
+    return { success: true };
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function report_handleGetStatuteMst(params) {
+  const adminCode = params.admin_code || '';
+  if (!report_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+
+  const lawName = String(params.law_name || '').trim();
+  if (!lawName) return { success: false, message: 'law_name이 필요합니다.' };
+
+  const normalizedTarget = lawName.replace(/\s+/g, '');
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'statute_mst_' + normalizedTarget;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return { success: true, law_name: lawName, mst: cached, cached: true };
+  }
+
+  try {
+    const url = 'https://www.law.go.kr/DRF/lawSearch.do?OC=' + REPORT_LAW_OC +
+      '&target=law&type=XML&query=' + encodeURIComponent(lawName);
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+
+    if (res.getResponseCode() !== 200) {
+      return { success: false, message: '법령정보센터 응답 오류: ' + res.getResponseCode() };
+    }
+
+    const xml = XmlService.parse(res.getContentText('UTF-8'));
+    const root = xml.getRootElement();
+    const laws = root.getChildren('law');
+
+    let mst = null;
+    for (let i = 0; i < laws.length; i++) {
+      const nameInResult = (laws[i].getChildText('법령명한글') || '').replace(/\s+/g, '');
+      if (nameInResult === normalizedTarget) {
+        mst = laws[i].getChildText('법령일련번호');
+        break;
+      }
+    }
+    if (!mst && laws.length > 0) {
+      mst = laws[0].getChildText('법령일련번호');
+    }
+
+    if (!mst) return { success: false, message: '해당 법령을 찾을 수 없습니다: ' + lawName };
+
+    cache.put(cacheKey, mst, 21600);
+    return { success: true, law_name: lawName, mst: mst };
+
+  } catch (err) {
+    return { success: false, message: '조회 오류: ' + err.message };
+  }
+}
+
+function report_tryReadReportFile(link) {
+  try {
+    const match = String(link).match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (!match) return null;
+
+    const file = DriveApp.getFileById(match[1]);
+    const name = file.getName().toLowerCase();
+
+    if (name.endsWith('.html') || name.endsWith('.htm')) {
+      return { type: 'html', content: file.getBlob().getDataAsString('UTF-8') };
+    }
+    if (name.endsWith('.md') || name.endsWith('.markdown')) {
+      return { type: 'md', content: file.getBlob().getDataAsString('UTF-8') };
+    }
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function report_logAccess(ss, reportId) {
+  const logSheet = ss.getSheetByName(REPORT_SHEET_LOG);
+  logSheet.insertRowBefore(2);
+  logSheet.getRange(2, 1, 1, 2).setValues([[reportId, new Date()]]);
+}
+
+function report_generateReportId(sheet, headers) {
+  const data = sheet.getDataRange().getValues();
+  const colReportId = headers.indexOf('report_id');
+
+  const existingIds = new Set(
+    data.slice(1).map(function (row) { return String(row[colReportId]).trim(); }).filter(Boolean)
+  );
+
+  function randomCode() {
+    let code = '';
+    for (let i = 0; i < REPORT_ID_LENGTH; i++) {
+      code += REPORT_ID_CHARS[Math.floor(Math.random() * REPORT_ID_CHARS.length)];
+    }
+    return code;
+  }
+
+  let newId;
+  do {
+    newId = randomCode();
+  } while (existingIds.has(newId));
+
+  return newId;
+}
+
+function report_doPost(body) {
+  switch (body.action) {
+    case 'admin_list':      return report_handleAdminList(body.admin_code || '');
+    case 'create_report':   return report_handleCreateReport(body);
+    case 'clear_password':  return report_handleClearPassword(body);
+    case 'delete_report':   return report_handleDeleteReport(body);
+    case 'get_statute_mst': return report_handleGetStatuteMst(body);
+    case 'report_access':   return report_handleReportAccess(body);
+    default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
 }
 
