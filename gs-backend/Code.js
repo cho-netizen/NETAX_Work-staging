@@ -13026,10 +13026,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     .map(function (b) { return b.text; })
     .join('\n');
 
-  // 시간예산 초과 또는 루프한계 도달로 도구 호출이 채 안 끝났는데 텍스트가 하나도 없으면,
-  // 예전에는 그대로 빈 응답이 나갔다. 대신 도구 없이 한 번 더 불러서 "지금까지 모은 정보로
-  // 일단 마무리해달라"고 요청해 최소한 뭔가 답을 받는다.
-  if (!replyText && (maxLoopsHit || timeBudgetExceeded)) {
+  // [2026.08] 원래는 시간예산 초과·루프한계 도달 두 경우에만 이 보완 요청을 걸었는데, 그 두
+  // 경우가 아니어도(예: 도구 호출은 정상적으로 다 끝났지만 모델이 생각(thinking)·도구 호출만
+  // 하고 사용자에게 보여줄 글은 하나도 안 쓴 채 턴을 마친 경우) 화면에 "(빈 응답)"만 뜨는
+  // 사례가 실사용 중 보고됐다. 원인이 뭐든 사용자 입장에서 빈 응답은 항상 나쁜 결과이므로,
+  // 조건을 좁게 따지지 말고 텍스트가 비어있으면 무조건 이 보완 요청을 걸도록 넓힌다.
+  if (!replyText) {
     try {
       const wrapUpMessages = messages.concat([{
         role: 'user',
@@ -13053,7 +13055,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     if (!replyText) {
       replyText = timeBudgetExceeded
         ? '요청이 예상보다 오래 걸려 시간 제한(약 4분) 안에 마무리하지 못했습니다. 요청을 더 작은 단위로 나눠서 다시 시도해주세요.'
-        : '요청이 너무 많은 단계(도구 호출 ' + MAX_TOOL_LOOPS + '회)를 필요로 해서 끝까지 마무리하지 못했습니다. 요청을 더 작은 단위로 나눠서 다시 시도해주세요.';
+        : maxLoopsHit
+        ? '요청이 너무 많은 단계(도구 호출 ' + MAX_TOOL_LOOPS + '회)를 필요로 해서 끝까지 마무리하지 못했습니다. 요청을 더 작은 단위로 나눠서 다시 시도해주세요.'
+        : '이번 요청에 답변을 만들지 못했습니다. 같은 질문을 다시 한 번 보내주시거나, 표현을 조금 바꿔서 다시 시도해주세요.';
     }
   }
 

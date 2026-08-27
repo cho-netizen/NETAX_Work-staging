@@ -1973,7 +1973,7 @@
         thinkingBubble.textContent = '오류: ' + data.error;
         chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
       } else {
-        renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
+        renderAssistantReply(thinkingBubble, data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.', data.clientActions, editTargetFileSnapshot);
         const aiMsgObj = { role: 'assistant', content: data.reply || '' };
         chatMessages.push(aiMsgObj);
         thinkingBubble._nxMsgRef = aiMsgObj;
@@ -2105,7 +2105,7 @@
         thinkingBubble.textContent = '오류: ' + data.error;
         return;
       }
-      renderAssistantReply(thinkingBubble, data.reply || '(빈 응답)', data.clientActions, editTargetFileSnapshot);
+      renderAssistantReply(thinkingBubble, data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.', data.clientActions, editTargetFileSnapshot);
       const newMsgObj = { role: 'assistant', content: data.reply || '' };
       chatMessages.push(newMsgObj);
       thinkingBubble._nxMsgRef = newMsgObj;
