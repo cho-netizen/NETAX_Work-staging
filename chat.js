@@ -632,7 +632,10 @@
   const AI_SETTINGS_KEY = 'nx_ai_settings';
   const DEFAULT_AI_SETTINGS = {
     model: 'claude-sonnet-5',
-    effort: 'medium',
+    // [2026.08] "보통"과 "높음"을 실제 세무 질문으로 비교해본 결과, 가장 까다로운 판단 지점에서
+    // "높음"만 정확한 근거조문까지 짚어주는 차이가 확인돼 기본값을 올림. 이미 설정을 저장해둔
+    // 브라우저(localStorage)에는 소급 적용되지 않으니, 기존 사용자는 설정에서 한 번 바꿔야 함.
+    effort: 'high',
     temperature: null,          // null이면 요청에 아예 안 실어서 모델 기본값 사용
     maxTokens: null,            // null이면 강도(effort)별 기본 상한 사용
     enableWebSearch: true,  // 서버가 명시적으로 false를 안 보내면 항상 웹검색을 켜므로, 화면 기본 표시도 "켜짐"에 맞춘다.

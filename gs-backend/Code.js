@@ -34,7 +34,10 @@ const MODEL_CONFIG = {
   'claude-fable-5':             { provider: 'claude', input: 10.00, output: 50.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
   'gemini-3.1-pro-preview':     { provider: 'gemini', input: 2.00,  output: 12.00, temp: true,  codeExec: true  },
   'gemini-3.5-flash':           { provider: 'gemini', input: 1.50,  output: 9.00,  temp: true,  codeExec: true  },
-  'gemini-3.1-flash-lite':      { provider: 'gemini', input: 0.25,  output: 1.50,  temp: true,  codeExec: true  }
+  'gemini-3.1-flash-lite':      { provider: 'gemini', input: 0.25,  output: 1.50,  temp: true,  codeExec: true  },
+  // [2026.08] 더 저렴한(무료 등급 대상) 옵션 추가 요청으로 넣음 — ai.google.dev/gemini-api/docs/pricing 기준.
+  'gemini-2.5-flash':           { provider: 'gemini', input: 0.30,  output: 2.50,  temp: true,  codeExec: true  },
+  'gemini-2.5-flash-lite':      { provider: 'gemini', input: 0.10,  output: 0.40,  temp: true,  codeExec: true  }
 };
 const DEFAULT_MODEL = 'claude-sonnet-5';
 
@@ -50,7 +53,7 @@ const EFFORT_MAP = {
   medium: { thinking: true,  budgetTokens: 4000,  maxTokens: 12000 },
   high:   { thinking: true,  budgetTokens: 10000, maxTokens: 32000 }
 };
-const DEFAULT_EFFORT = 'medium';
+const DEFAULT_EFFORT = 'high'; // 2026.08: 실사용 비교 후 기본값을 "보통"→"높음"으로 올림
 
 const WEB_SEARCH_COST_PER_USE = 0.01;
 // [2026.08] 예전엔 여기(서버)에 도구 왕복 루프 상한(MAX_TOOL_LOOPS)과 Apps Script 실행시간
