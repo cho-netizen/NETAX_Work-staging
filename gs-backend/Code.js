@@ -3165,65 +3165,82 @@ function doPost(e) {
 }
 
 function buildContextSystemPrompt(basePrompt, body) {
-  let extra = '';
+  // [2026.08] 프롬프트 캐싱은 "앞부분이 이전 요청과 얼마나 똑같이 이어지는지"로 적중 여부가
+  // 갈린다. 예전엔 화면 상태(열린 폴더·파일 등, 매번 바뀜)를 맨 앞에 붙였는데, 그러면 그
+  // 뒤에 오는 고정 지침들까지 전부 캐시가 깨져서 폴더만 옮겨다녀도 매번 도구설명+마스터
+  // 프로필 전체를 새로 캐시(정상가의 1.25배)하게 됐다. 그래서 고정 지침(staticExtra)을
+  // 먼저 두고, 매번 바뀌는 화면 상태(dynamicExtra)는 맨 뒤로 옮겨서 앞부분 캐시가
+  // 유지되게 한다. 실측: 화면 상태만 다른 두 요청을 연달아 보내면 캐시 적중률이 0%였다가,
+  // 이 순서로 바꾼 뒤엔 화면 상태가 달라도 앞부분(도구+마스터프로필+아래 고정 지침)이
+  // 그대로 캐시 히트된다.
+  let staticExtra = '';
+  let dynamicExtra = '';
   const ctx = body.context || {};
 
-  if (Array.isArray(ctx.currentPath) && ctx.currentPath.length) {
-    extra += '\n\n[현재 화면 상태] 사용자는 지금 파일탐색기에서 "' + ctx.currentPath.join(' / ') + '" 위치를 보고 있다.';
-  }
-
-  if (ctx.openFile && ctx.openFile.name) {
-    extra += '\n현재 편집기/뷰어에 열려 있는 파일: "' + ctx.openFile.name + '" (fileId: ' + ctx.openFile.id + ')';
-
-    if (typeof ctx.openFile.liveContent === 'string') {
-      extra += '\n\n[지금 편집기에 실시간으로 열려 있는 문서 내용 — 저장 여부와 무관하게 이게 최신 상태다. read_drive_file로 다시 읽을 필요 없음]\n'
-        + '-----\n' + ctx.openFile.liveContent + '\n-----';
-      extra += '\n\n[중요] 지금 편집기에 열려 있는 바로 이 문서를 고치거나, 이 문서를 바탕으로 새로 정리해달라는 요청이면 — save_file_to_folder로 조용히 덮어쓰지 말고 반드시 apply_document_edit 도구를 사용하라(도구 설명 참고). save_file_to_folder를 쓰면 사용자가 "편집기에 적용하기" 버튼을 못 받아서 편집기 화면이 갱신 안 된 채로 남는다. 완전히 다른 새 파일을 만드는 경우(지금 열려있는 문서와 무관한 별도 파일)에만 save_file_to_folder를 써라. 문서 수정을 요청한 게 아니라면 둘 다 쓰지 마라.';
-    } else if (ctx.openFile.mimeType && (ctx.openFile.mimeType.indexOf('image/') === 0 || ctx.openFile.mimeType === 'application/pdf')) {
-      extra += '\n이 파일은 이미지 또는 PDF 뷰어로 열려 있다. 사용자 메시지에 이 파일 자체가 이미지/문서 블록으로 이미 첨부되어 있을 수 있으니, 그 내용을 직접 보고 판단해서 답하라.';
-    }
-  }
-
-  if (ctx.openDiagram) {
-    extra += '\n\n[지금 화면에 관계도(mermaid 문법) 도구가 열려 있다. 현재 내용: ]\n'
-      + '-----\n' + (ctx.openDiagram.liveContent || '(비어 있음)') + '\n-----';
-    extra += '\n가계도·지분관계·거래흐름 등을 관계도로 그려달라는 요청이면 apply_diagram_edit 도구를 사용하라(도구 설명 참고). 관계도 요청이 아니면 이 도구를 쓰지 마라.';
-  }
-
-  // ---- 아래부터는 각 도구 자신의 description에 이미 담겨있는 "언제 어떻게 쓰는지" 설명은
+  // ---- 아래는 각 도구 자신의 description에 이미 담겨있는 "언제 어떻게 쓰는지" 설명은
   // 여기서 반복하지 않는다. 여기 남기는 건 도구 하나의 설명만으로는 알기 어려운,
   // 여러 도구·여러 시스템을 넘나드는 판단기준뿐이다. ----
 
-  extra += '\n\n[일정·할일 관련 3가지 시스템 구분] 처리일지(마감일을 입력하면 화면 쪽에서 자동으로 캘린더에 등록됨, AI가 부를 별도 도구 없음) / '
+  staticExtra += '\n\n[일정·할일 관련 3가지 시스템 구분] 처리일지(마감일을 입력하면 화면 쪽에서 자동으로 캘린더에 등록됨, AI가 부를 별도 도구 없음) / '
     + 'lookup_calendar_events(캘린더 조회 전용) / lookup_google_tasks·add_google_task(할일 목록, 캘린더와 별개)는 서로 다른 시스템이다. '
     + '"마감일 캘린더에 등록해줘"라고 하면 처리일지에 그 날짜로 적으라고 안내하고, "이번주 일정 뭐 있어?"는 lookup_calendar_events로, '
     + '"할일로 등록해줘"는 add_google_task로 처리하되 서로 혼동하지 마라.';
 
-  extra += '\n\n[부동산·사업자 데이터 조회 시 공통 원칙] 필요한 코드·번호를 확실히 아는 경우에만 조회·계산하고, 모르면 절대 지어내지 말고 사용자에게 물어봐라. '
+  staticExtra += '\n\n[부동산·사업자 데이터 조회 시 공통 원칙] 필요한 코드·번호를 확실히 아는 경우에만 조회·계산하고, 모르면 절대 지어내지 말고 사용자에게 물어봐라. '
     + '결과를 답변에 쓸 때는 데이터 출처(국토교통부/건축HUB/국세청)와 기준일자를 명시하라.';
 
-  extra += '\n\n[결과 검증] 여러 단계·여러 도구의 결과를 종합해서 최종 결론을 내기 직전에는, 그 사이에 숫자나 사실관계가 서로 어긋나는 부분이 없는지 한 번 더 스스로 점검하고 나서 답하라.';
+  staticExtra += '\n\n[결과 검증] 여러 단계·여러 도구의 결과를 종합해서 최종 결론을 내기 직전에는, 그 사이에 숫자나 사실관계가 서로 어긋나는 부분이 없는지 한 번 더 스스로 점검하고 나서 답하라.';
 
-  extra += '\n\n[문서 저장 도구의 content 파라미터 — 절대 생략·축약 금지] save_file_to_folder·export_to_google_doc·apply_document_edit·apply_diagram_edit처럼 문서 전체 내용을 담는 도구를 호출할 때는, '
+  staticExtra += '\n\n[문서 저장 도구의 content 파라미터 — 절대 생략·축약 금지] save_file_to_folder·export_to_google_doc·apply_document_edit·apply_diagram_edit처럼 문서 전체 내용을 담는 도구를 호출할 때는, '
     + '그 내용을 반드시 매번 새로 온전히 다 써서 채워야 한다. 앞서 채팅에서 이미 그 내용을 이야기했더라도 "위 내용과 동일", "(생략)", "앞서 작성한 내용 참고" 같은 식으로 줄이거나 비워두면 절대 안 된다 — '
     + '그 도구는 대화 맥락을 못 보고 오직 이번에 준 내용만 그대로 파일에 저장하므로, 생략하면 빈 파일이 되거나 저장 자체가 실패한다. '
     + '작성할 문서가 매우 길어서 한 번에 다 쓰기 버거우면, 저장 도구부터 섣불리 부르지 말고 먼저 답변으로 개요/목차를 보여준 뒤 저장 여부를 확인받거나, 스스로 판단해서 문서를 절 단위로 나눠 완성한 다음 마지막에 전체를 합쳐 한 번에 저장하라.';
 
-  extra += '\n\n[기억 저장소 구분] 정보를 어디에 남길지는 다음 기준으로 판단하라 — (1) 이번 대화·이번 사건에만 해당하는 내용은 아무 도구도 쓸 필요 없다(대화기록에 자연히 남는다). '
+  staticExtra += '\n\n[기억 저장소 구분] 정보를 어디에 남길지는 다음 기준으로 판단하라 — (1) 이번 대화·이번 사건에만 해당하는 내용은 아무 도구도 쓸 필요 없다(대화기록에 자연히 남는다). '
     + '(2) 이번 사건 안에서 여러 단계로 진행 중인 작업의 진행상태는 manage_task_plan에 남긴다. '
     + '(3) 특정 사건과 무관하게 앞으로도 계속 적용돼야 할 사실·지침은 remember_fact로 마스터 프로필에 남긴다. '
     + '헷갈리면 (1)로 취급하라 — 잘못 승격시키는 것보다 그냥 넘어가는 게 안전하다.';
 
-  extra += '\n\n[분야별 업무관리자 우선순위] load_business_manager로 불러온 분야별 지침이 다른 일반 지침과 충돌하면, 그 분야에 한해서는 분야별 지침을 우선하라.';
+  staticExtra += '\n\n[분야별 업무관리자 우선순위] load_business_manager로 불러온 분야별 지침이 다른 일반 지침과 충돌하면, 그 분야에 한해서는 분야별 지침을 우선하라.';
 
-  extra += '\n\n[총괄관리자 — 시스템 자기점검] audit_business_managers(관리자들끼리 모순·중복 점검) / propose_new_business_manager(새 분야 관리자 초안 제안) 도구가 있다. ' +
+  staticExtra += '\n\n[총괄관리자 — 시스템 자기점검] audit_business_managers(관리자들끼리 모순·중복 점검) / propose_new_business_manager(새 분야 관리자 초안 제안) 도구가 있다. ' +
     'propose_new_business_manager로 만든 초안은 "_제안함" 폴더에만 저장되고 자동으로 활성화되지 않는다 — 이건 의도된 안전장치이니, 마치 이미 적용된 것처럼 착각하지 말고 사용자에게 검토가 필요하다고 명확히 알려라.';
 
-  extra += '\n\n[화제 전환 처리] 이 대화에 사건·검토 관련 이전 내용이 쌓여 있더라도, 사용자의 새 메시지가 그 내용과 명백히 무관한 별개의 질문(예: 날씨, 간단한 계산, 일반 상식 등)이면 이전 화제(예: "~건 검토를 진행할까요?" 같은 직전 제안)를 다시 꺼내거나 그쪽으로 답을 끌고 가지 마라. 새 질문에만 집중해서 답하고, 답변이 끝난 뒤에도 먼저 이전 화제로 돌아가자고 제안하지 마라 — 사용자가 먼저 그 화제를 다시 꺼내면 그때 이어가라.';
+  staticExtra += '\n\n[화제 전환 처리] 이 대화에 사건·검토 관련 이전 내용이 쌓여 있더라도, 사용자의 새 메시지가 그 내용과 명백히 무관한 별개의 질문(예: 날씨, 간단한 계산, 일반 상식 등)이면 이전 화제(예: "~건 검토를 진행할까요?" 같은 직전 제안)를 다시 꺼내거나 그쪽으로 답을 끌고 가지 마라. 새 질문에만 집중해서 답하고, 답변이 끝난 뒤에도 먼저 이전 화제로 돌아가자고 제안하지 마라 — 사용자가 먼저 그 화제를 다시 꺼내면 그때 이어가라.';
+
+  // [2026.08] 예전엔 이걸 화면의 "자동참조" 켜고끄기 토글로 사람이 미리 정해둬야 했다 — 다른
+  // 130개 넘는 도구는 전부 AI가 알아서 필요할 때만 쓰는데 이것만 예외였다. 이제 다른 도구들과
+  // 똑같이 취급 — 매번 판단은 AI에게 맡기고, 켜고끄는 토글 자체를 없앴다.
+  staticExtra += '\n\nlist_drive_folder / read_drive_file 도구가 있다. 답변에 필요하다고 판단되면 사용자에게 묻지 않고 알아서 그 도구로 폴더나 파일을 확인한 뒤 답하라. 관련 없어 보이는 질문(잡담 등)에는 굳이 도구를 쓰지 마라. '
+    + '단, 이름이 "_"로 시작하는 폴더(자동참조 제외 폴더 — list_drive_folder 결과에 "자동참조제외": true로 표시됨)는 스스로 판단해서 그 안으로 들어가 보지 마라. 사용자가 그 폴더를 이름으로 콕 집어 요청했거나 채팅에 명시적으로 첨부한 경우에만 확인하라.';
+
+  // ---- 여기서부터는 매번 바뀌는 화면 상태 — 반드시 staticExtra 뒤(맨 끝)에 붙여야 캐시가 유지된다 ----
+
+  if (Array.isArray(ctx.currentPath) && ctx.currentPath.length) {
+    dynamicExtra += '\n\n[현재 화면 상태] 사용자는 지금 파일탐색기에서 "' + ctx.currentPath.join(' / ') + '" 위치를 보고 있다.';
+  }
+
+  if (ctx.openFile && ctx.openFile.name) {
+    dynamicExtra += '\n현재 편집기/뷰어에 열려 있는 파일: "' + ctx.openFile.name + '" (fileId: ' + ctx.openFile.id + ')';
+
+    if (typeof ctx.openFile.liveContent === 'string') {
+      dynamicExtra += '\n\n[지금 편집기에 실시간으로 열려 있는 문서 내용 — 저장 여부와 무관하게 이게 최신 상태다. read_drive_file로 다시 읽을 필요 없음]\n'
+        + '-----\n' + ctx.openFile.liveContent + '\n-----';
+      dynamicExtra += '\n\n[중요] 지금 편집기에 열려 있는 바로 이 문서를 고치거나, 이 문서를 바탕으로 새로 정리해달라는 요청이면 — save_file_to_folder로 조용히 덮어쓰지 말고 반드시 apply_document_edit 도구를 사용하라(도구 설명 참고). save_file_to_folder를 쓰면 사용자가 "편집기에 적용하기" 버튼을 못 받아서 편집기 화면이 갱신 안 된 채로 남는다. 완전히 다른 새 파일을 만드는 경우(지금 열려있는 문서와 무관한 별도 파일)에만 save_file_to_folder를 써라. 문서 수정을 요청한 게 아니라면 둘 다 쓰지 마라.';
+    } else if (ctx.openFile.mimeType && (ctx.openFile.mimeType.indexOf('image/') === 0 || ctx.openFile.mimeType === 'application/pdf')) {
+      dynamicExtra += '\n이 파일은 이미지 또는 PDF 뷰어로 열려 있다. 사용자 메시지에 이 파일 자체가 이미지/문서 블록으로 이미 첨부되어 있을 수 있으니, 그 내용을 직접 보고 판단해서 답하라.';
+    }
+  }
+
+  if (ctx.openDiagram) {
+    dynamicExtra += '\n\n[지금 화면에 관계도(mermaid 문법) 도구가 열려 있다. 현재 내용: ]\n'
+      + '-----\n' + (ctx.openDiagram.liveContent || '(비어 있음)') + '\n-----';
+    dynamicExtra += '\n가계도·지분관계·거래흐름 등을 관계도로 그려달라는 요청이면 apply_diagram_edit 도구를 사용하라(도구 설명 참고). 관계도 요청이 아니면 이 도구를 쓰지 마라.';
+  }
 
   if (Array.isArray(ctx.attachedTexts) && ctx.attachedTexts.length) {
     ctx.attachedTexts.forEach(function (t) {
-      extra += '\n\n[명시적으로 참조 첨부된 내용: "' + t.name + '" — 지금 화면에 있는 그대로이며, 다시 읽을 필요 없음]\n'
+      dynamicExtra += '\n\n[명시적으로 참조 첨부된 내용: "' + t.name + '" — 지금 화면에 있는 그대로이며, 다시 읽을 필요 없음]\n'
         + '-----\n' + (t.text || '(비어 있음)') + '\n-----';
     });
   }
@@ -3234,25 +3251,24 @@ function buildContextSystemPrompt(basePrompt, body) {
 
     if (attachedFiles.length) {
       const fileList = attachedFiles.map(function (f) { return '"' + f.name + '"(fileId: ' + f.id + ')'; }).join(', ');
-      extra += '\n\n[명시적으로 첨부된 파일] 사용자가 채팅에 다음 파일을 직접 첨부했다: ' + fileList
+      dynamicExtra += '\n\n[명시적으로 첨부된 파일] 사용자가 채팅에 다음 파일을 직접 첨부했다: ' + fileList
         + '. 자동참조 모드와 무관하게, 이 파일들은 반드시 read_drive_file로 읽고 답변에 활용하라.';
     }
     if (attachedFolders.length) {
       const folderList = attachedFolders.map(function (f) {
         return '"' + f.name + '"(path: [' + (f.path || []).map(function (p) { return '"' + p + '"'; }).join(',') + '])';
       }).join(', ');
-      extra += '\n\n[명시적으로 첨부된 폴더] 사용자가 채팅에 다음 폴더를 직접 첨부했다: ' + folderList
+      dynamicExtra += '\n\n[명시적으로 첨부된 폴더] 사용자가 채팅에 다음 폴더를 직접 첨부했다: ' + folderList
         + '. 자동참조 모드와 무관하게, list_drive_folder로 그 폴더의 path를 넣어 먼저 목록을 확인하고, 질문에 답하는 데 필요해 보이는 파일들을 read_drive_file로 이어서 읽어라. 폴더 안 파일이 많으면 전부 다 읽지 말고 관련성 높은 것부터 판단해서 골라 읽어라.';
     }
   }
 
-  // [2026.08] 예전엔 이걸 화면의 "자동참조" 켜고끄기 토글로 사람이 미리 정해둬야 했다 — 다른
-  // 130개 넘는 도구는 전부 AI가 알아서 필요할 때만 쓰는데 이것만 예외였다. 이제 다른 도구들과
-  // 똑같이 취급 — 매번 판단은 AI에게 맡기고, 켜고끄는 토글 자체를 없앴다.
-  extra += '\n\nlist_drive_folder / read_drive_file 도구가 있다. 답변에 필요하다고 판단되면 사용자에게 묻지 않고 알아서 그 도구로 폴더나 파일을 확인한 뒤 답하라. 관련 없어 보이는 질문(잡담 등)에는 굳이 도구를 쓰지 마라. '
-    + '단, 이름이 "_"로 시작하는 폴더(자동참조 제외 폴더 — list_drive_folder 결과에 "자동참조제외": true로 표시됨)는 스스로 판단해서 그 안으로 들어가 보지 마라. 사용자가 그 폴더를 이름으로 콕 집어 요청했거나 채팅에 명시적으로 첨부한 경우에만 확인하라.';
-
-  return (basePrompt || DEFAULT_SYSTEM_PROMPT) + extra;
+  // [2026.08] 문자열 하나로 합쳐서 돌려주면 Claude 쪽에서 캐시 경계를 나눌 방법이 없다.
+  // static(고정 지침)과 dynamic(화면 상태)을 분리해서 돌려주고, callClaude가 static
+  // 부분에만 cache_control 경계를 찍어 화면 상태가 바뀌어도 그 앞부분은 캐시가 유지되게
+  // 한다. Gemini 등 경계 개념이 없는 호출부는 그냥 full(합친 문자열)을 쓰면 된다.
+  const staticText = (basePrompt || DEFAULT_SYSTEM_PROMPT) + staticExtra;
+  return { static: staticText, dynamic: dynamicExtra, full: staticText + dynamicExtra };
 }
 
 /**
@@ -12115,14 +12131,19 @@ function isLikelyTruncatedContentToolCall_(result) {
 }
 
 function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
+  // [2026.08] 예전엔 payload 맨 위에 cache_control 하나만 찍어서 "전체를 통째로" 캐시
+  // 대상으로 삼았다 — 그런데 실측해보니 이건 부분 일치를 전혀 인정하지 않고, tools나
+  // system 어디든 한 글자라도 다르면 전체가 캐시 미스로 처리됐다(화면에서 폴더만 옮겨도
+  // 매번 도구설명+마스터프로필 전체를 새로 캐시하며 정상가의 1.25배를 냄). 그래서 이제는
+  // system을 static(고정 지침, 화면 상태와 무관)/dynamic(화면 상태, 매번 다름) 두
+  // 블록으로 나눠서 static 쪽에만 캐시 경계를 찍는다 — 화면 상태가 바뀌어도 static
+  // 블록은 그대로 캐시 히트된다.
   const payload = {
     model: model,
     max_tokens: maxTokens,
-    system: systemPrompt,
-    // 자동 프롬프트 캐싱 — 도구 정의 + 시스템 프롬프트(마스터 프로필 포함) + 대화 이력 중
-    // 반복되는 앞부분을 자동으로 캐시해서, 다음 턴부터는 그 부분을 정상가의 10%만 청구되게 한다.
-    // 화면 상태(열린 파일 등)가 바뀌어 캐시가 깨져도 에러 없이 조용히 새로 캐시될 뿐이라 안전하다.
-    cache_control: { type: 'ephemeral' }
+    system: [
+      { type: 'text', text: systemPrompt.static, cache_control: { type: 'ephemeral' } }
+    ].concat(systemPrompt.dynamic ? [{ type: 'text', text: systemPrompt.dynamic }] : [])
   };
 
   if (cfg.thinkingMode === 'adaptive') {
@@ -12171,6 +12192,16 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     advisorModel = MODEL_CONFIG[body.advisorModel] ? body.advisorModel : 'claude-opus-4-8';
     tools.push({ type: 'advisor_20260301', name: 'advisor', model: advisorModel, max_uses: 3 });
     betaFlags.push('advisor-tool-2026-03-01');
+  }
+
+  // [2026.08] 여기까지의 도구 목록(계산기+웹서치 등)은 화면 상태와 무관하게 매 요청 거의
+  // 똑같다 — 마지막 도구에 캐시 경계를 찍어서, 뒤에 이어붙는 화면 상태별 도구(아래)가
+  // 매번 달라져도 이 앞부분은 캐시가 깨지지 않게 한다. DRIVE_TOOLS 원본 객체를 직접
+  // 건드리면 다음 요청에도 그 값이 남을 수 있으니(전역 배열 공유), 얕은 복사본을 만들어서
+  // 그 위에만 표시한다.
+  if (tools.length) {
+    const lastIdx = tools.length - 1;
+    tools[lastIdx] = Object.assign({}, tools[lastIdx], { cache_control: { type: 'ephemeral' } });
   }
 
   // 문서수정·관계도수정·폴더이동 도구 — 열려 있는 화면 상태(body.context)에 맞춰서만 추가된다.
@@ -13223,7 +13254,7 @@ function callGemini(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
   const payload = {
     contents: toGeminiContents(body.messages),
-    systemInstruction: { parts: [{ text: systemPrompt }] },
+    systemInstruction: { parts: [{ text: systemPrompt.full }] },
     generationConfig: generationConfig
   };
   if (tools.length > 0) payload.tools = tools;
