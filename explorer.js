@@ -1625,7 +1625,9 @@
   // 맞다는 판단으로 옮겨왔다 — admin.netax.kr 쪽 케이스관리 탭은 신규 케이스 "등록"용으로
   // 그대로 남겨두고, "현황 보기·항목 추가"는 여기서도 쓸 수 있게 한다.)
   // =========================================================
-  const MY_API_URL_FOR_SUBMISSIONS = 'https://script.google.com/macros/s/AKfycbzpyTO4wLZNJhpoiV0Ke3u1KsRW_4x6LppvPWE9hyZbE9UrZzDzQ2gOLndzmeKeHwBLsw/exec';
+  // [2026.08] my 모듈이 이 프로젝트(gs-backend)로 이관되면서 별도 URL이 아니라 이 페이지가
+  // 이미 쓰는 GAS_URL과 동일해짐 — 통합 인증(_key)과, report 모듈과 겹치는 admin_list는
+  // module:'my'로 구분해서 보낸다.
   const MY_ADMIN_CODE_KEY = 'nx_my_admin_code';
 
   function getMyAdminCode_(forcePrompt){
@@ -1638,10 +1640,10 @@
   }
 
   async function callMyBackend_(payload){
-    const res = await fetch(MY_API_URL_FOR_SUBMISSIONS, {
+    const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(Object.assign({ _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' }, payload))
     });
     return res.json();
   }
@@ -1719,7 +1721,7 @@
     showToast('제출현황을 불러오는 중입니다…', 'info');
     let data;
     try{
-      data = await callMyBackend_({ action: 'admin_list', admin_code: adminCode });
+      data = await callMyBackend_({ action: 'admin_list', admin_code: adminCode, module: 'my' });
     }catch(err){
       showToast('my.netax.kr 연결 중 오류: ' + (err && err.message ? err.message : err), 'error');
       return;
