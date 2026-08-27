@@ -1110,9 +1110,8 @@
          안 닫혀야 연달아 여러 개를 토글할 수 있다 — .toggle-item 참고. 자주 쓰는 기능은 아니지만
          AI가 오류로 엉뚱한 맥락을 참조할 때 바로 초기화해야 해서 채팅기록지우기도 여기 같이 뒀다. -->
     <div class="topbar-item mode-menu-group topbar-equal-btn" id="modeMenuWrap">
-      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 자동참조 · 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기"><span class="tool-menu-icon">🔗</span> <span class="tool-menu-label">참조</span></button>
+      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기"><span class="tool-menu-icon">🔗</span> <span class="tool-menu-label">참조</span></button>
       <div id="modeMenuPopup" class="nx-popup">
-        <label class="toggle-item"><input type="checkbox" id="modeChkAutoRef"> 🔗 자동참조 — AI가 알아서 판단해서 지금 보고 있는 폴더/파일을 확인</label>
         <label class="toggle-item"><input type="checkbox" id="modeChkWebSearch"> 🌐 웹서치 — 기본으로 항상 켜져 있음</label>
         <label class="toggle-item"><input type="checkbox" id="modeChkWebFetch"> 📥 웹페이지 가져오기 — URL이 있으면 자동으로도 켜짐</label>
         <div class="toggle-sep"></div>
@@ -1221,6 +1220,7 @@
 
         <label class="modal-label">모델</label>
         <select id="settingsModel">
+          <option value="auto" selected>🤖 자동 (질문에 따라 Sonnet 5/Haiku 중 자동 선택, 추천)</option>
           <option value="claude-sonnet-5">Claude Sonnet 5</option>
           <option value="claude-opus-4-8">Claude Opus 4.8</option>
           <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
@@ -1233,6 +1233,7 @@
           <option value="gemini-2.5-flash">Gemini 2.5 Flash (신규키 이용불가)</option>
           <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (신규키 이용불가)</option>
         </select>
+        <div class="modal-hint">"자동"을 고르면 질문에 세금 관련 단어(양도소득세·조문·공제 등)가 있으면 Sonnet 5(신중하게)로, 그 외 간단한 질문·문서 수정은 저렴한 Haiku(보통)로 매번 알아서 골라줍니다. 특정 모델을 직접 고정하고 싶으면 아래에서 골라주세요.</div>
         <div class="modal-hint">Gemini는 Flash·Flash-Lite 계열이 무료 등급 대상입니다(2026.4.1부터, 사용량 제한 안에서). Pro(3.1 Pro)는 무료 등급이 없습니다. 요금 청구 여부는 이 시스템이 쓰는 구글 API 키의 결제 연동 상태에 달려있습니다. [2026.08 확인] 새로 발급한 키는 Gemini 2.5 계열이 "신규 사용자에게 더 이상 제공 안 함"으로 막혀있고, 3.x 계열은 원인 불명의 "프로젝트 접근 거부" 오류가 났습니다 — 새 키를 만든 직후라면 구글 쪽 권한 반영에 시간이 걸릴 수 있으니 잠시 후 다시 시도해보세요.</div>
 
         <label class="modal-label">사고 강도</label>
@@ -1777,7 +1778,7 @@ graph TD
 <script src="/client-manage.js?v=20260827a"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
-<script src="/chat.js?v=20260827c"></script>
+<script src="/chat.js?v=20260827d"></script>
 <script src="/pwa.js?v=20260814a"></script>
 
 </body>

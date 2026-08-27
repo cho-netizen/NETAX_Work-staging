@@ -309,10 +309,11 @@
 
 
   // ============================================================
-  // 자동참조 (ON: AI가 알아서 판단해 폴더/파일을 읽음 / OFF: 명시적으로 요청했을 때만) — 상단 🔗자동참조 버튼으로 관리
-  // ============================================================
-  const AUTOREF_KEY = 'nx_autoref_mode';
-  let autoRefMode = localStorage.getItem(AUTOREF_KEY) === '1';
+  // 자동참조 — [2026.08] 예전엔 켜고끄기 토글이 있었는데, AI가 폴더/파일을 스스로 판단해서
+  // 읽을지는 이제 항상 AI 판단에 맡긴다(gs-backend 시스템프롬프트도 이제 무조건 이 지시를
+  // 준다 — 다른 130개 넘는 도구를 AI가 알아서 쓰는 것과 동일하게 취급). 이 변수는 화면캡처
+  // 자동첨부·열린 이미지/PDF 자동전송 같은 나머지 동작에만 계속 쓰이므로 항상 켜진 채로 둔다.
+  let autoRefMode = true;
 
   // 다크모드 체크박스 — 저장 버튼 안 기다리고 체크하는 즉시 바로 적용
   const settingsDarkMode = document.getElementById('settingsDarkMode');
@@ -631,7 +632,7 @@
   // ============================================================
   const AI_SETTINGS_KEY = 'nx_ai_settings';
   const DEFAULT_AI_SETTINGS = {
-    model: 'claude-sonnet-5',
+    model: 'auto', // [2026.08] 질문 내용을 보고 Sonnet(높음)/Haiku(보통) 중 자동으로 고름 — pickAutoModel_ 참고
     // [2026.08] "보통"과 "높음"을 실제 세무 질문으로 비교해본 결과, 가장 까다로운 판단 지점에서
     // "높음"만 정확한 근거조문까지 짚어주는 차이가 확인돼 기본값을 올림. 이미 설정을 저장해둔
     // 브라우저(localStorage)에는 소급 적용되지 않으니, 기존 사용자는 설정에서 한 번 바꿔야 함.
@@ -759,19 +760,13 @@
   // 여기서) — [2026.08] 버튼 3개를 체크박스 팝업 하나로 합쳤다. 설정모달을 안 열어도 바로
   // 켜고 끌 수 있는 건 그대로고, 체크박스라 하나 바꿔도 팝업이 안 닫혀서 연달아 여러 개를
   // 토글할 수 있다(예전 버튼 방식은 누르는 즉시 바로 반영되는 대신 각자 따로 눌러야 했음). ----
-  const modeChkAutoRef = document.getElementById('modeChkAutoRef');
   const modeChkWebSearch = document.getElementById('modeChkWebSearch');
   const modeChkWebFetch = document.getElementById('modeChkWebFetch');
   function refreshModeButtonStates(){
-    modeChkAutoRef.checked = autoRefMode;
     // 웹서치는 기본이 "켜짐"이라, enableWebSearch가 명시적으로 false일 때만 체크 해제로 표시한다.
     modeChkWebSearch.checked = aiSettings.enableWebSearch !== false;
     modeChkWebFetch.checked = !!aiSettings.enableWebFetch;
   }
-  modeChkAutoRef.addEventListener('change', ()=>{
-    autoRefMode = modeChkAutoRef.checked;
-    localStorage.setItem(AUTOREF_KEY, autoRefMode ? '1' : '0');
-  });
   modeChkWebSearch.addEventListener('change', ()=>{
     aiSettings.enableWebSearch = modeChkWebSearch.checked;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
@@ -784,6 +779,7 @@
 
   // 입력창 아래 "모델 · 강도" 뱃지 표시 갱신
   const MODEL_LABELS = {
+    'auto': '자동(질문별 선택)',
     'claude-sonnet-5': 'Sonnet 5',
     'claude-opus-4-8': 'Opus 4.8',
     'claude-haiku-4-5-20251001': 'Haiku 4.5',
@@ -797,6 +793,12 @@
   // 버튼은 ⚙ 아이콘 하나뿐이라, 지금 모델·강도는 마우스를 올렸을 때 보이는 title(툴팁)로 알려준다.
   function updateChatModelBadge(){
     const modelName = MODEL_LABELS[aiSettings.model] || aiSettings.model;
+    // 자동 모드는 질문마다 모델/강도가 달라지므로(pickAutoModel_) 고정된 강도를 같이 보여주면
+    // 오히려 헷갈린다 — 모델명만 표시.
+    if (aiSettings.model === 'auto'){
+      btnOpenSettingsEl.title = 'AI 설정 (Alt+S) · 현재: ' + modelName;
+      return;
+    }
     const effortName = EFFORT_LABELS[aiSettings.effort] || aiSettings.effort;
     btnOpenSettingsEl.title = 'AI 설정 (Alt+S) · 현재: ' + modelName + ' · ' + effortName;
   }
@@ -811,8 +813,30 @@
     return URL_DETECT_RE.test(text || '');
   }
 
-  function buildAiSettingsPayload(forceWebFetch){
-    const payload = { model: aiSettings.model, effort: aiSettings.effort };
+  // [2026.08] "모델을 매번 사람이 수동으로 바꿔야 하냐"는 요청으로 추가 — 세무 조문·계산 등
+  // 어려운 판단이 필요해 보이면 Sonnet 5(높음)로, 그 외(문서 다듬기·간단한 질문 등)는 저렴한
+  // Haiku(보통)로 자동으로 고른다. 간단한 키워드 규칙이라 완벽하진 않지만, 애매하면 비싼 쪽
+  // (Sonnet)으로 보내도록 만들어서 "쉬운 질문에 비싼 모델 쓰는 건" 손해가 적고 "어려운 질문을
+  // 싼 모델로 잘못 보내는" 위험은 최대한 피했다. 설정에서 "자동" 대신 특정 모델을 직접 고르면
+  // 이 판단을 안 거치고 항상 그 모델을 쓴다.
+  const AUTO_MODEL_COMPLEX_RE = /(양도소득세|증여세|상속세|취득세|재산세|종합소득세|법인세|부가가치세|세법|시행령|시행규칙|판례|예규|조문|§|비과세|감면|공제|과세표준|세율|절세|불복|경정청구|가업승계|명의신탁|특수관계자|평가액|법정상속분|유류분|부담부증여|이월과세|양도차익)/;
+  function pickAutoModel_(text){
+    if (AUTO_MODEL_COMPLEX_RE.test(text || '')) return { model: 'claude-sonnet-5', effort: 'high' };
+    return { model: 'claude-haiku-4-5-20251001', effort: 'medium' };
+  }
+  // regenerateFrom_처럼 "지금 입력창"이 아니라 이미 쌓인 대화기록에서 자동모델 판단용 텍스트를 뽑을 때 사용.
+  function lastUserText_(messages){
+    for (let i = messages.length - 1; i >= 0; i--){
+      if (messages[i].role === 'user') return typeof messages[i].content === 'string' ? messages[i].content : '';
+    }
+    return '';
+  }
+
+  function buildAiSettingsPayload(forceWebFetch, messageTextForAutoModel){
+    const resolved = (aiSettings.model === 'auto')
+      ? pickAutoModel_(messageTextForAutoModel)
+      : { model: aiSettings.model, effort: aiSettings.effort };
+    const payload = { model: resolved.model, effort: resolved.effort };
     if (aiSettings.temperature !== null && aiSettings.temperature !== undefined) payload.temperature = aiSettings.temperature;
     if (aiSettings.maxTokens !== null && aiSettings.maxTokens !== undefined) payload.maxTokens = aiSettings.maxTokens;
     // 웹서치는 이제 서버 기본값이 "항상 켜짐"이라, 켜진 상태(true)는 굳이 안 보내도 되지만
@@ -2026,7 +2050,7 @@
           voiceTurn: isVoiceTurn
         },
         autoRef: autoRefMode,
-        aiSettingsPayload: buildAiSettingsPayload(messageContainsUrl(text)),
+        aiSettingsPayload: buildAiSettingsPayload(messageContainsUrl(text), text),
         onDone: (replyText, clientActions) => {
           renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
           const aiMsgObj = { role: 'assistant', content: replyText };
@@ -2150,7 +2174,7 @@
           voiceTurn: false
         },
         autoRef: autoRefMode,
-        aiSettingsPayload: buildAiSettingsPayload(false),
+        aiSettingsPayload: buildAiSettingsPayload(false, lastUserText_(chatMessages)),
         onDone: (replyText, clientActions) => {
           renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
           const newMsgObj = { role: 'assistant', content: replyText };
