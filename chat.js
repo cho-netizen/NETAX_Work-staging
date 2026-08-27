@@ -1962,25 +1962,41 @@
       opts.thinkingBubble.textContent = round === 0 ? '생각 중…'
         : (forceWrapUp ? '마무리하는 중…' : '🔧 확인하는 중… (' + (round + 1) + '단계)');
 
+      const requestBody = JSON.stringify(Object.assign({
+        _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
+        messages: turnMessages,
+        context: opts.context,
+        autoRef: opts.autoRef,
+        forceWrapUp: forceWrapUp
+      }, opts.aiSettingsPayload));
+
+      // [2026.08] 순수 네트워크 오류(요청이 서버에 닿기도 전에 끊기는 경우 — 회선 순간 끊김,
+      // 모바일 전환 중 등)는 이미 답을 받았는데 화면 표시만 실패한 경우와 달리 재시도해도
+      // 안전하다(서버가 이번 요청을 처리했다는 흔적 자체가 없으므로 중복 과금 위험이 없음).
+      // 사용자가 매번 직접 알아채고 다시 입력해야 했던 걸 없애기 위해 1회 자동 재시도한다.
+      // data.error(서버가 응답은 했지만 오류를 실어보낸 경우, 예: 키 오류·API 한도)는 재시도해도
+      // 안 될 가능성이 높아 그대로 즉시 오류로 보여준다(여기서 재시도 대상이 아님).
       let data;
-      try{
-        const res = await fetch(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          signal: opts.signal,
-          body: JSON.stringify(Object.assign({
-            _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
-            messages: turnMessages,
-            context: opts.context,
-            autoRef: opts.autoRef,
-            forceWrapUp: forceWrapUp
-          }, opts.aiSettingsPayload))
-        });
-        data = await res.json();
-      }catch(err){
-        if (err && err.name === 'AbortError'){ opts.onAbort(); return; }
-        opts.onError('네트워크 오류: ' + (err && err.message ? err.message : err));
-        return;
+      for (let netAttempt = 0; netAttempt < 2; netAttempt++) {
+        try{
+          const res = await fetch(GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            signal: opts.signal,
+            body: requestBody
+          });
+          data = await res.json();
+          break;
+        }catch(err){
+          if (err && err.name === 'AbortError'){ opts.onAbort(); return; }
+          if (netAttempt === 0){
+            opts.thinkingBubble.textContent = '네트워크가 불안정해서 다시 시도하는 중…';
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          opts.onError('네트워크 오류: ' + (err && err.message ? err.message : err));
+          return;
+        }
       }
 
       if (data.error){ opts.onError('오류: ' + data.error); return; }
