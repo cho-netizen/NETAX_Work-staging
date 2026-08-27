@@ -1137,6 +1137,7 @@
       <button type="button" id="btnOpenSearch" class="tb-btn" title="파일·폴더 이름 검색">🔍 검색</button>
       <button type="button" id="btnOpenTrash" class="tb-btn" title="이 폴더에서 최근 삭제한 항목 복원">🗑 휴지통</button>
       <button type="button" id="btnOpenDashboard" class="tb-btn" title="모든 폴더의 처리일지·마감일을 한눈에">📊 현황판</button>
+      <button type="button" id="btnOpenWorkManage" class="tb-btn" title="사건별 세부업무와 법정기한 관리">🗂 작업관리</button>
       <button type="button" id="btnOpenLog" class="tb-btn" title="이 폴더의 경과지 보기">📝 경과지</button>
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenTaxCalc" class="tb-btn" title="양도소득세·증여세·상속세 정밀 계산 (항목별 입력폼)">📐 세액계산</button>
@@ -1690,6 +1691,29 @@ graph TD
         <div id="dashboardList" class="log-list"></div>
       </div>
 
+      <div id="workManageView" style="display:none; flex:1; flex-direction:column; min-height:0;">
+        <div class="editor-toolbar">
+          <button class="back-btn" id="btnWorkManageBack" title="닫기">✕</button>
+          <span class="editor-filename">🗂 작업관리 · 사건별 세부업무 · 법정기한</span>
+          <div class="spacer"></div>
+          <select id="workCaseFilterStatus" title="상태로 필터">
+            <option value="">전체 상태</option>
+            <option value="진행중">진행중</option>
+            <option value="완료">완료</option>
+            <option value="보류">보류</option>
+          </select>
+          <button type="button" id="btnWorkCaseNew" class="save-btn">+ 새 사건</button>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:row; min-height:0;">
+          <div id="workCaseListCol" style="width:280px; min-width:220px; border-right:1px solid var(--line); overflow-y:auto;">
+            <div id="workCaseList" class="log-list"></div>
+          </div>
+          <div id="workCaseDetailCol" style="flex:1; overflow-y:auto; padding:16px; box-sizing:border-box;">
+            <div id="workCaseDetail"><div class="explorer-status">왼쪽에서 사건을 선택하거나 "+ 새 사건"을 눌러주세요.</div></div>
+          </div>
+        </div>
+      </div>
+
       <div id="searchView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnSearchBack" title="닫기">✕</button>
@@ -1721,6 +1745,7 @@ graph TD
 <script src="/core.js?v=20260814a"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
 <script src="/explorer.js?v=20260814a"></script>
+<script src="/work-manage.js?v=20260827a"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
 <script src="/chat.js?v=20260814a"></script>

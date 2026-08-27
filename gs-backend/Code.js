@@ -2765,6 +2765,12 @@ function doPost(e) {
       return jsonResponse(my_doPost(body));
     }
 
+    // [2026.08] work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) 신규
+    const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask'];
+    if (WORK_ACTIONS.indexOf(body.action) !== -1) {
+      return jsonResponse(work_doPost(body));
+    }
+
     if (body.action === 'listFolder') {
       return jsonResponse(handleListFolder(body));
     }
@@ -14604,6 +14610,349 @@ function my_doPost(body) {
     case 'get_report_list': return my_withAuth_(body, my_handleGetReportList);
     case 'get_report_file': return my_withAuth_(body, my_handleGetReportFile);
     case 'admin_add_checklist_item': return my_handleAdminAddChecklistItem(body);
+    default: return { success: false, message: '알 수 없는 action: ' + body.action };
+  }
+}
+
+// =========================================================
+// work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) (2026.08 신규)
+// 사건 1행 = Cases 시트 한 줄. 하위업무는 my_ 모듈의 체크리스트/제출상태와 같은 방식으로
+// 한 셀에 JSON 트리(children 배열, 깊이 제한 없음)로 저장한다.
+// =========================================================
+const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
+const WORK_SHEET_CASES = 'Cases';
+const WORK_HEADERS = ['id', '고객명', '사건명', '세목', '담당자', '의뢰일', '기준일', '법정일', '상태', '하위업무', '생성일', '수정일'];
+// 세목별 법정기한 규칙(개월수) — explorer.js의 CALC_DEADLINE_MONTHS_/기한계산 팝업과 동일 공식
+// ("기준일이 속한 달의 말일" 기준으로 N개월 뒤). 불복만 이번에 새로 추가.
+const WORK_DEADLINE_MONTHS_ = { transfer: 2, gift: 3, inheritance: 6, objection: 2 };
+
+function work_getSheet_() {
+  const ss = SpreadsheetApp.openById(WORK_SHEET_ID);
+  let sheet = ss.getSheetByName(WORK_SHEET_CASES);
+  if (!sheet) {
+    sheet = ss.insertSheet(WORK_SHEET_CASES);
+    sheet.appendRow(WORK_HEADERS);
+  }
+  return sheet;
+}
+
+function work_colMap_(headers) {
+  const map = {};
+  WORK_HEADERS.forEach(function (name) { map[name] = headers.indexOf(name); });
+  return map;
+}
+
+// dateFns.addMonths와 동일하게 동작: 같은 일(day)을 유지하되, 그 달에 없는 날짜면 그 달의
+// 말일로 맞춘다(롤오버시키지 않음). explorer.js 기한계산 팝업과 계산 결과를 일치시키기 위함.
+function work_addMonthsClamped_(date, months) {
+  const targetIndex = date.getMonth() + months;
+  const targetYear = date.getFullYear() + Math.floor(targetIndex / 12);
+  const targetMonth = ((targetIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const day = Math.min(date.getDate(), lastDayOfTargetMonth);
+  return new Date(targetYear, targetMonth, day);
+}
+
+function work_calcDeadline_(seMok, baseDateStr) {
+  if (!baseDateStr) return '';
+  const months = WORK_DEADLINE_MONTHS_[seMok];
+  if (months === undefined) return '';
+  const base = new Date(baseDateStr + 'T00:00:00');
+  if (isNaN(base.getTime())) return '';
+  const monthEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0); // 기준일이 속한 달의 말일
+  const deadline = work_addMonthsClamped_(monthEnd, months);
+  return Utilities.formatDate(deadline, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function work_dateStr_(v) {
+  if (!v) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v).slice(0, 10);
+}
+
+function work_readRow_(col, rowValues) {
+  let subtasks = [];
+  try { subtasks = JSON.parse(rowValues[col.하위업무] || '[]'); } catch (e) { subtasks = []; }
+  if (!Array.isArray(subtasks)) subtasks = [];
+  return {
+    id: rowValues[col.id],
+    고객명: rowValues[col.고객명],
+    사건명: rowValues[col.사건명],
+    세목: rowValues[col.세목],
+    담당자: rowValues[col.담당자],
+    의뢰일: work_dateStr_(rowValues[col.의뢰일]),
+    기준일: work_dateStr_(rowValues[col.기준일]),
+    법정일: work_dateStr_(rowValues[col.법정일]),
+    상태: rowValues[col.상태],
+    하위업무: subtasks,
+    생성일: rowValues[col.생성일],
+    수정일: rowValues[col.수정일]
+  };
+}
+
+function work_findCaseRow_(sheet, col, caseId) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][col.id]).trim() === String(caseId).trim()) {
+      return { rowIndex: i + 1, row: data[i] };
+    }
+  }
+  return null;
+}
+
+function work_getCases(params) {
+  const sheet = work_getSheet_();
+  const data = sheet.getDataRange().getValues();
+  const col = work_colMap_(data[0]);
+  const cases = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][col.id]) continue;
+    cases.push(work_readRow_(col, data[i]));
+  }
+  return { success: true, cases: cases };
+}
+
+function work_createCase(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+
+    const id = Utilities.getUuid();
+    const now = new Date();
+    const seMok = String(params.세목 || '').trim();
+    const 기준일 = String(params.기준일 || '').trim();
+
+    const newRow = [];
+    newRow[col.id] = id;
+    newRow[col.고객명] = String(params.고객명 || '').trim();
+    newRow[col.사건명] = String(params.사건명 || '').trim();
+    newRow[col.세목] = seMok;
+    newRow[col.담당자] = String(params.담당자 || '').trim();
+    newRow[col.의뢰일] = String(params.의뢰일 || '').trim();
+    newRow[col.기준일] = 기준일;
+    newRow[col.법정일] = work_calcDeadline_(seMok, 기준일);
+    newRow[col.상태] = params.상태 || '진행중';
+    newRow[col.하위업무] = '[]';
+    newRow[col.생성일] = now;
+    newRow[col.수정일] = now;
+
+    sheet.appendRow(newRow);
+    SpreadsheetApp.flush();
+
+    const caseObj = work_readRow_(col, newRow);
+    work_syncCaseCalendar_(caseObj);
+    return { success: true, case: caseObj };
+  });
+}
+
+function work_updateCase(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+    const found = work_findCaseRow_(sheet, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
+
+    const row = found.row;
+    ['고객명', '사건명', '담당자', '상태'].forEach(function (key) {
+      if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
+    });
+    let recalc = false;
+    if (params.세목 !== undefined) { row[col.세목] = String(params.세목).trim(); recalc = true; }
+    if (params.기준일 !== undefined) { row[col.기준일] = String(params.기준일).trim(); recalc = true; }
+    if (recalc) {
+      row[col.법정일] = work_calcDeadline_(row[col.세목], row[col.기준일]);
+    }
+    row[col.수정일] = new Date();
+
+    sheet.getRange(found.rowIndex, 1, 1, row.length).setValues([row]);
+    SpreadsheetApp.flush();
+
+    const caseObj = work_readRow_(col, row);
+    work_syncCaseCalendar_(caseObj);
+    return { success: true, case: caseObj };
+  });
+}
+
+function work_deleteCase(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+    const found = work_findCaseRow_(sheet, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
+    sheet.deleteRow(found.rowIndex);
+    work_deleteCaseCalendarEvents_(params.id);
+    return { success: true };
+  });
+}
+
+// ---- 하위업무 트리 조작 (깊이 제한 없음. 실사용은 "단계→세부항목" 2단계 예상) ----
+// 트리를 순회하며 id가 일치하는 노드를 찾으면 콜백(nodes, idx)을 호출한다.
+function work_walkTree_(nodes, nodeId, callback) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (String(nodes[i].id) === String(nodeId)) {
+      if (callback(nodes, i)) return true;
+    }
+    if (Array.isArray(nodes[i].children) && work_walkTree_(nodes[i].children, nodeId, callback)) return true;
+  }
+  return false;
+}
+
+function work_loadTree_(row, col) {
+  let tree = [];
+  try { tree = JSON.parse(row[col.하위업무] || '[]'); } catch (e) { tree = []; }
+  return Array.isArray(tree) ? tree : [];
+}
+
+function work_saveTree_(sheet, rowIndex, col, tree) {
+  sheet.getRange(rowIndex, col.하위업무 + 1).setValue(JSON.stringify(tree));
+  sheet.getRange(rowIndex, col.수정일 + 1).setValue(new Date());
+  SpreadsheetApp.flush();
+  return sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function work_addSubtask(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+    const found = work_findCaseRow_(sheet, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
+
+    const tree = work_loadTree_(found.row, col);
+    const newNode = {
+      id: Utilities.getUuid(),
+      title: String(params.title || '').trim(),
+      status: '대기',
+      assignee: String(params.assignee || '').trim(),
+      dueDate: String(params.dueDate || '').trim(),
+      children: []
+    };
+    if (!newNode.title) return { success: false, message: '항목 이름을 입력해주세요.' };
+
+    if (params.parentId) {
+      let added = false;
+      work_walkTree_(tree, params.parentId, function (nodes, idx) {
+        if (!Array.isArray(nodes[idx].children)) nodes[idx].children = [];
+        nodes[idx].children.push(newNode);
+        added = true;
+        return true;
+      });
+      if (!added) return { success: false, message: '상위 항목을 찾을 수 없습니다.' };
+    } else {
+      tree.push(newNode);
+    }
+
+    const updatedRow = work_saveTree_(sheet, found.rowIndex, col, tree);
+    const caseObj = work_readRow_(col, updatedRow);
+    work_syncCaseCalendar_(caseObj);
+    return { success: true, case: caseObj };
+  });
+}
+
+function work_updateSubtask(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+    const found = work_findCaseRow_(sheet, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
+
+    const tree = work_loadTree_(found.row, col);
+    let updated = false;
+    work_walkTree_(tree, params.nodeId, function (nodes, idx) {
+      ['title', 'status', 'assignee', 'dueDate'].forEach(function (key) {
+        if (params[key] !== undefined) nodes[idx][key] = params[key];
+      });
+      updated = true;
+      return true;
+    });
+    if (!updated) return { success: false, message: '하위업무를 찾을 수 없습니다.' };
+
+    const updatedRow = work_saveTree_(sheet, found.rowIndex, col, tree);
+    const caseObj = work_readRow_(col, updatedRow);
+    work_syncCaseCalendar_(caseObj);
+    return { success: true, case: caseObj };
+  });
+}
+
+function work_deleteSubtask(params) {
+  return withLock_(8000, function () {
+    const sheet = work_getSheet_();
+    const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+    const found = work_findCaseRow_(sheet, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
+
+    const tree = work_loadTree_(found.row, col);
+    function removeFrom(nodes) {
+      for (let i = 0; i < nodes.length; i++) {
+        if (String(nodes[i].id) === String(params.nodeId)) { nodes.splice(i, 1); return true; }
+        if (Array.isArray(nodes[i].children) && removeFrom(nodes[i].children)) return true;
+      }
+      return false;
+    }
+    if (!removeFrom(tree)) return { success: false, message: '하위업무를 찾을 수 없습니다.' };
+
+    const updatedRow = work_saveTree_(sheet, found.rowIndex, col, tree);
+    const caseObj = work_readRow_(col, updatedRow);
+    work_syncCaseCalendar_(caseObj);
+    return { success: true, case: caseObj };
+  });
+}
+
+// ---- 구글캘린더 동기화 (syncCalendarForPath_ 패턴 응용, Code.js:3790 참고) ----
+// 이 사건 태그가 붙은 기존 일정을 전부 지우고, 법정일 + 마감일 있는 하위업무를 종일 일정으로
+// 다시 만든다. 매번 통째로 재생성하는 방식이라 항목을 지우거나 날짜를 바꿔도 항상 정확히 따라온다.
+function work_syncCaseCalendar_(caseObj) {
+  try {
+    const cal = CalendarApp.getDefaultCalendar();
+    const tag = '[NX:work:' + caseObj.id + ']';
+    work_deleteEventsByTag_(cal, tag);
+
+    const label = (caseObj.고객명 || '') + ' ' + (caseObj.사건명 || '');
+    if (caseObj.법정일) {
+      work_createAllDayEvent_(cal, '[NX] ' + label + ' — 법정기한', caseObj.법정일, tag);
+    }
+    (caseObj.하위업무 || []).forEach(function visit(node) {
+      if (node.dueDate) {
+        work_createAllDayEvent_(cal, '[NX] ' + label + ' — ' + String(node.title || '').slice(0, 60), node.dueDate, tag);
+      }
+      (node.children || []).forEach(visit);
+    });
+  } catch (err) {
+    // 캘린더 접근 권한이 없거나 오류가 나도 사건/하위업무 저장 자체는 계속 진행돼야 함
+  }
+}
+
+function work_deleteCaseCalendarEvents_(caseId) {
+  try {
+    const cal = CalendarApp.getDefaultCalendar();
+    work_deleteEventsByTag_(cal, '[NX:work:' + caseId + ']');
+  } catch (err) { }
+}
+
+function work_deleteEventsByTag_(cal, tag) {
+  const searchStart = new Date(); searchStart.setFullYear(searchStart.getFullYear() - 1);
+  const searchEnd = new Date(); searchEnd.setFullYear(searchEnd.getFullYear() + 2);
+  cal.getEvents(searchStart, searchEnd, { search: tag }).forEach(function (ev) {
+    try { ev.deleteEvent(); } catch (e) { }
+  });
+}
+
+function work_createAllDayEvent_(cal, title, dateStr, tag) {
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    cal.createAllDayEvent(title, d, { description: tag });
+  } catch (e) { }
+}
+
+function work_doPost(body) {
+  switch (body.action) {
+    case 'work_get_cases': return work_getCases(body);
+    case 'work_create_case': return work_createCase(body);
+    case 'work_update_case': return work_updateCase(body);
+    case 'work_delete_case': return work_deleteCase(body);
+    case 'work_add_subtask': return work_addSubtask(body);
+    case 'work_update_subtask': return work_updateSubtask(body);
+    case 'work_delete_subtask': return work_deleteSubtask(body);
     default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
 }

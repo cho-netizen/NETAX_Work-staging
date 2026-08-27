@@ -102,6 +102,7 @@
   // (2026.08) 검색·휴지통은 여기 없다 — 탐색기 빈 공간 우클릭(길게 누르기) 메뉴로 옮겼다.
   const WORK_TOOLS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
+    { icon: '🗂', label: '작업관리', handler: openWorkManageView },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '📐', label: '세액계산', handler: openTaxCalcView },
