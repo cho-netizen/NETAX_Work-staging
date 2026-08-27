@@ -172,9 +172,9 @@
   // 드래그하면 그 위치로 옮겨진다. 폭·높이는 드래그를 시작하는 순간의 실제 크기로 고정한다
   // (그전까지는 CSS의 left:5vw/right:5vw로 화면 크기에 따라 자동 계산되던 상태라, 그대로
   // 두면 위치를 옮기는 도중에도 폭이 계속 흔들린다).
-  const explorerPanelHead = document.getElementById('explorerPanelHead');
+  const floatDragHandleEl = document.getElementById('explorerPanelHead');
   let floatDragging = false, floatDragOffsetX = 0, floatDragOffsetY = 0;
-  explorerPanelHead.addEventListener('pointerdown', (e)=>{
+  floatDragHandleEl.addEventListener('pointerdown', (e)=>{
     if (!workspace.classList.contains('explorer-floating')) return;
     if (e.target.closest('.breadcrumb, button, a, input')) return; // 폴더 이동 등 원래 클릭 동작은 그대로 둔다
     floatDragging = true;
@@ -187,10 +187,10 @@
     explorerPanelEl.style.top = rect.top + 'px';
     floatDragOffsetX = e.clientX - rect.left;
     floatDragOffsetY = e.clientY - rect.top;
-    explorerPanelHead.setPointerCapture(e.pointerId);
+    floatDragHandleEl.setPointerCapture(e.pointerId);
     document.body.style.userSelect = 'none';
   });
-  explorerPanelHead.addEventListener('pointermove', (e)=>{
+  floatDragHandleEl.addEventListener('pointermove', (e)=>{
     if (!floatDragging) return;
     const w = explorerPanelEl.offsetWidth, h = explorerPanelEl.offsetHeight;
     const left = Math.max(0, Math.min(window.innerWidth - w, e.clientX - floatDragOffsetX));
@@ -202,8 +202,8 @@
     floatDragging = false;
     document.body.style.userSelect = '';
   }
-  explorerPanelHead.addEventListener('pointerup', endFloatDrag);
-  explorerPanelHead.addEventListener('pointercancel', endFloatDrag);
+  floatDragHandleEl.addEventListener('pointerup', endFloatDrag);
+  floatDragHandleEl.addEventListener('pointercancel', endFloatDrag);
   // (예전 버전 데이터 마이그레이션은 아래 최종 초기화 지점에서 한 번에 처리한다 — 여기서
   // 클래스를 미리 건드리면 나중에 applyWorkspaceMode가 그대로 덮어써서 의미가 없어짐)
 
