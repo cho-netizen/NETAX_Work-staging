@@ -2747,6 +2747,12 @@ function doPost(e) {
       return jsonResponse(booking_rejectApplication(body));
     }
 
+    // [2026.08] desk 모듈 — NETAX Desk(폴더/링크 관리) 이관
+    const DESK_ACTIONS = ['listAll', 'addFolder', 'deleteFolder', 'addLink', 'deleteLink', 'reorderFolders', 'reorderLinks', 'moveLink'];
+    if (DESK_ACTIONS.indexOf(body.action) !== -1) {
+      return jsonResponse(desk_doPost(body));
+    }
+
     if (body.action === 'listFolder') {
       return jsonResponse(handleListFolder(body));
     }
@@ -13304,6 +13310,10 @@ function doGet(e) {
     }
     return booking_getBookings();
   }
+  if (action === 'listAll') {
+    // desk 모듈 — 원래도 비밀번호 없이 공개 조회였음(쓰기만 DESK_EDIT_PASSWORD로 보호).
+    return jsonResponse(desk_handleListAll());
+  }
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'NX Assistant 프록시가 정상 동작 중입니다.' }))
     .setMimeType(ContentService.MimeType.JSON);
@@ -13529,6 +13539,244 @@ function booking_installCalendarSyncTrigger() {
     .timeBased()
     .everyMinutes(10)
     .create();
+}
+
+// =========================================================
+// desk 모듈 — NETAX Desk(폴더/링크 관리)의 gs-backend 이관 (2026.08)
+// desk.netax.kr이 실제로 직접 호출하는 백엔드. 쓰기 작업(추가/삭제/이동/재정렬)은
+// 이 프로젝트 공통 인증(_key)과 별개로 DESK_EDIT_PASSWORD(스크립트 속성)를 추가로 요구한다
+// (원래 설계 그대로 유지 — desk.netax.kr 자체는 로그인이 없어서 이중 잠금 필요).
+// =========================================================
+const DESK_SHEET_ID = '1TACQdGSsPdr8EFd-v_iR3DRmt6NlTPwmSXtm30jbPm8'; // NETAX Desk Data
+const DESK_FOLDERS_SHEET_NAME = 'Folders';
+const DESK_LINKS_SHEET_NAME = 'Links';
+
+function desk_checkEditPassword_(inputPassword) {
+  const correct = PropertiesService.getScriptProperties().getProperty('DESK_EDIT_PASSWORD');
+  if (!correct) return { error: 'DESK_EDIT_PASSWORD가 스크립트 속성에 설정되어 있지 않아 쓰기 작업이 비활성화되어 있습니다.' };
+  if (String(inputPassword || '') !== correct) return { error: '비밀번호가 올바르지 않습니다.' };
+  return null;
+}
+
+function desk_withLock_(waitMs, fn) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(waitMs || 8000);
+  } catch (err) {
+    return { error: '다른 저장 작업이 진행 중입니다. 잠시 후 다시 시도해주세요.' };
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function desk_normalizeKey_(s) {
+  var zwChars = [8203, 8204, 8205, 65279].map(function (c) { return String.fromCharCode(c); }); // ZWSP,ZWNJ,ZWJ,BOM
+  var spaceChars = [160, 12288].map(function (c) { return String.fromCharCode(c); }); // NBSP, ideographic space
+  var str = String(s || '');
+  zwChars.concat(spaceChars).forEach(function (ch) {
+    str = str.split(ch).join('');
+  });
+  return str.replace(/\s+/g, '').toLowerCase();
+}
+
+function desk_sheetToObjects_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 1) return [];
+  const header = values[0].map(function (h) { return String(h).trim(); });
+  return values.slice(1)
+    .filter(function (row) { return row.some(function (v) { return String(v).trim() !== ''; }); })
+    .map(function (row) {
+      const obj = {};
+      header.forEach(function (h, i) { obj[h] = row[i]; });
+      return obj;
+    });
+}
+
+function desk_handleListAll() {
+  const ss = SpreadsheetApp.openById(DESK_SHEET_ID);
+  const folders = desk_sheetToObjects_(ss.getSheetByName(DESK_FOLDERS_SHEET_NAME));
+  const links = desk_sheetToObjects_(ss.getSheetByName(DESK_LINKS_SHEET_NAME));
+  return { folders: folders, links: links };
+}
+
+function desk_handleAddFolder(body) {
+  const name = String(body.name || '').trim();
+  if (!name) return { error: '폴더명이 없습니다.' };
+  return desk_withLock_(8000, function () {
+    const sheet = SpreadsheetApp.openById(DESK_SHEET_ID).getSheetByName(DESK_FOLDERS_SHEET_NAME);
+    const values = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      if (desk_normalizeKey_(values[i][2]) === desk_normalizeKey_(name)) {
+        return { error: '이미 같은 이름의 폴더가 있습니다: ' + name };
+      }
+    }
+    let maxOrder = -1;
+    for (let i = 1; i < values.length; i++) {
+      const n = Number(values[i][0]);
+      if (Number.isFinite(n) && n > maxOrder) maxOrder = n;
+    }
+    sheet.appendRow([maxOrder + 1, body.icon || '', name, body.desc || '']);
+    return { success: true };
+  });
+}
+
+function desk_handleDeleteFolder(body) {
+  const name = String(body.name || '').trim();
+  if (!name) return { error: '폴더명이 없습니다.' };
+  return desk_withLock_(8000, function () {
+    const ss = SpreadsheetApp.openById(DESK_SHEET_ID);
+    const folderSheet = ss.getSheetByName(DESK_FOLDERS_SHEET_NAME);
+    const values = folderSheet.getDataRange().getValues();
+
+    let targetRow = -1;
+    for (let i = 1; i < values.length; i++) {
+      if (desk_normalizeKey_(values[i][2]) === desk_normalizeKey_(name)) { targetRow = i + 1; break; }
+    }
+    if (targetRow === -1) return { error: '폴더를 찾을 수 없습니다: ' + name };
+    folderSheet.deleteRow(targetRow);
+
+    const linkSheet = ss.getSheetByName(DESK_LINKS_SHEET_NAME);
+    const linkValues = linkSheet.getDataRange().getValues();
+    for (let i = linkValues.length - 1; i >= 1; i--) {
+      if (desk_normalizeKey_(linkValues[i][0]) === desk_normalizeKey_(name)) linkSheet.deleteRow(i + 1);
+    }
+    return { success: true };
+  });
+}
+
+function desk_handleAddLink(body) {
+  const folderName = String(body.folderName || '').trim();
+  const title = String(body.title || '').trim();
+  let url = String(body.url || '').trim();
+  if (!folderName) return { error: '폴더명이 없습니다.' };
+  if (!title) return { error: '제목이 없습니다.' };
+  if (!url) return { error: 'URL이 없습니다.' };
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  return desk_withLock_(8000, function () {
+    const ss = SpreadsheetApp.openById(DESK_SHEET_ID);
+    const folderSheet = ss.getSheetByName(DESK_FOLDERS_SHEET_NAME);
+    const folderValues = folderSheet.getDataRange().getValues();
+    const exists = folderValues.slice(1).some(function (row) {
+      return desk_normalizeKey_(row[2]) === desk_normalizeKey_(folderName);
+    });
+    if (!exists) return { error: '존재하지 않는 폴더입니다: ' + folderName + ' (먼저 폴더를 추가해주세요)' };
+
+    const linkSheet = ss.getSheetByName(DESK_LINKS_SHEET_NAME);
+    linkSheet.appendRow([folderName, title, url, body.mode || '']);
+    return { success: true };
+  });
+}
+
+function desk_handleDeleteLink(body) {
+  const folderName = String(body.folderName || '').trim();
+  const title = String(body.title || '').trim();
+  if (!folderName || !title) return { error: '폴더명과 제목이 모두 필요합니다.' };
+
+  return desk_withLock_(8000, function () {
+    const sheet = SpreadsheetApp.openById(DESK_SHEET_ID).getSheetByName(DESK_LINKS_SHEET_NAME);
+    const values = sheet.getDataRange().getValues();
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (desk_normalizeKey_(values[i][0]) === desk_normalizeKey_(folderName) && desk_normalizeKey_(values[i][1]) === desk_normalizeKey_(title)) {
+        sheet.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { error: '해당 링크를 찾을 수 없습니다.' };
+  });
+}
+
+function desk_handleReorderFolders(body) {
+  const order = Array.isArray(body.order) ? body.order : [];
+  if (!order.length) return { error: '순서 정보가 없습니다.' };
+  return desk_withLock_(8000, function () {
+    const sheet = SpreadsheetApp.openById(DESK_SHEET_ID).getSheetByName(DESK_FOLDERS_SHEET_NAME);
+    const values = sheet.getDataRange().getValues();
+    const orderIndex = {};
+    order.forEach(function (name, idx) { orderIndex[desk_normalizeKey_(name)] = idx; });
+    for (let i = 1; i < values.length; i++) {
+      const key = desk_normalizeKey_(values[i][2]);
+      if (Object.prototype.hasOwnProperty.call(orderIndex, key)) {
+        sheet.getRange(i + 1, 1).setValue(orderIndex[key]);
+      }
+    }
+    return { success: true };
+  });
+}
+
+function desk_handleReorderLinks(body) {
+  const folderName = String(body.folderName || '').trim();
+  const order = Array.isArray(body.order) ? body.order : [];
+  if (!folderName || !order.length) return { error: '폴더명과 순서 정보가 필요합니다.' };
+  return desk_withLock_(8000, function () {
+    const sheet = SpreadsheetApp.openById(DESK_SHEET_ID).getSheetByName(DESK_LINKS_SHEET_NAME);
+    const values = sheet.getDataRange().getValues();
+    const key = desk_normalizeKey_(folderName);
+
+    const rowsByTitle = {};
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (desk_normalizeKey_(values[i][0]) === key) {
+        rowsByTitle[desk_normalizeKey_(values[i][1])] = values[i];
+        sheet.deleteRow(i + 1);
+      }
+    }
+    order.forEach(function (title) {
+      const row = rowsByTitle[desk_normalizeKey_(title)];
+      if (row) sheet.appendRow(row);
+    });
+    return { success: true };
+  });
+}
+
+function desk_handleMoveLink(body) {
+  const fromFolder = String(body.fromFolder || '').trim();
+  const toFolder = String(body.toFolder || '').trim();
+  const title = String(body.title || '').trim();
+  if (!fromFolder || !toFolder || !title) return { error: '이동에 필요한 정보가 부족합니다.' };
+  if (desk_normalizeKey_(fromFolder) === desk_normalizeKey_(toFolder)) return { success: true };
+
+  return desk_withLock_(8000, function () {
+    const ss = SpreadsheetApp.openById(DESK_SHEET_ID);
+    const folderSheet = ss.getSheetByName(DESK_FOLDERS_SHEET_NAME);
+    const folderValues = folderSheet.getDataRange().getValues();
+    const toExists = folderValues.slice(1).some(function (row) { return desk_normalizeKey_(row[2]) === desk_normalizeKey_(toFolder); });
+    if (!toExists) return { error: '이동할 폴더가 존재하지 않습니다: ' + toFolder };
+
+    const linkSheet = ss.getSheetByName(DESK_LINKS_SHEET_NAME);
+    const values = linkSheet.getDataRange().getValues();
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (desk_normalizeKey_(values[i][0]) === desk_normalizeKey_(fromFolder) && desk_normalizeKey_(values[i][1]) === desk_normalizeKey_(title)) {
+        const row = values[i];
+        linkSheet.deleteRow(i + 1);
+        linkSheet.appendRow([toFolder, row[1], row[2], row[3]]);
+        return { success: true };
+      }
+    }
+    return { error: '이동할 링크를 찾을 수 없습니다.' };
+  });
+}
+
+function desk_doPost(body) {
+  const WRITE_ACTIONS = ['addFolder', 'deleteFolder', 'addLink', 'deleteLink', 'reorderFolders', 'reorderLinks', 'moveLink'];
+  if (WRITE_ACTIONS.indexOf(body.action) !== -1) {
+    const authError = desk_checkEditPassword_(body.password);
+    if (authError) return authError;
+  }
+  switch (body.action) {
+    case 'listAll':        return desk_handleListAll();
+    case 'addFolder':      return desk_handleAddFolder(body);
+    case 'deleteFolder':   return desk_handleDeleteFolder(body);
+    case 'addLink':        return desk_handleAddLink(body);
+    case 'deleteLink':     return desk_handleDeleteLink(body);
+    case 'reorderFolders': return desk_handleReorderFolders(body);
+    case 'reorderLinks':   return desk_handleReorderLinks(body);
+    case 'moveLink':       return desk_handleMoveLink(body);
+    default: return { error: '알 수 없는 action: ' + body.action };
+  }
 }
 
 function jsonResponse(obj) {
