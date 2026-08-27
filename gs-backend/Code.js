@@ -12096,6 +12096,31 @@ function trimOldToolResults_(messages) {
   });
 }
 
+// [2026.08] messages 배열의 마지막 메시지 끝에 캐시 경계를 찍는다 — 다음 라운드(메시지가 몇 개
+// 더 늘어난 상태)에서 이 경계까지는 그대로 캐시 재사용된다. content가 문자열이면 캐시 경계를
+// 못 붙이므로 블록 배열로 바꿔주고, 이미 블록 배열이면 마지막 블록에만 표시한다. body.messages는
+// 요청마다 새로 파싱된 객체라 다른 요청과 공유되지 않지만, 그래도 원본을 직접 건드리지 않고
+// 필요한 부분만 얕은 복사한다.
+function withMessagesCacheBreakpoint_(messages) {
+  if (!messages.length) return messages;
+  const lastIdx = messages.length - 1;
+  const last = messages[lastIdx];
+  let content = last.content;
+  if (typeof content === 'string') {
+    if (!content) return messages;
+    content = [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
+  } else if (Array.isArray(content) && content.length) {
+    const blockIdx = content.length - 1;
+    content = content.slice();
+    content[blockIdx] = Object.assign({}, content[blockIdx], { cache_control: { type: 'ephemeral' } });
+  } else {
+    return messages;
+  }
+  const newMessages = messages.slice();
+  newMessages[lastIdx] = Object.assign({}, last, { content: content });
+  return newMessages;
+}
+
 // [2026.08] 예전엔 도구 왕복 루프가 이 함수 안에서 여러 번 돌았기 때문에, 라운드가 늘어날
 // 때마다 이전 라운드의 이미지·PDF 원본이 매번 다시 통째로 전송되는 걸 막는 stripOlderBinaryInLoop_
 // 함수가 따로 있었다. 이제 라운드마다 별도의 요청(=매번 이 파일 맨 위 trimOldToolResults_가
@@ -12229,7 +12254,13 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   // pause_turn(앤트로픽 서버가 자체적으로 이어서 보내라고 신호주는 경우)과 토큰한도로 잘린 응답
   // 재시도는 "같은 라운드 안에서" 바로 해결되는 문제라(도구 실행이 필요한 것도 아님) 그대로 이
   // 함수 안에 남기고, 최대 시도횟수만 안전하게 제한한다.
-  let messages = trimOldToolResults_(body.messages.slice());
+  // [2026.08] 도구를 여러 번 연쇄 호출하는 무거운 질문(예: 세무구조 진단)은 라운드가 늘어날수록
+  // messages 배열도 같이 길어진다. 그런데 여기엔 캐시 경계가 없어서, 실측해보니 라운드마다
+  // "이전 라운드에서 이미 보낸 내용"까지 매번 새로 정가로 청구되고 있었다(라운드 2가 라운드 1
+  // 내용을 캐시로 재사용하지 못함) — 도구를 여러 번 불러야 하는 무거운 질문일수록 이 낭비가
+  // 라운드 수만큼 누적된다. 매 요청의 마지막 메시지 끝에 캐시 경계를 찍어두면, 다음 라운드가
+  // 왔을 때(메시지가 몇 개 더 늘어난 상태) 그 경계까지는 그대로 캐시 재사용된다.
+  let messages = withMessagesCacheBreakpoint_(trimOldToolResults_(body.messages.slice()));
   let result = null, status = null;
   let truncationRetries = 0; // content 파라미터가 토큰한도로 잘린 걸 감지했을 때 자동 재시도 횟수(최대 2회)
   const clientActions = []; // 문서수정/관계도수정/폴더이동 요청을 모아뒀다가 이번 라운드 응답에 함께 실어보낸다.
