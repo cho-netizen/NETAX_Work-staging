@@ -30,13 +30,13 @@ function getMasterProfileText_() {
 const MODEL_CONFIG = {
   'claude-sonnet-5':            { provider: 'claude', input: 2.00,  output: 10.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
   'claude-opus-4-8':            { provider: 'claude', input: 5.00,  output: 25.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
-  // [2026.08] reducedTools:true — 실사용 중 발견: DRIVE_TOOLS(세액계산 도구 92개 포함, 한글
-  // 설명이라 토큰당 밀도가 높음) 전체를 실어보내면 그것만으로 약 43만 토큰이나 되는데, Haiku
-  // 4.5는 컨텍스트 상한이 20만 토큰이라 도구 목록만으로 이미 꽉 차서 "자동" 모델선택으로 이
-  // 모델을 골랐을 때 매번 "prompt is too long" 오류가 났다. Haiku는 애초에 "간단한 보고서
-  // 수정·잡담"용으로만 자동선택되므로, 세금계산기 92개를 뺀 축소 도구세트(BASIC_TOOL_NAMES_)로
-  // 부른다 — 부족하면 애초에 pickAutoModel_이 Sonnet(전체 도구)로 보냈어야 할 질문인 것.
-  'claude-haiku-4-5-20251001':  { provider: 'claude', input: 1.00,  output: 5.00,  temp: true,  codeExec: false, thinkingMode: 'budget', reducedTools: true },
+  // [2026.08] DRIVE_TOOLS(세액계산 도구 92개 포함, 한글 설명이라 토큰당 밀도가 높음) 전체를
+  // 실어보내면 그것만으로 약 43만 토큰인데, Haiku 4.5는 컨텍스트 상한이 20만 토큰이라 도구
+  // 목록만으로 꽉 차서 "prompt is too long" 오류가 났었다 — 지금은 browse_tax_calculators
+  // 분야별 탐색 방식으로 바뀌어서(아래 TAX_TOOL_CATEGORIES_) 기본 도구 + 실제로 열람한 분야만
+  // 실리므로 Haiku도 안전하게 세금 계산을 할 수 있다(한 분야 최대 20개 정도라 20만 토큰에
+  // 여유 있게 들어감).
+  'claude-haiku-4-5-20251001':  { provider: 'claude', input: 1.00,  output: 5.00,  temp: true,  codeExec: false, thinkingMode: 'budget' },
   'claude-fable-5':             { provider: 'claude', input: 10.00, output: 50.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
   'gemini-3.1-pro-preview':     { provider: 'gemini', input: 2.00,  output: 12.00, temp: true,  codeExec: true  },
   'gemini-3.5-flash':           { provider: 'gemini', input: 1.50,  output: 9.00,  temp: true,  codeExec: true  },
@@ -109,14 +109,16 @@ function logNxInteraction_(entry) {
   }
 }
 
-// [2026.08 "도구 설명 다이어트"] DRIVE_TOOLS 135개 중 92개(calculate_* 세액계산기)가 한글
-// 설명이 길어서 그것만으로 약 43만 토큰 — 세금 계산과 무관한 질문(파일 정리, 잡담, 문서
-// 수정 등)에도 매번 이 전부를 실어보내고 있었다. Haiku(컨텍스트 20만)는 아예 안 들어가서
-// reducedTools로 이미 고쳤는데(위 MODEL_CONFIG), Sonnet(컨텍스트 100만)은 넘치진 않아도
-// 매 요청마다 쓸데없이 처리시간·캐시비용이 들었다. 그래서 모델과 무관하게, 이번 질문에
-// 세금 계산 낌새가 있는지를 서버가 직접 보고(needsFullToolset_) 없으면 계산기 92개를 통째로
-// 뺀 축소세트만 준다 — 애매하면 넣는 쪽으로 판단해서(광범위한 키워드) 정말 필요한 도구가
-// 빠지는 일은 최대한 피한다.
+// [2026.08 "도구 설명 다이어트" v2 — 분야별 탐색 방식] DRIVE_TOOLS 135개 중 92개(calculate_*
+// 세액계산기)가 한글 설명이 길어서 그것만으로 약 43만 토큰이다. 처음엔 "세금 계산 낌새가
+// 있으면 92개를 통째로 준다"는 키워드 방식으로 고쳤는데(needsFullToolset_, 지금은 폐기),
+// "애매하면 AI가 알아서 92개 중 하나를 찾아 쓰라"는 식이라 무책임하다는 지적을 받았다 —
+// 키워드 하나 놓치면 필요한 계산기가 아예 안 보일 수도 있고, 반대로 걸리면 92개를 다 보여줘서
+// 절감 효과도 애매했다. 그래서 계산기 92개(+관련 유틸 4개)를 실제 세법 영역별로 10개
+// 분야(TAX_TOOL_CATEGORIES_)로 정리하고, AI가 browse_tax_calculators(분야)로 필요한 분야를
+// 먼저 "열람"해야 그 분야 계산기들이 다음 라운드부터 실제로 호출 가능해지는 방식으로 바꿨다.
+// 규칙(키워드 추측)이 아니라 AI 스스로 분야를 찾아 들어가는 구조라, 어떤 계산이 필요한
+// 질문이든 놓치지 않으면서도(분야 목록 자체는 항상 다 보임) 한 번에 다 보여주지 않는다.
 const BASIC_TOOL_NAMES_ = new Set([
   'list_drive_folder', 'read_drive_file', 'save_file_to_folder', 'export_to_google_doc', 'send_email',
   'register_report_to_rpt', 'manage_task_plan', 'lookup_calendar_events', 'search_emails',
@@ -124,29 +126,94 @@ const BASIC_TOOL_NAMES_ = new Set([
   'list_work_cases', 'create_work_case', 'update_work_case_status', 'add_work_subtask',
   'update_work_subtask_status', 'delete_work_case',
   'list_clients', 'create_client', 'update_client', 'add_consult_log', 'list_consult_logs',
-  'remember_fact'
+  'remember_fact',
+  // 아래 12개는 계산기만큼 무겁지 않아(설명이 짧음) 굳이 분야별 탐색 대상에 안 넣고 항상 켜둠.
+  'lookup_statute_article', 'lookup_real_estate_price', 'lookup_building_register', 'search_address',
+  'lookup_official_price', 'lookup_business_status', 'verify_business_registration',
+  'get_building_price_index_tables',
+  'list_business_managers', 'load_business_manager', 'audit_business_managers', 'propose_new_business_manager',
+  'browse_tax_calculators'
 ]);
 
-// 세금 계산/조회 낌새가 있는 키워드 — 이 중 하나라도 걸리면 전체 도구(계산기 92개 포함)를 준다.
-// 일부러 넓게 잡았다: 놓치면 AI가 정확한 도구 없이 계산을 시도하다 틀릴 수 있어서, 애매하면
-// 그냥 전체를 주는 쪽이 안전하다(Sonnet 컨텍스트는 100만이라 넘칠 걱정은 없음).
-const TAX_CALC_SIGNAL_RE = /(계산|세액|공제|세율|과세|비과세|감면|가산세|이월|이연|평가액|시가|기준시가|주식가치|비상장|양도|증여|상속|취득세|등록면허세|재산세|종합소득세|법인세|부가가치세|세법|시행령|시행규칙|판례|예규|조문|§|절세|불복|경정청구|가업승계|명의신탁|특수관계자)/;
+// calculate_* 92개 + 계산 관련 유틸 4개(allocate_inheritance_tax_by_heir 등) = 96개를
+// 실제 세법 영역대로 묶은 것. 이름이 바뀌거나 새 계산기가 추가되면 여기도 같이 확인할 것 —
+// 빠뜨리면 그 계산기는 browse_tax_calculators로도 영원히 안 나온다(테스트로 매번 카운트 확인 권장).
+const TAX_TOOL_CATEGORIES_ = {
+  transfer: { label: '양도소득세', tools: ['calculate_transfer_tax', 'calculate_transfer_tax_multi', 'calculate_transfer_tax_with_carryover', 'calculate_business_transfer_carryover', 'calculate_transfer_related_party_price_adjustment', 'calculate_stock_transfer_tax', 'calculate_stock_transfer_tax_with_carryover', 'calculate_overseas_asset_transfer_tax', 'calculate_overseas_asset_transfer_tax_multi', 'calculate_burdened_gift_transfer'] },
+  gift_basic: { label: '증여세(기본)', tools: ['calculate_gift_tax', 'calculate_special_rate_gift_tax', 'calculate_special_rate_gift_tax_clawback', 'calculate_nontaxable_gift_property', 'calculate_gift_special_provision_overlap'] },
+  gift_deemed: { label: '증여세(특수관계자간 이익증여 의제)', tools: ['calculate_related_party_transaction_gift_tax', 'calculate_business_opportunity_gift_tax', 'calculate_low_price_transfer_gift_amount', 'calculate_debt_forgiveness_gift_tax', 'calculate_free_property_use_gift_tax', 'calculate_interest_free_loan_gift_amount', 'calculate_property_use_service_gift_tax', 'calculate_insurance_proceeds_gift_tax', 'calculate_excess_dividend_gift_tax', 'calculate_donor_direct_transfer_deemed', 'calculate_property_acquisition_funds_gift_tax', 'calculate_spouse_property_transfer_gift_tax', 'calculate_nominee_trust_gift_tax', 'calculate_trust_income_gift_tax'] },
+  gift_corporate: { label: '증여세(법인·주식 관련 이익증여)', tools: ['calculate_merger_benefit_gift_tax', 'calculate_capital_increase_gift_tax', 'calculate_capital_reduction_gift_tax', 'calculate_org_change_gift_tax', 'calculate_convertible_bond_gift_tax', 'calculate_stock_listing_gift_tax', 'calculate_property_value_increase_gift_tax', 'calculate_in_kind_contribution_gift_tax', 'calculate_specific_corporation_gift_tax', 'calculate_share_swap_gain_recognition', 'calculate_holding_company_contribution_deferral', 'calculate_project_reit_contribution_deferral'] },
+  gift_succession: { label: '증여세(가업승계 특례)', tools: ['calculate_business_succession_deferral_amount', 'calculate_business_succession_deferral_clawback', 'calculate_farmland_gift_tax_reduction'] },
+  inheritance: { label: '상속세', tools: ['calculate_inheritance_tax', 'calculate_deemed_inheritance_property', 'calculate_nontaxable_inheritance_property', 'allocate_inheritance_tax_by_heir'] },
+  valuation: { label: '자산평가(증여·상속 공통 — 비상장주식·부동산·권리 등)', tools: ['calculate_unlisted_stock_value', 'calculate_land_value', 'calculate_house_value', 'calculate_listed_stock_value', 'calculate_rental_conversion_value', 'calculate_mortgaged_or_leased_property_value', 'calculate_goodwill_value', 'calculate_ground_right_value', 'calculate_patent_right_value', 'calculate_mining_right_value', 'calculate_member_right_value', 'calculate_dividend_difference', 'calculate_adjusted_share_count', 'calculate_other_tangible_property_value', 'calculate_trust_benefit_value', 'calculate_periodic_payment_right_value', 'calculate_building_standard_price', 'calculate_building_standard_price_multi', 'explain_conditional_right_valuation_factors', 'calculate_proportional_allocation'] },
+  local_tax: { label: '지방세(취득세·등록면허세·재산세)', tools: ['calculate_acquisition_tax', 'calculate_registration_license_tax', 'calculate_property_tax', 'calculate_new_house_acquisition_reduction', 'calculate_unsold_house_acquisition_reduction', 'calculate_unsold_house_one_house_exclusion', 'calculate_rural_house_one_house_exclusion', 'calculate_population_decline_area_house_exclusion'] },
+  reduction_special: { label: '감면·특례(농지·문화재·공익 등)', tools: ['calculate_farmland_repurchase_refund', 'calculate_national_forest_land_reduction', 'calculate_public_rental_housing_land_reduction', 'calculate_industrial_complex_relocation_lot_rate', 'calculate_museum_relocation_installment', 'calculate_long_term_rental_house_reduction', 'calculate_restructuring_property_reduction', 'calculate_cultural_heritage_tax_deferral', 'calculate_charity_donation_tax_exclusion', 'calculate_public_interest_org_penalty', 'calculate_disabled_person_trust_exclusion'] },
+  procedural: { label: '절차·공통(가산세·기한·분납·물납 등)', tools: ['calculate_filing_penalty_reduction', 'calculate_tax_exclusion_period', 'calculate_installment_split_payment_limit', 'calculate_installment_payment_schedule', 'calculate_clawback_interest', 'check_correction_claim_eligibility', 'check_fair_market_value_recognition', 'calculate_property_in_kind_stock_receipt_value', 'calculate_property_in_kind_payment_eligibility'] }
+};
 
-// 이번 턴의 실제 사용자 질문 텍스트를 찾는다 — 도구 왕복 중간 라운드는 messages 맨 뒤가
-// tool_result 배열(문자열이 아님)이라, 뒤에서부터 문자열 content를 가진 user 메시지를 찾는다
-// (chat.js의 lastUserText_와 같은 방식 — 같은 턴 안에서는 항상 같은 원본 질문을 찾아야
-// 라운드가 진행돼도 도구 세트가 중간에 바뀌지 않는다).
-function needsFullToolset_(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && m.role === 'user' && typeof m.content === 'string') {
-      return TAX_CALC_SIGNAL_RE.test(m.content);
+// 위 카테고리를 "도구이름 → 분야키" 역방향 조회표로 한 번만 만들어둔다(매 요청마다 다시 안 만듦).
+const TAX_TOOL_TO_CATEGORY_ = (function () {
+  const map = {};
+  Object.keys(TAX_TOOL_CATEGORIES_).forEach(function (cat) {
+    TAX_TOOL_CATEGORIES_[cat].tools.forEach(function (name) { map[name] = cat; });
+  });
+  return map;
+})();
+
+// 이번 턴 대화 전체(도구 왕복 중간 라운드 포함)에서 이미 browse_tax_calculators로 "열람"된
+// 분야를 모은다 — 한 번 열람한 분야는 같은 턴의 다음 라운드부터 그 분야 계산기가 실제로
+// 호출 가능해진다(반대로 다음 "턴"이 되면, 즉 최종 응답이 나가고 새 질문이 시작되면 초기화됨
+// — body.messages는 그 턴에서 새로 시작하는 배열이라 자연히 리셋된다).
+function browsedTaxCategories_(messages) {
+  const cats = new Set();
+  messages.forEach(function (m) {
+    if (m && m.role === 'assistant' && Array.isArray(m.content)) {
+      m.content.forEach(function (block) {
+        if (block && block.type === 'tool_use' && block.name === 'browse_tax_calculators' && block.input && block.input.category) {
+          cats.add(block.input.category);
+        }
+      });
     }
+  });
+  return cats;
+}
+
+// browse_tax_calculators의 실제 실행부 — DRIVE_TOOLS가 이 시점엔 아직 선언 전이라(호이스팅으로
+// 함수 몸체 실행 시점엔 문제없음, GAS도 함수 선언은 파일 전체에서 먼저 등록됨) 여기 둬도 된다.
+function toolBrowseTaxCalculators(category) {
+  const cat = TAX_TOOL_CATEGORIES_[category];
+  if (!cat) {
+    return { error: '알 수 없는 분야입니다: ' + category + '. 가능한 분야: ' + Object.keys(TAX_TOOL_CATEGORIES_).join(', ') };
   }
-  return true; // 못 찾으면(이례적) 안전하게 전체 도구를 준다
+  const tools = cat.tools.map(function (name) {
+    const def = DRIVE_TOOLS.find(function (t) { return t.name === name; });
+    return { name: name, summary: def ? String(def.description || '').slice(0, 90) : '' };
+  });
+  return {
+    success: true,
+    category: category,
+    label: cat.label,
+    tools: tools,
+    note: '이 분야의 계산기들은 다음 요청부터 실제로 호출할 수 있습니다(이번 응답에서 바로는 안 됨).'
+  };
 }
 
 const DRIVE_TOOLS = [
+  {
+    name: 'browse_tax_calculators',
+    description: '세액계산기가 92개나 있어서 한 번에 다 보여주지 않는다 — 세금 계산이 필요한 질문이면 먼저 이 도구로 관련 분야를 "열람"해라. 그 분야 안의 계산기 이름·한줄설명 목록을 받는다(이번 응답에서 바로 그 계산기를 부를 수는 없고, 다음 요청부터 실제로 호출 가능해진다). 어느 분야인지 애매하면 가장 가까운 걸로 한 번 열람해보거나, 여러 분야를 순서대로 열람해도 된다 — 열람 자체는 비용이 적다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          enum: Object.keys(TAX_TOOL_CATEGORIES_),
+          description: 'transfer=양도소득세, gift_basic=증여세 기본, gift_deemed=증여세 특수관계자간 이익증여 의제, gift_corporate=증여세 법인·주식 관련 이익증여, gift_succession=증여세 가업승계 특례, inheritance=상속세, valuation=자산평가(비상장주식·부동산·권리 등, 증여·상속 계산에 공통으로 쓰임), local_tax=지방세(취득세·등록면허세·재산세), reduction_special=감면·특례(농지·문화재·공익법인 등), procedural=절차·공통(가산세감면·제척기간·분납·물납 등 세목 무관 공통 계산)'
+        }
+      },
+      required: ['category']
+    }
+  },
   {
     name: 'list_drive_folder',
     description: '구글드라이브 폴더 안의 하위 폴더·파일 목록을 확인한다. path는 최상위(구글드라이브 전체)부터의 폴더명 배열이다. 예: ["고객사건","고광민","법인전환"]. path를 생략하면 지금 사용자가 작업 중인 기본 폴더(고객사건)를 보여준다. 이름이 "_"로 시작하는 폴더(예: "_백업")는 자동참조 제외 폴더라서 결과에 "자동참조제외": true로 표시된다 — 자동참조 모드(ON)라도 스스로 판단해서 그 폴더 안으로 들어가 보지 말고, 사용자가 그 폴더를 이름으로 콕 집어 요청했거나 명시적으로 채팅에 첨부한 경우에만 확인하라.',
@@ -12074,11 +12141,15 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     payload.stop_sequences = body.stopSequences.slice(0, 4);
   }
 
-  // reducedTools(컨텍스트 작은 모델, 예: Haiku)이거나, 이번 질문에 세금 계산 낌새가 없으면
-  // 계산기 92개를 뺀 축소 도구세트를 쓴다 — 모델 종류와 무관하게 적용(Sonnet도 대상).
-  const tools = (cfg.reducedTools || !needsFullToolset_(body.messages))
-    ? DRIVE_TOOLS.filter(function (t) { return BASIC_TOOL_NAMES_.has(t.name); })
-    : DRIVE_TOOLS.slice();
+  // 기본 도구(BASIC_TOOL_NAMES_) + 이번 턴 안에서 이미 browse_tax_calculators로 열람된
+  // 분야의 계산기만 포함한다 — 모델 종류와 무관하게 동일하게 적용(Haiku도 이제 세금 계산을
+  // 할 수 있다, 필요한 분야 하나만 열람하는 한 20만 토큰 한도를 넘길 일이 없음).
+  const browsedCats = browsedTaxCategories_(body.messages);
+  const tools = DRIVE_TOOLS.filter(function (t) {
+    if (BASIC_TOOL_NAMES_.has(t.name)) return true;
+    const cat = TAX_TOOL_TO_CATEGORY_[t.name];
+    return !!cat && browsedCats.has(cat);
+  });
   const betaFlags = [];
 
   if (body.enableWebSearch !== false) {
@@ -12164,6 +12235,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   const toolUseBlocks = (result.content || []).filter(function (b) {
       return b.type === 'tool_use' && (
         b.name === 'list_drive_folder' ||
+        b.name === 'browse_tax_calculators' ||
         b.name === 'read_drive_file' ||
         b.name === 'save_file_to_folder' ||
         b.name === 'export_to_google_doc' ||
@@ -12303,6 +12375,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
     if (toolUseBlocks.length > 0) {
     const toolResults = toolUseBlocks.map(function (block) {
+      if (block.name === 'browse_tax_calculators') {
+        const resultObj = toolBrowseTaxCalculators(block.input && block.input.category);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
       if (block.name === 'list_drive_folder') {
         const resultObj = toolListDriveFolder(block.input && block.input.path);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
