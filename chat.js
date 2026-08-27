@@ -760,6 +760,7 @@
   const mainModelLock = document.getElementById('mainModelLock');
   const mainModelLockLabel = document.getElementById('mainModelLockLabel');
   const mainAdvisor = document.getElementById('mainAdvisor');
+  const mainAdvisorLabel = document.getElementById('mainAdvisorLabel');
   let lastAutoPickedModel = 'claude-sonnet-5'; // 자동모드일 때 콤보박스에 보여줄, 마지막으로 실제 쓰인 모델
 
   function refreshMainModelUi(){
@@ -768,10 +769,14 @@
     mainModelSelect.disabled = !locked;
     mainModelSelect.value = locked ? aiSettings.model : lastAutoPickedModel;
     mainAdvisor.checked = !!aiSettings.enableAdvisor;
-    // [2026.08] 체크박스만으로는 지금 고정/자동인지 헷갈린다는 피드백 — 글자로도 분명히 표시.
+    // [2026.08] 체크박스만으로는 지금 고정/자동인지, 어드바이저가 켜졌는지 헷갈린다는
+    // 피드백 — 둘 다 글자/색으로 분명히 표시.
     if (mainModelLockLabel){
       mainModelLockLabel.textContent = locked ? 'F' : 'V';
       mainModelLockLabel.className = 'model-lock-label ' + (locked ? 'locked' : 'auto');
+    }
+    if (mainAdvisorLabel){
+      mainAdvisorLabel.className = mainAdvisor.checked ? 'on' : '';
     }
   }
   refreshMainModelUi();
@@ -792,6 +797,7 @@
     aiSettings.enableAdvisor = mainAdvisor.checked;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
     advisorModelRow.style.display = aiSettings.enableAdvisor ? 'block' : 'none'; // 설정모달이 열려있는 중이었다면 그쪽도 즉시 반영
+    if (mainAdvisorLabel) mainAdvisorLabel.className = mainAdvisor.checked ? 'on' : '';
   });
 
   // ---- 폰 상단 모드메뉴(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
