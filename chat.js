@@ -776,7 +776,7 @@
       mainModelLockLabel.className = 'model-lock-label ' + (locked ? 'locked' : 'auto');
     }
     if (mainAdvisorLabel){
-      mainAdvisorLabel.className = mainAdvisor.checked ? 'on' : '';
+      mainAdvisorLabel.className = 'advisor-label' + (mainAdvisor.checked ? ' on' : '');
     }
   }
   refreshMainModelUi();
@@ -797,7 +797,7 @@
     aiSettings.enableAdvisor = mainAdvisor.checked;
     localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
     advisorModelRow.style.display = aiSettings.enableAdvisor ? 'block' : 'none'; // 설정모달이 열려있는 중이었다면 그쪽도 즉시 반영
-    if (mainAdvisorLabel) mainAdvisorLabel.className = mainAdvisor.checked ? 'on' : '';
+    if (mainAdvisorLabel) mainAdvisorLabel.className = 'advisor-label' + (mainAdvisor.checked ? ' on' : '');
   });
 
   // ---- 폰 상단 모드메뉴(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
