@@ -1859,6 +1859,67 @@
 
   let currentChatAbortController = null; // 요청 중 '중지' 버튼으로 취소하기 위한 컨트롤러
 
+  // [2026.08] 예전엔 도구를 여러 번 연쇄 호출하는 대화도 서버(gs-backend)가 요청 1건 안에서
+  // 전부 끝내려고 했는데, Apps Script는 요청 1건당 실행시간이 약 6분으로 제한돼 있어서 그
+  // 시간을 넘기면 응답 자체를 못 받고 "네트워크 오류: Failed to fetch"만 떴다(실제로는 서버가
+  // 끝까지 일하다 죽은 것인데 화면에서는 원인을 알 길이 없었음). 이제는 서버가 한 번의 요청마다
+  // Claude API를 딱 1번만 부르고, 도구를 더 불러야 하면 done:false로 지금까지 진행상황(이번
+  // 라운드의 assistant 응답 + 도구실행 결과)만 돌려준다 — 이 함수가 그걸 받아서 대화에 이어붙여
+  // 즉시 다음 라운드를 요청한다. 그래서 전체 대화가 몇 분 걸려도 낱개 요청은 항상 짧다.
+  // sendChatMessage와 regenerateFrom_ 둘 다 이 함수를 통해서만 서버와 통신한다.
+  const CLIENT_MAX_TOOL_ROUNDS = 14; // 예전 서버쪽 MAX_TOOL_LOOPS를 그대로 승계
+
+  async function runChatTurn_(initialMessages, opts){
+    let turnMessages = initialMessages.slice();
+    let accumulatedActions = [];
+    let round = 0;
+
+    while (true){
+      const forceWrapUp = round >= CLIENT_MAX_TOOL_ROUNDS;
+      opts.thinkingBubble.textContent = round === 0 ? '생각 중…'
+        : (forceWrapUp ? '마무리하는 중…' : '🔧 확인하는 중… (' + (round + 1) + '단계)');
+
+      let data;
+      try{
+        const res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          signal: opts.signal,
+          body: JSON.stringify(Object.assign({
+            _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
+            messages: turnMessages,
+            context: opts.context,
+            autoRef: opts.autoRef,
+            forceWrapUp: forceWrapUp
+          }, opts.aiSettingsPayload))
+        });
+        data = await res.json();
+      }catch(err){
+        if (err && err.name === 'AbortError'){ opts.onAbort(); return; }
+        opts.onError('네트워크 오류: ' + (err && err.message ? err.message : err));
+        return;
+      }
+
+      if (data.error){ opts.onError('오류: ' + data.error); return; }
+
+      accumulatedActions = accumulatedActions.concat(data.clientActions || []);
+
+      // done:false가 명시된 경우에만 다음 라운드로 이어간다 — 구버전 서버 응답(done 필드가
+      // 아예 없는 경우)도 안전하게 "완료"로 취급해서 무한대기하지 않는다.
+      if (data.done === false){
+        turnMessages = turnMessages.concat([
+          { role: 'assistant', content: data.assistantContent },
+          { role: 'user', content: data.toolResults }
+        ]);
+        round++;
+        continue;
+      }
+
+      opts.onDone(data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.', accumulatedActions);
+      return;
+    }
+  }
+
   async function sendChatMessage(){
     const text = chatInputEl.value.trim();
     if (!text) return;
@@ -1945,49 +2006,41 @@
 
     try{
       currentChatAbortController = new AbortController();
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      await runChatTurn_(requestMessages, {
+        thinkingBubble: thinkingBubble,
         signal: currentChatAbortController.signal,
-        body: JSON.stringify(Object.assign({
-          _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
-          messages: requestMessages,
-          context: {
-            currentPath: explorerPath,
-            openFile: openFileCtx,
-            openDiagram: openDiagramCtx,
-            attachedItems: attachmentsForThisMessage,
-            attachedTexts: textAttachmentsForThisMessage,
-            // [패치 2026.07 — 버그#6] 이번 턴이 음성으로 시작됐는지 서버에 알려준다.
-            // 예전엔 이 정보가 프론트엔드에만 있어서(isVoiceTurn), AI는 지금 자기 답이
-            // 소리로 읽힐지 화면에 표시될지 전혀 모른 채 항상 문자채팅 방식(마크다운·표·
-            // 굵게 등)으로만 답했다. 그래서 음성모드에서도 "**이렇게** 하시면 됩니다"처럼
-            // 기호까지 그대로 다 읽어버리는 문제가 생겼다.
-            voiceTurn: isVoiceTurn
-          },
-          autoRef: autoRefMode
-        }, buildAiSettingsPayload(messageContainsUrl(text))))
+        context: {
+          currentPath: explorerPath,
+          openFile: openFileCtx,
+          openDiagram: openDiagramCtx,
+          attachedItems: attachmentsForThisMessage,
+          attachedTexts: textAttachmentsForThisMessage,
+          // [패치 2026.07 — 버그#6] 이번 턴이 음성으로 시작됐는지 서버에 알려준다.
+          // 예전엔 이 정보가 프론트엔드에만 있어서(isVoiceTurn), AI는 지금 자기 답이
+          // 소리로 읽힐지 화면에 표시될지 전혀 모른 채 항상 문자채팅 방식(마크다운·표·
+          // 굵게 등)으로만 답했다. 그래서 음성모드에서도 "**이렇게** 하시면 됩니다"처럼
+          // 기호까지 그대로 다 읽어버리는 문제가 생겼다.
+          voiceTurn: isVoiceTurn
+        },
+        autoRef: autoRefMode,
+        aiSettingsPayload: buildAiSettingsPayload(messageContainsUrl(text)),
+        onDone: (replyText, clientActions) => {
+          renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
+          const aiMsgObj = { role: 'assistant', content: replyText };
+          chatMessages.push(aiMsgObj);
+          thinkingBubble._nxMsgRef = aiMsgObj;
+          scheduleChatHistorySave();
+          if (isVoiceTurn) speakReply(replyText);
+        },
+        onError: (message) => {
+          thinkingBubble.textContent = message;
+          chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
+        },
+        onAbort: () => {
+          thinkingBubble.textContent = '⏹ 중단됨';
+          chatMessages.pop(); // 방금 push한 사용자 메시지도 취소된 걸로 취급 (응답 없이 기록만 남으면 다음 턴에 어색해짐)
+        }
       });
-      const data = await res.json();
-      if (data.error){
-        thinkingBubble.textContent = '오류: ' + data.error;
-        chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
-      } else {
-        renderAssistantReply(thinkingBubble, data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.', data.clientActions, editTargetFileSnapshot);
-        const aiMsgObj = { role: 'assistant', content: data.reply || '' };
-        chatMessages.push(aiMsgObj);
-        thinkingBubble._nxMsgRef = aiMsgObj;
-        scheduleChatHistorySave();
-        if (isVoiceTurn) speakReply(data.reply || '');
-      }
-    }catch(err){
-      if (err && err.name === 'AbortError'){
-        thinkingBubble.textContent = '⏹ 중단됨';
-        chatMessages.pop(); // 방금 push한 사용자 메시지도 취소된 걸로 취급 (응답 없이 기록만 남으면 다음 턴에 어색해짐)
-      } else {
-        thinkingBubble.textContent = '네트워크 오류: ' + (err && err.message ? err.message : err);
-        chatMessages.pop(); // 답을 못 받았으니 방금 push한 사용자 메시지도 취소된 걸로 취급(짝 없는 질문이 대화기록에 남지 않게)
-      }
     }finally{
       currentChatAbortController = null;
       chatInputEl.disabled = false;
@@ -2083,33 +2136,28 @@
       const openDiagramCtx = (typeof diagramView !== 'undefined' && diagramView.style.display !== 'none')
         ? { liveContent: diagramInput.value } : null;
 
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({
-          _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
-          messages: chatMessages.slice(),
-          context: {
-            currentPath: explorerPath,
-            openFile: openFileCtx,
-            openDiagram: openDiagramCtx,
-            attachedItems: [],
-            attachedTexts: [],
-            voiceTurn: false
-          },
-          autoRef: autoRefMode
-        }, buildAiSettingsPayload(false)))
+      await runChatTurn_(chatMessages.slice(), {
+        thinkingBubble: thinkingBubble,
+        context: {
+          currentPath: explorerPath,
+          openFile: openFileCtx,
+          openDiagram: openDiagramCtx,
+          attachedItems: [],
+          attachedTexts: [],
+          voiceTurn: false
+        },
+        autoRef: autoRefMode,
+        aiSettingsPayload: buildAiSettingsPayload(false),
+        onDone: (replyText, clientActions) => {
+          renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
+          const newMsgObj = { role: 'assistant', content: replyText };
+          chatMessages.push(newMsgObj);
+          thinkingBubble._nxMsgRef = newMsgObj;
+          scheduleChatHistorySave();
+        },
+        onError: (message) => { thinkingBubble.textContent = message; },
+        onAbort: () => { thinkingBubble.textContent = '⏹ 중단됨'; }
       });
-      const data = await res.json();
-      if (data.error){
-        thinkingBubble.textContent = '오류: ' + data.error;
-        return;
-      }
-      renderAssistantReply(thinkingBubble, data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.', data.clientActions, editTargetFileSnapshot);
-      const newMsgObj = { role: 'assistant', content: data.reply || '' };
-      chatMessages.push(newMsgObj);
-      thinkingBubble._nxMsgRef = newMsgObj;
-      scheduleChatHistorySave();
     }catch(err){
       thinkingBubble.textContent = '네트워크 오류: ' + (err && err.message ? err.message : err);
     }

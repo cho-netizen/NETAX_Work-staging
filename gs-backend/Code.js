@@ -53,11 +53,10 @@ const EFFORT_MAP = {
 const DEFAULT_EFFORT = 'medium';
 
 const WEB_SEARCH_COST_PER_USE = 0.01;
-const MAX_TOOL_LOOPS = 14; // 8 → 14: 복잡한 세무구조 진단처럼 도구를 여러 번 연쇄호출해야 하는
-                            // 요청이 8회 안에 안 끝나서 "생각중만 하다가 빈 응답"으로 끝나는 문제 완화.
-// Apps Script 웹앱은 실행시간 상한(보통 6분)을 넘기면 응답 없이 그냥 죽는다. 그 전에 우리가
-// 먼저 도구 루프를 안전하게 접고 "지금까지의 답변 + 안내 메시지"를 돌려주기 위한 시간 예산(4분).
-const TOOL_LOOP_TIME_BUDGET_MS = 4 * 60 * 1000;
+// [2026.08] 예전엔 여기(서버)에 도구 왕복 루프 상한(MAX_TOOL_LOOPS)과 Apps Script 실행시간
+// 상한(약 6분)에 대비한 시간 예산(TOOL_LOOP_TIME_BUDGET_MS)이 있었다. 이제 루프 자체를 클라이언트
+// (chat.js의 CLIENT_MAX_TOOL_ROUNDS)로 옮겨서 이 함수는 매 요청마다 API를 딱 1번만 부르므로
+// 더 이상 필요 없다 — 자세한 배경은 callClaude() 함수 위 주석 참고.
 
 const DEFAULT_FOLDER_ID_PROPERTY = 'NX_DEFAULT_FOLDER_ID';
 
@@ -3029,16 +3028,15 @@ function doPost(e) {
       result = callClaude(body, model, cfg, effort, maxTokens, systemPrompt, claudeKey);
     }
 
+    // [2026.08] 도구 왕복 루프가 이제 라운드마다 별도 요청(=별도 doPost 실행)이라, 로그도
+    // 라운드 하나당 한 줄씩 남는다(전체 대화 하나당 한 줄이 아님) — 실행시간·건수를 보는
+    // 용도로는 이 편이 오히려 라운드별 소요시간을 더 세밀하게 보여준다.
     logNxInteraction_({
       model: model,
       requestSummary: requestSummary,
-      resultSummary: result.reply || '',
+      resultSummary: result.reply || (result.done === false ? '(도구 호출 — 다음 라운드로 계속)' : ''),
       error: result.error || '',
-      loops: result.debugLoops || 0,
-      durationMs: Date.now() - requestStartTime,
-      timeBudgetExceeded: !!result.timeBudgetExceeded,
-      maxLoopsHit: !!result.maxLoopsHit,
-      truncationRetries: result.truncationRetries || 0
+      durationMs: Date.now() - requestStartTime
     });
 
     return jsonResponse(result);
@@ -11964,29 +11962,10 @@ function trimOldToolResults_(messages) {
   });
 }
 
-/**
- * 한 번의 요청 안에서 도구를 여러 번 반복 호출하는 동안(예: 파일읽기 → 파일목록조회 → 저장),
- * 이미지·PDF 같은 무거운 바이너리 결과가 매 왕복마다 그대로 다시 통째로 전송되는 것을 막는다.
- * 방금 막 추가된 마지막 라운드(assistant+tool_result 한 쌍)는 그대로 두고, 그보다 이전 라운드에
- * 있던 바이너리만 짧은 안내문으로 축약한다 — Code.gs를 직접 수정한다(반환값이 아니라 in-place).
- * 이걸 안 하면 큰 PDF 하나만 있어도 도구가 여러 번 오갈 때 요청 용량이 계속 불어나서
- * URLFetch 전송한도(게시 크기 제한)에 걸릴 수 있다.
- */
-function stripOlderBinaryInLoop_(messages) {
-  const keepFromIndex = Math.max(0, messages.length - 2); // 마지막 라운드(assistant+user)는 그대로 보존
-  for (let i = 0; i < keepFromIndex; i++) {
-    const m = messages[i];
-    if (m.role !== 'user' || !Array.isArray(m.content)) continue;
-    m.content.forEach(function (block) {
-      if (block && block.type === 'tool_result' && Array.isArray(block.content)) {
-        const hasBinary = block.content.some(function (c) { return c && (c.type === 'image' || c.type === 'document'); });
-        if (hasBinary) {
-          block.content = [{ type: 'text', text: '[이 대화 안에서 이미 확인한 이미지/문서 원본 — 용량 절약을 위해 이후 요청에서는 생략됨. 다시 필요하면 read_drive_file로 재조회하세요.]' }];
-        }
-      }
-    });
-  }
-}
+// [2026.08] 예전엔 도구 왕복 루프가 이 함수 안에서 여러 번 돌았기 때문에, 라운드가 늘어날
+// 때마다 이전 라운드의 이미지·PDF 원본이 매번 다시 통째로 전송되는 걸 막는 stripOlderBinaryInLoop_
+// 함수가 따로 있었다. 이제 라운드마다 별도의 요청(=매번 이 파일 맨 위 trimOldToolResults_가
+// body.messages 전체에 새로 적용됨)이라 그 역할을 trimOldToolResults_가 그대로 흡수한다.
 
 // "content 파라미터가 누락되어 저장이 실패했습니다" 문제의 근본 원인 — 문서 전체 내용처럼 긴
 // 문자열을 담는 도구(save_file_to_folder/export_to_google_doc/apply_document_edit/
@@ -12071,7 +12050,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   // 문서수정·관계도수정·폴더이동 도구 — 열려 있는 화면 상태(body.context)에 맞춰서만 추가된다.
   getClientActionTools_(body.context).forEach(function (t) { tools.push(t); });
 
-  payload.tools = tools;
+  // [2026.08] 클라이언트가 도구 왕복 라운드 상한에 도달했을 때 보내는 플래그 — 도구 자체를
+  // 아예 안 줘서, 모델이 지금까지 대화 내용만으로 텍스트로 마무리하게 강제한다.
+  payload.tools = body.forceWrapUp ? [] : tools;
 
   const options = {
     method: 'post',
@@ -12081,50 +12062,51 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   };
   if (betaFlags.length > 0) options.headers['anthropic-beta'] = betaFlags.join(',');
 
+  // [2026.08] 예전엔 도구 호출-응답을 여러 번(최대 14회) 이 함수 하나(=Apps Script 요청 1건)
+  // 안에서 내부적으로 돌렸는데, 실제 실행시간이 Apps Script의 요청당 상한(약 6분)을 넘기면
+  // 응답을 아예 못 보내고 죽어서 클라이언트에는 "Failed to fetch"로만 보였다(원인을 알 수 없는
+  // 네트워크 오류처럼 보임). 지금은 이 함수가 Claude API를 딱 1번만 부르고, 도구 호출이 더
+  // 필요하면 그 사실을 done:false로 클라이언트에 돌려준다 — 클라이언트(chat.js의 runChatTurn_)가
+  // 다음 요청을 즉시 이어보내는 식으로 루프를 이어간다. 전체 대화가 몇 분 걸려도 낱개 요청은
+  // 항상 짧아서 6분 제한에 걸릴 일이 구조적으로 사라진다.
+  // pause_turn(앤트로픽 서버가 자체적으로 이어서 보내라고 신호주는 경우)과 토큰한도로 잘린 응답
+  // 재시도는 "같은 라운드 안에서" 바로 해결되는 문제라(도구 실행이 필요한 것도 아님) 그대로 이
+  // 함수 안에 남기고, 최대 시도횟수만 안전하게 제한한다.
   let messages = trimOldToolResults_(body.messages.slice());
   let result = null, status = null;
-  let loops = 0;
-  let maxLoopsHit = false;
-  let timeBudgetExceeded = false;
   let truncationRetries = 0; // content 파라미터가 토큰한도로 잘린 걸 감지했을 때 자동 재시도 횟수(최대 2회)
-  const loopStartTime = Date.now();
-  const clientActions = []; // 문서수정/관계도수정/폴더이동 요청을 모아뒀다가 최종 응답에 함께 실어보낸다.
+  const clientActions = []; // 문서수정/관계도수정/폴더이동 요청을 모아뒀다가 이번 라운드 응답에 함께 실어보낸다.
 
-  while (loops < MAX_TOOL_LOOPS) {
-    // Apps Script 실행시간 상한(보통 6분)에 걸려 응답 없이 죽어버리는 것을 막기 위해,
-    // 도구 호출이 계속 이어지고 있어도 시간 예산을 넘기면 여기서 루프를 접는다.
-    // (Claude API 자체 호출이 아니라 "다음 도구 왕복을 또 시작할지"를 판단하는 지점이라
-    //  이미 진행 중인 API 호출이 끊기지는 않는다.)
-    if (Date.now() - loopStartTime > TOOL_LOOP_TIME_BUDGET_MS) {
-      timeBudgetExceeded = true;
-      break;
-    }
-
+  for (let attempt = 0; attempt < 6; attempt++) {
     payload.messages = messages;
     options.payload = JSON.stringify(payload);
 
     const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', options);
     status = response.getResponseCode();
     result = JSON.parse(response.getContentText());
-    loops++;
-
-    if (loops >= MAX_TOOL_LOOPS) maxLoopsHit = true;
 
     if (status !== 200) break;
     if (result.stop_reason === 'pause_turn') continue;
 
     // content 파라미터가 토큰한도에 걸려 잘린 것으로 보이면(위 isLikelyTruncatedContentToolCall_
-    // 참고), 이번 응답은 버리고(messages에 아무것도 추가하지 않음) max_tokens를 2배로 늘려
-    // 같은 요청을 다시 시도한다. 최대 2회까지만 — 그래도 계속 잘리면 정말로 한 번에 담기엔
-    // 너무 긴 것이므로, 아래 정상 흐름대로 진행해서 도구 자신의 오류 메시지("내용이 없습니다")를
-    // 모델이 보고 스스로 대응(예: 내용을 나눠서 저장)하게 둔다.
+    // 참고), 이번 응답은 버리고 max_tokens를 2배로 늘려 같은 요청을 다시 시도한다. 최대 2회까지만
+    // — 그래도 계속 잘리면 정말로 한 번에 담기엔 너무 긴 것이므로, 아래 정상 흐름대로 진행해서
+    // 도구 자신의 오류 메시지("내용이 없습니다")를 모델이 보고 스스로 대응하게 둔다.
     if (isLikelyTruncatedContentToolCall_(result) && truncationRetries < 2) {
       truncationRetries++;
       payload.max_tokens = Math.min(payload.max_tokens * 2, 64000);
       continue;
     }
 
-    const toolUseBlocks = (result.content || []).filter(function (b) {
+    break;
+  }
+
+  if (status !== 200) {
+    const errMsg = (result && result.error && result.error.message) ? result.error.message : ('Claude API 오류 (status ' + status + ')');
+    return { error: errMsg };
+  }
+
+  const toolUseBlocks = (result.content || []).filter(function (b) {
       return b.type === 'tool_use' && (
         b.name === 'list_drive_folder' ||
         b.name === 'read_drive_file' ||
@@ -12264,8 +12246,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       );
     });
 
-    if (toolUseBlocks.length === 0) break;
-
+    if (toolUseBlocks.length > 0) {
     const toolResults = toolUseBlocks.map(function (block) {
       if (block.name === 'list_drive_folder') {
         const resultObj = toolListDriveFolder(block.input && block.input.path);
@@ -13011,33 +12992,34 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
     });
 
-    messages.push({ role: 'assistant', content: result.content });
-    messages.push({ role: 'user', content: toolResults });
-    stripOlderBinaryInLoop_(messages); // 방금 추가한 이번 라운드는 그대로 두고, 그보다 이전 라운드의 이미지/PDF 원본만 축약
+    // 도구 호출이 있었다 — 아직 끝난 게 아니다. 이번 라운드의 원본 응답(assistant)과 도구
+    // 실행결과(tool_result)를 클라이언트에 돌려주면, 클라이언트가 대화에 이어붙여서 즉시
+    // 다음 라운드 요청을 보낸다(chat.js의 runChatTurn_).
+    return {
+      done: false,
+      assistantContent: result.content,
+      toolResults: toolResults,
+      clientActions: clientActions,
+      usage: buildClaudeUsageInfo_(result, cfg, model, advisorModel)
+    };
   }
 
-  if (status !== 200) {
-    const errMsg = (result.error && result.error.message) ? result.error.message : ('Claude API 오류 (status ' + status + ')');
-    return { error: errMsg };
-  }
-
+  // 도구 호출 없이(또는 body.forceWrapUp로 애초에 도구를 안 준 채) 텍스트로 마무리된 라운드.
   let replyText = (result.content || [])
     .filter(function (b) { return b.type === 'text'; })
     .map(function (b) { return b.text; })
     .join('\n');
 
-  // [2026.08] 원래는 시간예산 초과·루프한계 도달 두 경우에만 이 보완 요청을 걸었는데, 그 두
-  // 경우가 아니어도(예: 도구 호출은 정상적으로 다 끝났지만 모델이 생각(thinking)·도구 호출만
-  // 하고 사용자에게 보여줄 글은 하나도 안 쓴 채 턴을 마친 경우) 화면에 "(빈 응답)"만 뜨는
-  // 사례가 실사용 중 보고됐다. 원인이 뭐든 사용자 입장에서 빈 응답은 항상 나쁜 결과이므로,
-  // 조건을 좁게 따지지 말고 텍스트가 비어있으면 무조건 이 보완 요청을 걸도록 넓힌다.
+  // [2026.08] 정상 종료인데도 모델이 생각(thinking)·도구 호출만 하고 사용자에게 보여줄 글은
+  // 하나도 안 쓴 채 턴을 마치는 경우가 실사용 중 확인됐다. 사용자 입장에서 빈 응답은 항상
+  // 나쁜 결과이므로, 텍스트가 비어있으면 이유 불문하고 도구 없이 "지금까지로 마무리해달라"고
+  // 한 번 더 요청해 최소한 뭔가 답을 받는다.
   if (!replyText) {
     try {
-      const wrapUpMessages = messages.concat([{
-        role: 'user',
-        content: '(시스템 안내: 도구 호출 시간·횟수 제한에 도달했습니다. 지금까지 확인한 정보만으로 지금 답변을 마무리하세요. ' +
-          '추가로 확인이 더 필요한 부분이 있다면 어떤 정보가 더 필요한지도 함께 알려주세요. 도구를 더 호출하지 말고 텍스트로만 답하세요.)'
-      }]);
+      const wrapUpMessages = messages.concat([
+        { role: 'assistant', content: result.content },
+        { role: 'user', content: '(시스템 안내: 지금까지 확인한 정보만으로 지금 답변을 마무리하세요. 도구를 더 호출하지 말고 텍스트로만 답하세요.)' }
+      ]);
       const wrapUpPayload = Object.assign({}, payload, { messages: wrapUpMessages, tools: [] });
       delete wrapUpPayload.tool_choice;
       const wrapUpOptions = Object.assign({}, options, { payload: JSON.stringify(wrapUpPayload) });
@@ -13053,14 +13035,20 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       // 마무리 요청까지 실패하면 아래 안내문으로 대체된다.
     }
     if (!replyText) {
-      replyText = timeBudgetExceeded
-        ? '요청이 예상보다 오래 걸려 시간 제한(약 4분) 안에 마무리하지 못했습니다. 요청을 더 작은 단위로 나눠서 다시 시도해주세요.'
-        : maxLoopsHit
-        ? '요청이 너무 많은 단계(도구 호출 ' + MAX_TOOL_LOOPS + '회)를 필요로 해서 끝까지 마무리하지 못했습니다. 요청을 더 작은 단위로 나눠서 다시 시도해주세요.'
-        : '이번 요청에 답변을 만들지 못했습니다. 같은 질문을 다시 한 번 보내주시거나, 표현을 조금 바꿔서 다시 시도해주세요.';
+      replyText = '이번 요청에 답변을 만들지 못했습니다. 같은 질문을 다시 한 번 보내주시거나, 표현을 조금 바꿔서 다시 시도해주세요.';
     }
   }
 
+  return {
+    done: true,
+    reply: replyText,
+    clientActions: clientActions,
+    usage: buildClaudeUsageInfo_(result, cfg, model, advisorModel)
+  };
+}
+
+// callClaude의 done:false/done:true 두 반환 지점에서 공통으로 쓰는 이번 라운드 토큰·비용 계산.
+function buildClaudeUsageInfo_(result, cfg, model, advisorModel) {
   const webSearchUses = (result.content || [])
     .filter(function (b) { return b.type === 'server_tool_use' && b.name === 'web_search'; })
     .length;
@@ -13081,15 +13069,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
              + ((usage.advisor_usage.output_tokens || 0) / 1e6) * advCfg.output;
   }
 
-  return {
-    reply: replyText,
-    clientActions: clientActions,
-    usage: { inputTokens: inputTokens, outputTokens: outputTokens, costUsd: costUsd, model: model, webSearchUses: webSearchUses, advisorModel: advisorModel, cacheWriteTokens: cacheWriteTokens, cacheReadTokens: cacheReadTokens },
-    debugLoops: loops,
-    maxLoopsHit: maxLoopsHit,
-    timeBudgetExceeded: timeBudgetExceeded,
-    truncationRetries: truncationRetries
-  };
+  return { inputTokens: inputTokens, outputTokens: outputTokens, costUsd: costUsd, model: model, webSearchUses: webSearchUses, advisorModel: advisorModel, cacheWriteTokens: cacheWriteTokens, cacheReadTokens: cacheReadTokens };
 }
 
 function callGemini(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
@@ -13145,8 +13125,12 @@ function callGemini(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
 
   const costUsd = (inputTokens / 1e6) * cfg.input + (outputTokens / 1e6) * cfg.output;
 
+  // Gemini 경로는 처음부터 자체 도구(googleSearch/codeExecution/urlContext)를 API 호출
+  // 1번 안에서 자체적으로 끝내고, DRIVE_TOOLS 같은 우리쪽 도구를 왕복 실행할 일이 없어서
+  // callClaude처럼 여러 라운드로 쪼갤 필요가 없다 — 항상 done:true로 한 번에 마무리한다.
   return {
-    reply: replyText || ('(응답이 비어 있습니다 — finishReason: ' + (candidate.finishReason || '알수없음') + ')'),
+    done: true,
+    reply: replyText || ('이번 요청에 답변을 만들지 못했습니다(종료사유: ' + (candidate.finishReason || '알수없음') + '). 다시 한 번 시도해주세요.'),
     clientActions: [],
     usage: { inputTokens: inputTokens, outputTokens: outputTokens, costUsd: costUsd, model: model }
   };
