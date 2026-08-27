@@ -2232,7 +2232,11 @@
           // (2026-08-27 캘린더로 실사용 확인됨, 나머지 앱도 같은 방식으로 확장).
           const gemQuestion = geminiEcosystemRoute ? ('@' + text) : text;
           console.log('[NX Gem 진단] askGemSilent_ 호출 시작:', gemQuestion);
-          const gemResult = await askGemSilent_(gemQuestion, 20000);
+          // [2026.08] 세무사님이 원인을 짚어주심: 제미니 탭이 이미 열려있으면 금방 답이 오지만,
+          // 탭을 새로 열어야 하는 경우(창 생성+페이지 로딩+타이핑+응답까지)는 20초로는
+          // 부족해서 다 기다리지도 못하고 Haiku로 넘어가버리고 있었다. 넉넉하게 늘린다 —
+          // 실패해도 Haiku로 조용히 넘어가는 구조라 길게 잡아도 손해는 없다.
+          const gemResult = await askGemSilent_(gemQuestion, 50000);
           console.log('[NX Gem 진단] askGemSilent_ 결과:', gemResult);
           const gemAnswer = gemResult && gemResult.answer;
           const gemSources = (gemResult && gemResult.sources) || [];
