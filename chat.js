@@ -1769,6 +1769,14 @@
       navigateTo(explorerPath);
     }
 
+    // AI가 작업관리 사건/하위업무를 만들거나 바꿨을 때, 지금 작업관리 화면이 열려 있으면
+    // 목록을 새로고침해서 바로 반영되게 한다.
+    const workManageChangedAction = actions.find(a => a && a.type === 'work_manage_changed');
+    if (workManageChangedAction && typeof workManageView !== 'undefined' && workManageView
+        && workManageView.style.display !== 'none') {
+      loadWorkCases();
+    }
+
     // [패치] isReportWriterOpen(지금 이 순간의 화면 상태)로 게이트하지 않는다 — clientActions에
     // 실제로 들어있으면 무조건 버튼을 보여준다. diagramOpen도 마찬가지로 완화.
     const editAction = actions.find(a => a && a.type === 'edit_document');

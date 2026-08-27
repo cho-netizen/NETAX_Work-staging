@@ -2631,6 +2631,91 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'list_work_cases',
+    description: '작업관리(사건별 세부업무·법정기한 관리)에 등록된 사건 목록을 조회한다. "지금 진행중인 사건 뭐 있어?", "이번 사건 작업관리에 등록돼있어?", "마감 얼마 안 남은 거 있어?"처럼 물으면 이 도구로 확인하라. 여기서 얻은 id를 이후 update_work_case_status·add_work_subtask·update_work_subtask_status·delete_work_case의 caseId로 쓸 수 있다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['진행중', '완료', '보류'], description: '이 상태인 사건만(선택)' },
+        customerName: { type: 'string', description: '고객명으로 필터링(선택, 부분일치)' }
+      }
+    }
+  },
+  {
+    name: 'create_work_case',
+    description: '작업관리에 새 사건을 등록한다. taxType(세목)과 baseDate(기준일)를 넣으면 법정 신고기한(양도 2개월·증여 3개월·상속 6개월·불복 2개월, 기준일이 속한 달의 말일부터 계산)이 자동으로 계산되어 저장된다. 사용자가 "이 사건 작업관리에 등록해줘", "OO씨 양도소득세 건 만들어줘"처럼 명확히 요청했을 때만 써라. customerName·caseName을 지정하지 않으면 지금 사용자가 보고 있는 폴더(고객명/사건명)를 기본값으로 쓴다 — 그래도 특정이 안 되면 사용자에게 물어봐라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        customerName: { type: 'string', description: '고객명(생략하면 현재 보고 있는 폴더의 고객명)' },
+        caseName: { type: 'string', description: '사건명(생략하면 현재 보고 있는 폴더의 사건명)' },
+        taxType: { type: 'string', enum: ['transfer', 'gift', 'inheritance', 'objection'], description: 'transfer=양도, gift=증여, inheritance=상속, objection=불복' },
+        assignee: { type: 'string', description: '담당자(선택)' },
+        requestDate: { type: 'string', description: '의뢰일 YYYY-MM-DD(선택)' },
+        baseDate: { type: 'string', description: '기준일 YYYY-MM-DD(양도일·증여일·사망일 등, 법정기한 자동계산에 쓰임, 선택)' }
+      },
+      required: ['taxType']
+    }
+  },
+  {
+    name: 'update_work_case_status',
+    description: '작업관리에 등록된 사건의 진행 상태(진행중/완료/보류)를 바꾼다. "이 사건 완료 처리해줘"처럼 요청했을 때 써라. 어느 사건인지는 caseId(list_work_cases로 얻은 값) 또는 customerName+caseName으로 특정한다 — 둘 다 없으면 지금 보고 있는 폴더를 기준으로 찾는다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string', description: '사건 id(선택, list_work_cases 결과의 id)' },
+        customerName: { type: 'string', description: '고객명(caseId 없을 때 사건을 찾는 데 사용, 선택)' },
+        caseName: { type: 'string', description: '사건명(caseId 없을 때 사건을 찾는 데 사용, 선택)' },
+        status: { type: 'string', enum: ['진행중', '완료', '보류'], description: '바꿀 상태' }
+      },
+      required: ['status']
+    }
+  },
+  {
+    name: 'add_work_subtask',
+    description: '작업관리의 특정 사건 안에 세부 할일(하위업무)을 추가한다. "자료수집 할일로 넣어줘"처럼 요청했을 때 써라. parentTitle을 주면 그 이름의 기존 항목 밑에 하위항목으로 들어간다(트리 구조, 예: "자료수집" 밑에 "등기부등본 확보"). 어느 사건인지는 caseId 또는 customerName+caseName으로 특정하고, 둘 다 없으면 지금 보고 있는 폴더를 기준으로 찾는다 — 특정이 안 되면 먼저 list_work_cases로 확인하거나 사용자에게 물어봐라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string', description: '사건 id(선택)' },
+        customerName: { type: 'string', description: '고객명(선택)' },
+        caseName: { type: 'string', description: '사건명(선택)' },
+        parentTitle: { type: 'string', description: '이 이름의 기존 항목 밑에 하위항목으로 추가(선택, 생략하면 사건 바로 아래 최상위 항목으로 추가)' },
+        title: { type: 'string', description: '할일 이름' },
+        dueDate: { type: 'string', description: '마감일 YYYY-MM-DD(선택, 있으면 구글캘린더에도 자동 등록됨)' },
+        assignee: { type: 'string', description: '담당자(선택)' }
+      },
+      required: ['title']
+    }
+  },
+  {
+    name: 'update_work_subtask_status',
+    description: '작업관리 사건 안의 특정 하위업무 상태(대기/진행중/완료)를 바꾼다. "자료수집 끝났어", "등기부등본 확보 완료 처리해줘"처럼 요청했을 때 써라. title로 하위업무를 이름으로 찾는다(부분일치). 어느 사건인지는 add_work_subtask와 같은 방식(caseId 또는 customerName+caseName, 둘 다 없으면 지금 보고 있는 폴더)으로 특정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string', description: '사건 id(선택)' },
+        customerName: { type: 'string', description: '고객명(선택)' },
+        caseName: { type: 'string', description: '사건명(선택)' },
+        title: { type: 'string', description: '상태를 바꿀 하위업무 이름(부분일치로 찾음)' },
+        status: { type: 'string', enum: ['대기', '진행중', '완료'], description: '바꿀 상태' }
+      },
+      required: ['title', 'status']
+    }
+  },
+  {
+    name: 'delete_work_case',
+    description: '작업관리에서 사건 하나를 통째로 삭제한다(하위업무·연결된 캘린더 일정도 함께 삭제됨, 되돌릴 수 없음). 사용자가 "이 사건 작업관리에서 삭제해줘"처럼 명확하게 요청했을 때만 써라. 어느 사건인지는 caseId 또는 customerName+caseName으로 특정한다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caseId: { type: 'string', description: '사건 id(선택)' },
+        customerName: { type: 'string', description: '고객명(선택)' },
+        caseName: { type: 'string', description: '사건명(선택)' }
+      }
+    }
+  },
+  {
     name: 'remember_fact',
     description: '조종호님에 대한 지속적으로 유효한 사실이나 지침(예: 선호하는 보고서 형식, 앞으로 항상 지켜야 할 규칙, 새로 알게 된 사무실 운영방침)을 마스터 프로필에 추가해서, 이후 모든 대화·모든 사건 폴더에서 항상 참고되게 만든다. ' +
       '사용자가 "기억해줘", "앞으로 항상 이렇게 해줘"처럼 명시적으로 요청했을 때, 또는 스스로 판단하기에도 이건 이번 대화 한정이 아니라 앞으로 계속 적용돼야 할 규칙이 명확할 때만 사용하라. ' +
@@ -12084,6 +12169,12 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'lookup_google_tasks' ||
         b.name === 'add_google_task' ||
         b.name === 'add_log_entry' ||
+        b.name === 'list_work_cases' ||
+        b.name === 'create_work_case' ||
+        b.name === 'update_work_case_status' ||
+        b.name === 'add_work_subtask' ||
+        b.name === 'update_work_subtask_status' ||
+        b.name === 'delete_work_case' ||
         b.name === 'remember_fact' ||
         b.name === 'list_business_managers' ||
         b.name === 'load_business_manager' ||
@@ -12678,6 +12769,52 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
         const resultObj = toolAddLogEntry(input.text, input.date, input.dueDate, targetPath);
         if (resultObj && resultObj.success) clientActions.push({ type: 'explorer_changed', path: targetPath });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'list_work_cases') {
+        const input = block.input || {};
+        const resultObj = toolListWorkCases(input.status, input.customerName);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'create_work_case') {
+        const input = block.input || {};
+        const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
+        const resultObj = toolCreateWorkCase(input, targetPath);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'update_work_case_status') {
+        const input = block.input || {};
+        const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
+        const resultObj = toolUpdateWorkCaseStatus(input, targetPath);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'add_work_subtask') {
+        const input = block.input || {};
+        const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
+        const resultObj = toolAddWorkSubtask(input, targetPath);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'update_work_subtask_status') {
+        const input = block.input || {};
+        const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
+        const resultObj = toolUpdateWorkSubtaskStatus(input, targetPath);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'delete_work_case') {
+        const input = block.input || {};
+        const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
+        const resultObj = toolDeleteWorkCase(input, targetPath);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
@@ -14955,6 +15092,128 @@ function work_doPost(body) {
     case 'work_delete_subtask': return work_deleteSubtask(body);
     default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
+}
+
+// ---- AI 채팅(넥스) 도구 연동 — DRIVE_TOOLS의 list_work_cases 등에서 호출됨 ----
+// AI는 사건의 내부 id(UUID)를 모르므로, caseId가 없으면 고객명/사건명(부분일치, 없으면 지금
+// 보고 있는 폴더의 경로)으로 사건 하나를 찾아준다. 여러 건이 걸리면 에러로 후보 목록을 돌려줘서
+// AI가 사용자에게 다시 물어보게 한다.
+function work_resolveCase_(input, contextPath) {
+  const sheet = work_getSheet_();
+  const data = sheet.getDataRange().getValues();
+  const col = work_colMap_(data[0]);
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][col.id]) rows.push({ row: data[i], rowIndex: i + 1 });
+  }
+
+  if (input.caseId) {
+    const m = rows.find(function (x) { return String(x.row[col.id]).trim() === String(input.caseId).trim(); });
+    if (!m) return { error: '해당 id의 사건을 작업관리에서 찾을 수 없습니다.' };
+    return { sheet: sheet, col: col, row: m.row, rowIndex: m.rowIndex };
+  }
+
+  const customer = String(input.customerName || (contextPath && contextPath[0]) || '').trim();
+  const caseName = String(input.caseName || (contextPath && contextPath[1]) || '').trim();
+  if (!customer && !caseName) return { error: '어느 사건인지 특정할 수 없습니다. 고객명 또는 사건명을 알려주세요.' };
+
+  const matches = rows.filter(function (x) {
+    const c = String(x.row[col.고객명] || '').trim();
+    const n = String(x.row[col.사건명] || '').trim();
+    return (!customer || c.indexOf(customer) !== -1) && (!caseName || n.indexOf(caseName) !== -1);
+  });
+  if (matches.length === 0) return { error: '조건에 맞는 사건을 작업관리에서 찾지 못했습니다. list_work_cases로 먼저 확인해보세요.' };
+  if (matches.length > 1) {
+    return {
+      error: '조건에 맞는 사건이 ' + matches.length + '건입니다. 어느 것인지 사용자에게 확인해주세요.',
+      candidates: matches.map(function (x) { return { id: x.row[col.id], 고객명: x.row[col.고객명], 사건명: x.row[col.사건명] }; })
+    };
+  }
+  return { sheet: sheet, col: col, row: matches[0].row, rowIndex: matches[0].rowIndex };
+}
+
+// 트리에서 title이 (부분)일치하는 첫 노드를 찾는다 — AI는 노드의 내부 id를 모르므로 이름으로 찾음.
+function work_walkTitleSearch_(nodes, title, cb) {
+  for (let i = 0; i < nodes.length; i++) {
+    const t = String(nodes[i].title || '').trim();
+    if (t === String(title).trim() || t.indexOf(title) !== -1) { cb(nodes[i]); return true; }
+    if (Array.isArray(nodes[i].children) && work_walkTitleSearch_(nodes[i].children, title, cb)) return true;
+  }
+  return false;
+}
+
+function toolListWorkCases(status, customerName) {
+  const res = work_getCases({});
+  let cases = res.cases || [];
+  if (status) cases = cases.filter(function (c) { return c.상태 === status; });
+  if (customerName) cases = cases.filter(function (c) { return (c.고객명 || '').indexOf(customerName) !== -1; });
+  return {
+    success: true,
+    cases: cases.map(function (c) {
+      let total = 0, done = 0;
+      (function walk(nodes) {
+        (nodes || []).forEach(function (n) { total++; if (n.status === '완료') done++; walk(n.children); });
+      })(c.하위업무);
+      return {
+        id: c.id, 고객명: c.고객명, 사건명: c.사건명, 세목: c.세목, 담당자: c.담당자,
+        기준일: c.기준일, 법정일: c.법정일, 상태: c.상태,
+        하위업무진행: total ? (done + '/' + total) : '없음'
+      };
+    })
+  };
+}
+
+function toolCreateWorkCase(input, contextPath) {
+  const 고객명 = String(input.customerName || (contextPath && contextPath[0]) || '').trim();
+  const 사건명 = String(input.caseName || (contextPath && contextPath[1]) || '').trim();
+  if (!고객명 || !사건명) return { error: '고객명과 사건명이 필요합니다. 사용자에게 확인해주세요.' };
+  return work_createCase({
+    고객명: 고객명, 사건명: 사건명, 세목: input.taxType,
+    담당자: input.assignee, 의뢰일: input.requestDate, 기준일: input.baseDate
+  });
+}
+
+function toolUpdateWorkCaseStatus(input, contextPath) {
+  const resolved = work_resolveCase_(input, contextPath);
+  if (resolved.error) return resolved;
+  return work_updateCase({ id: resolved.row[resolved.col.id], 상태: input.status });
+}
+
+function toolAddWorkSubtask(input, contextPath) {
+  const resolved = work_resolveCase_(input, contextPath);
+  if (resolved.error) return resolved;
+
+  let parentId = null;
+  if (input.parentTitle) {
+    const tree = work_loadTree_(resolved.row, resolved.col);
+    let found = null;
+    work_walkTitleSearch_(tree, input.parentTitle, function (node) { found = node; });
+    if (!found) return { error: '"' + input.parentTitle + '" 이름의 상위 항목을 찾을 수 없습니다.' };
+    parentId = found.id;
+  }
+
+  return work_addSubtask({
+    id: resolved.row[resolved.col.id], parentId: parentId,
+    title: input.title, dueDate: input.dueDate, assignee: input.assignee
+  });
+}
+
+function toolUpdateWorkSubtaskStatus(input, contextPath) {
+  const resolved = work_resolveCase_(input, contextPath);
+  if (resolved.error) return resolved;
+
+  const tree = work_loadTree_(resolved.row, resolved.col);
+  let found = null;
+  work_walkTitleSearch_(tree, input.title, function (node) { found = node; });
+  if (!found) return { error: '"' + input.title + '" 이름의 하위업무를 찾을 수 없습니다.' };
+
+  return work_updateSubtask({ id: resolved.row[resolved.col.id], nodeId: found.id, status: input.status });
+}
+
+function toolDeleteWorkCase(input, contextPath) {
+  const resolved = work_resolveCase_(input, contextPath);
+  if (resolved.error) return resolved;
+  return work_deleteCase({ id: resolved.row[resolved.col.id] });
 }
 
 function jsonResponse(obj) {
