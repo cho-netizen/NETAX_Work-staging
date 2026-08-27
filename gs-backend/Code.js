@@ -13297,6 +13297,11 @@ function doGet(e) {
     return booking_getAvailability(e.parameter.date);
   }
   if (action === 'getBookings') {
+    // getBookings는 고객 이름·전화번호·상담내용이 그대로 담겨있어 인증 필요(availability는 익명 방문자용이라 공개 유지).
+    const expectedKey = PropertiesService.getScriptProperties().getProperty('API_SECRET');
+    if (!expectedKey || e.parameter._key !== expectedKey) {
+      return jsonResponse({ error: '인증 실패' });
+    }
     return booking_getBookings();
   }
   return ContentService
