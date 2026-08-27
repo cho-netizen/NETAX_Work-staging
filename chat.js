@@ -1185,7 +1185,7 @@
     }
     if (msg.type === 'NX_GEM_ANSWER'){
       if (pendingGemSilent_[msg.requestId]){
-        pendingGemSilent_[msg.requestId].resolve(msg.answer || '');
+        pendingGemSilent_[msg.requestId].resolve({ answer: msg.answer || '', sources: msg.sources || [] });
         delete pendingGemSilent_[msg.requestId];
         return true;
       }
@@ -1194,7 +1194,14 @@
         const prefix = pendingGemAnswerPrefix[msg.requestId] || '🔮 Gem';
         bubble.classList.remove('gem-pending');
         bubble.classList.add('gem');
-        bubble.textContent = prefix + ': ' + (msg.answer || '(빈 응답)');
+        // [2026.08] sources — 제미니가 실제 구글앱(캘린더·Gmail·드라이브 등) 데이터를 근거로
+        // 답했으면 확장프로그램이 그 출처 카드를 찾아 앱 이름을 알려준다. 있으면 확인됐다고,
+        // 없으면 근거 없이(일반 지식으로) 답했을 수 있다고 구분해서 보여준다 — 사용자가 이
+        // 답을 얼마나 믿어도 될지 스스로 판단할 수 있게.
+        const sourceNote = (msg.sources && msg.sources.length)
+          ? ('\n\n✅ 실제 ' + msg.sources.join(', ') + ' 데이터 확인됨')
+          : '\n\n⚠️ 출처 확인 안 됨 — 일반 지식으로 답했을 수 있습니다';
+        bubble.textContent = prefix + ': ' + (msg.answer || '(빈 응답)') + sourceNote;
         delete pendingGemBubbles[msg.requestId];
         delete pendingGemAnswerPrefix[msg.requestId];
       }
@@ -2203,9 +2210,18 @@
           // 제미니웹의 앱 연동 자동완성을 트리거해서 실제 원문을 가져오게 하기 위함
           // (2026-08-27 캘린더로 실사용 확인됨, 나머지 앱도 같은 방식으로 확장).
           const gemQuestion = geminiEcosystemRoute ? ('@' + text) : text;
-          const gemAnswer = await askGemSilent_(gemQuestion, 20000);
-          if (gemAnswer && gemAnswer.trim()){
-            const gemLabel = geminiEcosystemRoute ? ('🔮 (Gemini·' + geminiEcosystemRoute.label + ' 조회, 무료)') : '🔮 (Gemini·무료 답변)';
+          const gemResult = await askGemSilent_(gemQuestion, 20000);
+          const gemAnswer = gemResult && gemResult.answer;
+          const gemSources = (gemResult && gemResult.sources) || [];
+          // 생태계 라우팅(캘린더·Gmail·드라이브 조회)인데 확장프로그램이 실제 출처 카드를
+          // 못 찾았으면, 제미니가 근거 없이(일반 지식 추측으로) 답했을 위험이 있다는 뜻이다 —
+          // 무료라고 해서 검증 안 된 답을 그대로 쓰면 안 되므로, 이 경우엔 실패로 취급하고
+          // 아래 Haiku(실제 도구 접근 가능) 경로로 넘어간다.
+          const gemTrustworthy = gemAnswer && gemAnswer.trim() && (!geminiEcosystemRoute || gemSources.length > 0);
+          if (gemTrustworthy){
+            const gemLabel = geminiEcosystemRoute
+              ? ('🔮 (Gemini·' + geminiEcosystemRoute.label + ' 조회, 무료 — ✅ ' + gemSources.join(', ') + ' 확인됨)')
+              : '🔮 (Gemini·무료 답변)';
             renderAssistantReply(thinkingBubble, gemLabel + '\n\n' + gemAnswer, [], null);
             const aiMsgObj = { role: 'assistant', content: gemAnswer };
             chatMessages.push(aiMsgObj);
