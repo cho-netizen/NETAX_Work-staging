@@ -1138,6 +1138,7 @@
       <button type="button" id="btnOpenTrash" class="tb-btn" title="이 폴더에서 최근 삭제한 항목 복원">🗑 휴지통</button>
       <button type="button" id="btnOpenDashboard" class="tb-btn" title="모든 폴더의 처리일지·마감일을 한눈에">📊 현황판</button>
       <button type="button" id="btnOpenWorkManage" class="tb-btn" title="사건별 세부업무와 법정기한 관리">🗂 작업관리</button>
+      <button type="button" id="btnOpenClientManage" class="tb-btn" title="고객 명단과 상담·자문 이력 관리">👤 고객관리</button>
       <button type="button" id="btnOpenLog" class="tb-btn" title="이 폴더의 경과지 보기">📝 경과지</button>
       <button type="button" id="btnOpenCalc" class="tb-btn" title="이 폴더의 계산 워크시트 보기">🧮 계산기</button>
       <button type="button" id="btnOpenTaxCalc" class="tb-btn" title="양도소득세·증여세·상속세 정밀 계산 (항목별 입력폼)">📐 세액계산</button>
@@ -1714,6 +1715,25 @@ graph TD
         </div>
       </div>
 
+      <div id="clientManageView" style="display:none; flex:1; flex-direction:column; min-height:0;">
+        <div class="editor-toolbar">
+          <button class="back-btn" id="btnClientManageBack" title="닫기">✕</button>
+          <span class="editor-filename">👤 고객관리 · 명단 · 상담/자문 이력</span>
+          <div class="spacer"></div>
+          <input type="text" id="clientSearchInput" placeholder="이름으로 검색…" style="border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-family:inherit; font-size:12.5px; background:var(--panel); color:var(--ink);">
+          <button type="button" id="btnClientNew" class="save-btn">+ 새 고객</button>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:row; min-height:0;">
+          <div id="clientListCol" style="width:260px; min-width:200px; border-right:1px solid var(--line); overflow-y:auto;">
+            <div id="clientList" class="log-list"></div>
+          </div>
+          <div id="clientDetailCol" style="flex:1; overflow-y:auto; padding:16px; box-sizing:border-box;">
+            <div id="clientDetail"><div class="explorer-status">왼쪽에서 고객을 선택하거나 "+ 새 고객"을 눌러주세요.</div></div>
+          </div>
+        </div>
+      </div>
+      <datalist id="clientNameOptions"></datalist>
+
       <div id="searchView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnSearchBack" title="닫기">✕</button>
@@ -1746,6 +1766,7 @@ graph TD
 <script src="/tax-calc.js?v=20260814a"></script>
 <script src="/explorer.js?v=20260814a"></script>
 <script src="/work-manage.js?v=20260827a"></script>
+<script src="/client-manage.js?v=20260827a"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
 <script src="/chat.js?v=20260814a"></script>

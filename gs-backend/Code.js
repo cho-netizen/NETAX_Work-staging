@@ -2716,6 +2716,70 @@ const DRIVE_TOOLS = [
     }
   },
   {
+    name: 'list_clients',
+    description: '고객관리에 등록된 고객 명단을 조회한다(성명·전화번호·메모 등). "OO씨 연락처 뭐야?", "이 고객 정보 있어?"처럼 물으면 이 도구로 확인하라.',
+    input_schema: {
+      type: 'object',
+      properties: { search: { type: 'string', description: '이름으로 검색(선택, 부분일치). 생략하면 전체 목록.' } }
+    }
+  },
+  {
+    name: 'create_client',
+    description: '고객관리에 새 고객을 등록한다. 사용자가 "OO씨 고객으로 등록해줘"처럼 명확히 요청했을 때 써라. 참고로 작업관리에 사건을 등록하거나 자문내역을 기록할 때 고객명만 적어도 자동으로 여기 명단에 등록되므로, 이 도구는 사건·자문내역 없이 연락처만 미리 등록해두고 싶을 때 쓰는 것이다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '고객 성명' },
+        phone: { type: 'string', description: '전화번호(선택)' },
+        type: { type: 'string', description: '구분(선택, 예: 개인/법인)' },
+        businessNumber: { type: 'string', description: '사업자번호(선택)' },
+        memo: { type: 'string', description: '메모(선택)' }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'update_client',
+    description: '고객관리에 등록된 고객의 정보(전화번호·구분·사업자번호·메모)를 수정한다. "OO씨 연락처 바뀌었어, 010-...로 고쳐줘"처럼 요청했을 때 써라. 고객은 이름으로 찾는다 — 동명이인이면 여러 후보가 반환되니 사용자에게 확인해라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '고객 성명(찾는 기준)' },
+        phone: { type: 'string', description: '바꿀 전화번호(선택)' },
+        type: { type: 'string', description: '바꿀 구분(선택)' },
+        businessNumber: { type: 'string', description: '바꿀 사업자번호(선택)' },
+        memo: { type: 'string', description: '바꿀 메모(선택)' }
+      },
+      required: ['name']
+    }
+  },
+  {
+    name: 'add_consult_log',
+    description: '고객의 상담·자문 이력을 한 건 기록한다(예전 고객관리.xlsx의 자문내역과 같은 성격 — 날짜·담당자·상담유형·내용·수임료·관계·유입경로). 사용자가 "이 상담 기록해줘", "OO씨 자문내역 등록해줘"처럼 요청했을 때 써라. 이름만 주면 자동으로 고객관리 명단에 연결/신규등록된다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        customerName: { type: 'string', description: '고객 성명' },
+        date: { type: 'string', description: '상담 날짜 YYYY-MM-DD(생략하면 오늘)' },
+        staff: { type: 'string', description: '담당 세무사/직원(선택)' },
+        type: { type: 'string', description: '상담 유형(자유입력, 예: 수시자문·양도신고·불복청구·상속신고·양도상담 등)' },
+        content: { type: 'string', description: '상담 내용' },
+        relation: { type: 'string', description: '실제 상담자와 결제자가 다를 때 그 관계(선택, 예: 배우자·모친)' },
+        amount: { type: 'number', description: '수임료/자문료 금액(선택, 원단위 숫자)' },
+        source: { type: 'string', description: '유입경로(선택, 예: 네이버·구글·소개)' }
+      },
+      required: ['customerName', 'content']
+    }
+  },
+  {
+    name: 'list_consult_logs',
+    description: '고객의 상담·자문 이력을 조회한다. "OO씨 상담 이력 뭐 있어?", "최근 자문내역 보여줘"처럼 물으면 이 도구로 확인하라. 최신순으로 반환된다.',
+    input_schema: {
+      type: 'object',
+      properties: { customerName: { type: 'string', description: '고객명으로 필터링(선택, 부분일치). 생략하면 전체 최근 내역.' } }
+    }
+  },
+  {
     name: 'remember_fact',
     description: '조종호님에 대한 지속적으로 유효한 사실이나 지침(예: 선호하는 보고서 형식, 앞으로 항상 지켜야 할 규칙, 새로 알게 된 사무실 운영방침)을 마스터 프로필에 추가해서, 이후 모든 대화·모든 사건 폴더에서 항상 참고되게 만든다. ' +
       '사용자가 "기억해줘", "앞으로 항상 이렇게 해줘"처럼 명시적으로 요청했을 때, 또는 스스로 판단하기에도 이건 이번 대화 한정이 아니라 앞으로 계속 적용돼야 할 규칙이 명확할 때만 사용하라. ' +
@@ -2854,6 +2918,12 @@ function doPost(e) {
     const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask'];
     if (WORK_ACTIONS.indexOf(body.action) !== -1) {
       return jsonResponse(work_doPost(body));
+    }
+
+    // [2026.08] client 모듈 — 고객관리(고객 명단 + 자문내역) 신규
+    const CLIENT_ACTIONS = ['client_get_clients', 'client_create_client', 'client_update_client', 'client_delete_client', 'client_get_consult_logs', 'client_add_consult_log', 'client_update_consult_log', 'client_delete_consult_log'];
+    if (CLIENT_ACTIONS.indexOf(body.action) !== -1) {
+      return jsonResponse(client_doPost(body));
     }
 
     if (body.action === 'listFolder') {
@@ -12175,6 +12245,11 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'add_work_subtask' ||
         b.name === 'update_work_subtask_status' ||
         b.name === 'delete_work_case' ||
+        b.name === 'list_clients' ||
+        b.name === 'create_client' ||
+        b.name === 'update_client' ||
+        b.name === 'add_consult_log' ||
+        b.name === 'list_consult_logs' ||
         b.name === 'remember_fact' ||
         b.name === 'list_business_managers' ||
         b.name === 'load_business_manager' ||
@@ -12815,6 +12890,39 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const targetPath = (body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : [];
         const resultObj = toolDeleteWorkCase(input, targetPath);
         if (resultObj && resultObj.success) clientActions.push({ type: 'work_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'list_clients') {
+        const input = block.input || {};
+        const resultObj = toolListClients(input.search);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'create_client') {
+        const input = block.input || {};
+        const resultObj = toolCreateClient(input);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'client_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'update_client') {
+        const input = block.input || {};
+        const resultObj = toolUpdateClient(input);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'client_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'add_consult_log') {
+        const input = block.input || {};
+        const resultObj = toolAddConsultLog(input);
+        if (resultObj && resultObj.success) clientActions.push({ type: 'client_manage_changed' });
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'list_consult_logs') {
+        const input = block.input || {};
+        const resultObj = toolListConsultLogs(input.customerName);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
@@ -14752,23 +14860,336 @@ function my_doPost(body) {
 }
 
 // =========================================================
+// client 모듈 — 고객관리(고객 명단 + 자문내역·수임료 기록) (2026.08 신규)
+// 기존 고객관리.xlsx(자문일지 성격)에 없던 "고객 1명당 1행" 명단(Clients)을 새로 만들고,
+// 실제 상담·자문 이력은 예전처럼 이벤트 하나당 1행(ConsultLog)으로 남기되 고객ID로 연결한다.
+// work_ 모듈(작업관리)의 사건도 고객명을 적으면 자동으로 여기 명단과 연결/신규등록된다.
+// =========================================================
+const CLIENT_SHEET_ID = '1nHf4PK1F1-Ao5jZ-s43PB1A3eF85YVRcI7T1kK_ooBI';
+const CLIENT_SHEET_CLIENTS = 'Clients';
+const CLIENT_SHEET_LOG = 'ConsultLog';
+const CLIENT_HEADERS = ['id', '성명', '전화번호', '구분', '사업자번호', '메모', '등록일', '수정일'];
+const CONSULT_HEADERS = ['id', '고객ID', '고객명', '날짜', '담당자', '유형', '내용', '관계', '금액', '리뷰', '생성일'];
+
+function client_getSheets_() {
+  const ss = SpreadsheetApp.openById(CLIENT_SHEET_ID);
+  return { ss: ss, clients: client_ensureSheet_(ss, CLIENT_SHEET_CLIENTS, CLIENT_HEADERS), log: client_ensureSheet_(ss, CLIENT_SHEET_LOG, CONSULT_HEADERS) };
+}
+
+// work_getSheet_와 같은 자가치유 방식 — 시트가 없으면 헤더까지 만들고, 있는데 헤더가 모자라면
+// (스키마가 나중에 늘어난 경우) 빠진 헤더만 뒤에 이어붙인다.
+function client_ensureSheet_(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+    return sheet;
+  }
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const missing = headers.filter(function (h) { return existing.indexOf(h) === -1; });
+  if (missing.length > 0) {
+    sheet.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]);
+  }
+  return sheet;
+}
+
+function client_colMap_(headers, headerList) {
+  const map = {};
+  headerList.forEach(function (name) { map[name] = headers.indexOf(name); });
+  return map;
+}
+
+function client_dateStr_(v) {
+  if (!v) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v).slice(0, 10);
+}
+
+function client_findRow_(sheet, col, id) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][col.id]).trim() === String(id).trim()) return { rowIndex: i + 1, row: data[i] };
+  }
+  return null;
+}
+
+function client_readClient_(col, row) {
+  return {
+    id: row[col.id], 성명: row[col.성명], 전화번호: row[col.전화번호], 구분: row[col.구분],
+    사업자번호: row[col.사업자번호], 메모: row[col.메모],
+    등록일: client_dateStr_(row[col.등록일]), 수정일: client_dateStr_(row[col.수정일])
+  };
+}
+
+function client_readLog_(col, row) {
+  return {
+    id: row[col.id], 고객ID: row[col.고객ID], 고객명: row[col.고객명],
+    날짜: client_dateStr_(row[col.날짜]), 담당자: row[col.담당자], 유형: row[col.유형],
+    내용: row[col.내용], 관계: row[col.관계], 금액: row[col.금액], 리뷰: row[col.리뷰],
+    생성일: row[col.생성일]
+  };
+}
+
+function client_getClients(params) {
+  const sheets = client_getSheets_();
+  const data = sheets.clients.getDataRange().getValues();
+  const col = client_colMap_(data[0], CLIENT_HEADERS);
+  const q = String((params && params.search) || '').trim();
+  const clients = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][col.id]) continue;
+    if (q && String(data[i][col.성명] || '').indexOf(q) === -1) continue;
+    clients.push(client_readClient_(col, data[i]));
+  }
+  return { success: true, clients: clients };
+}
+
+// 이름으로 고객을 찾고, 없으면 그 자리에서 새로 만든다. work_ 모듈(사건 등록)과 자문내역 등록
+// 양쪽에서 "고객명만 입력해도 자동으로 고객관리 명단에 연결/등록"되게 하는 공용 함수.
+function client_findOrCreateByName_(name) {
+  const trimmed = String(name || '').trim();
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const data = sheets.clients.getDataRange().getValues();
+    const col = client_colMap_(data[0], CLIENT_HEADERS);
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][col.성명] || '').trim() === trimmed) return { id: data[i][col.id], isNew: false };
+    }
+    const id = Utilities.getUuid();
+    const now = new Date();
+    const newRow = [];
+    newRow[col.id] = id;
+    newRow[col.성명] = trimmed;
+    newRow[col.등록일] = now;
+    newRow[col.수정일] = now;
+    sheets.clients.appendRow(newRow);
+    SpreadsheetApp.flush();
+    return { id: id, isNew: true };
+  });
+}
+
+function client_createClient(params) {
+  const 성명 = String(params.성명 || '').trim();
+  if (!성명) return { success: false, message: '성명이 필요합니다.' };
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.clients.getDataRange().getValues()[0], CLIENT_HEADERS);
+    const id = Utilities.getUuid();
+    const now = new Date();
+    const newRow = [];
+    newRow[col.id] = id;
+    newRow[col.성명] = 성명;
+    newRow[col.전화번호] = String(params.전화번호 || '').trim();
+    newRow[col.구분] = String(params.구분 || '').trim();
+    newRow[col.사업자번호] = String(params.사업자번호 || '').trim();
+    newRow[col.메모] = String(params.메모 || '').trim();
+    newRow[col.등록일] = now;
+    newRow[col.수정일] = now;
+    sheets.clients.appendRow(newRow);
+    SpreadsheetApp.flush();
+    return { success: true, client: client_readClient_(col, newRow) };
+  });
+}
+
+function client_updateClient(params) {
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.clients.getDataRange().getValues()[0], CLIENT_HEADERS);
+    const found = client_findRow_(sheets.clients, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 고객입니다.' };
+    const row = found.row;
+    ['성명', '전화번호', '구분', '사업자번호', '메모'].forEach(function (key) {
+      if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
+    });
+    row[col.수정일] = new Date();
+    sheets.clients.getRange(found.rowIndex, 1, 1, row.length).setValues([row]);
+    SpreadsheetApp.flush();
+    return { success: true, client: client_readClient_(col, row) };
+  });
+}
+
+function client_deleteClient(params) {
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.clients.getDataRange().getValues()[0], CLIENT_HEADERS);
+    const found = client_findRow_(sheets.clients, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 고객입니다.' };
+    sheets.clients.deleteRow(found.rowIndex);
+    return { success: true };
+  });
+}
+
+function client_getConsultLogs(params) {
+  const sheets = client_getSheets_();
+  const data = sheets.log.getDataRange().getValues();
+  const col = client_colMap_(data[0], CONSULT_HEADERS);
+  const clientId = String((params && params.고객ID) || '').trim();
+  const q = String((params && params.search) || '').trim();
+  const logs = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][col.id]) continue;
+    if (clientId && String(data[i][col.고객ID] || '').trim() !== clientId) continue;
+    if (q && String(data[i][col.고객명] || '').indexOf(q) === -1) continue;
+    logs.push(client_readLog_(col, data[i]));
+  }
+  logs.sort(function (a, b) { return String(b.날짜 || '').localeCompare(String(a.날짜 || '')); });
+  return { success: true, logs: logs };
+}
+
+function client_addConsultLog(params) {
+  const 고객명 = String(params.고객명 || '').trim();
+  let 고객ID = String(params.고객ID || '').trim();
+  if (!고객ID && !고객명) return { success: false, message: '고객명(또는 고객ID)이 필요합니다.' };
+  if (!고객ID) 고객ID = client_findOrCreateByName_(고객명).id;
+
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.log.getDataRange().getValues()[0], CONSULT_HEADERS);
+    const id = Utilities.getUuid();
+    const now = new Date();
+    const newRow = [];
+    newRow[col.id] = id;
+    newRow[col.고객ID] = 고객ID;
+    newRow[col.고객명] = 고객명;
+    newRow[col.날짜] = String(params.날짜 || '').trim() || Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    newRow[col.담당자] = String(params.담당자 || '').trim();
+    newRow[col.유형] = String(params.유형 || '').trim();
+    newRow[col.내용] = String(params.내용 || '').trim();
+    newRow[col.관계] = String(params.관계 || '').trim();
+    newRow[col.금액] = params.금액 !== undefined && params.금액 !== '' ? Number(params.금액) || 0 : '';
+    newRow[col.리뷰] = String(params.리뷰 || '').trim();
+    newRow[col.생성일] = now;
+    sheets.log.appendRow(newRow);
+    SpreadsheetApp.flush();
+    return { success: true, log: client_readLog_(col, newRow) };
+  });
+}
+
+function client_updateConsultLog(params) {
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.log.getDataRange().getValues()[0], CONSULT_HEADERS);
+    const found = client_findRow_(sheets.log, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 자문내역입니다.' };
+    const row = found.row;
+    ['날짜', '담당자', '유형', '내용', '관계', '리뷰'].forEach(function (key) {
+      if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
+    });
+    if (params.금액 !== undefined) row[col.금액] = params.금액 !== '' ? Number(params.금액) || 0 : '';
+    sheets.log.getRange(found.rowIndex, 1, 1, row.length).setValues([row]);
+    SpreadsheetApp.flush();
+    return { success: true, log: client_readLog_(col, row) };
+  });
+}
+
+function client_deleteConsultLog(params) {
+  return withLock_(8000, function () {
+    const sheets = client_getSheets_();
+    const col = client_colMap_(sheets.log.getDataRange().getValues()[0], CONSULT_HEADERS);
+    const found = client_findRow_(sheets.log, col, params.id);
+    if (!found) return { success: false, message: '존재하지 않는 자문내역입니다.' };
+    sheets.log.deleteRow(found.rowIndex);
+    return { success: true };
+  });
+}
+
+function client_doPost(body) {
+  switch (body.action) {
+    case 'client_get_clients': return client_getClients(body);
+    case 'client_create_client': return client_createClient(body);
+    case 'client_update_client': return client_updateClient(body);
+    case 'client_delete_client': return client_deleteClient(body);
+    case 'client_get_consult_logs': return client_getConsultLogs(body);
+    case 'client_add_consult_log': return client_addConsultLog(body);
+    case 'client_update_consult_log': return client_updateConsultLog(body);
+    case 'client_delete_consult_log': return client_deleteConsultLog(body);
+    default: return { success: false, message: '알 수 없는 action: ' + body.action };
+  }
+}
+
+// ---- AI 채팅(넥스) 도구 연동 ----
+// AI는 고객 내부 id를 모르므로 이름(부분일치)으로 찾는다. work_resolveCase_와 같은 취지.
+function client_resolveByName_(name) {
+  const sheets = client_getSheets_();
+  const data = sheets.clients.getDataRange().getValues();
+  const col = client_colMap_(data[0], CLIENT_HEADERS);
+  const q = String(name || '').trim();
+  if (!q) return { error: '고객 이름이 필요합니다.' };
+  const matches = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][col.id]) continue;
+    if (String(data[i][col.성명] || '').indexOf(q) !== -1) matches.push({ rowIndex: i + 1, row: data[i] });
+  }
+  if (matches.length === 0) return { error: '"' + q + '" 이름의 고객을 찾지 못했습니다.' };
+  if (matches.length > 1) {
+    return {
+      error: '"' + q + '"에 해당하는 고객이 ' + matches.length + '명입니다. 어느 분인지 확인해주세요.',
+      candidates: matches.map(function (m) { return { id: m.row[col.id], 성명: m.row[col.성명], 전화번호: m.row[col.전화번호] }; })
+    };
+  }
+  return { sheets: sheets, col: col, row: matches[0].row, rowIndex: matches[0].rowIndex };
+}
+
+function toolListClients(search) {
+  return client_getClients({ search: search });
+}
+
+function toolCreateClient(input) {
+  return client_createClient({
+    성명: input.name, 전화번호: input.phone, 구분: input.type,
+    사업자번호: input.businessNumber, 메모: input.memo
+  });
+}
+
+function toolUpdateClient(input) {
+  const resolved = client_resolveByName_(input.name);
+  if (resolved.error) return resolved;
+  return client_updateClient({
+    id: resolved.row[resolved.col.id], 전화번호: input.phone, 구분: input.type,
+    사업자번호: input.businessNumber, 메모: input.memo
+  });
+}
+
+function toolAddConsultLog(input) {
+  return client_addConsultLog({
+    고객명: input.customerName, 고객ID: input.clientId, 날짜: input.date, 담당자: input.staff,
+    유형: input.type, 내용: input.content, 관계: input.relation, 금액: input.amount, 리뷰: input.source
+  });
+}
+
+function toolListConsultLogs(customerName) {
+  return client_getConsultLogs({ search: customerName });
+}
+
+// =========================================================
 // work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) (2026.08 신규)
 // 사건 1행 = Cases 시트 한 줄. 하위업무는 my_ 모듈의 체크리스트/제출상태와 같은 방식으로
 // 한 셀에 JSON 트리(children 배열, 깊이 제한 없음)로 저장한다.
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객명', '사건명', '세목', '담당자', '의뢰일', '기준일', '법정일', '상태', '하위업무', '생성일', '수정일'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '담당자', '의뢰일', '기준일', '법정일', '상태', '하위업무', '생성일', '수정일'];
 // 세목별 법정기한 규칙(개월수) — explorer.js의 CALC_DEADLINE_MONTHS_/기한계산 팝업과 동일 공식
 // ("기준일이 속한 달의 말일" 기준으로 N개월 뒤). 불복만 이번에 새로 추가.
 const WORK_DEADLINE_MONTHS_ = { transfer: 2, gift: 3, inheritance: 6, objection: 2 };
 
+// 시트를 열고, 처음 만드는 거면 헤더까지 써준다. 이미 있는 시트인데 WORK_HEADERS에 새 컬럼이
+// 추가된 상태(예: 고객ID 신규 도입)면, 기존 데이터는 그대로 두고 빠진 헤더만 뒤에 이어붙인다
+// — work_colMap_이 이름으로 컬럼을 찾으므로 위치가 중간이 아니어도 문제없다.
 function work_getSheet_() {
   const ss = SpreadsheetApp.openById(WORK_SHEET_ID);
   let sheet = ss.getSheetByName(WORK_SHEET_CASES);
   if (!sheet) {
     sheet = ss.insertSheet(WORK_SHEET_CASES);
     sheet.appendRow(WORK_HEADERS);
+    return sheet;
+  }
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const missing = WORK_HEADERS.filter(function (h) { return existingHeaders.indexOf(h) === -1; });
+  if (missing.length > 0) {
+    sheet.getRange(1, existingHeaders.length + 1, 1, missing.length).setValues([missing]);
   }
   return sheet;
 }
@@ -14813,6 +15234,7 @@ function work_readRow_(col, rowValues) {
   if (!Array.isArray(subtasks)) subtasks = [];
   return {
     id: rowValues[col.id],
+    고객ID: rowValues[col.고객ID],
     고객명: rowValues[col.고객명],
     사건명: rowValues[col.사건명],
     세목: rowValues[col.세목],
@@ -14858,10 +15280,16 @@ function work_createCase(params) {
     const now = new Date();
     const seMok = String(params.세목 || '').trim();
     const 기준일 = String(params.기준일 || '').trim();
+    const 고객명 = String(params.고객명 || '').trim();
+    // 고객ID를 직접 안 주면(화면에서 이름만 입력한 경우) 같은 이름의 고객을 고객관리에서 찾고,
+    // 없으면 그 자리에서 새 고객으로 등록해서 연결한다 — 사건 등록 흐름이 예전과 똑같이
+    // 이름만 입력하면 되도록 유지하면서도 자동으로 고객관리 명단이 쌓이게 하기 위함.
+    const 고객ID = String(params.고객ID || '').trim() || (고객명 ? client_findOrCreateByName_(고객명).id : '');
 
     const newRow = [];
     newRow[col.id] = id;
-    newRow[col.고객명] = String(params.고객명 || '').trim();
+    newRow[col.고객ID] = 고객ID;
+    newRow[col.고객명] = 고객명;
     newRow[col.사건명] = String(params.사건명 || '').trim();
     newRow[col.세목] = seMok;
     newRow[col.담당자] = String(params.담당자 || '').trim();
@@ -14893,6 +15321,9 @@ function work_updateCase(params) {
     ['고객명', '사건명', '담당자', '상태'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
+    if (params.고객명 !== undefined) {
+      row[col.고객ID] = params.고객명 ? client_findOrCreateByName_(row[col.고객명]).id : '';
+    }
     let recalc = false;
     if (params.세목 !== undefined) { row[col.세목] = String(params.세목).trim(); recalc = true; }
     if (params.기준일 !== undefined) { row[col.기준일] = String(params.기준일).trim(); recalc = true; }

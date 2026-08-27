@@ -103,6 +103,7 @@
   const WORK_TOOLS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
     { icon: '🗂', label: '작업관리', handler: openWorkManageView },
+    { icon: '👤', label: '고객관리', handler: openClientManageView },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '📐', label: '세액계산', handler: openTaxCalcView },
@@ -1775,6 +1776,14 @@
     if (workManageChangedAction && typeof workManageView !== 'undefined' && workManageView
         && workManageView.style.display !== 'none') {
       loadWorkCases();
+    }
+
+    // AI가 고객관리 명단/자문내역을 만들거나 바꿨을 때도 마찬가지로, 지금 고객관리 화면이
+    // 열려 있으면 새로고침한다.
+    const clientManageChangedAction = actions.find(a => a && a.type === 'client_manage_changed');
+    if (clientManageChangedAction && typeof clientManageView !== 'undefined' && clientManageView
+        && clientManageView.style.display !== 'none') {
+      loadClients();
     }
 
     // [패치] isReportWriterOpen(지금 이 순간의 화면 상태)로 게이트하지 않는다 — clientActions에

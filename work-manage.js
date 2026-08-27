@@ -96,7 +96,7 @@ const workManageView = document.getElementById('workManageView');
     workCaseDetail.innerHTML =
       '<h3 style="margin-top:0;">새 사건 등록</h3>' +
       '<div style="display:flex; flex-direction:column; gap:8px; max-width:420px;">' +
-      '<label>고객명<br><input type="text" id="wcNewCustomer" list="customerListOptions" style="width:100%;" placeholder="고객명"></label>' +
+      '<label>고객명<br><input type="text" id="wcNewCustomer" list="clientNameOptions" style="width:100%;" placeholder="고객명 (신규면 자동으로 고객관리에도 등록됩니다)"></label>' +
       '<label>사건명<br><input type="text" id="wcNewCase" style="width:100%;" placeholder="예: 2026년 양도소득세 신고"></label>' +
       '<label>세목<br><select id="wcNewSemok" style="width:100%;">' +
         Object.keys(WORK_SEMOK_LABELS).map(k => '<option value="' + k + '">' + WORK_SEMOK_LABELS[k] + '</option>').join('') +
