@@ -872,6 +872,21 @@
     return true;
   }
 
+  // [2026.08] 실사용으로 직접 확인됨 — Gem에게 "@"로 시작하는 질문을 보내면 확장프로그램이
+  // 제미니웹의 "@구글캘린더" 앱 연동을 정상적으로 처리해서, 실제 구글캘린더 원문을 그대로
+  // 조회해온다(NX가 이미 사건 마감일을 캘린더에 동기화해두므로, 캘린더 자체가 NX 데이터의
+  // 사본이라 믿을 수 있다). 그래서 일정 "조회"류 질문은 위의 완전 안전 목록과 별도로,
+  // Gem 우선 대상에 추가한다 — 단 "추가/등록/삭제/변경"처럼 쓰기 의도가 섞이면 제외한다
+  // (@는 참조만 가능하고 실제로 캘린더를 고치지는 못하므로, 쓰기 요청은 반드시 NX 자체
+  // 도구를 거쳐야 한다).
+  const GEM_CALENDAR_READ_RE = /(일정|캘린더|스케줄|미팅|약속|몇\s*시|언제)/;
+  const GEM_WRITE_INTENT_RE = /(추가|등록|삭제|취소|변경|수정|만들어|잡아|저장|고쳐|반영)/;
+  function isGemCalendarQuery_(text){
+    if (!text || text.length > 200) return false;
+    if (GEM_WRITE_INTENT_RE.test(text)) return false;
+    return GEM_CALENDAR_READ_RE.test(text);
+  }
+
   const pendingGemSilent_ = {}; // requestId -> {resolve, reject} — 화면에 별도 말풍선을 만들지 않는 조용한 요청용
   // askGem()과 같은 확장프로그램 경로(NX_GEM_ASK)를 쓰지만, Promise로 감싸서 sendChatMessage가
   // "성공하면 그 답을 이번 턴의 정식 답변으로 쓰고, 실패하면 Haiku로 넘어간다"처럼 판단할 수 있게 한다.
@@ -2160,20 +2175,27 @@
     // 보다도 먼저 제미니웹(확장프로그램 경유, 무료)을 시도한다 — 첨부·화면캡처·열린문서 등
     // NX 쪽 맥락이 이번 메시지에 섞여있으면 애초에 대상에서 뺀다(제미니는 그런 맥락을 볼 수
     // 없으므로). 실패해도 사용자에게 굳이 알리지 않고 조용히 원래 경로(Haiku)로 넘어간다.
+    const geminiCalendarRoute = isGemCalendarQuery_(text) && !isGemWebSafeMessage_(text);
     const geminiWebEligible = aiSettings.model === 'auto'
       && !extraBlocks.length
       && !openFileCtx
-      && isGemWebSafeMessage_(text);
+      && (isGemWebSafeMessage_(text) || geminiCalendarRoute);
 
     try{
       currentChatAbortController = new AbortController();
 
       if (geminiWebEligible){
-        thinkingBubble.textContent = '🔮 먼저 무료로 확인 중 (Gemini)…';
+        thinkingBubble.textContent = geminiCalendarRoute
+          ? '🔮 먼저 무료로 확인 중 (Gemini·구글캘린더)…'
+          : '🔮 먼저 무료로 확인 중 (Gemini)…';
         try{
-          const gemAnswer = await askGemSilent_(text, 20000);
+          // [2026.08] 캘린더 조회류는 "@"를 앞에 붙여서 보낸다 — 제미니웹의 @구글캘린더 연동을
+          // 트리거해서 실제 캘린더 원문을 가져오게 하기 위함(2026-08-27 실사용으로 확인됨).
+          const gemQuestion = geminiCalendarRoute ? ('@' + text) : text;
+          const gemAnswer = await askGemSilent_(gemQuestion, 20000);
           if (gemAnswer && gemAnswer.trim()){
-            renderAssistantReply(thinkingBubble, '🔮 (Gemini·무료 답변)\n\n' + gemAnswer, [], null);
+            const gemLabel = geminiCalendarRoute ? '🔮 (Gemini·구글캘린더 조회, 무료)' : '🔮 (Gemini·무료 답변)';
+            renderAssistantReply(thinkingBubble, gemLabel + '\n\n' + gemAnswer, [], null);
             const aiMsgObj = { role: 'assistant', content: gemAnswer };
             chatMessages.push(aiMsgObj);
             thinkingBubble._nxMsgRef = aiMsgObj;
