@@ -82,6 +82,7 @@
   // 레이아웃 전환: 좌우배치 → 상하배치 → 탐색기 생략 → 탐색기 띄우기 — 버튼 하나로 순환
   // ============================================================
   const workspace = document.getElementById('workspace');
+  const explorerPanelEl = document.querySelector('.panel.explorer');
   const btnWorkspaceMode = document.getElementById('btnWorkspaceMode');
   const workspaceModeIcon = document.getElementById('workspaceModeIcon');
   const workspaceModeLabel = document.getElementById('workspaceModeLabel');
@@ -114,6 +115,16 @@
     // 그래서 분리대를 왼쪽 끝까지 밀면 이 스위치만 조용히 켜지고 창전환 버튼(⬓)은 그걸 모르는
     // 상태가 되어 "분리대가 죽은 것처럼" 보였다. 이제 이 모드 체계 안으로 완전히 합쳤다.
     workspace.classList.toggle('chat-collapsed', mode === 'max');
+    // [2026.08] 띄우기 모드에서 드래그로 옮긴 위치는 그 모드 안에서만 의미가 있다 — 다른
+    // 배치로 바뀌면 남아있는 인라인 위치값이 그쪽 레이아웃까지 망가뜨리므로 초기화한다.
+    if (mode !== 'float'){
+      explorerPanelEl.style.left = '';
+      explorerPanelEl.style.top = '';
+      explorerPanelEl.style.right = '';
+      explorerPanelEl.style.bottom = '';
+      explorerPanelEl.style.width = '';
+      explorerPanelEl.style.height = '';
+    }
     workspaceModeIcon.textContent = WORKSPACE_MODE_META[mode].icon;
     workspaceModeLabel.textContent = WORKSPACE_MODE_META[mode].label;
     btnWorkspaceMode.title = WORKSPACE_MODE_META[mode].title;
@@ -154,6 +165,45 @@
   function setChatCollapsed(collapsed){
     setWorkspaceMode(collapsed ? 'max' : detectDefaultMode());
   }
+
+  // ---- 탐색기 "띄우기" 모드 — 패널 헤더를 잡고 화면 아무 곳으로나 드래그 ----
+  // [2026.08] 예전엔 "띄우기"가 화면 중앙에 고정된 위치로만 열렸다 — 진짜 떠 있는 창처럼
+  // 자유롭게 옮길 수 있어야 한다는 지적으로 추가. 헤더(breadcrumb·버튼 제외 영역)를 잡고
+  // 드래그하면 그 위치로 옮겨진다. 폭·높이는 드래그를 시작하는 순간의 실제 크기로 고정한다
+  // (그전까지는 CSS의 left:5vw/right:5vw로 화면 크기에 따라 자동 계산되던 상태라, 그대로
+  // 두면 위치를 옮기는 도중에도 폭이 계속 흔들린다).
+  const explorerPanelHead = document.getElementById('explorerPanelHead');
+  let floatDragging = false, floatDragOffsetX = 0, floatDragOffsetY = 0;
+  explorerPanelHead.addEventListener('pointerdown', (e)=>{
+    if (!workspace.classList.contains('explorer-floating')) return;
+    if (e.target.closest('.breadcrumb, button, a, input')) return; // 폴더 이동 등 원래 클릭 동작은 그대로 둔다
+    floatDragging = true;
+    const rect = explorerPanelEl.getBoundingClientRect();
+    explorerPanelEl.style.width = rect.width + 'px';
+    explorerPanelEl.style.height = rect.height + 'px';
+    explorerPanelEl.style.right = 'auto';
+    explorerPanelEl.style.bottom = 'auto';
+    explorerPanelEl.style.left = rect.left + 'px';
+    explorerPanelEl.style.top = rect.top + 'px';
+    floatDragOffsetX = e.clientX - rect.left;
+    floatDragOffsetY = e.clientY - rect.top;
+    explorerPanelHead.setPointerCapture(e.pointerId);
+    document.body.style.userSelect = 'none';
+  });
+  explorerPanelHead.addEventListener('pointermove', (e)=>{
+    if (!floatDragging) return;
+    const w = explorerPanelEl.offsetWidth, h = explorerPanelEl.offsetHeight;
+    const left = Math.max(0, Math.min(window.innerWidth - w, e.clientX - floatDragOffsetX));
+    const top = Math.max(0, Math.min(window.innerHeight - h, e.clientY - floatDragOffsetY));
+    explorerPanelEl.style.left = left + 'px';
+    explorerPanelEl.style.top = top + 'px';
+  });
+  function endFloatDrag(){
+    floatDragging = false;
+    document.body.style.userSelect = '';
+  }
+  explorerPanelHead.addEventListener('pointerup', endFloatDrag);
+  explorerPanelHead.addEventListener('pointercancel', endFloatDrag);
   // (예전 버전 데이터 마이그레이션은 아래 최종 초기화 지점에서 한 번에 처리한다 — 여기서
   // 클래스를 미리 건드리면 나중에 applyWorkspaceMode가 그대로 덮어써서 의미가 없어짐)
 

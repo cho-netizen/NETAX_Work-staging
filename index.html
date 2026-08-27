@@ -534,6 +534,10 @@
     bottom:16px; z-index:91;
     border-radius:12px; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.4); border:1px solid var(--line);
   }
+  /* 헤더를 잡고 화면 아무 곳으로나 옮길 수 있다는 걸 커서로 알려준다(breadcrumb·버튼은 제외). */
+  .workspace.explorer-floating .panel.explorer .panel-head{ cursor:move; }
+  .workspace.explorer-floating .panel.explorer .panel-head .breadcrumb,
+  .workspace.explorer-floating .panel.explorer .panel-head button{ cursor:pointer; }
 
   .panel-head{
     display:flex; align-items:center; gap:8px; height:38px; padding:0 14px;
@@ -1761,7 +1765,7 @@ graph TD
     </div>
   </div>
 
-<script src="/core.js?v=20260814a"></script>
+<script src="/core.js?v=20260828a"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
 <script src="/explorer.js?v=20260827b"></script>
 <script src="/work-manage.js?v=20260827a"></script>
