@@ -12002,15 +12002,18 @@ const CONTENT_BEARING_TOOL_FIELDS_ = {
   apply_diagram_edit: 'mermaidCode'
 };
 
+// [2026.08] 예전엔 "필드가 통째로 빠졌을 때"(빈 문자열/undefined)만 잘림으로 봤는데, 실제로는
+// 필드가 있어도 그 값 자체가 문장 중간에서 뚝 끊긴 채로 올 수 있다(예: 보고서 80%까지만 쓰고
+// max_tokens에 걸림) — 이 경우 "내용이 없습니다" 에러 없이 그대로 저장돼버려서, AI는 "저장
+// 했습니다"라고 답하지만 실제 파일은 잘린 내용으로 덮어써지는 문제가 있었다. stop_reason이
+// 'max_tokens'라는 것 자체가 "이 응답은 어차피 끝까지 못 썼다"는 확실한 신호이므로, 필드값이
+// 비어있는지와 상관없이 content-bearing 도구가 하나라도 있으면 무조건 잘린 것으로 보고
+// 재시도한다(더 큰 예산으로).
 function isLikelyTruncatedContentToolCall_(result) {
   if (!result || result.stop_reason !== 'max_tokens') return false;
   const blocks = result.content || [];
   return blocks.some(function (b) {
-    if (!b || b.type !== 'tool_use') return false;
-    const field = CONTENT_BEARING_TOOL_FIELDS_[b.name];
-    if (!field) return false;
-    const val = b.input && b.input[field];
-    return typeof val !== 'string' || val.length === 0;
+    return !!(b && b.type === 'tool_use' && CONTENT_BEARING_TOOL_FIELDS_[b.name]);
   });
 }
 
@@ -12275,7 +12278,13 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const targetPath = (Array.isArray(input.path) && input.path.length) ? input.path
           : ((body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : []);
         const resultObj = toolSaveFileToFolder(targetPath, input.name, input.content);
-        if (resultObj && !resultObj.error) clientActions.push({ type: 'explorer_changed', path: targetPath });
+        if (resultObj && !resultObj.error) {
+          clientActions.push({ type: 'explorer_changed', path: targetPath });
+          // [2026.08] "저장했다고 답했는데 실제로 안 바뀌어 있다"는 문제 대응 — AI의 말(환각 가능)이
+          // 아니라 실제로 파일쓰기가 성공했을 때만 서버가 직접 만드는 확인 배지. chat.js가
+          // clientActions.type==='file_saved'를 보고 채팅창에 파일명+링크를 고정적으로 보여준다.
+          clientActions.push({ type: 'file_saved', name: resultObj.name, url: resultObj.url, updated: resultObj.updated });
+        }
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
@@ -12284,7 +12293,10 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         const targetPath = (Array.isArray(input.path) && input.path.length) ? input.path
           : ((body.context && Array.isArray(body.context.currentPath)) ? body.context.currentPath : []);
         const resultObj = toolExportToGoogleDoc(targetPath, input.title, input.content);
-        if (resultObj && !resultObj.error) clientActions.push({ type: 'explorer_changed', path: targetPath });
+        if (resultObj && !resultObj.error) {
+          clientActions.push({ type: 'explorer_changed', path: targetPath });
+          clientActions.push({ type: 'file_saved', name: resultObj.name, url: resultObj.url, updated: resultObj.updated });
+        }
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 

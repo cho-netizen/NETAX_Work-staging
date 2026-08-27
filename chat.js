@@ -1798,17 +1798,31 @@
       textPart.textContent = replyText.trim() || '문서에 대한 수정안을 준비했습니다.';
       bubbleEl.appendChild(textPart);
 
+      // [2026.08] "반영했다"고 답은 하는데 실제로는 안 바뀌어 있다는 문제 대응 — AI의 말이
+      // "저장했습니다"처럼 이미 끝난 것처럼 들려도, apply_document_edit은 이 버튼을 눌러야만
+      // 실제로 반영되는 도구다. AI 말투에 기대지 않고 항상 고정 문구로 한 번 더 못박아둔다.
+      const notice = document.createElement('div');
+      notice.className = 'apply-pending-notice';
+      notice.textContent = '⚠️ 아직 저장되지 않았습니다 — 아래 버튼을 눌러야 실제 문서에 반영됩니다.';
+      bubbleEl.appendChild(notice);
+
       const applyBtn = document.createElement('button');
       applyBtn.className = 'apply-edit-btn';
       applyBtn.textContent = '📝 편집기에 적용하기';
       applyBtn.addEventListener('click', ()=>{
         applyEditToTargetFile_(editTargetFile, editAction.content || '', applyBtn);
+        notice.remove();
       });
       bubbleEl.appendChild(applyBtn);
     } else if (diagramAction){
       const textPart = document.createElement('div');
       textPart.textContent = replyText.trim() || '관계도 초안을 준비했습니다.';
       bubbleEl.appendChild(textPart);
+
+      const notice = document.createElement('div');
+      notice.className = 'apply-pending-notice';
+      notice.textContent = '⚠️ 아직 저장되지 않았습니다 — 아래 버튼을 눌러야 실제 관계도에 반영됩니다.';
+      bubbleEl.appendChild(notice);
 
       const applyBtn = document.createElement('button');
       applyBtn.className = 'apply-edit-btn';
@@ -1819,11 +1833,28 @@
         saveDiagram();
         applyBtn.textContent = '✓ 적용됨';
         applyBtn.disabled = true;
+        notice.remove();
       });
       bubbleEl.appendChild(applyBtn);
     } else {
       bubbleEl.textContent = replyText;
     }
+
+    // [2026.08] AI 말(환각 가능)이 아니라, 서버가 실제 파일쓰기 성공을 확인했을 때만 만드는
+    // 확인 배지 — save_file_to_folder/export_to_google_doc이 진짜 성공했을 때만 존재한다.
+    // "반영했다고 답은 하는데 실제로는 안 바뀐" 경우, 이 배지가 없다는 것 자체가 신호가 된다.
+    const savedActions = actions.filter(a => a && a.type === 'file_saved');
+    savedActions.forEach(a => {
+      const badge = document.createElement('div');
+      badge.className = 'file-saved-badge';
+      const label = a.updated ? '기존 파일에 덮어썼습니다' : '새 파일로 저장했습니다';
+      if (a.url){
+        badge.innerHTML = '✅ ' + label + ': <a href="' + a.url + '" target="_blank" rel="noopener">' + escapeHtml(a.name || '') + '</a>';
+      } else {
+        badge.textContent = '✅ ' + label + ': ' + (a.name || '');
+      }
+      bubbleEl.appendChild(badge);
+    });
   }
 
   let currentChatAbortController = null; // 요청 중 '중지' 버튼으로 취소하기 위한 컨트롤러
