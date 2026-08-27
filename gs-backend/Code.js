@@ -109,11 +109,14 @@ function logNxInteraction_(entry) {
   }
 }
 
-// [2026.08] 컨텍스트 창이 작은 모델(현재 Haiku, MODEL_CONFIG의 reducedTools:true)에게 줄
-// 축소 도구세트 — calculate_*(세액계산기 92개, DRIVE_TOOLS 대부분을 차지)와 세무 특화
-// 조회 도구(부동산·건축물대장·법령조문 등)를 빼고, "간단한 보고서 수정·잡담" 역할에 맞는
-// 범용 파일·문서·작업관리·고객관리 도구만 남긴다. DRIVE_TOOLS 이름이 바뀌면 여기도 같이
-// 확인할 것 — buildToolsForModel_에서 이 이름들로 DRIVE_TOOLS를 걸러 쓴다.
+// [2026.08 "도구 설명 다이어트"] DRIVE_TOOLS 135개 중 92개(calculate_* 세액계산기)가 한글
+// 설명이 길어서 그것만으로 약 43만 토큰 — 세금 계산과 무관한 질문(파일 정리, 잡담, 문서
+// 수정 등)에도 매번 이 전부를 실어보내고 있었다. Haiku(컨텍스트 20만)는 아예 안 들어가서
+// reducedTools로 이미 고쳤는데(위 MODEL_CONFIG), Sonnet(컨텍스트 100만)은 넘치진 않아도
+// 매 요청마다 쓸데없이 처리시간·캐시비용이 들었다. 그래서 모델과 무관하게, 이번 질문에
+// 세금 계산 낌새가 있는지를 서버가 직접 보고(needsFullToolset_) 없으면 계산기 92개를 통째로
+// 뺀 축소세트만 준다 — 애매하면 넣는 쪽으로 판단해서(광범위한 키워드) 정말 필요한 도구가
+// 빠지는 일은 최대한 피한다.
 const BASIC_TOOL_NAMES_ = new Set([
   'list_drive_folder', 'read_drive_file', 'save_file_to_folder', 'export_to_google_doc', 'send_email',
   'register_report_to_rpt', 'manage_task_plan', 'lookup_calendar_events', 'search_emails',
@@ -123,6 +126,25 @@ const BASIC_TOOL_NAMES_ = new Set([
   'list_clients', 'create_client', 'update_client', 'add_consult_log', 'list_consult_logs',
   'remember_fact'
 ]);
+
+// 세금 계산/조회 낌새가 있는 키워드 — 이 중 하나라도 걸리면 전체 도구(계산기 92개 포함)를 준다.
+// 일부러 넓게 잡았다: 놓치면 AI가 정확한 도구 없이 계산을 시도하다 틀릴 수 있어서, 애매하면
+// 그냥 전체를 주는 쪽이 안전하다(Sonnet 컨텍스트는 100만이라 넘칠 걱정은 없음).
+const TAX_CALC_SIGNAL_RE = /(계산|세액|공제|세율|과세|비과세|감면|가산세|이월|이연|평가액|시가|기준시가|주식가치|비상장|양도|증여|상속|취득세|등록면허세|재산세|종합소득세|법인세|부가가치세|세법|시행령|시행규칙|판례|예규|조문|§|절세|불복|경정청구|가업승계|명의신탁|특수관계자)/;
+
+// 이번 턴의 실제 사용자 질문 텍스트를 찾는다 — 도구 왕복 중간 라운드는 messages 맨 뒤가
+// tool_result 배열(문자열이 아님)이라, 뒤에서부터 문자열 content를 가진 user 메시지를 찾는다
+// (chat.js의 lastUserText_와 같은 방식 — 같은 턴 안에서는 항상 같은 원본 질문을 찾아야
+// 라운드가 진행돼도 도구 세트가 중간에 바뀌지 않는다).
+function needsFullToolset_(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === 'user' && typeof m.content === 'string') {
+      return TAX_CALC_SIGNAL_RE.test(m.content);
+    }
+  }
+  return true; // 못 찾으면(이례적) 안전하게 전체 도구를 준다
+}
 
 const DRIVE_TOOLS = [
   {
@@ -12052,7 +12074,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     payload.stop_sequences = body.stopSequences.slice(0, 4);
   }
 
-  const tools = cfg.reducedTools
+  // reducedTools(컨텍스트 작은 모델, 예: Haiku)이거나, 이번 질문에 세금 계산 낌새가 없으면
+  // 계산기 92개를 뺀 축소 도구세트를 쓴다 — 모델 종류와 무관하게 적용(Sonnet도 대상).
+  const tools = (cfg.reducedTools || !needsFullToolset_(body.messages))
     ? DRIVE_TOOLS.filter(function (t) { return BASIC_TOOL_NAMES_.has(t.name); })
     : DRIVE_TOOLS.slice();
   const betaFlags = [];
