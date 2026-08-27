@@ -36,8 +36,14 @@ const MODEL_CONFIG = {
   'gemini-3.5-flash':           { provider: 'gemini', input: 1.50,  output: 9.00,  temp: true,  codeExec: true  },
   'gemini-3.1-flash-lite':      { provider: 'gemini', input: 0.25,  output: 1.50,  temp: true,  codeExec: true  },
   // [2026.08] 더 저렴한(무료 등급 대상) 옵션 추가 요청으로 넣음 — ai.google.dev/gemini-api/docs/pricing 기준.
+  // 실사용 중 확인: 이 시스템의 구글 API 키(신규 발급분 포함)에서 gemini-2.5-* 계열은 이미
+  // "신규 사용자에게 더 이상 제공 안 함"으로 막혀있고(구글이 3.6-flash/3.5-flash-lite로 대체
+  // 안내), 반대로 gemini-3.1-*/gemini-3.5-flash는 원인 불명의 "프로젝트 접근 거부" 오류가 남.
+  // 그래서 2.5 계열 대신, 구글이 실제로 안내한 대체 모델(3.6-flash·3.5-flash-lite)을 넣는다.
   'gemini-2.5-flash':           { provider: 'gemini', input: 0.30,  output: 2.50,  temp: true,  codeExec: true  },
-  'gemini-2.5-flash-lite':      { provider: 'gemini', input: 0.10,  output: 0.40,  temp: true,  codeExec: true  }
+  'gemini-2.5-flash-lite':      { provider: 'gemini', input: 0.10,  output: 0.40,  temp: true,  codeExec: true  },
+  'gemini-3.6-flash':           { provider: 'gemini', input: 0.75,  output: 3.75,  temp: true,  codeExec: true  },
+  'gemini-3.5-flash-lite':      { provider: 'gemini', input: 0.30,  output: 2.50,  temp: true,  codeExec: true  }
 };
 const DEFAULT_MODEL = 'claude-sonnet-5';
 

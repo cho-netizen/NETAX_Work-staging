@@ -1228,10 +1228,12 @@
           <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
           <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
           <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (가장 저렴)</option>
+          <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash (신규키 이용불가)</option>
+          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (신규키 이용불가)</option>
         </select>
-        <div class="modal-hint">Gemini는 Flash·Flash-Lite 계열이 무료 등급 대상입니다(2026.4.1부터, 사용량 제한 안에서). Pro(3.1 Pro)는 무료 등급이 없습니다. 다만 실제로 요금이 청구되는지는 이 시스템이 쓰는 구글 API 키가 "결제 연동 안 된" 무료 계정 키인지에 달려있습니다 — 결제가 연동된 키라면 어떤 모델을 골라도 유료로 청구됩니다.</div>
+        <div class="modal-hint">Gemini는 Flash·Flash-Lite 계열이 무료 등급 대상입니다(2026.4.1부터, 사용량 제한 안에서). Pro(3.1 Pro)는 무료 등급이 없습니다. 요금 청구 여부는 이 시스템이 쓰는 구글 API 키의 결제 연동 상태에 달려있습니다. [2026.08 확인] 새로 발급한 키는 Gemini 2.5 계열이 "신규 사용자에게 더 이상 제공 안 함"으로 막혀있고, 3.x 계열은 원인 불명의 "프로젝트 접근 거부" 오류가 났습니다 — 새 키를 만든 직후라면 구글 쪽 권한 반영에 시간이 걸릴 수 있으니 잠시 후 다시 시도해보세요.</div>
 
         <label class="modal-label">사고 강도</label>
         <select id="settingsEffort">
