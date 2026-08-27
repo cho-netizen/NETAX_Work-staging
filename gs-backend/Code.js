@@ -12280,6 +12280,15 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   let truncationRetries = 0; // content 파라미터가 토큰한도로 잘린 걸 감지했을 때 자동 재시도 횟수(최대 2회)
   const clientActions = []; // 문서수정/관계도수정/폴더이동 요청을 모아뒀다가 이번 라운드 응답에 함께 실어보낸다.
 
+  // [2026.08] pause_turn(앤트로픽 서버 쪽에서 자체적으로 이어서 보내라고 신호주는 경우)이
+  // 안 좋은 경우가 겹치면 이 재시도 루프 하나가 여러 번의 긴 API 호출을 잇달아 부를 수 있다 —
+  // 이론상 그게 누적되면 지금은 없앤 줄 알았던 "Apps Script 6분 상한 초과 → 응답 없이 죽음"
+  // 문제가 이 루프 안에서 축소판으로 재발할 수 있다. 그래서 재시도를 계속하기 전에 지금까지
+  // 걸린 시간을 확인해서, 여유가 없으면(4분 초과) 더 기다리지 않고 지금까지의 결과로 마무리한다
+  // — 이후 로직이 텍스트가 비어 있으면 알아서 마무리 요청을 한 번 더 하므로 안전하게 처리된다.
+  const attemptLoopStartTime_ = Date.now();
+  const ATTEMPT_LOOP_TIME_BUDGET_MS_ = 4 * 60 * 1000;
+
   for (let attempt = 0; attempt < 6; attempt++) {
     payload.messages = messages;
     options.payload = JSON.stringify(payload);
@@ -12289,6 +12298,7 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     result = JSON.parse(response.getContentText());
 
     if (status !== 200) break;
+    if (Date.now() - attemptLoopStartTime_ > ATTEMPT_LOOP_TIME_BUDGET_MS_) break;
     if (result.stop_reason === 'pause_turn') continue;
 
     // content 파라미터가 토큰한도에 걸려 잘린 것으로 보이면(위 isLikelyTruncatedContentToolCall_
