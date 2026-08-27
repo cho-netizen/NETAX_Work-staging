@@ -2430,6 +2430,18 @@
     else refillInputForEdit_(msgRef);
   });
 
+  // [2026.08] 지난 내 질문을 더블클릭하면 입력창에 채우는 것에서 그치지 않고 바로 전송까지
+  // 한다 — 같은 질문을 그대로 다시 보내고 싶을 때 "채우기 → 보내기 클릭" 두 단계를 줄여준다.
+  chatBody.addEventListener('dblclick', (e)=>{
+    const bubbleEl = e.target.closest('.msg');
+    if (!bubbleEl || !bubbleEl._nxMsgRef) return;
+    if (e.target.closest('button, a, input, textarea')) return;
+    const msgRef = bubbleEl._nxMsgRef;
+    if (msgRef.role === 'assistant') return; // 답변은 더블클릭도 그냥 복사(단일클릭)만 — 전송 대상이 아님
+    if (!chatInputEl.value.trim() || chatInputEl.disabled) return; // 전송 중이거나 채워지지 않았으면 무시
+    sendChatMessage();
+  });
+
   (function setupChatMessageContextMenu_(){
     let menuEl = null;
     function closeMenu(){
