@@ -1901,6 +1901,7 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         signal: currentChatAbortController.signal,
         body: JSON.stringify(Object.assign({
+          _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
           messages: requestMessages,
           context: {
             currentPath: explorerPath,
@@ -2037,6 +2038,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({
+          _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
           messages: chatMessages.slice(),
           context: {
             currentPath: explorerPath,

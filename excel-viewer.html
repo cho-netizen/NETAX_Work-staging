@@ -74,7 +74,7 @@
     const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS doPost 단순 요청 규약과 동일하게 맞춤
-      body: JSON.stringify(Object.assign({ action: action }, payload))
+      body: JSON.stringify(Object.assign({ action: action, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' }, payload))
     });
     if (!res.ok) throw new Error('네트워크 오류 (status ' + res.status + ')');
     return res.json();

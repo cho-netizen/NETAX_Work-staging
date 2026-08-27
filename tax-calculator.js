@@ -682,6 +682,7 @@ function taxCalcResultRow(label, value, opts){
 // ============================================================
 async function runFolderAiExtraction(instructionText){
   const payload = Object.assign({
+    _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '',
     messages: [{ role: 'user', content: instructionText }],
     context: { currentPath: explorerPath }
   }, (typeof buildAiSettingsPayload === 'function') ? buildAiSettingsPayload(false) : {});
@@ -735,7 +736,7 @@ function openAddressSearchModal_(onPick){
     fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'searchAddress', keyword: keyword })
+      body: JSON.stringify({ action: 'searchAddress', keyword: keyword, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' })
     }).then(function(res){ return res.json(); }).then(function(data){
       if (data.error){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">' + data.error.replace(/</g,'&lt;') + '</div>'; return; }
       const juso = data.juso || [];
@@ -792,7 +793,7 @@ function openRealPriceModal_(lawdCd, onPick){
     listBox.innerHTML = '<div class="taxcalc-evidence-empty">조회 중…</div>';
     fetch(GAS_URL, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'lookupRealPrice', lawdCd: lawdCd, dealYm: dealYm })
+      body: JSON.stringify({ action: 'lookupRealPrice', lawdCd: lawdCd, dealYm: dealYm, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' })
     }).then(function(res){ return res.json(); }).then(function(data){
       if (data.error){ listBox.innerHTML = '<div class="taxcalc-evidence-empty">' + data.error.replace(/</g,'&lt;') + '</div>'; return; }
       const items = data.items || [];
@@ -5487,7 +5488,7 @@ taxCalcView.addEventListener('click', function(e){
       if (resultEl) resultEl.textContent = '확인 중…';
       fetch(GAS_URL, {
         method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'checkBusinessNumber', bNo: raw })
+        body: JSON.stringify({ action: 'checkBusinessNumber', bNo: raw, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' })
       }).then(function(res){ return res.json(); }).then(function(data){
         if (!resultEl) return;
         if (data.error){ resultEl.textContent = '⚠ ' + data.error; return; }
@@ -5508,7 +5509,7 @@ taxCalcView.addEventListener('click', function(e){
     const priceKind = btn.dataset.priceKind;
     fetch(GAS_URL, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'lookupOfficialPrice', pnu: pnu, priceKind: priceKind, dong: a.assetDong || '', ho: a.assetHo || '' })
+      body: JSON.stringify({ action: 'lookupOfficialPrice', pnu: pnu, priceKind: priceKind, dong: a.assetDong || '', ho: a.assetHo || '', _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' })
     }).then(function(res){ return res.json(); }).then(function(data){
       if (data.error){ alert(data.error); return; }
       if (priceKind === 'apartment' || priceKind === 'house') a.housePrice = data.price; else a.landPrice = data.price;

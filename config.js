@@ -6,6 +6,10 @@
 // ============================================================
 window.NX_CONFIG = {
   GAS_URL: 'https://script.google.com/macros/s/AKfycbyFbvXiV6rSzCvhtc_T2WrzNF5ZxhOFWtSSsgzSavzPbjv4LBGhjXhu_Q2_8m-PDj8s/exec',
+  // [2026.08] work.netax.kr 백엔드가 로그인 없이 아무나 접근 가능한 상태였던 걸 막기 위해 추가.
+  // 서버(gs-backend)의 스크립트 속성 API_SECRET과 같은 값이어야 함. 재배포 시 URL만 바뀌므로
+  // 이 값 자체는 바뀌지 않지만, 값을 바꿀 일이 생기면 서버 스크립트 속성도 같이 바꿔야 함.
+  API_SECRET: 'c235d6c3e3fd0eb7567da6e58849c61eeeb8d904497f5f1d41729d705208330e',
   // "NETAX 외부조회 커넥터" 크롬 확장프로그램 ID.
   // manifest.json에 key를 고정해 두었기 때문에, 확장프로그램을 다시 설치하거나 PC를 바꿔도
   // 이 값은 바뀌지 않습니다(재확인 불필요). 확장프로그램 자체를 새로 만들 때만 값을 바꾸면 됩니다.

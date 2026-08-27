@@ -14,7 +14,7 @@
         method: 'POST',
         // GAS 웹앱의 CORS preflight 회피를 위해 text/plain으로 보냄 (서버에서 JSON.parse로 처리)
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({ action }, payload))
+        body: JSON.stringify(Object.assign({ action, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' }, payload))
       });
     }catch(networkErr){
       // fetch 자체가 실패(오프라인, DNS 등) — 이것도 일시적일 수 있으니 재시도 대상에 포함

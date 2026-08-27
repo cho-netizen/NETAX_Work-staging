@@ -1405,7 +1405,7 @@ async function loadFromUrlFileId(){
     const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'readFile', fileId: fileId })
+      body: JSON.stringify({ action: 'readFile', fileId: fileId, _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || '' })
     });
     data = await res.json();
   } catch (err) {
@@ -2801,7 +2801,8 @@ async function saveToDrive(){
         action: 'uploadFile',
         fileId: fileId,
         name: (d && d.name) ? d.name : '문서',
-        base64Data: utf8ToBase64_(content)
+        base64Data: utf8ToBase64_(content),
+        _key: (window.NX_CONFIG && window.NX_CONFIG.API_SECRET) || ''
       })
     });
     const data = await res.json();
