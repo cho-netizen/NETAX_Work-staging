@@ -18,11 +18,23 @@ const DEFAULT_SYSTEM_PROMPT = '너는 "넥스"라는 이름의, 이음세무컨�
 // 되고, 코드 재배포는 필요 없다(파일ID가 바뀌지 않는 한).
 const MASTER_PROFILE_FILE_ID = '1rL0-EhNYzeacN_oGpDGjAGXWcikI2cYP';
 
+// [2026.08] 예전엔 채팅 요청마다(도구 왕복 루프가 클라이언트 주도로 바뀐 뒤로는 라운드마다)
+// Drive에서 이 파일을 매번 새로 읽어왔다 — 내용이 remember_fact로 가끔만 바뀌는데도 매 요청
+// 불필요한 Drive API 호출 하나가 더 생겨서 응답 지연 요인이 됐다. 5분짜리 스크립트 캐시를
+// 붙여서 대부분의 요청은 Drive를 안 거치고 바로 돌려주고, remember_fact로 실제로 내용이
+// 바뀌면 그 즉시 캐시를 지워서 다음 요청부터 새 내용이 반영되게 한다.
+const MASTER_PROFILE_CACHE_KEY_ = 'nx_master_profile_v1';
 function getMasterProfileText_() {
   try {
-    return DriveApp.getFileById(MASTER_PROFILE_FILE_ID).getBlob().getDataAsString('UTF-8');
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(MASTER_PROFILE_CACHE_KEY_);
+    if (cached !== null) return cached;
+    const text = DriveApp.getFileById(MASTER_PROFILE_FILE_ID).getBlob().getDataAsString('UTF-8');
+    cache.put(MASTER_PROFILE_CACHE_KEY_, text, 300);
+    return text;
   } catch (err) {
-    // 파일ID가 잘못됐거나 삭제됐어도 채팅 자체는 계속 되게, 조용히 빈 값으로 처리한다.
+    // 파일ID가 잘못됐거나 삭제됐어도, 또는 캐시 서비스 자체에 오류가 나도 채팅은 계속 되게,
+    // 조용히 빈 값으로 처리한다.
     return '';
   }
 }
@@ -11502,6 +11514,9 @@ function toolRememberFact(fact) {
         updated = existing.replace(/\s+$/, '') + '\n' + line + '\n';
       }
       file.setContent(updated);
+      // 방금 실제로 내용이 바뀌었으니, 5분 캐시가 남아있어도 다음 요청부터 바로 새 내용이
+      // 반영되게 캐시를 지운다(getMasterProfileText_ 위 주석 참고).
+      try { CacheService.getScriptCache().remove(MASTER_PROFILE_CACHE_KEY_); } catch (e) { /* 캐시 삭제 실패해도 기능엔 지장 없음 */ }
       return { success: true, added: fact };
     } catch (err) {
       return { error: '마스터 프로필 갱신 중 오류: ' + err.message };
