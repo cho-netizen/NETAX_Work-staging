@@ -12213,19 +12213,15 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   });
   const betaFlags = [];
 
-  if (body.enableWebSearch !== false) {
-    // 예전엔 body.enableWebSearch === true 일 때만 켰다 — 화면(프론트엔드)에서 이 값을
-    // 안 보내면 그냥 꺼진 채로 요청이 나가서, 날씨처럼 실시간 정보가 필요한 질문에
-    // Claude가 도구 자체가 없어 "모른다"고 답했다. 이제는 화면에서 명시적으로
-    // enableWebSearch: false를 보낸 경우에만 끄고, 그 외(안 보내는 경우 포함)엔 기본으로 켠다.
-    tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
-  }
+  // [2026.08] 웹서치·웹페이지 가져오기도 다른 130개 넘는 도구와 똑같이 취급한다 — 화면에
+  // 켜고 끄는 토글 없이 항상 도구를 쥐어주고, 필요할 때 쓸지는 AI가 알아서 판단하게 한다
+  // (예전엔 웹서치는 "꺼짐이 명시되지 않으면 켬", 웹페이지 가져오기는 "URL이 있으면 자동으로
+  // 켬"처럼 절반만 자동화되어 있었다 — 자동참조 때와 같은 이유로 나머지 절반도 없앤다).
+  tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
+  tools.push({ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 });
+  betaFlags.push('web-fetch-2025-09-10');
   if (body.enableCodeExecution && cfg.codeExec) {
     tools.push({ type: 'code_execution_20260120', name: 'code_execution' });
-  }
-  if (body.enableWebFetch) {
-    tools.push({ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 });
-    betaFlags.push('web-fetch-2025-09-10');
   }
   let advisorModel = null;
   if (body.enableAdvisor) {
@@ -13303,10 +13299,9 @@ function callGemini(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
   }
   generationConfig.thinkingConfig = { thinkingBudget: effort.thinking ? effort.budgetTokens : 0 };
 
-  const tools = [];
-  if (body.enableWebSearch) tools.push({ googleSearch: {} });
+  // [2026.08] Claude 쪽과 마찬가지로 웹검색·URL조회는 항상 켜두고 AI가 알아서 판단하게 한다.
+  const tools = [{ googleSearch: {} }, { urlContext: {} }];
   if (body.enableCodeExecution && cfg.codeExec) tools.push({ codeExecution: {} });
-  if (body.enableWebFetch) tools.push({ urlContext: {} });
 
   const payload = {
     contents: toGeminiContents(body.messages),

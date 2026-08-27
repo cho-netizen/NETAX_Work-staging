@@ -189,7 +189,6 @@
      못 이긴다(클래스를 아무리 많이 겹쳐도 ID 1개를 못 이긴다). class로 통일한다. */
   .workspace-mode-group{ display:none; } /* 탐색 통합버튼 — full은 레이아웃 버튼(layout-buttons-wide)을 그대로 쓰므로 숨김 */
   .work-tools-group{ display:none; } /* 도구 통합버튼 — full은 개별 버튼(tool-buttons-wide)을 그대로 쓰므로 숨김 */
-  .mode-menu-group{ display:none; } /* 참조 통합버튼(자동참조·웹서치·가져오기·채팅기록지우기) — full(넓은 PC)에선 개별 버튼 자리가 없어 숨김, grouped·compact에서만 보임 */
   .memo-group{ display:flex; } /* 메모는 화면 크기와 무관하게 항상 보임(감싸는 div만 새로 생겼을 뿐 동작은 그대로) */
 
   /* ---- grouped·compact(PC 중간폭·폰) 공용: 상단엔 [작업폴더](고정폭) + [탐색·참조·도구·메모]
@@ -249,8 +248,7 @@
      안 보이게 되는 문제가 있다(클릭은 되는데 뜬 메뉴가 안 보여서 "안 눌리는 것처럼" 보임).
      top을 상단바 실측 높이(--topbar-h)로 고정하고 좌우를 화면 여백 기준으로 잡으면 상단바의
      어느 버튼을 눌러도 팝업이 항상 화면 안에 온전히 들어온다. */
-  body.stage-compact #workToolsPopup,
-  body.stage-compact #modeMenuPopup{
+  body.stage-compact #workToolsPopup{
     position:fixed; left:8px; right:8px; top:calc(var(--topbar-h, 52px) + 6px); bottom:auto;
     min-width:0; width:auto; max-height:60vh; overflow-y:auto;
   }
@@ -695,8 +693,7 @@
   }
   #btnExitTalkingMode:hover{ background:#f0f2f6; }
   body.cover-mode .layout-buttons-wide,
-  body.cover-mode .workspace-mode-group,
-  body.cover-mode .mode-menu-group{ display:none !important; } /* 커버화면모드에선 이 모드버튼들은 의미가 없어서 계속 숨김 */
+  body.cover-mode .workspace-mode-group{ display:none !important; } /* 커버화면모드에선 이 모드버튼들은 의미가 없어서 계속 숨김 */
   /* 작업폴더 검색콤보(customerSelect)와 그 옆의 지금 작업폴더 표시(coverPathLabel)는 채팅모드에서는
      그대로 보이게 두고(2026.07 — 기존엔 커버화면모드 전체에서 무조건 숨겼었는데, 마이크만으로 폴더
      이동하기보다 눈으로 확인하고 싶다는 요청으로 되돌림), 토킹모드(화면이 음성전용으로 바뀐 상태)에서만 숨긴다. */
@@ -1126,19 +1123,6 @@
     <div class="topbar-item topbar-equal-btn workspace-mode-group" id="workspaceModeWrap">
       <button id="btnWorkspaceMode" class="tb-btn" title="탐색작업창 배치 (클릭할 때마다 순환: 좌우 → 상하 → 생략 → 띄우기 → 최대)"><span class="tool-menu-icon" id="workspaceModeIcon">⬓</span> <span class="tool-menu-label" id="workspaceModeLabel">Row</span></button>
     </div>
-    <!-- [2026.08] 자동참조·웹서치·가져오기 버튼 3개를 체크박스 팝업 하나로 합쳤다. 셋 다
-         독립적으로 켜고 끌 수 있는 상태라(하나 고르면 닫히는 액션메뉴와 달리) 체크해도 팝업이
-         안 닫혀야 연달아 여러 개를 토글할 수 있다 — .toggle-item 참고. 자주 쓰는 기능은 아니지만
-         AI가 오류로 엉뚱한 맥락을 참조할 때 바로 초기화해야 해서 채팅기록지우기도 여기 같이 뒀다. -->
-    <div class="topbar-item mode-menu-group topbar-equal-btn" id="modeMenuWrap">
-      <button type="button" id="btnModeMenu" class="tb-btn" title="참조 — 웹서치 · 웹페이지 가져오기 켜고 끄기 · 채팅기록 지우기"><span class="tool-menu-icon">🔗</span> <span class="tool-menu-label">참조</span></button>
-      <div id="modeMenuPopup" class="nx-popup">
-        <label class="toggle-item"><input type="checkbox" id="modeChkWebSearch"> 🌐 웹서치 — 기본으로 항상 켜져 있음</label>
-        <label class="toggle-item"><input type="checkbox" id="modeChkWebFetch"> 📥 웹페이지 가져오기 — URL이 있으면 자동으로도 켜짐</label>
-        <div class="toggle-sep"></div>
-        <button type="button" id="btnNewChat" class="tool-menu-item danger-item" title="지금 이 사건의 대화기록을 지우고 새로 시작합니다 (되돌릴 수 없음)">🗑 채팅기록 지우기</button>
-      </div>
-    </div>
     <div class="layout-buttons-wide">
       <button type="button" id="btnLayoutRow" class="tb-btn" data-mode="row" title="좌우 배치">⬓ Row</button>
       <button type="button" id="btnLayoutCol" class="tb-btn" data-mode="col" title="상하 배치">⬒ Col</button>
@@ -1254,6 +1238,11 @@
         <div class="modal-checkrow">
           <a href="https://console.anthropic.com" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block;">Claude 콘솔 열기 ↗</a>
           <a href="https://aistudio.google.com" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block;">Google AI Studio 열기 ↗</a>
+        </div>
+
+        <label class="modal-label">⚠️ 위험 작업</label>
+        <div class="modal-checkrow">
+          <button type="button" id="btnNewChat" class="ghost-btn danger-item" title="지금 이 사건의 대화기록을 지우고 새로 시작합니다 (되돌릴 수 없음)">🗑 채팅기록 지우기</button>
         </div>
 
       </div>
@@ -1775,7 +1764,7 @@ graph TD
 <script src="/client-manage.js?v=20260827a"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
-<script src="/chat.js?v=20260827u"></script>
+<script src="/chat.js?v=20260828a"></script>
 <script src="/pwa.js?v=20260814a"></script>
 
 </body>

@@ -131,14 +131,8 @@
   const workToolsPopup = document.getElementById('workToolsPopup');
   fillToolPopup(workToolsPopup, WORK_TOOLS);
 
-  // 모드 팝업(자동참조·웹서치·가져오기 체크박스 + 채팅기록지우기)은 체크박스 상태 반영을
-  // 이 아래(모드버튼 섹션)에서 따로 처리하지만, 열고 닫는 토글 자체는 다른 그룹 팝업들과
-  // 같은 방식(하나 열리면 나머지는 자동으로 닫힘)을 써야 하므로 여기 같이 등록한다.
-  const btnModeMenu = document.getElementById('btnModeMenu');
-  const modeMenuPopup = document.getElementById('modeMenuPopup');
-
   const ALL_GROUP_POPUPS = [
-    [workToolsPopup, btnWorkTools], [modeMenuPopup, btnModeMenu]
+    [workToolsPopup, btnWorkTools]
   ];
 
   function wireGroupToggle(btn, popup){
@@ -217,7 +211,7 @@
     // (다른 stage 판정처럼 topbarEl.scrollWidth로 재지 않는다 — scrollWidth는 내용이 컨테이너보다
     // 작을 땐 그냥 clientWidth로 눌러앉아버려서 "얼마나 남는지"를 알 수 없다. 대신 이 5개 요소의
     // 실제 폭을 직접 더해서 clientWidth와 비교한다.)
-    const LABEL_ROW_IDS = ['customerSelect', 'workspaceModeWrap', 'modeMenuWrap', 'workToolsWrap', 'memoWrap'];
+    const LABEL_ROW_IDS = ['customerSelect', 'workspaceModeWrap', 'workToolsWrap', 'memoWrap'];
     let topbarButtonsLabeled = false;
     function updateTopbarButtonsLabeled(){
       if (currentStage === 'full'){
@@ -639,9 +633,6 @@
     effort: 'high',
     temperature: null,          // null이면 요청에 아예 안 실어서 모델 기본값 사용
     maxTokens: null,            // null이면 강도(effort)별 기본 상한 사용
-    enableWebSearch: true,  // 서버가 명시적으로 false를 안 보내면 항상 웹검색을 켜므로, 화면 기본 표시도 "켜짐"에 맞춘다.
-                             // 이 버튼은 이제 "켜는 버튼"이 아니라 "끄는 버튼"이다 — 기본은 항상 노랗게(켜짐), 눌러야 회색(꺼짐)이 된다.
-    enableWebFetch: false,
     enableCodeExecution: false,
     enableAdvisor: false,
     advisorModel: 'claude-opus-4-8',
@@ -653,15 +644,10 @@
       const raw = localStorage.getItem(AI_SETTINGS_KEY);
       if (raw){
         const parsed = JSON.parse(raw);
-        // 웹서치 기본값이 false→true로 바뀌면서, 예전에 저장해둔 enableWebSearch:false가
-        // 새 기본값(true)을 덮어써 버리면 오히려 "항상 꺼짐"으로 굳어버린다. 이걸 막기 위해
-        // 딱 한 번, 예전 설정을 새 기본값으로 밀어준다(사용자가 이후에 버튼을 직접 눌러 끄면
-        // 그 뒤로는 정상적으로 그 선택이 유지된다).
-        const MIGRATION_FLAG = 'nx_websearch_default_migrated_v1';
-        if (!localStorage.getItem(MIGRATION_FLAG)){
-          delete parsed.enableWebSearch; // 있던 값 버리고 DEFAULT_AI_SETTINGS의 새 기본값(true)을 따르게 함
-          localStorage.setItem(MIGRATION_FLAG, '1');
-        }
+        // [2026.08] 웹서치·웹페이지 가져오기는 이제 서버가 항상 켜두고 AI가 알아서 판단한다 —
+        // 화면에 켜고 끄는 값 자체가 없어졌으므로, 예전에 저장해둔 값이 남아있어도 무시한다.
+        delete parsed.enableWebSearch;
+        delete parsed.enableWebFetch;
         return Object.assign({}, DEFAULT_AI_SETTINGS, parsed);
       }
     }catch(err){ console.warn('AI 설정 로드 실패, 기본값 사용', err); }
@@ -701,10 +687,6 @@
       effort: settingsEffort.value,
       temperature: tempRaw === '' ? null : Math.max(0, Math.min(1, Number(tempRaw))),
       maxTokens: maxTokRaw === '' ? null : Math.max(256, Math.min(64000, Math.floor(Number(maxTokRaw)))),
-      // 웹서치·웹페이지가져오기는 이 폼이 아니라 상단 모드버튼(🌐🔗)이 직접 관리한다 —
-      // 저장 시 이 폼이 덮어쓰지 않도록 지금 값을 그대로 유지한다.
-      enableWebSearch: aiSettings.enableWebSearch,
-      enableWebFetch: aiSettings.enableWebFetch,
       enableCodeExecution: settingsCodeExec.checked,
       advisorModel: settingsAdvisorModel.value,
       systemPrompt: settingsSystemPrompt.value.trim()
@@ -800,27 +782,6 @@
     if (mainAdvisorLabel) mainAdvisorLabel.className = 'advisor-label' + (mainAdvisor.checked ? ' on' : '');
   });
 
-  // ---- 폰 상단 모드메뉴(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
-  // 여기서) — [2026.08] 버튼 3개를 체크박스 팝업 하나로 합쳤다. 설정모달을 안 열어도 바로
-  // 켜고 끌 수 있는 건 그대로고, 체크박스라 하나 바꿔도 팝업이 안 닫혀서 연달아 여러 개를
-  // 토글할 수 있다(예전 버튼 방식은 누르는 즉시 바로 반영되는 대신 각자 따로 눌러야 했음). ----
-  const modeChkWebSearch = document.getElementById('modeChkWebSearch');
-  const modeChkWebFetch = document.getElementById('modeChkWebFetch');
-  function refreshModeButtonStates(){
-    // 웹서치는 기본이 "켜짐"이라, enableWebSearch가 명시적으로 false일 때만 체크 해제로 표시한다.
-    modeChkWebSearch.checked = aiSettings.enableWebSearch !== false;
-    modeChkWebFetch.checked = !!aiSettings.enableWebFetch;
-  }
-  modeChkWebSearch.addEventListener('change', ()=>{
-    aiSettings.enableWebSearch = modeChkWebSearch.checked;
-    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
-  });
-  modeChkWebFetch.addEventListener('change', ()=>{
-    aiSettings.enableWebFetch = modeChkWebFetch.checked;
-    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
-  });
-  refreshModeButtonStates();
-
   // 입력창 아래 "모델 · 강도" 뱃지 표시 갱신
   const MODEL_LABELS = {
     'auto': '자동(질문별 선택)',
@@ -849,13 +810,6 @@
   updateChatModelBadge();
 
   // 채팅 전송 시 GAS로 실어보낼 AI 설정 payload 조립 (값이 기본값/공백이면 아예 안 실어서 서버 기본값이 적용되게 함)
-  // 메시지 안에 URL이 있는지 감지 — 사용자가 매번 "가져오기" 버튼을 켰다 껐다 하지 않아도,
-  // URL을 붙여넣은 순간에는 이번 요청 한정으로 자동으로 웹페이지 가져오기 도구를 켜준다.
-  // (평소엔 꺼둔 채로 두고, 필요할 때만 켜지는 게 자연스럽다는 판단)
-  const URL_DETECT_RE = /https?:\/\/[^\s]+/i;
-  function messageContainsUrl(text){
-    return URL_DETECT_RE.test(text || '');
-  }
 
   // [2026.08] "모델을 매번 사람이 수동으로 바꿔야 하냐"는 요청으로 추가 — 세무 조문·계산 등
   // 어려운 판단이 필요해 보이면 Sonnet 5(높음)로, 그 외(문서 다듬기·간단한 질문 등)는 저렴한
@@ -944,7 +898,7 @@
     return '';
   }
 
-  function buildAiSettingsPayload(forceWebFetch, messageTextForAutoModel){
+  function buildAiSettingsPayload(messageTextForAutoModel){
     const resolved = (aiSettings.model === 'auto')
       ? pickAutoModel_(messageTextForAutoModel)
       : { model: aiSettings.model, effort: aiSettings.effort };
@@ -958,11 +912,6 @@
     const payload = { model: resolved.model, effort: resolved.effort };
     if (aiSettings.temperature !== null && aiSettings.temperature !== undefined) payload.temperature = aiSettings.temperature;
     if (aiSettings.maxTokens !== null && aiSettings.maxTokens !== undefined) payload.maxTokens = aiSettings.maxTokens;
-    // 웹서치는 이제 서버 기본값이 "항상 켜짐"이라, 켜진 상태(true)는 굳이 안 보내도 되지만
-    // 꺼진 상태(false)는 반드시 명시적으로 보내야 서버가 진짜로 꺼준다(값을 아예 안 보내면
-    // 서버는 "명시적으로 끄지 않았다"고 판단해서 계속 켠 채로 처리하기 때문).
-    if (aiSettings.enableWebSearch === false) payload.enableWebSearch = false;
-    if (aiSettings.enableWebFetch || forceWebFetch) payload.enableWebFetch = true;
     if (aiSettings.enableCodeExecution) payload.enableCodeExecution = true;
     if (aiSettings.enableAdvisor){
       payload.enableAdvisor = true;
@@ -1470,7 +1419,7 @@
   }
   document.getElementById('btnNewChat').addEventListener('click', ()=>{
     startNewConversation();
-    document.getElementById('modeMenuPopup').classList.remove('show'); // [2026.08] 모드 팝업 안으로 옮겨서, 눌렀으면 팝업도 같이 닫아준다
+    settingsOverlay.style.display = 'none'; // [2026.08] 설정 모달 안으로 옮겼으므로, 눌렀으면 모달도 같이 닫아준다
   });
 
   function renderAttachBar(){
@@ -2197,9 +2146,6 @@
       };
     }
 
-    const autoWebFetch = messageContainsUrl(text) && !aiSettings.enableWebFetch;
-    if (autoWebFetch) showToast('메시지에 URL이 있어 이번 요청만 웹페이지 가져오기를 자동으로 켰습니다.', 'info');
-
     // [2026.08] "자동" 모드에서 정말 간단하고 자료조회가 필요없어 보이는 질문이면, Haiku(유료)
     // 보다도 먼저 제미니웹(확장프로그램 경유, 무료)을 시도한다 — 첨부·화면캡처·열린문서 등
     // NX 쪽 맥락이 이번 메시지에 섞여있으면 애초에 대상에서 뺀다(제미니는 그런 맥락을 볼 수
@@ -2278,7 +2224,7 @@
           voiceTurn: isVoiceTurn
         },
         autoRef: autoRefMode,
-        aiSettingsPayload: buildAiSettingsPayload(messageContainsUrl(text), text),
+        aiSettingsPayload: buildAiSettingsPayload(text),
         onDone: (replyText, clientActions) => {
           renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
           const aiMsgObj = { role: 'assistant', content: replyText };
@@ -2402,7 +2348,7 @@
           voiceTurn: false
         },
         autoRef: autoRefMode,
-        aiSettingsPayload: buildAiSettingsPayload(false, lastUserText_(chatMessages)),
+        aiSettingsPayload: buildAiSettingsPayload(lastUserText_(chatMessages)),
         onDone: (replyText, clientActions) => {
           renderAssistantReply(thinkingBubble, replyText, clientActions, editTargetFileSnapshot);
           const newMsgObj = { role: 'assistant', content: replyText };
