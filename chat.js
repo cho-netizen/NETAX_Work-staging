@@ -2221,7 +2221,6 @@
     try{
       currentChatAbortController = new AbortController();
 
-      console.log('[NX Gem 진단]', { geminiWebEligible, geminiEcosystemRoute, autoMode: aiSettings.model === 'auto', extraBlocks: extraBlocks.length, openFileCtx: !!openFileCtx, nxExtConnected: nxExtConnected });
       if (geminiWebEligible){
         thinkingBubble.textContent = geminiEcosystemRoute
           ? ('🔮 먼저 무료로 확인 중 (Gemini·' + geminiEcosystemRoute.label + ')…')
@@ -2231,13 +2230,11 @@
           // 제미니웹의 앱 연동 자동완성을 트리거해서 실제 원문을 가져오게 하기 위함
           // (2026-08-27 캘린더로 실사용 확인됨, 나머지 앱도 같은 방식으로 확장).
           const gemQuestion = geminiEcosystemRoute ? ('@' + text) : text;
-          console.log('[NX Gem 진단] askGemSilent_ 호출 시작:', gemQuestion);
-          // [2026.08] 세무사님이 원인을 짚어주심: 제미니 탭이 이미 열려있으면 금방 답이 오지만,
-          // 탭을 새로 열어야 하는 경우(창 생성+페이지 로딩+타이핑+응답까지)는 20초로는
-          // 부족해서 다 기다리지도 못하고 Haiku로 넘어가버리고 있었다. 넉넉하게 늘린다 —
+          // [2026.08] 제미니 탭이 이미 열려있으면 금방 답이 오지만, 탭을 새로 열어야 하는
+          // 경우(창 생성+페이지 로딩+타이핑+응답까지)는 20초로는 부족해서 다 기다리지도
+          // 못하고 Haiku로 넘어가버리는 문제가 실사용으로 확인됐다 — 넉넉하게 늘렸다.
           // 실패해도 Haiku로 조용히 넘어가는 구조라 길게 잡아도 손해는 없다.
           const gemResult = await askGemSilent_(gemQuestion, 50000);
-          console.log('[NX Gem 진단] askGemSilent_ 결과:', gemResult);
           const gemAnswer = gemResult && gemResult.answer;
           const gemSources = (gemResult && gemResult.sources) || [];
           // 생태계 라우팅(캘린더·Gmail·드라이브 조회)인데 확장프로그램이 실제 출처 카드를
@@ -2257,11 +2254,9 @@
             if (isVoiceTurn) speakReply(gemAnswer);
             return;
           }
-          // 빈 답은 실패로 취급하고 아래 Haiku 경로로 넘어간다.
-          console.log('[NX Gem 진단] gemTrustworthy=false — sources 없음 또는 빈 답이라 Haiku로 넘어감');
+          // 빈 답이거나 출처 미확인이면 실패로 취급하고 아래 Haiku 경로로 넘어간다.
         }catch(err){
           // 미연결·시간초과·확장프로그램 오류 — 조용히 원래 경로(Haiku)로 이어간다.
-          console.log('[NX Gem 진단] askGemSilent_ 실패:', err && err.message);
         }
         thinkingBubble.textContent = '생각 중…';
       }
