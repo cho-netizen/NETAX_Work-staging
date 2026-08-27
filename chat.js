@@ -872,19 +872,29 @@
     return true;
   }
 
-  // [2026.08] 실사용으로 직접 확인됨 — Gem에게 "@"로 시작하는 질문을 보내면 확장프로그램이
-  // 제미니웹의 "@구글캘린더" 앱 연동을 정상적으로 처리해서, 실제 구글캘린더 원문을 그대로
-  // 조회해온다(NX가 이미 사건 마감일을 캘린더에 동기화해두므로, 캘린더 자체가 NX 데이터의
-  // 사본이라 믿을 수 있다). 그래서 일정 "조회"류 질문은 위의 완전 안전 목록과 별도로,
-  // Gem 우선 대상에 추가한다 — 단 "추가/등록/삭제/변경"처럼 쓰기 의도가 섞이면 제외한다
-  // (@는 참조만 가능하고 실제로 캘린더를 고치지는 못하므로, 쓰기 요청은 반드시 NX 자체
-  // 도구를 거쳐야 한다).
-  const GEM_CALENDAR_READ_RE = /(일정|캘린더|스케줄|미팅|약속|몇\s*시|언제)/;
-  const GEM_WRITE_INTENT_RE = /(추가|등록|삭제|취소|변경|수정|만들어|잡아|저장|고쳐|반영)/;
-  function isGemCalendarQuery_(text){
-    if (!text || text.length > 200) return false;
-    if (GEM_WRITE_INTENT_RE.test(text)) return false;
-    return GEM_CALENDAR_READ_RE.test(text);
+  // [2026.08] 세무사님이 캘린더로 직접 확인(2026-08-27): Gem에게 "@"로 시작하는 질문을 보내면
+  // 확장프로그램이 제미니웹의 "@구글캘린더" 앱 연동을 정상 처리해서 실제 원문을 그대로
+  // 가져온다. 지시에 따라 캘린더에 국한하지 않고 구글 생태계 전체(Gmail·드라이브)로 넓힌다 —
+  // 단, 각 앱마다 "조회" 신호가 있을 때만, 그리고 아래 두 가지에 걸리면 무조건 제외한다:
+  // (1) 쓰기 의도(추가·삭제·수정 등 — @는 참조만 가능하고 실제로 고치지 못함),
+  // (2) 사건·고객·세액계산처럼 NX 고유의 구조화된 데이터가 필요한 질문(제미니는 NX의
+  // 사건폴더 구조·고객DB·계산엔진을 전혀 모르므로, 이런 건 그럴싸한 오답 위험이 있다).
+  const GEM_ECOSYSTEM_ROUTES_ = [
+    { app: 'calendar', label: '구글캘린더', re: /(일정|캘린더|스케줄|미팅|약속|몇\s*시|언제)/ },
+    { app: 'gmail', label: 'Gmail', re: /(메일|이메일|편지함|받은편지)/ },
+    { app: 'drive', label: '드라이브', re: /(드라이브|파일|폴더|문서)/ }
+  ];
+  const GEM_WRITE_INTENT_RE = /(추가|등록|삭제|취소|변경|수정|만들어|잡아|저장|고쳐|반영|보내|발송|답장|이동|복사|공유|이름\s*바꿔)/;
+  const GEM_STRUCTURED_EXCLUDE_RE = /(사건|고객|상담|기억해|계산|세액|세금|양도|증여|상속|취득세|재산세|법인세|소득세|부가가치세|세법|시행령|시행규칙|판례|예규|조문|비과세|감면|공제|세율|공시가격|시세|등기|사업자|주소|건축물|첨부)/;
+  function detectGemEcosystemRoute_(text){
+    if (!text || text.length > 200) return null;
+    if (GEM_WRITE_INTENT_RE.test(text)) return null;
+    if (GEM_STRUCTURED_EXCLUDE_RE.test(text)) return null;
+    if (AUTO_MODEL_COMPLEX_RE.test(text)) return null;
+    for (let i = 0; i < GEM_ECOSYSTEM_ROUTES_.length; i++){
+      if (GEM_ECOSYSTEM_ROUTES_[i].re.test(text)) return GEM_ECOSYSTEM_ROUTES_[i];
+    }
+    return null;
   }
 
   const pendingGemSilent_ = {}; // requestId -> {resolve, reject} — 화면에 별도 말풍선을 만들지 않는 조용한 요청용
@@ -2175,26 +2185,27 @@
     // 보다도 먼저 제미니웹(확장프로그램 경유, 무료)을 시도한다 — 첨부·화면캡처·열린문서 등
     // NX 쪽 맥락이 이번 메시지에 섞여있으면 애초에 대상에서 뺀다(제미니는 그런 맥락을 볼 수
     // 없으므로). 실패해도 사용자에게 굳이 알리지 않고 조용히 원래 경로(Haiku)로 넘어간다.
-    const geminiCalendarRoute = isGemCalendarQuery_(text) && !isGemWebSafeMessage_(text);
+    const geminiEcosystemRoute = detectGemEcosystemRoute_(text);
     const geminiWebEligible = aiSettings.model === 'auto'
       && !extraBlocks.length
       && !openFileCtx
-      && (isGemWebSafeMessage_(text) || geminiCalendarRoute);
+      && (isGemWebSafeMessage_(text) || !!geminiEcosystemRoute);
 
     try{
       currentChatAbortController = new AbortController();
 
       if (geminiWebEligible){
-        thinkingBubble.textContent = geminiCalendarRoute
-          ? '🔮 먼저 무료로 확인 중 (Gemini·구글캘린더)…'
+        thinkingBubble.textContent = geminiEcosystemRoute
+          ? ('🔮 먼저 무료로 확인 중 (Gemini·' + geminiEcosystemRoute.label + ')…')
           : '🔮 먼저 무료로 확인 중 (Gemini)…';
         try{
-          // [2026.08] 캘린더 조회류는 "@"를 앞에 붙여서 보낸다 — 제미니웹의 @구글캘린더 연동을
-          // 트리거해서 실제 캘린더 원문을 가져오게 하기 위함(2026-08-27 실사용으로 확인됨).
-          const gemQuestion = geminiCalendarRoute ? ('@' + text) : text;
+          // [2026.08] 구글 생태계(캘린더·Gmail·드라이브) 조회류는 "@"를 앞에 붙여서 보낸다 —
+          // 제미니웹의 앱 연동 자동완성을 트리거해서 실제 원문을 가져오게 하기 위함
+          // (2026-08-27 캘린더로 실사용 확인됨, 나머지 앱도 같은 방식으로 확장).
+          const gemQuestion = geminiEcosystemRoute ? ('@' + text) : text;
           const gemAnswer = await askGemSilent_(gemQuestion, 20000);
           if (gemAnswer && gemAnswer.trim()){
-            const gemLabel = geminiCalendarRoute ? '🔮 (Gemini·구글캘린더 조회, 무료)' : '🔮 (Gemini·무료 답변)';
+            const gemLabel = geminiEcosystemRoute ? ('🔮 (Gemini·' + geminiEcosystemRoute.label + ' 조회, 무료)') : '🔮 (Gemini·무료 답변)';
             renderAssistantReply(thinkingBubble, gemLabel + '\n\n' + gemAnswer, [], null);
             const aiMsgObj = { role: 'assistant', content: gemAnswer };
             chatMessages.push(aiMsgObj);
