@@ -601,6 +601,11 @@
     flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 2px; width:48px;
     border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--sub);
   }
+  .chat-model-select{
+    flex-shrink:0; font-family:inherit; font-size:11px; padding:4px 4px; max-width:104px;
+    border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--sub);
+  }
+  .chat-model-select:disabled{ opacity:0.7; }
   .chat-input-wrap input{
     flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
     font-family:inherit; font-size:var(--chat-font-size, 13.5px); background:var(--panel); color:var(--ink);
@@ -1218,22 +1223,7 @@
         <div id="voiceCommandList" class="voice-command-list"></div>
         <button type="button" id="btnResetVoiceCommands" class="ghost-btn" style="margin-top:6px; align-self:flex-start;">기본값으로 복원</button>
 
-        <label class="modal-label">모델</label>
-        <select id="settingsModel">
-          <option value="auto" selected>🤖 자동 (질문에 따라 Sonnet 5/Haiku 중 자동 선택, 추천)</option>
-          <option value="claude-sonnet-5">Claude Sonnet 5</option>
-          <option value="claude-opus-4-8">Claude Opus 4.8</option>
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-          <option value="claude-fable-5">Claude Fable 5</option>
-          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
-          <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
-          <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash (신규키 이용불가)</option>
-          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (신규키 이용불가)</option>
-        </select>
-        <div class="modal-hint">"자동"을 고르면 질문에 세금 관련 단어(양도소득세·조문·공제 등)가 있으면 Sonnet 5(신중하게)로, 그 외 간단한 질문·문서 수정은 저렴한 Haiku(보통)로 매번 알아서 골라줍니다. 특정 모델을 직접 고정하고 싶으면 아래에서 골라주세요.</div>
+        <div class="modal-hint">모델 선택·🔒잠금·어드바이저(+)는 이제 채팅 입력창 아래 도구줄로 옮겼습니다 — 매번 여기 들어올 필요 없이 거기서 바로 바꿀 수 있습니다.</div>
         <div class="modal-hint">Gemini는 Flash·Flash-Lite 계열이 무료 등급 대상입니다(2026.4.1부터, 사용량 제한 안에서). Pro(3.1 Pro)는 무료 등급이 없습니다. 요금 청구 여부는 이 시스템이 쓰는 구글 API 키의 결제 연동 상태에 달려있습니다. [2026.08 확인] 새로 발급한 키는 Gemini 2.5 계열이 "신규 사용자에게 더 이상 제공 안 함"으로 막혀있고, 3.x 계열은 원인 불명의 "프로젝트 접근 거부" 오류가 났습니다 — 새 키를 만든 직후라면 구글 쪽 권한 반영에 시간이 걸릴 수 있으니 잠시 후 다시 시도해보세요.</div>
 
         <label class="modal-label">사고 강도</label>
@@ -1254,9 +1244,6 @@
           <label><input type="checkbox" id="settingsCodeExec"> 코드실행 사용</label>
         </div>
 
-        <div class="modal-checkrow">
-          <label><input type="checkbox" id="settingsAdvisor"> 어드바이저(자문 AI) 사용</label>
-        </div>
         <div id="advisorModelRow" style="display:none;">
           <label class="modal-label">어드바이저 모델</label>
           <select id="settingsAdvisorModel">
@@ -1535,6 +1522,21 @@
           <button type="button" id="btnExtStatus" class="icon-round-btn" title="NX 외부조회 커넥터(확장프로그램) 연결상태 — 미설치/미연결">🔌</button>
           <button type="button" id="btnPasteClipboard" class="icon-round-btn" title="클립보드 내용을 입력창에 붙여넣기 (외부조회 사이트에서 복사한 값을 바로 가져올 때)">📋</button>
           <button type="button" id="btnClearInput" class="icon-round-btn" title="입력창 비우기">✕</button>
+          <select id="mainModelSelect" class="chat-model-select" title="AI 모델 — 🔒 잠그지 않으면 질문 내용에 따라 자동으로 바뀝니다(지금 이 값은 마지막으로 실제 쓰인 모델을 보여줍니다)">
+            <option value="claude-sonnet-5">Sonnet 5</option>
+            <option value="claude-opus-4-8">Opus 4.8</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+            <option value="claude-fable-5">Fable 5</option>
+            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+          </select>
+          <label class="icon-round-btn" style="cursor:pointer; padding:0 8px;" title="체크: 지금 고른 모델로 고정 / 해제: 질문 내용 보고 자동으로 모델 전환"><input type="checkbox" id="mainModelLock" style="margin:0 3px 0 0; vertical-align:middle;">🔒</label>
+          <label class="icon-round-btn" style="cursor:pointer; padding:0 8px;" title="어드바이저 — 답변 전에 다른 AI(오퍼스)에게 한 번 더 검토를 받습니다"><input type="checkbox" id="mainAdvisor" style="margin:0 3px 0 0; vertical-align:middle;">+</label>
           <select id="gemContextCount" title="Gem에게 물어볼 때 직전 대화를 몇 개(턴) 같이 보낼지 선택 (0=입력창 내용만)">
             <option value="0">0턴</option>
             <option value="1">1턴</option>
@@ -1778,7 +1780,7 @@ graph TD
 <script src="/client-manage.js?v=20260827a"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
-<script src="/chat.js?v=20260827d"></script>
+<script src="/chat.js?v=20260827e"></script>
 <script src="/pwa.js?v=20260814a"></script>
 
 </body>

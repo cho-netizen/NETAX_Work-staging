@@ -30,7 +30,13 @@ function getMasterProfileText_() {
 const MODEL_CONFIG = {
   'claude-sonnet-5':            { provider: 'claude', input: 2.00,  output: 10.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
   'claude-opus-4-8':            { provider: 'claude', input: 5.00,  output: 25.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
-  'claude-haiku-4-5-20251001':  { provider: 'claude', input: 1.00,  output: 5.00,  temp: true,  codeExec: false, thinkingMode: 'budget'   },
+  // [2026.08] reducedTools:true — 실사용 중 발견: DRIVE_TOOLS(세액계산 도구 92개 포함, 한글
+  // 설명이라 토큰당 밀도가 높음) 전체를 실어보내면 그것만으로 약 43만 토큰이나 되는데, Haiku
+  // 4.5는 컨텍스트 상한이 20만 토큰이라 도구 목록만으로 이미 꽉 차서 "자동" 모델선택으로 이
+  // 모델을 골랐을 때 매번 "prompt is too long" 오류가 났다. Haiku는 애초에 "간단한 보고서
+  // 수정·잡담"용으로만 자동선택되므로, 세금계산기 92개를 뺀 축소 도구세트(BASIC_TOOL_NAMES_)로
+  // 부른다 — 부족하면 애초에 pickAutoModel_이 Sonnet(전체 도구)로 보냈어야 할 질문인 것.
+  'claude-haiku-4-5-20251001':  { provider: 'claude', input: 1.00,  output: 5.00,  temp: true,  codeExec: false, thinkingMode: 'budget', reducedTools: true },
   'claude-fable-5':             { provider: 'claude', input: 10.00, output: 50.00, temp: false, codeExec: true,  thinkingMode: 'adaptive' },
   'gemini-3.1-pro-preview':     { provider: 'gemini', input: 2.00,  output: 12.00, temp: true,  codeExec: true  },
   'gemini-3.5-flash':           { provider: 'gemini', input: 1.50,  output: 9.00,  temp: true,  codeExec: true  },
@@ -102,6 +108,21 @@ function logNxInteraction_(entry) {
     // 로그 기록 자체가 실패해도 본 응답에는 영향 주지 않는다.
   }
 }
+
+// [2026.08] 컨텍스트 창이 작은 모델(현재 Haiku, MODEL_CONFIG의 reducedTools:true)에게 줄
+// 축소 도구세트 — calculate_*(세액계산기 92개, DRIVE_TOOLS 대부분을 차지)와 세무 특화
+// 조회 도구(부동산·건축물대장·법령조문 등)를 빼고, "간단한 보고서 수정·잡담" 역할에 맞는
+// 범용 파일·문서·작업관리·고객관리 도구만 남긴다. DRIVE_TOOLS 이름이 바뀌면 여기도 같이
+// 확인할 것 — buildToolsForModel_에서 이 이름들로 DRIVE_TOOLS를 걸러 쓴다.
+const BASIC_TOOL_NAMES_ = new Set([
+  'list_drive_folder', 'read_drive_file', 'save_file_to_folder', 'export_to_google_doc', 'send_email',
+  'register_report_to_rpt', 'manage_task_plan', 'lookup_calendar_events', 'search_emails',
+  'lookup_google_tasks', 'add_google_task', 'add_log_entry',
+  'list_work_cases', 'create_work_case', 'update_work_case_status', 'add_work_subtask',
+  'update_work_subtask_status', 'delete_work_case',
+  'list_clients', 'create_client', 'update_client', 'add_consult_log', 'list_consult_logs',
+  'remember_fact'
+]);
 
 const DRIVE_TOOLS = [
   {
@@ -12031,7 +12052,9 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
     payload.stop_sequences = body.stopSequences.slice(0, 4);
   }
 
-  const tools = DRIVE_TOOLS.slice();
+  const tools = cfg.reducedTools
+    ? DRIVE_TOOLS.filter(function (t) { return BASIC_TOOL_NAMES_.has(t.name); })
+    : DRIVE_TOOLS.slice();
   const betaFlags = [];
 
   if (body.enableWebSearch !== false) {

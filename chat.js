@@ -671,23 +671,19 @@
   let aiSettings = loadAiSettings();
 
   const settingsOverlay = document.getElementById('settingsOverlay');
-  const settingsModel = document.getElementById('settingsModel');
   const settingsEffort = document.getElementById('settingsEffort');
   const settingsTemperature = document.getElementById('settingsTemperature');
   const settingsMaxTokens = document.getElementById('settingsMaxTokens');
   const settingsCodeExec = document.getElementById('settingsCodeExec');
-  const settingsAdvisor = document.getElementById('settingsAdvisor');
   const advisorModelRow = document.getElementById('advisorModelRow');
   const settingsAdvisorModel = document.getElementById('settingsAdvisorModel');
   const settingsSystemPrompt = document.getElementById('settingsSystemPrompt');
 
   function populateSettingsForm(s){
-    settingsModel.value = s.model;
     settingsEffort.value = s.effort;
     settingsTemperature.value = (s.temperature === null || s.temperature === undefined) ? '' : s.temperature;
     settingsMaxTokens.value = (s.maxTokens === null || s.maxTokens === undefined) ? '' : s.maxTokens;
     settingsCodeExec.checked = !!s.enableCodeExecution;
-    settingsAdvisor.checked = !!s.enableAdvisor;
     settingsAdvisorModel.value = s.advisorModel;
     advisorModelRow.style.display = s.enableAdvisor ? 'block' : 'none';
     settingsSystemPrompt.value = s.systemPrompt || '';
@@ -697,7 +693,11 @@
     const tempRaw = settingsTemperature.value.trim();
     const maxTokRaw = settingsMaxTokens.value.trim();
     return {
-      model: settingsModel.value,
+      // [2026.08] 모델(고정/자동)과 어드바이저 켜고끄기는 이제 채팅 입력창 아래 도구줄에서
+      // 바로 관리한다(mainModelSelect/mainModelLock/mainAdvisor) — 이 폼을 저장해도 그 값들을
+      // 덮어쓰지 않도록 지금 값을 그대로 유지한다(웹서치·웹페이지가져오기와 같은 방식).
+      model: aiSettings.model,
+      enableAdvisor: aiSettings.enableAdvisor,
       effort: settingsEffort.value,
       temperature: tempRaw === '' ? null : Math.max(0, Math.min(1, Number(tempRaw))),
       maxTokens: maxTokRaw === '' ? null : Math.max(256, Math.min(64000, Math.floor(Number(maxTokRaw)))),
@@ -706,7 +706,6 @@
       enableWebSearch: aiSettings.enableWebSearch,
       enableWebFetch: aiSettings.enableWebFetch,
       enableCodeExecution: settingsCodeExec.checked,
-      enableAdvisor: settingsAdvisor.checked,
       advisorModel: settingsAdvisorModel.value,
       systemPrompt: settingsSystemPrompt.value.trim()
     };
@@ -748,13 +747,46 @@
   settingsOverlay.addEventListener('click', (e)=>{
     if (e.target === settingsOverlay) saveSettingsAndClose(); // 바깥(어두운 영역) 클릭 시에도 저장 후 닫기
   });
-  settingsAdvisor.addEventListener('change', ()=>{
-    advisorModelRow.style.display = settingsAdvisor.checked ? 'block' : 'none';
-  });
   document.getElementById('btnResetSettings').addEventListener('click', ()=>{
     populateSettingsForm(DEFAULT_AI_SETTINGS);
   });
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettingsAndClose);
+
+  // ---- 채팅 입력창 아래 도구줄의 모델선택+🔒잠금+어드바이저(+) — [2026.08] "설정 모달에 들어가야만
+  // 바꿀 수 있는 건 자동이 아니다"는 지적으로 여기로 꺼냈다. 콤보박스는 항상 실제 모델 이름을
+  // 보여준다("자동"이라는 값 자체는 화면에 안 보임) — 🔒를 체크하면 그 표시된 모델로 고정되고,
+  // 체크를 풀면 매 질문마다 pickAutoModel_이 고른 모델을 콤보에 실시간으로 반영만 한다.
+  const mainModelSelect = document.getElementById('mainModelSelect');
+  const mainModelLock = document.getElementById('mainModelLock');
+  const mainAdvisor = document.getElementById('mainAdvisor');
+  let lastAutoPickedModel = 'claude-sonnet-5'; // 자동모드일 때 콤보박스에 보여줄, 마지막으로 실제 쓰인 모델
+
+  function refreshMainModelUi(){
+    const locked = aiSettings.model !== 'auto';
+    mainModelLock.checked = locked;
+    mainModelSelect.disabled = !locked;
+    mainModelSelect.value = locked ? aiSettings.model : lastAutoPickedModel;
+    mainAdvisor.checked = !!aiSettings.enableAdvisor;
+  }
+  refreshMainModelUi();
+
+  mainModelLock.addEventListener('change', ()=>{
+    aiSettings.model = mainModelLock.checked ? mainModelSelect.value : 'auto';
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
+    refreshMainModelUi();
+    updateChatModelBadge();
+  });
+  mainModelSelect.addEventListener('change', ()=>{
+    if (!mainModelLock.checked) return; // 잠금 해제 상태에선 disabled라 사실상 여기 안 옴(방어용)
+    aiSettings.model = mainModelSelect.value;
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
+    updateChatModelBadge();
+  });
+  mainAdvisor.addEventListener('change', ()=>{
+    aiSettings.enableAdvisor = mainAdvisor.checked;
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
+    advisorModelRow.style.display = aiSettings.enableAdvisor ? 'block' : 'none'; // 설정모달이 열려있는 중이었다면 그쪽도 즉시 반영
+  });
 
   // ---- 폰 상단 모드메뉴(탐색작업창은 위에서 별도 처리 / 자동참조·웹서치·웹페이지가져오기는
   // 여기서) — [2026.08] 버튼 3개를 체크박스 팝업 하나로 합쳤다. 설정모달을 안 열어도 바로
@@ -836,6 +868,13 @@
     const resolved = (aiSettings.model === 'auto')
       ? pickAutoModel_(messageTextForAutoModel)
       : { model: aiSettings.model, effort: aiSettings.effort };
+    // 자동모드면 방금 고른 모델을 도구줄 콤보박스에 바로 반영해서, "지금 실제로 뭘 쓰고 있는지"가
+    // 항상 눈에 보이게 한다.
+    if (aiSettings.model === 'auto'){
+      lastAutoPickedModel = resolved.model;
+      if (typeof refreshMainModelUi === 'function') refreshMainModelUi();
+    }
+    updateChatModelBadge();
     const payload = { model: resolved.model, effort: resolved.effort };
     if (aiSettings.temperature !== null && aiSettings.temperature !== undefined) payload.temperature = aiSettings.temperature;
     if (aiSettings.maxTokens !== null && aiSettings.maxTokens !== undefined) payload.maxTokens = aiSettings.maxTokens;
