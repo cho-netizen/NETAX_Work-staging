@@ -2759,6 +2759,12 @@ function doPost(e) {
       return jsonResponse(report_doPost(body));
     }
 
+    // [2026.08] my 모듈 — my.netax.kr(고객 통합 페이지) 이관
+    const MY_ACTIONS = ['admin_create_case', 'login', 'get_checklist_status', 'upload_file', 'get_report_list', 'get_report_file', 'admin_add_checklist_item'];
+    if (MY_ACTIONS.indexOf(body.action) !== -1) {
+      return jsonResponse(my_doPost(body));
+    }
+
     if (body.action === 'listFolder') {
       return jsonResponse(handleListFolder(body));
     }
@@ -14196,6 +14202,10 @@ function report_generateReportId(sheet, headers) {
 }
 
 function report_doPost(body) {
+  // admin_list는 my 모듈과 이름이 겹쳐서, module:'my'로 명시된 경우만 my 쪽으로 넘긴다.
+  if (body.action === 'admin_list' && body.module === 'my') {
+    return my_handleAdminList(body.admin_code || '');
+  }
   switch (body.action) {
     case 'admin_list':      return report_handleAdminList(body.admin_code || '');
     case 'create_report':   return report_handleCreateReport(body);
@@ -14203,6 +14213,397 @@ function report_doPost(body) {
     case 'delete_report':   return report_handleDeleteReport(body);
     case 'get_statute_mst': return report_handleGetStatuteMst(body);
     case 'report_access':   return report_handleReportAccess(body);
+    default: return { success: false, message: '알 수 없는 action: ' + body.action };
+  }
+}
+
+// =========================================================
+// my 모듈 — my.netax.kr(고객 통합 페이지) 백엔드 이관 (2026.08)
+// admin_code 스크립트 속성은 report 모듈이 RPT_ADMIN_CODE로 옮겨가서 비게 된 원래
+// 이름(ADMIN_CODE)을 그대로 재사용.
+// =========================================================
+let MY_SHEET_ID = '1-rHNUuds5QxmH9OoLpfIejnlPmNnlyuHGWTLZCM3XU4';
+const MY_SHEET_CASES = 'Cases';
+const MY_SHEET_SUB_LOG = 'SubmissionLog';
+const MY_ROOT_FOLDER_ID = '1y1Wf0Dra6RQ0Nm5HA2Rm_DYwPl9LpiYc';
+const MY_SUBFOLDER_UPLOAD = '제출자료';
+const MY_SUBFOLDER_REPORT = '보고서';
+const MY_REPORT_ID_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const MY_REPORT_ID_LENGTH = 4;
+
+function my_isValidAdminCode(inputCode) {
+  const stored = PropertiesService.getScriptProperties().getProperty('ADMIN_CODE');
+  if (!stored || !inputCode) return false;
+  return String(inputCode).toLowerCase() === String(stored).toLowerCase();
+}
+
+function my_withAuth_(params, callback) {
+  const reportId = String(params.report_id || '').trim();
+  const passwordHash = params.password_hash || '';
+  if (!reportId || !passwordHash) {
+    return { success: false, message: 'report_id와 password_hash가 필요합니다.' };
+  }
+
+  const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+  const sheet = ss.getSheetByName(MY_SHEET_CASES);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const col = my_colMap_(headers);
+
+  let row = null, rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][col.report_id]).trim() === reportId) { row = data[i]; rowIndex = i + 1; break; }
+  }
+  if (!row) return { success: false, message: '존재하지 않는 report_id입니다.' };
+
+  const expiry = new Date(row[col.만료일]);
+  expiry.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (today > expiry) return { success: false, message: '이용 기간이 만료되었습니다.' };
+
+  const storedHash = String(row[col.비밀번호해시]).trim();
+  if (!storedHash || passwordHash !== storedHash) {
+    return { success: false, message: '인증에 실패했습니다.' };
+  }
+
+  return callback(params, { ss, sheet, data, headers, col, row, rowIndex });
+}
+
+function my_colMap_(headers) {
+  const map = {};
+  ['고객명', '사건명', 'report_id', '발급일', '비밀번호해시', '만료일', '폴더ID', '체크리스트', '제출상태', '권한']
+    .forEach(function (name) { map[name] = headers.indexOf(name); });
+  map.report_id = headers.indexOf('report_id');
+  return map;
+}
+
+function my_handleLogin(params) {
+  const reportId = String(params.report_id || '').trim();
+  const passwordHash = params.password_hash || '';
+  if (!reportId) return { success: false, message: 'report_id가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch (err) {
+    return { success: false, message: '동시 접속이 많아 처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+    const sheet = ss.getSheetByName(MY_SHEET_CASES);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const col = my_colMap_(headers);
+
+    let row = null, rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][col.report_id]).trim() === reportId) { row = data[i]; rowIndex = i + 1; break; }
+    }
+    if (!row) return { success: false, message: '존재하지 않는 report_id입니다.' };
+
+    const expiry = new Date(row[col.만료일]);
+    expiry.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (today > expiry) return { success: false, message: '이용 기간이 만료되었습니다.' };
+
+    const storedHash = String(row[col.비밀번호해시]).trim();
+    const hasPassword = storedHash.length > 0;
+
+    if (!hasPassword) {
+      if (!passwordHash) {
+        return { success: false, needs_setup: true, customer_name: row[col.고객명], message: '최초 접속입니다. 비밀번호를 설정해주세요.' };
+      }
+      sheet.getRange(rowIndex, col.비밀번호해시 + 1).setValue(passwordHash);
+      SpreadsheetApp.flush();
+    } else {
+      if (!passwordHash) {
+        return { success: false, needs_login: true, customer_name: row[col.고객명], message: '비밀번호를 입력해주세요.' };
+      }
+      if (passwordHash !== storedHash) {
+        return { success: false, message: '비밀번호가 일치하지 않습니다.' };
+      }
+    }
+
+    let checklist = [];
+    try { checklist = JSON.parse(row[col.체크리스트] || '[]'); } catch (e2) { checklist = []; }
+    let status = {};
+    try { status = JSON.parse(row[col.제출상태] || '{}'); } catch (e3) { status = {}; }
+
+    return {
+      success: true,
+      customer_name: row[col.고객명],
+      case_name: row[col.사건명],
+      checklist: checklist,
+      submission_status: status
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function my_handleGetChecklistStatus(params, ctx) {
+  let checklist = [];
+  try { checklist = JSON.parse(ctx.row[ctx.col.체크리스트] || '[]'); } catch (e) { checklist = []; }
+  let status = {};
+  try { status = JSON.parse(ctx.row[ctx.col.제출상태] || '{}'); } catch (e2) { status = {}; }
+  return { success: true, checklist: checklist, submission_status: status };
+}
+
+function my_handleUploadFile(params, ctx) {
+  const base64Data = params.base64_data || '';
+  const fileName = String(params.filename || '제출파일').trim();
+  const mimeType = params.mime_type || 'application/pdf';
+  const checklistItem = String(params.checklist_item || '').trim();
+
+  if (!base64Data) return { success: false, message: '업로드할 파일 데이터가 없습니다.' };
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (err) {
+    return { success: false, message: '다른 저장 작업이 진행 중입니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const folderId = ctx.row[ctx.col.폴더ID];
+    if (!folderId) return { success: false, message: '케이스 폴더가 설정되어 있지 않습니다.' };
+
+    const caseFolder = DriveApp.getFolderById(folderId);
+    const uploadFolder = my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_UPLOAD);
+
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
+    uploadFolder.createFile(blob);
+
+    let status = {};
+    try { status = JSON.parse(ctx.row[ctx.col.제출상태] || '{}'); } catch (e) { status = {}; }
+    if (checklistItem) {
+      status[checklistItem] = { submitted: true, fileName: fileName, uploadedAt: new Date().toISOString() };
+    } else {
+      if (!Array.isArray(status._extra)) status._extra = [];
+      status._extra.push({ fileName: fileName, uploadedAt: new Date().toISOString() });
+    }
+    ctx.sheet.getRange(ctx.rowIndex, ctx.col.제출상태 + 1).setValue(JSON.stringify(status));
+    SpreadsheetApp.flush();
+
+    const logSheet = ctx.ss.getSheetByName(MY_SHEET_SUB_LOG);
+    logSheet.appendRow([params.report_id, fileName, checklistItem || '(기타제출)', new Date()]);
+
+    return { success: true, submission_status: status };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function my_handleGetReportList(params, ctx) {
+  const folderId = ctx.row[ctx.col.폴더ID];
+  if (!folderId) return { success: true, reports: [] };
+
+  const caseFolder = DriveApp.getFolderById(folderId);
+  const reportFolder = my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_REPORT);
+
+  const reports = [];
+  const files = reportFolder.getFiles();
+  while (files.hasNext()) {
+    const f = files.next();
+    const name = f.getName().toLowerCase();
+    if (name.endsWith('.html') || name.endsWith('.htm')) {
+      reports.push({ id: f.getId(), name: f.getName(), updated: f.getLastUpdated().toISOString() });
+    }
+  }
+  reports.sort(function (a, b) { return new Date(b.updated) - new Date(a.updated); });
+  return { success: true, reports: reports };
+}
+
+function my_handleGetReportFile(params, ctx) {
+  const folderId = ctx.row[ctx.col.폴더ID];
+  const fileId = String(params.file_id || '').trim();
+  if (!folderId || !fileId) return { success: false, message: '파일 정보가 부족합니다.' };
+
+  const caseFolder = DriveApp.getFolderById(folderId);
+  const reportFolder = my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_REPORT);
+
+  let belongs = false;
+  const files = reportFolder.getFiles();
+  while (files.hasNext()) {
+    if (files.next().getId() === fileId) { belongs = true; break; }
+  }
+  if (!belongs) return { success: false, message: '이 케이스에 속한 보고서가 아닙니다.' };
+
+  const file = DriveApp.getFileById(fileId);
+  const content = file.getBlob().getDataAsString('UTF-8');
+  return { success: true, html: content, name: file.getName() };
+}
+
+function my_handleAdminCreateCase(params) {
+  if (!my_isValidAdminCode(params.admin_code || '')) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+  const name = String(params.name || '').trim();
+  const caseName = String(params.case_name || '').trim();
+  const checklist = Array.isArray(params.checklist) ? params.checklist : [];
+  const permission = String(params.permission || '허용').trim();
+
+  if (!name || !caseName) {
+    return { success: false, message: '고객명과 사건명은 필수입니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch (err) {
+    return { success: false, message: '처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const folderName = (name + ' ' + caseName).trim();
+    const rootFolder = DriveApp.getFolderById(MY_ROOT_FOLDER_ID);
+    let caseFolder = null;
+    const existing = rootFolder.getFoldersByName(folderName);
+    if (existing.hasNext()) {
+      caseFolder = existing.next();
+    } else {
+      caseFolder = rootFolder.createFolder(folderName);
+    }
+    my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_UPLOAD);
+    my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_REPORT);
+
+    const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+    const sheet = ss.getSheetByName(MY_SHEET_CASES);
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const col = my_colMap_(headers);
+
+    const reportId = my_generateReportId_(sheet, col);
+    const today = new Date();
+
+    const rowValues = new Array(headers.length).fill('');
+    rowValues[col.고객명] = name;
+    rowValues[col.사건명] = caseName;
+    rowValues[col.report_id] = reportId;
+    rowValues[col.발급일] = today;
+    rowValues[col.비밀번호해시] = '';
+    rowValues[col.폴더ID] = caseFolder.getId();
+    rowValues[col.체크리스트] = JSON.stringify(checklist);
+    rowValues[col.제출상태] = JSON.stringify({});
+    rowValues[col.권한] = permission;
+
+    const newRow = sheet.getLastRow() + 1;
+    sheet.getRange(newRow, 1, 1, headers.length).setValues([rowValues]);
+
+    const issuedCellA1 = sheet.getRange(newRow, col.발급일 + 1).getA1Notation();
+    sheet.getRange(newRow, col.만료일 + 1).setFormula('=' + issuedCellA1 + '+30');
+
+    SpreadsheetApp.flush();
+    return { success: true, report_id: reportId, folder_url: caseFolder.getUrl() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function my_handleAdminList(adminCode) {
+  if (!my_isValidAdminCode(adminCode)) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+  const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+  const sheet = ss.getSheetByName(MY_SHEET_CASES);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const col = my_colMap_(headers);
+
+  const cases = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[col.report_id]) continue;
+
+    let checklist = [];
+    try { checklist = JSON.parse(row[col.체크리스트] || '[]'); } catch (e) { checklist = []; }
+    let status = {};
+    try { status = JSON.parse(row[col.제출상태] || '{}'); } catch (e) { status = {}; }
+
+    cases.push({
+      name: row[col.고객명],
+      case_name: row[col.사건명],
+      report_id: row[col.report_id],
+      issued: row[col.발급일],
+      expiry: row[col.만료일],
+      has_password: String(row[col.비밀번호해시]).trim().length > 0,
+      folder_id: row[col.폴더ID],
+      checklist: checklist,
+      submission_status: status
+    });
+  }
+  return { success: true, cases: cases };
+}
+
+function my_handleAdminAddChecklistItem(params) {
+  if (!my_isValidAdminCode(params.admin_code || '')) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+  const reportId = String(params.report_id || '').trim();
+  const newItem = String(params.item || '').trim();
+  if (!reportId || !newItem) {
+    return { success: false, message: 'report_id와 item이 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch (err) {
+    return { success: false, message: '처리가 지연되고 있습니다. 잠시 후 다시 시도해주세요.' };
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+    const sheet = ss.getSheetByName(MY_SHEET_CASES);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const col = my_colMap_(headers);
+
+    let rowIndex = -1;
+    let row = null;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][col.report_id]).trim() === reportId) { row = data[i]; rowIndex = i + 1; break; }
+    }
+    if (!row) return { success: false, message: '존재하지 않는 report_id입니다.' };
+
+    let checklist = [];
+    try { checklist = JSON.parse(row[col.체크리스트] || '[]'); } catch (e) { checklist = []; }
+
+    if (checklist.indexOf(newItem) === -1) {
+      checklist.push(newItem);
+      sheet.getRange(rowIndex, col.체크리스트 + 1).setValue(JSON.stringify(checklist));
+      SpreadsheetApp.flush();
+    }
+
+    return { success: true, checklist: checklist };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function my_getOrCreateSubfolder_(parentFolder, name) {
+  const found = parentFolder.getFoldersByName(name);
+  if (found.hasNext()) return found.next();
+  return parentFolder.createFolder(name);
+}
+
+function my_generateReportId_(sheet, col) {
+  const data = sheet.getDataRange().getValues();
+  const existingIds = new Set(data.slice(1).map(function (row) { return String(row[col.report_id]).trim(); }).filter(Boolean));
+
+  function randomCode() {
+    let code = '';
+    for (let i = 0; i < MY_REPORT_ID_LENGTH; i++) {
+      code += MY_REPORT_ID_CHARS[Math.floor(Math.random() * MY_REPORT_ID_CHARS.length)];
+    }
+    return code;
+  }
+  let newId;
+  do { newId = randomCode(); } while (existingIds.has(newId));
+  return newId;
+}
+
+function my_doPost(body) {
+  switch (body.action) {
+    case 'admin_create_case': return my_handleAdminCreateCase(body);
+    case 'login': return my_handleLogin(body);
+    case 'get_checklist_status': return my_withAuth_(body, my_handleGetChecklistStatus);
+    case 'upload_file': return my_withAuth_(body, my_handleUploadFile);
+    case 'get_report_list': return my_withAuth_(body, my_handleGetReportList);
+    case 'get_report_file': return my_withAuth_(body, my_handleGetReportFile);
+    case 'admin_add_checklist_item': return my_handleAdminAddChecklistItem(body);
     default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
 }
