@@ -758,6 +758,7 @@
   // 체크를 풀면 매 질문마다 pickAutoModel_이 고른 모델을 콤보에 실시간으로 반영만 한다.
   const mainModelSelect = document.getElementById('mainModelSelect');
   const mainModelLock = document.getElementById('mainModelLock');
+  const mainModelLockLabel = document.getElementById('mainModelLockLabel');
   const mainAdvisor = document.getElementById('mainAdvisor');
   let lastAutoPickedModel = 'claude-sonnet-5'; // 자동모드일 때 콤보박스에 보여줄, 마지막으로 실제 쓰인 모델
 
@@ -767,6 +768,11 @@
     mainModelSelect.disabled = !locked;
     mainModelSelect.value = locked ? aiSettings.model : lastAutoPickedModel;
     mainAdvisor.checked = !!aiSettings.enableAdvisor;
+    // [2026.08] 체크박스만으로는 지금 고정/자동인지 헷갈린다는 피드백 — 글자로도 분명히 표시.
+    if (mainModelLockLabel){
+      mainModelLockLabel.textContent = locked ? '고정' : '자동';
+      mainModelLockLabel.className = 'model-lock-label ' + (locked ? 'locked' : 'auto');
+    }
   }
   refreshMainModelUi();
 
