@@ -13323,7 +13323,7 @@ function booking_sendSMS(to, message) {
   const senderPhone = props.getProperty('SOLAPI_SENDER_PHONE');
   if (!apiKey || !apiSecret || !senderPhone || !to) return;
   try {
-    sendSolapiSms_(apiKey, apiSecret, senderPhone, to, message);
+    sendSolapiSms_(apiKey, apiSecret, senderPhone.replace(/-/g, ''), String(to).replace(/-/g, ''), message);
   } catch (err) {
     console.error('상담예약 SMS 발송 실패: ' + err.message);
   }
