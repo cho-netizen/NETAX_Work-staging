@@ -856,6 +856,49 @@
     if (AUTO_MODEL_COMPLEX_RE.test(text || '')) return { model: 'claude-sonnet-5', effort: 'high' };
     return { model: 'claude-haiku-4-5-20251001', effort: 'medium' };
   }
+  // [2026.08] 제미니웹(확장프로그램으로 gemini.google.com에 대신 물어봄, 무료)을 "정말 간단하고
+  // NX 자료·도구가 전혀 필요 없는" 질문에 한해 Haiku보다도 먼저 시도한다 — 성공하면 API 비용이
+  // 0원이다. 실패(미연결·시간초과·오류)하면 조용히 원래 경로(Haiku)로 넘어가므로 손해가 없다.
+  // 대상은 일부러 매우 좁게 잡았다: 파일·일정·고객·사건·이메일처럼 NX의 실제 자료가 필요할
+  // 가능성이 조금이라도 있는 질문, 그리고 세금 관련 질문은 전부 제외한다. 제미니는 NX의
+  // 드라이브·캘린더·계산기에 접근할 방법이 전혀 없어서, 그런 질문을 던지면 모른다고 하는 대신
+  // 그럴싸하게 지어낸 답(할루시네이션)을 낼 위험이 있고, 이건 이 시스템이 가장 경계하는
+  // 부분이다 — 비용을 아끼려다 그 원칙을 깨면 안 된다.
+  const GEM_UNSAFE_SIGNAL_RE = /(파일|폴더|저장|불러|읽어|열어|찾아|검색|조회|일정|캘린더|할일|메일|이메일|보내|발송|사건|고객|상담|기억해|등록|계산|세액|세금|양도|증여|상속|취득세|재산세|법인세|소득세|부가가치세|세법|시행령|시행규칙|판례|예규|조문|비과세|감면|공제|세율|공시가격|시세|등기|사업자|주소|건축물|첨부|반영|수정|고쳐|삭제)/;
+  function isGemWebSafeMessage_(text){
+    if (!text || text.length > 200) return false; // 길면 복잡한 요청일 가능성 — 대상에서 제외
+    if (GEM_UNSAFE_SIGNAL_RE.test(text)) return false;
+    if (AUTO_MODEL_COMPLEX_RE.test(text)) return false;
+    return true;
+  }
+
+  const pendingGemSilent_ = {}; // requestId -> {resolve, reject} — 화면에 별도 말풍선을 만들지 않는 조용한 요청용
+  // askGem()과 같은 확장프로그램 경로(NX_GEM_ASK)를 쓰지만, Promise로 감싸서 sendChatMessage가
+  // "성공하면 그 답을 이번 턴의 정식 답변으로 쓰고, 실패하면 Haiku로 넘어간다"처럼 판단할 수 있게 한다.
+  function askGemSilent_(question, timeoutMs){
+    return new Promise((resolve, reject) => {
+      ensureExtConnected_().then((connected) => {
+        if (!connected){ reject(new Error('not_connected')); return; }
+        const requestId = 'gemsilent_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        const timer = setTimeout(() => {
+          delete pendingGemSilent_[requestId];
+          reject(new Error('timeout'));
+        }, timeoutMs || 20000);
+        pendingGemSilent_[requestId] = {
+          resolve: (answer) => { clearTimeout(timer); resolve(answer); },
+          reject: (err) => { clearTimeout(timer); reject(err); }
+        };
+        try{
+          nxExtPort.postMessage({ type: 'NX_GEM_ASK', requestId: requestId, question: question });
+        }catch(err){
+          clearTimeout(timer);
+          delete pendingGemSilent_[requestId];
+          reject(err);
+        }
+      });
+    });
+  }
+
   // regenerateFrom_처럼 "지금 입력창"이 아니라 이미 쌓인 대화기록에서 자동모델 판단용 텍스트를 뽑을 때 사용.
   function lastUserText_(messages){
     for (let i = messages.length - 1; i >= 0; i--){
@@ -1116,6 +1159,11 @@
       return true;
     }
     if (msg.type === 'NX_GEM_ANSWER'){
+      if (pendingGemSilent_[msg.requestId]){
+        pendingGemSilent_[msg.requestId].resolve(msg.answer || '');
+        delete pendingGemSilent_[msg.requestId];
+        return true;
+      }
       const bubble = pendingGemBubbles[msg.requestId];
       if (bubble){
         const prefix = pendingGemAnswerPrefix[msg.requestId] || '🔮 Gem';
@@ -1128,6 +1176,11 @@
       return true;
     }
     if (msg.type === 'NX_GEM_ERROR'){
+      if (pendingGemSilent_[msg.requestId]){
+        pendingGemSilent_[msg.requestId].reject(new Error(msg.error || 'gem_error'));
+        delete pendingGemSilent_[msg.requestId];
+        return true;
+      }
       const bubble = pendingGemBubbles[msg.requestId];
       if (bubble){
         const prefix = pendingGemAnswerPrefix[msg.requestId] || '🔮 Gem';
@@ -2103,8 +2156,38 @@
     const autoWebFetch = messageContainsUrl(text) && !aiSettings.enableWebFetch;
     if (autoWebFetch) showToast('메시지에 URL이 있어 이번 요청만 웹페이지 가져오기를 자동으로 켰습니다.', 'info');
 
+    // [2026.08] "자동" 모드에서 정말 간단하고 자료조회가 필요없어 보이는 질문이면, Haiku(유료)
+    // 보다도 먼저 제미니웹(확장프로그램 경유, 무료)을 시도한다 — 첨부·화면캡처·열린문서 등
+    // NX 쪽 맥락이 이번 메시지에 섞여있으면 애초에 대상에서 뺀다(제미니는 그런 맥락을 볼 수
+    // 없으므로). 실패해도 사용자에게 굳이 알리지 않고 조용히 원래 경로(Haiku)로 넘어간다.
+    const geminiWebEligible = aiSettings.model === 'auto'
+      && !extraBlocks.length
+      && !openFileCtx
+      && isGemWebSafeMessage_(text);
+
     try{
       currentChatAbortController = new AbortController();
+
+      if (geminiWebEligible){
+        thinkingBubble.textContent = '🔮 먼저 무료로 확인 중 (Gemini)…';
+        try{
+          const gemAnswer = await askGemSilent_(text, 20000);
+          if (gemAnswer && gemAnswer.trim()){
+            renderAssistantReply(thinkingBubble, '🔮 (Gemini·무료 답변)\n\n' + gemAnswer, [], null);
+            const aiMsgObj = { role: 'assistant', content: gemAnswer };
+            chatMessages.push(aiMsgObj);
+            thinkingBubble._nxMsgRef = aiMsgObj;
+            scheduleChatHistorySave();
+            if (isVoiceTurn) speakReply(gemAnswer);
+            return;
+          }
+          // 빈 답은 실패로 취급하고 아래 Haiku 경로로 넘어간다.
+        }catch(err){
+          // 미연결·시간초과·확장프로그램 오류 — 조용히 원래 경로(Haiku)로 이어간다.
+        }
+        thinkingBubble.textContent = '생각 중…';
+      }
+
       await runChatTurn_(requestMessages, {
         thinkingBubble: thinkingBubble,
         signal: currentChatAbortController.signal,
