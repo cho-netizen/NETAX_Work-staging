@@ -770,7 +770,7 @@
     mainAdvisor.checked = !!aiSettings.enableAdvisor;
     // [2026.08] 체크박스만으로는 지금 고정/자동인지 헷갈린다는 피드백 — 글자로도 분명히 표시.
     if (mainModelLockLabel){
-      mainModelLockLabel.textContent = locked ? '고정' : '자동';
+      mainModelLockLabel.textContent = locked ? 'F' : 'V';
       mainModelLockLabel.className = 'model-lock-label ' + (locked ? 'locked' : 'auto');
     }
   }
