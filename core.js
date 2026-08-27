@@ -124,6 +124,20 @@
       explorerPanelEl.style.bottom = '';
       explorerPanelEl.style.width = '';
       explorerPanelEl.style.height = '';
+    } else if (!explorerPanelEl.style.left){
+      // [2026.08] 오른쪽 아래 모서리로 크기를 조절하는 기능(resize:both)은 위치·크기가
+      // left/top/width/height로 명확히 잡혀 있어야 안정적으로 동작한다 — CSS의
+      // left:5vw/right:5vw처럼 "양쪽 끝"으로 계산되는 상태로 두면 리사이즈 도중 폭이
+      // 같이 흔들린다. 그래서 띄우기 모드에 처음 들어오는 순간, 지금 CSS로 계산된 실제
+      // 크기를 그대로 explicit 값으로 고정해둔다(사용자 입장에서는 위치·크기가 똑같이
+      // 보이므로 아무 변화도 못 느낀다).
+      const rect = explorerPanelEl.getBoundingClientRect();
+      explorerPanelEl.style.left = rect.left + 'px';
+      explorerPanelEl.style.top = rect.top + 'px';
+      explorerPanelEl.style.width = rect.width + 'px';
+      explorerPanelEl.style.height = rect.height + 'px';
+      explorerPanelEl.style.right = 'auto';
+      explorerPanelEl.style.bottom = 'auto';
     }
     workspaceModeIcon.textContent = WORKSPACE_MODE_META[mode].icon;
     workspaceModeLabel.textContent = WORKSPACE_MODE_META[mode].label;

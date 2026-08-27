@@ -533,6 +533,9 @@
     top:calc(var(--topbar-h, 50px) + 8px); left:5vw; right:5vw;
     bottom:16px; z-index:91;
     border-radius:12px; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.4); border:1px solid var(--line);
+    /* 오른쪽 아래 모서리를 드래그해서 크기도 조절할 수 있게 — 브라우저 기본 리사이즈 손잡이 사용.
+       resize는 overflow가 visible이 아니어야 동작하므로 위의 overflow:hidden과 함께 써야 한다. */
+    resize:both; min-width:320px; min-height:240px;
   }
   /* 헤더를 잡고 화면 아무 곳으로나 옮길 수 있다는 걸 커서로 알려준다(breadcrumb·버튼은 제외). */
   .workspace.explorer-floating .panel.explorer .panel-head{ cursor:move; }
@@ -1765,7 +1768,7 @@ graph TD
     </div>
   </div>
 
-<script src="/core.js?v=20260828b"></script>
+<script src="/core.js?v=20260828c"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
 <script src="/explorer.js?v=20260827b"></script>
 <script src="/work-manage.js?v=20260827a"></script>
