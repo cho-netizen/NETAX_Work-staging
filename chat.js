@@ -2205,15 +2205,18 @@
     // NX 쪽 맥락이 이번 메시지에 섞여있으면 애초에 대상에서 뺀다(제미니는 그런 맥락을 볼 수
     // 없으므로). 실패해도 사용자에게 굳이 알리지 않고 조용히 원래 경로(Haiku)로 넘어간다.
     const geminiEcosystemRoute = detectGemEcosystemRoute_(text);
-    // [2026.08] 처음엔 "자동" 모드일 때만 대상으로 했는데, 실사용 중 발견: 모델을 Haiku로
-    // 직접 고정해둔 경우도 "간단한 질문 위주"라는 의도는 자동모드와 같으므로 대상에 넣는다.
-    // Sonnet·Opus 등 비싼 모델을 일부러 고정한 경우는 여전히 존중해서 대상에서 뺀다(사용자가
-    // 그 질문엔 확실히 좋은 모델을 쓰고 싶다는 명시적 선택이므로).
+    // [2026.08] 모델 선택(Sonnet/Haiku 등)은 "답변 품질을 얼마나 높게 쓸지"를 정하는 것이고,
+    // 구글 생태계(캘린더·Gmail·드라이브) 조회는 "원본 데이터를 어디서 가져올지"를 정하는
+    // 완전히 다른 축이다 — 세무사님 지적으로 이 둘을 분리했다. 그래서:
+    // - 일반 잡담(isGemWebSafeMessage_)은 "답변 자체"를 제미니로 대체하는 것이므로 모델을
+    //   일부러 비싼 걸로 고정해뒀으면(예: Sonnet) 그 선택을 존중해서 대상에서 뺀다.
+    // - 반면 캘린더/Gmail/드라이브 "조회"는 원본 데이터를 가져오는 것뿐이라, 어떤 모델을
+    //   고정해뒀든 상관없이 항상 먼저 시도한다 — 실패하거나 출처 확인이 안 되면 그대로
+    //   고정된 모델(비싸도)로 넘어가므로 손해가 없다.
     const geminiWebModelOk = aiSettings.model === 'auto' || aiSettings.model === 'claude-haiku-4-5-20251001';
-    const geminiWebEligible = geminiWebModelOk
-      && !extraBlocks.length
+    const geminiWebEligible = !extraBlocks.length
       && !openFileCtx
-      && (isGemWebSafeMessage_(text) || !!geminiEcosystemRoute);
+      && ((geminiWebModelOk && isGemWebSafeMessage_(text)) || !!geminiEcosystemRoute);
 
     try{
       currentChatAbortController = new AbortController();
