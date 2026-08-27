@@ -1819,6 +1819,9 @@
     target.addEventListener('load', onLoad);
   }
 
+  // "반영했습니다/저장했습니다"류 완료 주장 표현 — renderAssistantReply의 미검증 저장 경고에 사용.
+  const COMPLETION_CLAIM_RE = /(반영했|저장했|업데이트했|갱신했|추가했습니다|생성했|파일을?\s*만들었)/;
+
   function renderAssistantReply(bubbleEl, replyText, clientActions, editTargetFile){
     const actions = Array.isArray(clientActions) ? clientActions : [];
     const diagramOpen = (typeof diagramView !== 'undefined' && diagramView.style.display !== 'none');
@@ -1921,6 +1924,20 @@
       }
       bubbleEl.appendChild(badge);
     });
+
+    // [2026.08] "반영했습니다/저장했습니다"라고 말은 하는데 실제로는 아무 도구도 호출 안 한 채
+    // 말로만 지어내는 경우가 실사용 중 재확인됐다(마스터프로필에 2026-08-17에 이미 "절대 금지"로
+    // 적어뒀는데도 재발) — 지침만으로는 AI가 안 지키면 그만이라, 화면이 직접 검증한다. 완료를
+    // 주장하는 말투가 있는데 위에서 실제 저장/적용 신호(editAction·diagramAction·file_saved)가
+    // 하나도 없었다면, AI 말과 무관하게 경고를 띄운다.
+    const claimedCompletion = COMPLETION_CLAIM_RE.test(replyText || '');
+    const hasRealSaveSignal = !!editAction || !!diagramAction || savedActions.length > 0;
+    if (claimedCompletion && !hasRealSaveSignal){
+      const warn = document.createElement('div');
+      warn.className = 'unverified-save-warning';
+      warn.textContent = '⚠️ AI가 저장/반영했다고 답했지만, 실제로 저장 도구를 호출한 기록이 이번 응답에 없습니다. 직접 파일을 열어 확인해주세요.';
+      bubbleEl.appendChild(warn);
+    }
   }
 
   let currentChatAbortController = null; // 요청 중 '중지' 버튼으로 취소하기 위한 컨트롤러
