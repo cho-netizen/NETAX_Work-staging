@@ -140,7 +140,7 @@ async function renderClientDetail(c){
     '<button type="button" id="ccSaveClient" class="ghost-btn">저장</button>' +
     '</div>' +
     '<textarea id="ccEditMemo" placeholder="메모" style="width:100%; max-width:500px; min-height:50px; font-family:inherit; margin-bottom:16px;">' + escapeHtml(c.메모 || '') + '</textarea>' +
-    '<h4 style="margin-bottom:6px;">상담·자문 이력</h4>' +
+    '<h4 style="margin-bottom:6px;">서비스 이력</h4>' +
     '<div id="ccLogList" class="log-list"><div class="log-empty">불러오는 중…</div></div>' +
     '<div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
     '<input type="date" id="ccNewLogDate" title="날짜(생략하면 오늘)">' +
@@ -202,30 +202,59 @@ async function renderClientDetail(c){
   loadClientLogs_(c);
 }
 
+// [2026.08] "상담·자문 이력"이라는 이름 때문에 실제 상담 기록만 남기는 곳으로 오해하기
+// 쉬웠다 — 사용자 지적: "모든 서비스가 반영되고 연결되어야 하는 거지". 그래서 이 고객에게
+// 실제로 한 모든 일(상담·자문 기록 + 작업관리에 등록된 사건들)을 한 목록에 합쳐서 보여주는
+// "서비스 이력"으로 바꿨다. 작업관리 사건은 work_get_cases로 전체를 받아 고객ID로 걸러낸다
+// (건수가 적은 1인 세무사무소 규모라 서버 필터 없이 그냥 다 받아서 걸러도 충분히 빠름).
 async function loadClientLogs_(c){
   const listEl = document.getElementById('ccLogList');
   if (!listEl) return;
   try{
-    const res = await callGas('client_get_consult_logs', { 고객ID: c.id });
-    if (res.error || res.success === false){
-      listEl.innerHTML = '<div class="log-empty">' + escapeHtml(res.error || res.message || '불러오지 못했습니다.') + '</div>';
+    const [logRes, caseRes] = await Promise.all([
+      callGas('client_get_consult_logs', { 고객ID: c.id }),
+      callGas('work_get_cases', {})
+    ]);
+    if (logRes.error || logRes.success === false){
+      listEl.innerHTML = '<div class="log-empty">' + escapeHtml(logRes.error || logRes.message || '불러오지 못했습니다.') + '</div>';
       return;
     }
-    const logs = res.logs || [];
-    if (!logs.length){
-      listEl.innerHTML = '<div class="log-empty">아직 자문내역이 없습니다.</div>';
+    const items = (logRes.logs || []).map(log => ({ kind: 'log', date: log.날짜 || '', data: log }));
+    if (!caseRes.error && caseRes.success !== false){
+      (caseRes.cases || []).filter(wc => wc.고객ID === c.id).forEach(wc => {
+        items.push({ kind: 'case', date: wc.의뢰일 || wc.수정일 || '', data: wc });
+      });
+    }
+    if (!items.length){
+      listEl.innerHTML = '<div class="log-empty">아직 이력이 없습니다.</div>';
       return;
     }
+    items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     listEl.innerHTML = '';
-    logs.forEach(log => {
+    items.forEach(item => {
       const row = document.createElement('div');
       row.className = 'log-entry';
-      renderLogRowView_(row, c, log);
+      if (item.kind === 'log') renderLogRowView_(row, c, item.data);
+      else renderCaseHistoryRow_(row, item.data);
       listEl.appendChild(row);
     });
   }catch(err){
     listEl.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>';
   }
+}
+
+// 서비스 이력에 섞여 들어가는 작업관리 사건 한 줄 — 상담기록(renderLogRowView_)과 같은
+// .log-date/.log-text 구조를 써서 같은 목록 안에서 자연스럽게 나란히 보이게 한다.
+function renderCaseHistoryRow_(row, wc){
+  const semokLabel = (typeof WORK_SEMOK_LABELS !== 'undefined' && WORK_SEMOK_LABELS[wc.세목]) || wc.세목 || '';
+  const deadlineLabel = typeof workDeadlineFieldLabel_ === 'function' ? workDeadlineFieldLabel_(wc.업무유형) : '법정일';
+  row.innerHTML =
+    '<div class="log-date">' + escapeHtml(wc.의뢰일 ? fmtDateShort_(wc.의뢰일) : '') + '</div>' +
+    '<div class="log-text">' +
+    '🗂 <b>' + escapeHtml(wc.사건명 || '') + '</b> · ' + escapeHtml(semokLabel) + (wc.업무유형 ? ' · ' + escapeHtml(wc.업무유형) : '') +
+    ' · <span style="color:' + (wc.상태 === '완료' ? '#16a34a' : 'var(--sub)') + ';">' + escapeHtml(wc.상태 || '') + '</span>' +
+    (wc.법정일 ? '<br>' + escapeHtml(deadlineLabel) + ': ' + escapeHtml(fmtDateShort_(wc.법정일)) : '') +
+    '</div>';
 }
 
 // [2026.08] 자문내역도 등록 후에는 삭제만 되고 수정이 안 됐다(고객명·사건명과 같은 이유의
