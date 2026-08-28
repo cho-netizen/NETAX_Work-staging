@@ -220,27 +220,71 @@ async function loadClientLogs_(c){
     logs.forEach(log => {
       const row = document.createElement('div');
       row.className = 'log-entry';
-      const amountText = log.금액 ? ' · ' + Number(log.금액).toLocaleString('ko-KR') + '원' : '';
-      row.innerHTML =
-        '<div class="log-date">' + escapeHtml(log.날짜 || '') + '</div>' +
-        '<div class="log-text">' +
-        (log.유형 ? '<b>' + escapeHtml(log.유형) + '</b> · ' : '') + escapeHtml(log.담당자 || '') + amountText +
-        '<br>' + escapeHtml(log.내용 || '') +
-        '</div>' +
-        '<span class="log-del" title="삭제">✕</span>';
-      row.querySelector('.log-del').addEventListener('click', async () => {
-        if (!confirm('이 자문내역을 삭제할까요?')) return;
-        try{
-          const delRes = await callGas('client_delete_consult_log', { id: log.id });
-          if (delRes.error || delRes.success === false){ showToast(delRes.error || delRes.message || '삭제 실패', 'error'); return; }
-          loadClientLogs_(c);
-        }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
-      });
+      renderLogRowView_(row, c, log);
       listEl.appendChild(row);
     });
   }catch(err){
     listEl.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>';
   }
+}
+
+// [2026.08] 자문내역도 등록 후에는 삭제만 되고 수정이 안 됐다(고객명·사건명과 같은 이유의
+// 누락) — 각 항목에 "✏️ 수정" 버튼을 추가해서 눌렀을 때만 그 항목이 입력칸으로 바뀌고,
+// 그 외에는 지금처럼 읽기전용 요약으로 보여준다(모든 항목이 항상 입력칸이면 목록이
+// 길어졌을 때 너무 번잡해서).
+function renderLogRowView_(row, c, log){
+  const amountText = log.금액 ? ' · ' + Number(log.금액).toLocaleString('ko-KR') + '원' : '';
+  row.innerHTML =
+    '<div class="log-date">' + escapeHtml(log.날짜 || '') + '</div>' +
+    '<div class="log-text">' +
+    (log.유형 ? '<b>' + escapeHtml(log.유형) + '</b> · ' : '') + escapeHtml(log.담당자 || '') + amountText +
+    (log.관계 ? ' · ' + escapeHtml(log.관계) : '') +
+    '<br>' + escapeHtml(log.내용 || '') +
+    '</div>' +
+    '<span class="log-edit" title="수정" style="cursor:pointer; margin-right:6px;">✏️</span>' +
+    '<span class="log-del" title="삭제">✕</span>';
+  row.querySelector('.log-edit').addEventListener('click', () => renderLogRowEdit_(row, c, log));
+  row.querySelector('.log-del').addEventListener('click', async () => {
+    if (!confirm('이 자문내역을 삭제할까요?')) return;
+    try{
+      const delRes = await callGas('client_delete_consult_log', { id: log.id });
+      if (delRes.error || delRes.success === false){ showToast(delRes.error || delRes.message || '삭제 실패', 'error'); return; }
+      loadClientLogs_(c);
+    }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
+  });
+}
+
+function renderLogRowEdit_(row, c, log){
+  row.innerHTML =
+    '<div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; width:100%;">' +
+    '<input type="date" class="logEditDate" value="' + escapeHtml(log.날짜 || '') + '" style="font-size:12px;">' +
+    '<input type="text" class="logEditStaff" placeholder="담당자" value="' + escapeHtml(log.담당자 || '') + '" style="width:70px; font-size:12px;">' +
+    '<input type="text" class="logEditType" placeholder="유형" value="' + escapeHtml(log.유형 || '') + '" style="width:100px; font-size:12px;">' +
+    '<input type="text" class="logEditRelation" placeholder="관계(선택)" value="' + escapeHtml(log.관계 || '') + '" style="width:80px; font-size:12px;">' +
+    '<input type="number" class="logEditAmount" placeholder="금액" value="' + (log.금액 || '') + '" style="width:90px; font-size:12px;">' +
+    '<input type="text" class="logEditContent" placeholder="내용" value="' + escapeHtml(log.내용 || '') + '" style="flex:1; min-width:160px; font-size:12.5px;">' +
+    '<button type="button" class="save-btn logEditSave" style="padding:3px 8px;">저장</button>' +
+    '<button type="button" class="ghost-btn logEditCancel" style="padding:3px 8px;">취소</button>' +
+    '</div>';
+  row.querySelector('.logEditCancel').addEventListener('click', () => renderLogRowView_(row, c, log));
+  row.querySelector('.logEditSave').addEventListener('click', async () => {
+    const content = row.querySelector('.logEditContent').value.trim();
+    if (!content){ showToast('내용을 입력해주세요.', 'warning'); return; }
+    try{
+      const res = await callGas('client_update_consult_log', {
+        id: log.id,
+        날짜: row.querySelector('.logEditDate').value,
+        담당자: row.querySelector('.logEditStaff').value.trim(),
+        유형: row.querySelector('.logEditType').value.trim(),
+        관계: row.querySelector('.logEditRelation').value.trim(),
+        금액: row.querySelector('.logEditAmount').value,
+        내용: content
+      });
+      if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
+      showToast('저장했습니다.', 'success');
+      loadClientLogs_(c);
+    }catch(err){ showToast('저장 중 오류가 발생했습니다.', 'error'); }
+  });
 }
 
 // [2026.08] 작업관리와 같은 이유로 고객관리도 항상 새 창으로 연다 — 부트스트랩은 이 파일
