@@ -1438,7 +1438,11 @@
       const base = new Date(calcDeadlineBaseDate.value + 'T00:00:00');
       const months = CALC_DEADLINE_MONTHS_[calcDeadlineType.value] || 0;
       const monthEnd = dateFns.endOfMonth(base);
-      const deadline = dateFns.addMonths(monthEnd, months);
+      const rough = dateFns.addMonths(monthEnd, months);
+      // [2026.08 버그수정] addMonths는 day-of-month를 유지하며 더하는 방식이라(예: 6/30+6개월
+      // →12/30) 도착한 달이 더 길면 말일이 아닌 날짜가 나올 수 있었다 — 도착한 달의 말일로
+      // 한 번 더 맞춘다(work-manage 자동계산과 동일한 규칙으로 통일).
+      const deadline = dateFns.endOfMonth(rough);
       const weekdayKo = ['일','월','화','수','목','금','토'][deadline.getDay()];
       calcDeadlineResult.textContent = '신고기한: ' + dateFns.format(deadline, 'yyyy-MM-dd') + ' (' + weekdayKo + ')';
     });

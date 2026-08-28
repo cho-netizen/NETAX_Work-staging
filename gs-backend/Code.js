@@ -778,7 +778,7 @@ const DRIVE_TOOLS = [
         isSubstituteInheritance: { type: 'boolean', description: '§27① 단서 — 「민법」제1001조에 따른 대습상속인 경우. true면 세대생략가산액을 적용하지 않는다(할증률 0).' },
         interestAmount: { type: 'number', description: '각종 사후관리 위반에 따른 추징 시 붙는 이자상당액(원). 해당 사안일 때만 별도로 계산해서 입력. 없으면 생략.' },
         forProfitBequestAmount: { type: 'number', description: '영리법인 상속세 면제(§3의2)용 — 영리법인이 유증받은 재산가액(원). 영리법인 자체의 상속세는 면제되지만, 상속인·직계비속이 그 법인의 최대주주 등인 경우 지분 상당액만큼 상속인에게 별도 납부의무가 생긴다. 없으면 생략.' },
-        forProfitExemptedTaxAmount: { type: 'number', description: '영리법인이 유증받아 면제된 상속세액(원). (면제세액 - 유증재산가액×10%)×상속인 지분비율만큼을 상속인이 납부해야 한다. 없으면 생략.' },
+        forProfitExemptedTaxAmount: { type: 'number', description: '영리법인이 유증받아 면제된 상속세액(원). (면제세액 - 유증재산가액×10%)×상속인 지분비율만큼을 상속인이 납부해야 한다(§3조의2②, 시행령§3②). 없으면 생략. 주의: 시행령§3②의 이 계산식은 원문이 수식 이미지로 제공되어 law.go.kr 원문과 1:1 대조 확인은 못했고, 실무상 통용되는 산식을 그대로 반영한 것이다.' },
         forProfitHeirShareRatio: { type: 'number', description: '영리법인 최대주주 등에 해당하는 상속인·직계비속의 지분 상당 비율(0~1). 없으면 생략(0).' },
         culturalPropertyDeferredTaxAmount: { type: 'number', description: '문화재자료·박물관자료등 징수유예세액(원) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 없으면 생략.' },
         businessInheritanceDeferredTaxAmount: { type: 'number', description: '가업상속 상속세 납부유예세액(원, §72의2, [별지 제12호의2서식]) — 이번 신고 시 납부할 세액에서 차감(유예)된다. 정확한 금액을 모르면 totalGrossEstateValue와 businessInheritanceIndividualNetAssetValue/businessInheritanceStockValue 등을 넣어 이 도구가 계산한 가업상속납부유예_가능세액(참고용)을 확인한 뒤 그 금액을 여기 넣어라. 없으면 생략.' },
@@ -804,7 +804,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'allocate_inheritance_tax_by_heir',
-    description: '상속인이 여러 명일 때, calculate_inheritance_tax로 계산한 전체 상속세(산출세액·세액공제·가산세·납부세액)를 각 상속인이 실제 받았거나 받을 재산 비율로 안분해 상속인별 납부세액을 계산한다(상증세법 §3조의2②, 유산세 방식). calculate_inheritance_tax를 먼저 호출해 그 결과를 aggregateResult로 그대로 넘겨야 한다.',
+    description: '상속인이 여러 명일 때, calculate_inheritance_tax로 계산한 전체 상속세(산출세액·세액공제·가산세·납부세액)를 각 상속인이 실제 받았거나 받을 재산 비율로 안분해 상속인별 납부세액을 계산한다(상증세법 §3조의2①, 유산세 방식). calculate_inheritance_tax를 먼저 호출해 그 결과를 aggregateResult로 그대로 넘겨야 한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1769,7 +1769,9 @@ const DRIVE_TOOLS = [
         ratioType: { type: 'string', enum: ['general', 'nonvoting_charity', 'conglomerate_related', 'noncompliant'], description: 'assetType이 stock일 때 필수 — general=원칙(10%), nonvoting_charity=의결권미행사+자선장학사회복지목적 공익법인(20%), conglomerate_related=상호출자제한기업집단과 특수관계있는 공익법인(5%), noncompliant=§48⑪요건 미충족 공익법인(5%).' },
         totalIssuedShares: { type: 'number', description: 'assetType이 stock일 때 필수 — 그 내국법인의 발행주식총수등(자기주식 제외).' },
         donatedShares: { type: 'number', description: 'assetType이 stock일 때 필수 — 이번에 출연하는 주식수.' },
-        priorRelatedShares: { type: 'number', description: 'assetType이 stock일 때 — 합산대상 기존 보유 동일법인 주식수 합계(출연당시 그 공익법인등 보유분+출연자 및 특수관계인이 다른 공익법인등에 출연한 분+상속인 등이 출연한 다른 공익법인등 보유분). 없으면 0.' }
+        priorRelatedShares: { type: 'number', description: 'assetType이 stock일 때 — 합산대상 기존 보유 동일법인 주식수 합계(출연당시 그 공익법인등 보유분+출연자 및 특수관계인이 다른 공익법인등에 출연한 분+상속인 등이 출연한 다른 공익법인등 보유분). 없으면 0.' },
+        isExemptFromExcessInclusion: { type: 'boolean', description: '§16③(상속세)·§48①단서(증여세, §16③ 각 호를 그대로 인용) — 한도비율을 초과해도 다음 3가지 중 하나에 해당하면 그 초과분을 과세가액에 산입하지 않는 예외. true면 exemptionGround로 어느 호에 해당하는지 표시한다.' },
+        exemptionGround: { type: 'string', enum: ['authority_approved', 'sold_within_3years', 'other_statute'], description: 'isExemptFromExcessInclusion이 true일 때 — authority_approved=1호(상호출자제한기업집단과 특수관계 없는 공익법인에 출연자와 특수관계 없는 내국법인 주식을 출연, 주무관청이 목적사업 효율수행을 위해 필요하다고 인정), sold_within_3years=2호(§48⑪요건 충족 공익법인이 초과보유일부터 3년 이내에 초과분을 출연자·특수관계인 아닌 자에게 매각), other_statute=3호(공익법인의 설립·운영에 관한 법률 등 다른 법령에 따른 출연).' }
       },
       required: ['taxType', 'assetType', 'donatedAmount']
     }
@@ -4861,8 +4863,8 @@ function shortTermReinheritanceCredit_(priorInheritanceTax, reinheritedPropertyV
 //     + (전체과세표준－전체가산증여재산과세표준) × [(그 상속인 상속세과세가액상당액－그 상속인 가산증여재산가액)
 //                                                  ÷ (전체상속세과세가액－전체가산증여재산가액)]
 // "상속인별 상속세과세가액상당액"과 "그 상속인이 납부할 상속세액"은 이 시행령 조문 자체에는 별도 산식이
-// 없으나, 상증세법§3조의2②(상속세 납부의무 안분)이 이미 "각자가 받았거나 받을 재산" 비율로 안분하도록
-// 정하고 있고 이 도구의 §3조의2② 안분 도구(toolAllocateInheritanceTaxByHeir)도 실무관행에 따라 "실제
+// 없으나, 상증세법§3조의2①(상속세 납부의무 안분)이 이미 "각자가 받았거나 받을 재산" 비율로 안분하도록
+// 정하고 있고 이 도구의 §3조의2① 안분 도구(toolAllocateInheritanceTaxByHeir)도 실무관행에 따라 "실제
 // 상속재산가액 비율"로 그 비율을 조작적으로 정의하고 있으므로, 여기서도 동일한 비율을 그대로 적용해
 // 두 조문의 해석을 일관되게 유지한다.
 // nonHeirPriorGiftTaxableBaseTotal·nonHeirPriorGiftAmountTotal: 시행령§3①1호 가목·나목 원문이 각각
@@ -4893,7 +4895,7 @@ function priorGiftTaxCreditPrecise_(overallCalculatedTax, overallTaxBase, overal
     const daMok = heirTaxableAmountShare - giftAmount;
     const ratioDaNa = naMok > 0 ? (daMok / naMok) : 0;
     const taxableBaseEquivalent = giftTaxableBase + gaMok * ratioDaNa; // 상속인별 상속세과세표준상당액
-    const grossTaxShare = overallCalculatedTax * actualValueRatio; // 그 상속인이 납부할 상속세액(§3조의2②)
+    const grossTaxShare = overallCalculatedTax * actualValueRatio; // 그 상속인이 납부할 상속세액(§3조의2①)
     const limit = taxableBaseEquivalent > 0 ? Math.round(grossTaxShare * Math.min(1, giftTaxableBase / taxableBaseEquivalent)) : 0;
     const credit = Math.min(giftTaxPaid, Math.round(grossTaxShare), limit);
     totalCredit += credit;
@@ -6939,7 +6941,7 @@ function toolCalculateInheritanceTax(p) {
   };
 }
 
-// 상속인별 납부세액 안분 (상증세법 §3조의2②) — 우리나라 상속세는 유산세 방식이라 상속재산 전체에 대해
+// 상속인별 납부세액 안분 (상증세법 §3조의2①) — 우리나라 상속세는 유산세 방식이라 상속재산 전체에 대해
 // 하나의 세액을 계산한 뒤, 각 상속인은 "자신이 받았거나 받을 재산이 전체 상속재산에서 차지하는 비율"만큼만
 // 납세의무를 진다. toolCalculateInheritanceTax의 결과(전체 세액)와 상속인별 실제상속재산가액만 있으면 계산되며,
 // 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계가 전체 금액과 정확히 일치하게 한다.
@@ -7011,8 +7013,8 @@ function toolAllocateInheritanceTaxByHeir(aggregateResult, heirs, nonHeirPriorGi
     정밀비율_적용여부: !!preciseRatios,
     합계검증: { 실제상속재산가액_합계: totalInherited, 납부세액_합계: aggregateResult.납부세액 || 0 },
     안내: (preciseRatios
-      ? '상증세법 §3조의2②·시행령§3①1호에 따라, 사전증여 데이터를 반영한 정밀 비율(상속인별 상속세과세표준상당액 비율)로 안분했습니다.'
-      : '상증세법 §3조의2②에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식, 사전증여 데이터 없음).') +
+      ? '상증세법 §3조의2①·시행령§3①1호에 따라, 사전증여 데이터를 반영한 정밀 비율(상속인별 상속세과세표준상당액 비율)로 안분했습니다.'
+      : '상증세법 §3조의2①에 따라, 전체 산출세액·세액공제·가산세 등을 상속인별 실제상속재산가액 비율로 안분했습니다(유산세 방식, 사전증여 데이터 없음).') +
       ' 상속공제는 전체 1회만 적용되는 항목이라 인별로 나누지 않았습니다. 반올림 잔액은 실제상속재산가액이 가장 큰 상속인에게 몰아서 합계를 맞췄습니다. 각 상속인은 자신이 받았거나 받을 재산을 한도로 연대납부의무를 지므로, 실제 배분·납부는 상속인 간 협의나 유언에 따른 실제 취득재산 기준으로 재확인하세요.'
   };
 }
@@ -11219,8 +11221,17 @@ function toolCalculateCharityDonationTaxExclusion(p) {
   const limitShares = totalIssuedShares * ratio;
   const combinedShares = donatedShares + priorRelatedShares;
   const excessShares = Math.max(0, combinedShares - limitShares);
-  const excessSharesFromThisDonation = Math.min(excessShares, donatedShares);
+  let excessSharesFromThisDonation = Math.min(excessShares, donatedShares);
   const valuePerShare = donatedAmount / donatedShares;
+  // §16③(상속세)·§48①단서(증여세, §16③을 그대로 인용) — 초과분이 있어도 다음 3가지 예외 중 하나에
+  // 해당하면 그 초과분을 과세가액에 산입하지 않는다: 1호 주무관청이 인정하는 특정 공익법인(비계열·
+  // 비출연자관계 법인 주식), 2호 §48⑪요건 충족 공익법인이 초과보유일부터 3년 이내에 초과분 매각,
+  // 3호 공익법인의설립운영에관한법률등 다른 법령에 따른 출연.
+  let exemptionNote = '';
+  if (p.isExemptFromExcessInclusion && excessSharesFromThisDonation > 0) {
+    exemptionNote = ' §16③(' + (p.exemptionGround === 'authority_approved' ? '1호, 주무관청이 목적사업 효율수행을 위해 필요하다고 인정' : p.exemptionGround === 'sold_within_3years' ? '2호, §48⑪요건 충족 공익법인이 초과보유일부터 3년 이내 초과분 매각' : p.exemptionGround === 'other_statute' ? '3호, 공익법인의 설립·운영에 관한 법률 등 다른 법령에 따른 출연' : '각 호') + ' 예외에 해당해 초과분(' + excessSharesFromThisDonation + '주 상당 ' + Math.round(valuePerShare * excessSharesFromThisDonation) + '원)을 과세가액에 산입하지 않습니다' + (taxType === 'gift' ? '(§48①단서가 §16③ 각 호를 그대로 인용).' : '.');
+    excessSharesFromThisDonation = 0;
+  }
   const taxableInclusionAmount = Math.round(valuePerShare * excessSharesFromThisDonation);
   const exclusionAmount = donatedAmount - taxableInclusionAmount;
 
@@ -11231,6 +11242,7 @@ function toolCalculateCharityDonationTaxExclusion(p) {
     안내: (excessSharesFromThisDonation > 0
       ? '이번 출연분을 포함한 합산 주식수(' + combinedShares + '주)가 발행주식총수등의 ' + Math.round(ratio * 100) + '%(' + Math.round(limitShares) + '주)를 초과해, 그 초과분에 상당하는 가액(' + taxableInclusionAmount + '원)을 과세가액에 산입합니다(' + (taxType === 'inheritance' ? '§16②' : '§48①단서') + ').'
       : '합산 주식수가 한도(' + Math.round(ratio * 100) + '%, ' + Math.round(limitShares) + '주) 이내여서 전액 과세가액에 산입하지 않습니다.')
+      + exemptionNote
       + ' §48②의 8가지 사후관리 위반 사유(용도외사용·3년내미사용·초과주식취득·운용소득미사용 등)에 따른 즉시증여세 부과는 이 계산기가 다루지 않으니 해당 사안이면 별도로 확인하세요.'
   };
 }
@@ -15692,7 +15704,12 @@ function work_calcDeadline_(seMok, baseDateStr) {
   const base = new Date(baseDateStr + 'T00:00:00');
   if (isNaN(base.getTime())) return '';
   const monthEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0); // 기준일이 속한 달의 말일
-  const deadline = work_addMonthsClamped_(monthEnd, months);
+  const rough = work_addMonthsClamped_(monthEnd, months);
+  // [2026.08 버그수정] work_addMonthsClamped_는 day-of-month를 그대로 유지하며 개월수만 더하는
+  // 방식이라(예: 6/30 + 6개월 → 12/30), 도착한 달이 원래 달보다 길면 진짜 말일(12/31)이 아닌
+  // 어중간한 날짜가 나오는 문제가 있었다. 실사용으로 확인된 규칙("발생일의 말일로부터 각각
+  // N개월이 되는 달의 말일")대로, 도착한 달의 말일로 한 번 더 강제로 맞춘다.
+  const deadline = new Date(rough.getFullYear(), rough.getMonth() + 1, 0);
   return Utilities.formatDate(deadline, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 

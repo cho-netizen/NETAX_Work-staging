@@ -139,7 +139,10 @@ const workManageView = document.getElementById('workManageView');
     const prog = workProgress(c);
     workCaseDetail.innerHTML =
       '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
-      '<h3 style="margin-top:0;">' + escapeHtml(c.고객명 || '') + ' · ' + escapeHtml(c.사건명 || '') + '</h3>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0;">' +
+      '<input type="text" id="wcEditCustomerName" placeholder="고객명" value="' + escapeHtml(c.고객명 || '') + '" style="font-weight:700; font-size:15px; width:120px;">' +
+      '<input type="text" id="wcEditCaseName" placeholder="사건명" value="' + escapeHtml(c.사건명 || '') + '" style="font-weight:700; font-size:15px; flex:1; min-width:120px;">' +
+      '</div>' +
       '<button type="button" id="wcDeleteCase" class="ghost-btn" title="사건 삭제">🗑 사건삭제</button>' +
       '</div>' +
       '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px;">' +
@@ -162,8 +165,13 @@ const workManageView = document.getElementById('workManageView');
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
 
     document.getElementById('wcSaveCase').addEventListener('click', async () => {
+      const customerName = document.getElementById('wcEditCustomerName').value.trim();
+      const caseName = document.getElementById('wcEditCaseName').value.trim();
+      if (!customerName || !caseName){ showToast('고객명과 사건명은 비워둘 수 없습니다.', 'warning'); return; }
       const payload = {
         id: c.id,
+        고객명: customerName,
+        사건명: caseName,
         세목: document.getElementById('wcEditSemok').value,
         담당자: document.getElementById('wcEditAssignee').value.trim(),
         의뢰일: document.getElementById('wcEditRequestDate').value,
@@ -296,7 +304,13 @@ const workManageView = document.getElementById('workManageView');
     }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
   }
 
-document.getElementById('btnOpenWorkManage').addEventListener('click', openWorkManageView);
+// [2026.08] 지시: 작업관리는 탐색창(같은 화면 안 패널 전환) 대신 항상 새 창으로 연다 —
+// 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 새 창도 완전한 앱 한 벌이라
+// (index.html을 통째로 다시 연다) URL에 ?view=workmanage를 붙여서 열고, 이 파일 맨 아래의
+// 부트스트랩 코드가 그 값을 보고 새 창 안에서 자동으로 이 화면을 최대화해서 띄운다.
+document.getElementById('btnOpenWorkManage').addEventListener('click', () => {
+  window.open(location.origin + location.pathname + '?view=workmanage', '_blank');
+});
 document.getElementById('btnWorkManageBack').addEventListener('click', closeWorkManageView);
 document.getElementById('btnWorkCaseNew').addEventListener('click', renderNewCaseForm);
 workCaseFilterStatus.addEventListener('change', renderWorkCaseList);

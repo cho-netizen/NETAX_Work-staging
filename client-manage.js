@@ -130,7 +130,7 @@ function renderNewClientForm(){
 async function renderClientDetail(c){
   clientDetail.innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
-    '<h3 style="margin-top:0;">' + escapeHtml(c.성명 || '') + '</h3>' +
+    '<input type="text" id="ccEditName" placeholder="성명" value="' + escapeHtml(c.성명 || '') + '" style="font-weight:700; font-size:15px; flex:1; min-width:0; margin-right:8px;">' +
     '<button type="button" id="ccDeleteClient" class="ghost-btn" title="고객 삭제">🗑 고객삭제</button>' +
     '</div>' +
     '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px;">' +
@@ -152,9 +152,12 @@ async function renderClientDetail(c){
     '</div>';
 
   document.getElementById('ccSaveClient').addEventListener('click', async () => {
+    const name = document.getElementById('ccEditName').value.trim();
+    if (!name){ showToast('성명은 비워둘 수 없습니다.', 'warning'); return; }
     try{
       const res = await callGas('client_update_client', {
-        id: c.id, 전화번호: document.getElementById('ccEditPhone').value.trim(),
+        id: c.id, 성명: name,
+        전화번호: document.getElementById('ccEditPhone').value.trim(),
         구분: document.getElementById('ccEditType').value.trim(),
         사업자번호: document.getElementById('ccEditBiz').value.trim(),
         메모: document.getElementById('ccEditMemo').value.trim()
@@ -240,7 +243,11 @@ async function loadClientLogs_(c){
   }
 }
 
-document.getElementById('btnOpenClientManage').addEventListener('click', openClientManageView);
+// [2026.08] 작업관리와 같은 이유로 고객관리도 항상 새 창으로 연다 — 부트스트랩은 이 파일
+// 맨 아래에서 처리(work-manage.js 쪽 주석 참고).
+document.getElementById('btnOpenClientManage').addEventListener('click', () => {
+  window.open(location.origin + location.pathname + '?view=clientmanage', '_blank');
+});
 document.getElementById('btnClientManageBack').addEventListener('click', closeClientManageView);
 document.getElementById('btnClientNew').addEventListener('click', renderNewClientForm);
 clientSearchInput.addEventListener('input', () => { loadClients(); });
@@ -249,3 +256,16 @@ clientSearchInput.addEventListener('input', () => { loadClients(); });
 // 열지 않아도 미리 한 번 목록을 받아온다(customerListOptions을 loadCustomers()가 미리
 // 채워두는 것과 같은 이유).
 loadClients();
+
+// [2026.08] 새 창 부트스트랩 — 작업관리·고객관리 버튼이 이제 이 index.html을 통째로
+// ?view=workmanage 또는 ?view=clientmanage를 붙여서 새 창으로 연다. 이 파일이 두 화면의
+// open 함수를 모두 쓸 수 있는 마지막 시점(work-manage.js 다음에 로드됨)이라 여기서 처리한다.
+// 채팅창까지 같이 뜨면 두 창을 나란히 놓고 쓰기엔 좁으므로, 새 창에서는 탐색작업창을
+// 최대화(채팅 끔) 모드로 시작한다.
+(function bootstrapStandaloneView_(){
+  const view = new URLSearchParams(location.search).get('view');
+  if (view !== 'workmanage' && view !== 'clientmanage') return;
+  if (typeof setWorkspaceMode === 'function') setWorkspaceMode('max');
+  if (view === 'workmanage') openWorkManageView();
+  else openClientManageView();
+})();
