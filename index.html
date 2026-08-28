@@ -539,6 +539,8 @@
   .workspace.explorer-floating .panel.explorer .panel-head{ cursor:move; }
   .workspace.explorer-floating .panel.explorer .panel-head .breadcrumb,
   .workspace.explorer-floating .panel.explorer .panel-head button{ cursor:pointer; }
+  /* 띄우기 모드일 때만 닫기(✕) 버튼을 보여준다 — 다른 배치에선 의미가 없어서 숨김. */
+  .workspace.explorer-floating #btnFloatClose{ display:inline-flex !important; }
 
   .panel-head{
     display:flex; align-items:center; gap:8px; height:38px; padding:0 14px;
@@ -1544,6 +1546,7 @@
       <div class="panel-head" id="explorerPanelHead">
         <div class="breadcrumb" id="breadcrumb">&nbsp;</div>
         <div class="spacer"></div>
+        <button type="button" id="btnFloatClose" class="back-btn" title="띄우기 닫기 (원래 배치로 돌아가기)" style="display:none;">✕</button>
       </div>
 
       <div id="diagramView" style="display:none; flex:1; flex-direction:column; min-height:0;">
@@ -1757,11 +1760,11 @@ graph TD
     </div>
   </div>
 
-<script src="/core.js?v=20260828c"></script>
+<script src="/core.js?v=20260828d"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
 <script src="/explorer.js?v=20260828a"></script>
-<script src="/work-manage.js?v=20260828b"></script>
-<script src="/client-manage.js?v=20260828c"></script>
+<script src="/work-manage.js?v=20260828c"></script>
+<script src="/client-manage.js?v=20260828d"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
 <script src="/chat.js?v=20260828a"></script>

@@ -295,7 +295,7 @@ document.getElementById('btnOpenClientManage').addEventListener('click', () => {
   const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
   const w = Math.round(sw / 2), h = sh;
   window.open(location.origin + location.pathname + '?view=clientmanage', '_blank',
-    'width=' + w + ',height=' + h + ',left=' + w + ',top=0,resizable=yes,scrollbars=yes');
+    'width=' + w + ',height=' + h + ',left=' + w + ',top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
 });
 document.getElementById('btnClientManageBack').addEventListener('click', closeClientManageView);
 document.getElementById('btnClientNew').addEventListener('click', renderNewClientForm);
@@ -315,6 +315,9 @@ loadClients();
   const view = new URLSearchParams(location.search).get('view');
   if (view !== 'workmanage' && view !== 'clientmanage') return;
   if (typeof setWorkspaceMode === 'function') setWorkspaceMode('max');
+  // [2026.08] 새 창의 제목이 계속 기본값("NX-Work")과 똑같으면, 창을 두 개 이상 띄웠을 때
+  // 작업표시줄·Alt+Tab에서 어느 게 어느 화면인지 구분이 안 된다 — 창을 만들면서 놓친 부분.
+  document.title = (view === 'workmanage' ? '작업관리' : '고객관리') + ' - NX-Work';
   if (view === 'workmanage') openWorkManageView();
   else openClientManageView();
 })();

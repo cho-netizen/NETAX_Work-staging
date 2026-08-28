@@ -315,8 +315,10 @@ const workManageView = document.getElementById('workManageView');
 document.getElementById('btnOpenWorkManage').addEventListener('click', () => {
   const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
   const w = Math.round(sw / 2), h = sh;
+  // toolbar/location/menubar/status=no — 주소창·북마크바 등을 없애서 진짜 전용 프로그램
+  // 창처럼 보이게 한다(안 그러면 브라우저 껍데기가 그대로 남아 화면만 더 좁아짐).
   window.open(location.origin + location.pathname + '?view=workmanage', '_blank',
-    'width=' + w + ',height=' + h + ',left=0,top=0,resizable=yes,scrollbars=yes');
+    'width=' + w + ',height=' + h + ',left=0,top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
 });
 document.getElementById('btnWorkManageBack').addEventListener('click', closeWorkManageView);
 document.getElementById('btnWorkCaseNew').addEventListener('click', renderNewCaseForm);

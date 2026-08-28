@@ -218,6 +218,17 @@
   }
   floatDragHandleEl.addEventListener('pointerup', endFloatDrag);
   floatDragHandleEl.addEventListener('pointercancel', endFloatDrag);
+
+  // [2026.08] 띄우기 모드도 다른 창(작업관리·고객관리 팝업, 관계도 등)처럼 닫기(✕) 버튼을
+  // 줘야 한다는 지적 — 헤더 드래그로 옮기는 것과 별개로, 눌러서 원래 배치로 돌아가는
+  // 명확한 방법이 있어야 한다. 헤더 드래그 클릭과 겹치지 않도록 stopPropagation.
+  const btnFloatClose = document.getElementById('btnFloatClose');
+  if (btnFloatClose){
+    btnFloatClose.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      setWorkspaceMode(detectDefaultMode());
+    });
+  }
   // (예전 버전 데이터 마이그레이션은 아래 최종 초기화 지점에서 한 번에 처리한다 — 여기서
   // 클래스를 미리 건드리면 나중에 applyWorkspaceMode가 그대로 덮어써서 의미가 없어짐)
 
