@@ -139,12 +139,16 @@ const BASIC_TOOL_NAMES_ = new Set([
   'update_work_subtask_status', 'delete_work_case',
   'list_clients', 'create_client', 'update_client', 'add_consult_log', 'list_consult_logs',
   'remember_fact',
-  // 아래 12개는 계산기만큼 무겁지 않아(설명이 짧음) 굳이 분야별 탐색 대상에 안 넣고 항상 켜둠.
+  // 아래는 계산기만큼 무겁지 않아(설명이 짧음) 굳이 분야별 탐색 대상에 안 넣고 항상 켜둠.
   'lookup_statute_article', 'lookup_real_estate_price', 'lookup_building_register', 'search_address',
   'lookup_official_price', 'lookup_business_status', 'verify_business_registration',
   'get_building_price_index_tables',
   'list_business_managers', 'load_business_manager', 'audit_business_managers', 'propose_new_business_manager',
-  'browse_tax_calculators'
+  'browse_tax_calculators',
+  // [2026.08] 예규·판례도 국가법령정보센터 API로 GAS가 직접 가져오게 추가 — AI가 웹서치로
+  // 예규판례를 대충 찾는 대신, 조문 조회(lookup_statute_article)와 같은 방식으로 공식 원문을
+  // 정확히 가져오게 하기 위함(사용자 지적: "AI가 법령조회하느라 바쁜" 비효율 해소).
+  'search_tax_precedent', 'get_tax_precedent_detail'
 ]);
 
 // calculate_* 92개 + 계산 관련 유틸 4개(allocate_inheritance_tax_by_heir 등) = 96개를
@@ -292,6 +296,30 @@ const DRIVE_TOOLS = [
         articleNo: { type: 'string', description: '조번호. 예: "45", "45조의2". 생략하면 조문 전체를 가져온다.' }
       },
       required: ['lawName']
+    }
+  },
+  {
+    name: 'search_tax_precedent',
+    description: '국가법령정보센터에서 판례·법령해석례(예규성격)·행정규칙(국세청 훈령·고시·예규)을 키워드로 검색한다. "이거 관련 판례 있어?", "예규 찾아줘"처럼 요청했을 때, 또는 세법 쟁점에 대한 실제 선례·해석이 필요할 때 써라. 검색 결과가 많을 수 있으니(수백 건도 흔함) 목록에서 가장 관련 있어 보이는 것을 골라 id를 get_tax_precedent_detail에 넘겨 원문을 가져와라. 결과가 너무 많거나 애매하면 검색어를 더 구체적으로 좁혀서 다시 검색하라.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule'], description: 'precedent=판례(법원 판결, 세무 관련도 포함), interpretation=법령해석례(기획재정부·국세청 등의 질의에 대한 법제처 회신, 예규와 성격이 비슷함), administrative_rule=행정규칙(국세청 등의 훈령·고시·예규)' },
+        query: { type: 'string', description: '검색 키워드(예: "상속세 시가 매매사례가액", "공익법인 전용계좌")' }
+      },
+      required: ['category', 'query']
+    }
+  },
+  {
+    name: 'get_tax_precedent_detail',
+    description: 'search_tax_precedent로 찾은 판례·법령해석례·행정규칙의 id로 그 원문(전체 내용)을 가져온다. category와 id는 반드시 search_tax_precedent 결과에서 그대로 가져와야 한다(직접 지어내지 마라).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule'], description: 'search_tax_precedent에서 쓴 것과 같은 category' },
+        id: { type: 'string', description: 'search_tax_precedent 결과의 id(일련번호)' }
+      },
+      required: ['category', 'id']
     }
   },
   {
@@ -3686,6 +3714,105 @@ function toolLookupStatuteArticle(lawName, articleNo) {
     };
   } catch (err) {
     return { error: '조문 조회 중 오류: ' + err.message };
+  }
+}
+
+/**
+ * [2026.08] 판례·법령해석례(예규 성격)·행정규칙(국세청 훈령·고시·예규) 검색/조회.
+ * toolLookupStatuteArticle과 같은 국가법령정보센터 공식 API(LAW_OC 인증키 재사용)를 그대로
+ * 쓰되, target만 다르다(prec=판례, expc=법령해석례, admrul=행정규칙) — 실제 호출해서 확인한
+ * 필드명을 그대로 매핑한다. searchFields/detailFields의 key=반환할 이름, value=XML 태그명
+ * (id는 예외로 검색결과의 일련번호를 담아 상세조회에 그대로 넘기는 용도).
+ */
+const TAX_PRECEDENT_CATEGORY_ = {
+  precedent: {
+    target: 'prec',
+    searchFields: { id: '판례일련번호', 사건명: '사건명', 사건번호: '사건번호', 선고일자: '선고일자', 법원명: '법원명', 데이터출처: '데이터출처명' },
+    detailFields: { 사건명: '사건명', 판시사항: '판시사항', 판결요지: '판결요지', 참조조문: '참조조문', 판례내용: '판례내용' }
+  },
+  interpretation: {
+    target: 'expc',
+    searchFields: { id: '법령해석례일련번호', 안건명: '안건명', 안건번호: '안건번호', 회신일자: '회신일자', 질의기관: '질의기관명', 회신기관: '회신기관명' },
+    detailFields: { 안건명: '안건명', 질의요지: '질의요지', 회답: '회답', 이유: '이유' }
+  },
+  administrative_rule: {
+    target: 'admrul',
+    searchFields: { id: '행정규칙일련번호', 행정규칙명: '행정규칙명', 행정규칙종류: '행정규칙종류', 발령일자: '발령일자', 발령번호: '발령번호', 소관부처: '소관부처명' }
+    // 행정규칙 상세는 기본정보+조문내용(배열)로 구조가 달라서 detailFields 없이 아래서 따로 처리.
+  }
+};
+
+function toolSearchTaxPrecedent(category, query) {
+  const conf = TAX_PRECEDENT_CATEGORY_[category];
+  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule 중 하나여야 합니다.' };
+  if (!query || !String(query).trim()) return { error: '검색어가 없습니다.' };
+
+  const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
+  if (!ocKey) return { error: 'LAW_OC(국가법령정보센터 인증키)가 스크립트 속성에 설정되어 있지 않습니다.' };
+
+  try {
+    const url = 'https://www.law.go.kr/DRF/lawSearch.do?OC=' + encodeURIComponent(ocKey)
+      + '&target=' + conf.target + '&type=XML&display=20&query=' + encodeURIComponent(String(query).trim());
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return { error: '검색 API 호출 실패 (status ' + res.getResponseCode() + ')' };
+    const doc = XmlService.parse(res.getContentText('UTF-8'));
+    const root = doc.getRootElement();
+    const totalCnt = Number(root.getChildText('totalCnt')) || 0;
+    const items = root.getChildren(conf.target).map(function (el) {
+      const item = {};
+      Object.keys(conf.searchFields).forEach(function (key) {
+        item[key] = (el.getChildText(conf.searchFields[key]) || '').trim();
+      });
+      return item;
+    });
+    if (!items.length) return { totalCount: totalCnt, count: 0, results: [], message: '"' + query + '"으로 검색된 결과가 없습니다.' };
+    return {
+      totalCount: totalCnt, count: items.length, results: items,
+      안내: totalCnt > items.length ? ('전체 ' + totalCnt + '건 중 상위 ' + items.length + '건만 보여줌 — 더 정확히 찾으려면 검색어를 좁혀라.') : undefined
+    };
+  } catch (err) {
+    return { error: '검색 중 오류: ' + err.message };
+  }
+}
+
+function toolGetTaxPrecedentDetail(category, id) {
+  const conf = TAX_PRECEDENT_CATEGORY_[category];
+  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule 중 하나여야 합니다.' };
+  if (!id) return { error: 'id가 없습니다(search_tax_precedent 결과의 id를 그대로 넘겨야 함).' };
+
+  const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
+  if (!ocKey) return { error: 'LAW_OC(국가법령정보센터 인증키)가 스크립트 속성에 설정되어 있지 않습니다.' };
+
+  try {
+    const url = 'https://www.law.go.kr/DRF/lawService.do?OC=' + encodeURIComponent(ocKey)
+      + '&target=' + conf.target + '&ID=' + encodeURIComponent(id) + '&type=XML';
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return { error: '원문 조회 API 호출 실패 (status ' + res.getResponseCode() + ')' };
+    const doc = XmlService.parse(res.getContentText('UTF-8'));
+    const root = doc.getRootElement();
+
+    if (category === 'administrative_rule') {
+      // 행정규칙만 응답 구조가 다르다(기본정보 한 블록 + 조문내용 여러 개를 순서대로 이어붙임).
+      const basic = root.getChild('행정규칙기본정보');
+      const articles = root.getChildren('조문내용').map(function (el) { return (el.getText() || '').trim(); });
+      if (!basic) return { error: '해당 행정규칙을 찾을 수 없습니다(id를 다시 확인해주세요).' };
+      return {
+        행정규칙명: basic.getChildText('행정규칙명'),
+        행정규칙종류: basic.getChildText('행정규칙종류'),
+        발령일자: basic.getChildText('발령일자'),
+        소관부처: basic.getChildText('소관부처명'),
+        내용: articles.join('\n')
+      };
+    }
+
+    const item = {};
+    Object.keys(conf.detailFields).forEach(function (key) {
+      item[key] = (root.getChildText(conf.detailFields[key]) || '').trim();
+    });
+    if (!item[Object.keys(conf.detailFields)[0]]) return { error: '해당 항목을 찾을 수 없습니다(id를 다시 확인해주세요).' };
+    return item;
+  } catch (err) {
+    return { error: '원문 조회 중 오류: ' + err.message };
   }
 }
 
@@ -12595,6 +12722,8 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
         b.name === 'export_to_google_doc' ||
         b.name === 'send_email' ||
         b.name === 'lookup_statute_article' ||
+        b.name === 'search_tax_precedent' ||
+        b.name === 'get_tax_precedent_detail' ||
         b.name === 'register_report_to_rpt' ||
         b.name === 'lookup_real_estate_price' ||
         b.name === 'lookup_building_register' ||
@@ -12778,6 +12907,18 @@ function callClaude(body, model, cfg, effort, maxTokens, systemPrompt, apiKey) {
       if (block.name === 'lookup_statute_article') {
         const input = block.input || {};
         const resultObj = toolLookupStatuteArticle(input.lawName, input.articleNo);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'search_tax_precedent') {
+        const input = block.input || {};
+        const resultObj = toolSearchTaxPrecedent(input.category, input.query);
+        return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
+      }
+
+      if (block.name === 'get_tax_precedent_detail') {
+        const input = block.input || {};
+        const resultObj = toolGetTaxPrecedentDetail(input.category, input.id);
         return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(resultObj) };
       }
 
