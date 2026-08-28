@@ -101,8 +101,8 @@ function renderNewClientForm(){
     '<div style="display:flex; flex-direction:column; gap:8px; max-width:380px;">' +
     '<label>성명<br><input type="text" id="ccNewName" style="width:100%;" placeholder="고객 성명"></label>' +
     '<label>전화번호<br><input type="text" id="ccNewPhone" style="width:100%;" placeholder="(선택)"></label>' +
-    '<label>구분<br><select id="ccNewType" style="width:100%;"><option value="">(선택 안 함)</option>' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '">' + t + '</option>').join('') + '</select></label>' +
-    '<label>납세번호 <span style="color:var(--sub); font-weight:400;">(사업자번호 또는 주민번호)</span><br><input type="text" id="ccNewBiz" style="width:100%;" placeholder="(선택)"></label>' +
+    '<label>구분<br><select id="ccNewType" style="width:100%;">' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '"' + (t === '보통' ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>' +
+    '<label>납세번호<br><input type="text" id="ccNewBiz" style="width:100%;" placeholder="(선택)"></label>' +
     '<label>메모<br><textarea id="ccNewMemo" style="width:100%; min-height:60px; font-family:inherit;" placeholder="(선택)"></textarea></label>' +
     '<div style="display:flex; gap:8px; margin-top:8px;">' +
     '<button type="button" id="ccNewSave" class="save-btn">저장</button>' +
@@ -140,8 +140,8 @@ async function renderClientDetail(c){
     '</div>' +
     '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px;">' +
     '<input type="text" id="ccEditPhone" placeholder="전화번호" value="' + escapeHtml(c.전화번호 || '') + '" style="width:130px;">' +
-    '<select id="ccEditType" style="width:100px;"><option value="">구분 선택</option>' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '"' + (t === c.구분 ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
-    '<input type="text" id="ccEditBiz" placeholder="납세번호(사업자·주민번호)" value="' + escapeHtml(c.사업자번호 || '') + '" style="width:170px;">' +
+    '<select id="ccEditType" style="width:100px;">' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '"' + (t === (c.구분 || '보통') ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
+    '<input type="text" id="ccEditBiz" placeholder="납세번호" value="' + escapeHtml(c.사업자번호 || '') + '" style="width:130px;">' +
     '<button type="button" id="ccSaveClient" class="ghost-btn">저장</button>' +
     '</div>' +
     '<textarea id="ccEditMemo" placeholder="메모" style="width:100%; max-width:500px; min-height:50px; font-family:inherit; margin-bottom:16px;">' + escapeHtml(c.메모 || '') + '</textarea>' +

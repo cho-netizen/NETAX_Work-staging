@@ -110,8 +110,11 @@ const workManageView = document.getElementById('workManageView');
       row.style.cursor = 'pointer';
       if (c.id === workSelectedCaseId) row.style.outline = '2px solid var(--navy)';
       const noDeadlineText = workDeadlineFieldLabel_(c.업무유형) === '처리시한' ? '시한없음' : '기한없음';
+      // 완료된 사건은 더 이상 "챙겨야 할 기한"이 아니므로, 눈에 띄는 골드색 대신 다른 텍스트와
+      // 같은 톤으로 가라앉혀서 진행 중인 사건(골드색)만 도드라져 보이게 한다.
+      const dateStyle = c.상태 === '완료' ? ' style="color:var(--sub);"' : '';
       row.innerHTML =
-        '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? fmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
+        '<div class="log-date"' + dateStyle + '>' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? fmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
         '<div class="log-text"><b>' + escapeHtml(c.고객명 || '(고객명 없음)') + '</b> · ' + escapeHtml(c.사건명 || '') +
         '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(WORK_SEMOK_LABELS[c.세목] || c.세목 || '') + (c.업무유형 ? ' · ' + escapeHtml(c.업무유형) : '') + ' · ' + escapeHtml(c.상태 || '') +
         (prog.total ? (' · 하위업무 ' + prog.done + '/' + prog.total) : '') + '</span></div>';
@@ -286,7 +289,7 @@ const workManageView = document.getElementById('workManageView');
     editUptypeSel.addEventListener('change', onEditUptypeChange);
     refillEditUptype(true);
 
-    document.getElementById('wcSaveCase').addEventListener('click', async () => {
+    async function saveCaseNow_(silent){
       const customerName = document.getElementById('wcEditCustomerName').value.trim();
       const caseName = document.getElementById('wcEditCaseName').value.trim();
       if (!customerName || !caseName){ showToast('고객명과 사건명은 비워둘 수 없습니다.', 'warning'); return; }
@@ -308,10 +311,15 @@ const workManageView = document.getElementById('workManageView');
       try{
         const res = await callGas('work_update_case', payload);
         if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
-        showToast('저장했습니다.', 'success');
+        if (!silent) showToast('저장했습니다.', 'success');
         await loadWorkCases();
       }catch(err){ showToast('저장 중 오류가 발생했습니다.', 'error'); }
-    });
+    }
+    document.getElementById('wcSaveCase').addEventListener('click', () => saveCaseNow_(false));
+    // [2026.08] 상태를 콤보에서 바꾸는 순간(특히 완료로 바꿀 때) 바로 저장되게 — "저장" 버튼을
+    // 따로 눌러야 하는 게 번거롭다는 지적. silent=true로 불러서 "저장했습니다" 토스트 대신
+    // 상태변경 자체가 곧 확인이 되도록 한다(둘 다 뜨면 중복 알림처럼 느껴져서).
+    document.getElementById('wcEditStatus').addEventListener('change', () => saveCaseNow_(true));
 
     document.getElementById('wcDeleteCase').addEventListener('click', async () => {
       if (!confirm('"' + c.사건명 + '" 사건을 삭제할까요? 하위업무와 캘린더 일정도 함께 지워집니다.')) return;

@@ -15658,7 +15658,10 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '납세자', '상태', '하위업무', '생성일', '수정일'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '하위업무', '생성일', '수정일'];
+// 완료전법정일: 완료 처리하는 순간 법정일을 완료일(오늘)로 덮어쓰기 직전의 원래 값을 잠깐
+// 보관해두는 내부용 컬럼(화면에는 안 보여줌) — 나중에 완료를 취소(진행/보류로 되돌림)하면
+// 이 값으로 법정일을 원상복구하기 위함.
 // [2026.08] 신고 업무만 다루는 게 아니라 상담·불복(이의신청 등)도 다루므로, 세목(양도/증여/
 // 상속/불복)만으로는 부족해서 '업무유형'을 추가했다. 세목이 양도/증여/상속이면 업무유형은
 // 신고/상담 중 하나, 세목이 불복이면 업무유형이 그 세부유형(이의신청/심사청구/...)이 된다.
@@ -15841,6 +15844,7 @@ function work_updateCase(params) {
     if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
 
     const row = found.row;
+    const wasCompleted = row[col.상태] === '완료'; // 아래서 덮어쓰기 전에 미리 기억해둔다
     ['고객명', '사건명', '담당자', '상태', '납세자'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
@@ -15858,6 +15862,19 @@ function work_updateCase(params) {
       if (params.법정일 !== undefined) row[col.법정일] = String(params.법정일).trim();
     } else if (recalc) {
       row[col.법정일] = work_calcDeadline_(row[col.세목], upType, row[col.기준일]);
+    }
+    // [2026.08] 완료 처리하는 순간(진행/보류→완료로 바뀔 때만, 이미 완료인 걸 다시 저장할
+    // 때는 건드리지 않음) 법정일/처리시한이 아직 남은 미래 날짜라도 실제 완료일(오늘)로
+    // 갱신한다 — 사용자 지적: "처리기한이 남아있는데 완료처리하면 완료일로 바뀌어야". 원래
+    // 값은 완료전법정일에 백업해뒀다가, 나중에 완료를 취소하면(완료→진행/보류) 그 값을
+    // 그대로 복구한다 — 단, 복구 시점에 기준일 등도 같이 바꿔서 recalc가 새로 일어났다면
+    // 그 새 계산값이 우선(사용자가 그 요청에서 다른 것도 같이 바꾼 거라 더 최신 정보).
+    if (params.상태 === '완료' && !wasCompleted) {
+      row[col.완료전법정일] = row[col.법정일];
+      row[col.법정일] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    } else if (wasCompleted && params.상태 !== undefined && params.상태 !== '완료') {
+      if (!recalc && row[col.완료전법정일]) row[col.법정일] = row[col.완료전법정일];
+      row[col.완료전법정일] = '';
     }
     row[col.수정일] = new Date();
 
