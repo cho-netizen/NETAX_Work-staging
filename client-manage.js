@@ -14,6 +14,8 @@ let clients = [];
 let selectedClientId = null;
 let clientShowingNewForm = false;
 
+const CLIENT_TIER_OPTIONS_ = ['로얄', '우수', '보통', '영세'];
+
 async function openClientManageView(){
   ensureExplorerVisible();
   hideAllPanelViews();
@@ -43,7 +45,10 @@ async function loadClients(){
       const still = clients.find(c => c.id === selectedClientId);
       if (still) { renderClientDetail(still); return; }
     }
-    if (!clientShowingNewForm && clientDetail){
+    // 고객정보 빠른보기(팝업) 안에서 저장했을 때는 clientDetail이 그 팝업 안에 옮겨져 있는
+    // 상태라, 여기서 안내문구로 덮어써버리면 팝업 내용이 사라져버린다 — 그 경우는 건너뛴다.
+    const inQuickView = clientDetail && clientDetail.parentElement && clientDetail.parentElement.id === 'clientQuickViewMount';
+    if (!clientShowingNewForm && clientDetail && !inQuickView){
       clientDetail.innerHTML = '<div class="explorer-status">왼쪽에서 고객을 선택하거나 "+ 새 고객"을 눌러주세요.</div>';
     }
   }catch(err){
@@ -96,8 +101,8 @@ function renderNewClientForm(){
     '<div style="display:flex; flex-direction:column; gap:8px; max-width:380px;">' +
     '<label>성명<br><input type="text" id="ccNewName" style="width:100%;" placeholder="고객 성명"></label>' +
     '<label>전화번호<br><input type="text" id="ccNewPhone" style="width:100%;" placeholder="(선택)"></label>' +
-    '<label>구분<br><input type="text" id="ccNewType" style="width:100%;" placeholder="예: 개인/법인 (선택)"></label>' +
-    '<label>사업자번호<br><input type="text" id="ccNewBiz" style="width:100%;" placeholder="(선택)"></label>' +
+    '<label>구분<br><select id="ccNewType" style="width:100%;"><option value="">(선택 안 함)</option>' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '">' + t + '</option>').join('') + '</select></label>' +
+    '<label>납세번호 <span style="color:var(--sub); font-weight:400;">(사업자번호 또는 주민번호)</span><br><input type="text" id="ccNewBiz" style="width:100%;" placeholder="(선택)"></label>' +
     '<label>메모<br><textarea id="ccNewMemo" style="width:100%; min-height:60px; font-family:inherit;" placeholder="(선택)"></textarea></label>' +
     '<div style="display:flex; gap:8px; margin-top:8px;">' +
     '<button type="button" id="ccNewSave" class="save-btn">저장</button>' +
@@ -131,25 +136,20 @@ async function renderClientDetail(c){
   clientDetail.innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
     '<input type="text" id="ccEditName" placeholder="성명" value="' + escapeHtml(c.성명 || '') + '" style="font-weight:700; font-size:15px; flex:1; min-width:0; margin-right:8px;">' +
-    '<button type="button" id="ccDeleteClient" class="ghost-btn" title="고객 삭제">🗑 고객삭제</button>' +
+    '<button type="button" id="ccDeleteClient" class="ghost-btn" title="삭제">🗑 삭제</button>' +
     '</div>' +
     '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px;">' +
     '<input type="text" id="ccEditPhone" placeholder="전화번호" value="' + escapeHtml(c.전화번호 || '') + '" style="width:130px;">' +
-    '<input type="text" id="ccEditType" placeholder="구분" value="' + escapeHtml(c.구분 || '') + '" style="width:100px;">' +
-    '<input type="text" id="ccEditBiz" placeholder="사업자번호" value="' + escapeHtml(c.사업자번호 || '') + '" style="width:130px;">' +
+    '<select id="ccEditType" style="width:100px;"><option value="">구분 선택</option>' + CLIENT_TIER_OPTIONS_.map(t => '<option value="' + t + '"' + (t === c.구분 ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
+    '<input type="text" id="ccEditBiz" placeholder="납세번호(사업자·주민번호)" value="' + escapeHtml(c.사업자번호 || '') + '" style="width:170px;">' +
     '<button type="button" id="ccSaveClient" class="ghost-btn">저장</button>' +
     '</div>' +
     '<textarea id="ccEditMemo" placeholder="메모" style="width:100%; max-width:500px; min-height:50px; font-family:inherit; margin-bottom:16px;">' + escapeHtml(c.메모 || '') + '</textarea>' +
     '<h4 style="margin-bottom:6px;">서비스 이력</h4>' +
     '<div id="ccLogList" class="log-list"><div class="log-empty">불러오는 중…</div></div>' +
-    '<div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">' +
-    '<input type="date" id="ccNewLogDate" title="날짜(생략하면 오늘)">' +
-    '<input type="text" id="ccNewLogStaff" placeholder="담당자" style="width:80px;">' +
-    '<input type="text" id="ccNewLogType" placeholder="유형(예: 수시자문)" style="width:120px;">' +
-    '<input type="text" id="ccNewLogContent" placeholder="내용" style="flex:1; min-width:160px;">' +
-    '<input type="number" id="ccNewLogAmount" placeholder="금액" style="width:100px;">' +
-    '<button type="button" id="ccAddLog" class="ghost-btn">+ 자문내역 추가</button>' +
-    '</div>';
+    '<h4 id="ccPaymentToggle" style="margin-bottom:6px; margin-top:18px; cursor:pointer; width:fit-content;" title="눌러서 수금 내역 추가">➕ 수금관리</h4>' +
+    '<div id="ccPaymentList" class="log-list"><div class="log-empty">불러오는 중…</div></div>' +
+    '<div id="ccNewPaymentFormWrap" style="display:none; margin-top:10px; gap:6px; flex-wrap:wrap; align-items:center;"></div>';
 
   document.getElementById('ccSaveClient').addEventListener('click', async () => {
     const name = document.getElementById('ccEditName').value.trim();
@@ -165,11 +165,14 @@ async function renderClientDetail(c){
       if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
       showToast('저장했습니다.', 'success');
       await loadClients();
+      // 빠르게보기 팝업 안에서 저장한 거라면, 방금 저장한 값을 기준으로 스냅샷을 갱신해서
+      // 바로 닫아도 "저장 안 한 내용이 있다"는 경고가 잘못 뜨지 않게 한다.
+      if (quickViewSnapshot_ !== null) quickViewSnapshot_ = quickViewCurrentSignature_();
     }catch(err){ showToast('저장 중 오류가 발생했습니다.', 'error'); }
   });
 
   document.getElementById('ccDeleteClient').addEventListener('click', async () => {
-    if (!confirm('"' + c.성명 + '" 고객을 삭제할까요? 자문내역은 남아있지만 이 고객과의 연결은 끊어집니다.')) return;
+    if (!confirm('"' + c.성명 + '" 고객을 삭제할까요? 수금 내역은 남아있지만 이 고객과의 연결은 끊어집니다.')) return;
     try{
       const res = await callGas('client_delete_client', { id: c.id });
       if (res.error || res.success === false){ showToast(res.error || res.message || '삭제 실패', 'error'); return; }
@@ -179,63 +182,77 @@ async function renderClientDetail(c){
     }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
   });
 
-  document.getElementById('ccAddLog').addEventListener('click', async () => {
-    const content = document.getElementById('ccNewLogContent').value.trim();
-    if (!content){ showToast('내용을 입력해주세요.', 'warning'); return; }
-    try{
-      const res = await callGas('client_add_consult_log', {
-        고객ID: c.id, 고객명: c.성명,
-        날짜: document.getElementById('ccNewLogDate').value,
-        담당자: document.getElementById('ccNewLogStaff').value.trim(),
-        유형: document.getElementById('ccNewLogType').value.trim(),
-        내용: content,
-        금액: document.getElementById('ccNewLogAmount').value
+  // [2026.08] 작업관리의 "➕ 하위업무" 패턴과 통일 — 별도 버튼 없이 "수금관리" 표시 자체를
+  // 누르면 입력칸이 나타난다.
+  const newPaymentFormWrap = document.getElementById('ccNewPaymentFormWrap');
+  document.getElementById('ccPaymentToggle').addEventListener('click', () => {
+    if (newPaymentFormWrap.style.display === 'none'){
+      newPaymentFormWrap.style.display = 'flex';
+      newPaymentFormWrap.innerHTML =
+        '<input type="date" id="ccNewPayDate" title="날짜(생략하면 오늘)">' +
+        '<input type="number" id="ccNewPayAmount" placeholder="금액" style="width:110px;">' +
+        '<select id="ccNewPayReceipt">' +
+        '<option value="">수취증빙 선택</option>' +
+        '<option value="현금영수증">현금영수증</option>' +
+        '<option value="세금계산서">세금계산서</option>' +
+        '<option value="신용카드">신용카드</option>' +
+        '</select>' +
+        '<button type="button" id="ccAddPayment" class="save-btn">추가</button>' +
+        '<button type="button" id="ccAddPaymentCancel" class="ghost-btn">취소</button>';
+      document.getElementById('ccAddPaymentCancel').addEventListener('click', () => { newPaymentFormWrap.style.display = 'none'; newPaymentFormWrap.innerHTML = ''; });
+      document.getElementById('ccAddPayment').addEventListener('click', async () => {
+        const amount = document.getElementById('ccNewPayAmount').value;
+        if (!amount){ showToast('금액을 입력해주세요.', 'warning'); return; }
+        try{
+          const res = await callGas('client_add_consult_log', {
+            고객ID: c.id, 고객명: c.성명,
+            날짜: document.getElementById('ccNewPayDate').value,
+            금액: amount,
+            수취증빙: document.getElementById('ccNewPayReceipt').value
+          });
+          if (res.error || res.success === false){ showToast(res.error || res.message || '추가 실패', 'error'); return; }
+          showToast('수금 내역을 추가했습니다.', 'success');
+          newPaymentFormWrap.style.display = 'none';
+          newPaymentFormWrap.innerHTML = '';
+          loadClientPayments_(c);
+        }catch(err){ showToast('추가 중 오류가 발생했습니다.', 'error'); }
       });
-      if (res.error || res.success === false){ showToast(res.error || res.message || '추가 실패', 'error'); return; }
-      showToast('자문내역을 추가했습니다.', 'success');
-      document.getElementById('ccNewLogContent').value = '';
-      document.getElementById('ccNewLogAmount').value = '';
-      loadClientLogs_(c);
-    }catch(err){ showToast('추가 중 오류가 발생했습니다.', 'error'); }
+    } else {
+      newPaymentFormWrap.style.display = 'none';
+      newPaymentFormWrap.innerHTML = '';
+    }
   });
 
   loadClientLogs_(c);
+  loadClientPayments_(c);
 }
 
 // [2026.08] "상담·자문 이력"이라는 이름 때문에 실제 상담 기록만 남기는 곳으로 오해하기
-// 쉬웠다 — 사용자 지적: "모든 서비스가 반영되고 연결되어야 하는 거지". 그래서 이 고객에게
-// 실제로 한 모든 일(상담·자문 기록 + 작업관리에 등록된 사건들)을 한 목록에 합쳐서 보여주는
-// "서비스 이력"으로 바꿨다. 작업관리 사건은 work_get_cases로 전체를 받아 고객ID로 걸러낸다
-// (건수가 적은 1인 세무사무소 규모라 서버 필터 없이 그냥 다 받아서 걸러도 충분히 빠름).
+// 쉬웠다 — 사용자 지적: "모든 서비스가 반영되고 연결되어야 하는 거지". 그래서 "서비스
+// 이력"은 이 고객 명의로 작업관리에 등록된 사건들을 보여주는 것으로 정리했다(작업관리
+// 사건 자체가 이미 "무슨 일을 했는지"를 다 담고 있으므로). 옛 자문내역(ConsultLog) 기록은
+// "수금관리"(아래 loadClientPayments_)로 용도를 바꿨다 — 날짜·금액·수취증빙만 남기는
+// 입금 기록용으로.
 async function loadClientLogs_(c){
   const listEl = document.getElementById('ccLogList');
   if (!listEl) return;
   try{
-    const [logRes, caseRes] = await Promise.all([
-      callGas('client_get_consult_logs', { 고객ID: c.id }),
-      callGas('work_get_cases', {})
-    ]);
-    if (logRes.error || logRes.success === false){
-      listEl.innerHTML = '<div class="log-empty">' + escapeHtml(logRes.error || logRes.message || '불러오지 못했습니다.') + '</div>';
+    const res = await callGas('work_get_cases', {});
+    if (res.error || res.success === false){
+      listEl.innerHTML = '<div class="log-empty">' + escapeHtml(res.error || res.message || '불러오지 못했습니다.') + '</div>';
       return;
     }
-    const items = (logRes.logs || []).map(log => ({ kind: 'log', date: log.날짜 || '', data: log }));
-    if (!caseRes.error && caseRes.success !== false){
-      (caseRes.cases || []).filter(wc => wc.고객ID === c.id).forEach(wc => {
-        items.push({ kind: 'case', date: wc.의뢰일 || wc.수정일 || '', data: wc });
-      });
-    }
-    if (!items.length){
+    const cases = (res.cases || []).filter(wc => wc.고객ID === c.id);
+    if (!cases.length){
       listEl.innerHTML = '<div class="log-empty">아직 이력이 없습니다.</div>';
       return;
     }
-    items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    cases.sort((a, b) => (b.의뢰일 || b.수정일 || '').localeCompare(a.의뢰일 || a.수정일 || ''));
     listEl.innerHTML = '';
-    items.forEach(item => {
+    cases.forEach(wc => {
       const row = document.createElement('div');
       row.className = 'log-entry';
-      if (item.kind === 'log') renderLogRowView_(row, c, item.data);
-      else renderCaseHistoryRow_(row, item.data);
+      renderCaseHistoryRow_(row, wc);
       listEl.appendChild(row);
     });
   }catch(err){
@@ -243,8 +260,7 @@ async function loadClientLogs_(c){
   }
 }
 
-// 서비스 이력에 섞여 들어가는 작업관리 사건 한 줄 — 상담기록(renderLogRowView_)과 같은
-// .log-date/.log-text 구조를 써서 같은 목록 안에서 자연스럽게 나란히 보이게 한다.
+// 서비스 이력에 보여주는 작업관리 사건 한 줄.
 function renderCaseHistoryRow_(row, wc){
   const semokLabel = (typeof WORK_SEMOK_LABELS !== 'undefined' && WORK_SEMOK_LABELS[wc.세목]) || wc.세목 || '';
   const deadlineLabel = typeof workDeadlineFieldLabel_ === 'function' ? workDeadlineFieldLabel_(wc.업무유형) : '법정일';
@@ -257,61 +273,79 @@ function renderCaseHistoryRow_(row, wc){
     '</div>';
 }
 
-// [2026.08] 자문내역도 등록 후에는 삭제만 되고 수정이 안 됐다(고객명·사건명과 같은 이유의
-// 누락) — 각 항목에 "✏️ 수정" 버튼을 추가해서 눌렀을 때만 그 항목이 입력칸으로 바뀌고,
-// 그 외에는 지금처럼 읽기전용 요약으로 보여준다(모든 항목이 항상 입력칸이면 목록이
-// 길어졌을 때 너무 번잡해서).
-function renderLogRowView_(row, c, log){
-  const amountText = log.금액 ? ' · ' + Number(log.금액).toLocaleString('ko-KR') + '원' : '';
+// [2026.08] 수금관리 — 옛 자문내역(ConsultLog) 시트를 그대로 재사용하되, 화면에는 날짜·
+// 금액·수취증빙(현금영수증/세금계산서/신용카드) 3가지만 남겼다(담당자·유형·내용·관계 필드는
+// 시트에 남아있지만 이 화면에서는 더 이상 쓰지 않음 — 데이터 손실 없이 용도만 바꾼 것).
+async function loadClientPayments_(c){
+  const listEl = document.getElementById('ccPaymentList');
+  if (!listEl) return;
+  try{
+    const res = await callGas('client_get_consult_logs', { 고객ID: c.id });
+    if (res.error || res.success === false){
+      listEl.innerHTML = '<div class="log-empty">' + escapeHtml(res.error || res.message || '불러오지 못했습니다.') + '</div>';
+      return;
+    }
+    const payments = res.logs || [];
+    if (!payments.length){
+      listEl.innerHTML = '<div class="log-empty">아직 수금 내역이 없습니다.</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    payments.forEach(pay => {
+      const row = document.createElement('div');
+      row.className = 'log-entry';
+      renderPaymentRowView_(row, c, pay);
+      listEl.appendChild(row);
+    });
+  }catch(err){
+    listEl.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>';
+  }
+}
+
+function renderPaymentRowView_(row, c, pay){
+  const amountText = pay.금액 ? Number(pay.금액).toLocaleString('ko-KR') + '원' : '';
   row.innerHTML =
-    '<div class="log-date">' + escapeHtml(fmtDateShort_(log.날짜)) + '</div>' +
-    '<div class="log-text">' +
-    (log.유형 ? '<b>' + escapeHtml(log.유형) + '</b> · ' : '') + escapeHtml(log.담당자 || '') + amountText +
-    (log.관계 ? ' · ' + escapeHtml(log.관계) : '') +
-    '<br>' + escapeHtml(log.내용 || '') +
-    '</div>' +
+    '<div class="log-date">' + escapeHtml(fmtDateShort_(pay.날짜)) + '</div>' +
+    '<div class="log-text">' + escapeHtml(amountText) + (pay.수취증빙 ? ' · ' + escapeHtml(pay.수취증빙) : '') + '</div>' +
     '<span class="log-edit" title="수정" style="cursor:pointer; margin-right:6px;">✏️</span>' +
     '<span class="log-del" title="삭제">✕</span>';
-  row.querySelector('.log-edit').addEventListener('click', () => renderLogRowEdit_(row, c, log));
+  row.querySelector('.log-edit').addEventListener('click', () => renderPaymentRowEdit_(row, c, pay));
   row.querySelector('.log-del').addEventListener('click', async () => {
-    if (!confirm('이 자문내역을 삭제할까요?')) return;
+    if (!confirm('이 수금 내역을 삭제할까요?')) return;
     try{
-      const delRes = await callGas('client_delete_consult_log', { id: log.id });
+      const delRes = await callGas('client_delete_consult_log', { id: pay.id });
       if (delRes.error || delRes.success === false){ showToast(delRes.error || delRes.message || '삭제 실패', 'error'); return; }
-      loadClientLogs_(c);
+      loadClientPayments_(c);
     }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
   });
 }
 
-function renderLogRowEdit_(row, c, log){
+function renderPaymentRowEdit_(row, c, pay){
+  const receiptOptions = ['', '현금영수증', '세금계산서', '신용카드'];
   row.innerHTML =
     '<div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; width:100%;">' +
-    '<input type="date" class="logEditDate" value="' + escapeHtml(log.날짜 || '') + '" style="font-size:12px;">' +
-    '<input type="text" class="logEditStaff" placeholder="담당자" value="' + escapeHtml(log.담당자 || '') + '" style="width:70px; font-size:12px;">' +
-    '<input type="text" class="logEditType" placeholder="유형" value="' + escapeHtml(log.유형 || '') + '" style="width:100px; font-size:12px;">' +
-    '<input type="text" class="logEditRelation" placeholder="관계(선택)" value="' + escapeHtml(log.관계 || '') + '" style="width:80px; font-size:12px;">' +
-    '<input type="number" class="logEditAmount" placeholder="금액" value="' + (log.금액 || '') + '" style="width:90px; font-size:12px;">' +
-    '<input type="text" class="logEditContent" placeholder="내용" value="' + escapeHtml(log.내용 || '') + '" style="flex:1; min-width:160px; font-size:12.5px;">' +
-    '<button type="button" class="save-btn logEditSave" style="padding:3px 8px;">저장</button>' +
-    '<button type="button" class="ghost-btn logEditCancel" style="padding:3px 8px;">취소</button>' +
+    '<input type="date" class="payEditDate" value="' + escapeHtml(pay.날짜 || '') + '" style="font-size:12px;">' +
+    '<input type="number" class="payEditAmount" placeholder="금액" value="' + (pay.금액 || '') + '" style="width:110px; font-size:12px;">' +
+    '<select class="payEditReceipt" style="font-size:12px;">' +
+    receiptOptions.map(o => '<option value="' + o + '"' + (o === (pay.수취증빙 || '') ? ' selected' : '') + '>' + (o || '수취증빙 선택') + '</option>').join('') +
+    '</select>' +
+    '<button type="button" class="save-btn payEditSave" style="padding:3px 8px;">저장</button>' +
+    '<button type="button" class="ghost-btn payEditCancel" style="padding:3px 8px;">취소</button>' +
     '</div>';
-  row.querySelector('.logEditCancel').addEventListener('click', () => renderLogRowView_(row, c, log));
-  row.querySelector('.logEditSave').addEventListener('click', async () => {
-    const content = row.querySelector('.logEditContent').value.trim();
-    if (!content){ showToast('내용을 입력해주세요.', 'warning'); return; }
+  row.querySelector('.payEditCancel').addEventListener('click', () => renderPaymentRowView_(row, c, pay));
+  row.querySelector('.payEditSave').addEventListener('click', async () => {
+    const amount = row.querySelector('.payEditAmount').value;
+    if (!amount){ showToast('금액을 입력해주세요.', 'warning'); return; }
     try{
       const res = await callGas('client_update_consult_log', {
-        id: log.id,
-        날짜: row.querySelector('.logEditDate').value,
-        담당자: row.querySelector('.logEditStaff').value.trim(),
-        유형: row.querySelector('.logEditType').value.trim(),
-        관계: row.querySelector('.logEditRelation').value.trim(),
-        금액: row.querySelector('.logEditAmount').value,
-        내용: content
+        id: pay.id,
+        날짜: row.querySelector('.payEditDate').value,
+        금액: amount,
+        수취증빙: row.querySelector('.payEditReceipt').value
       });
       if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
       showToast('저장했습니다.', 'success');
-      loadClientLogs_(c);
+      loadClientPayments_(c);
     }catch(err){ showToast('저장 중 오류가 발생했습니다.', 'error'); }
   });
 }
@@ -336,6 +370,14 @@ loadClients();
 // #clientDetail 요소 자체를 팝업 안으로 옮겼다가(appendChild) 닫을 때 원래 자리로 되돌린다.
 // (렌더 함수를 새로 만들지 않고 DOM 노드만 옮기므로, 저장·삭제·자문내역 추가 등 기존 로직이
 // 그대로 다 동작한다.)
+// 빠르게보기를 열 때의 입력값 스냅샷 — 닫으려 할 때 지금 값과 비교해서 저장 안 한 수정이
+// 있으면 확인 없이 그냥 닫아버리지 않도록 한다(사용자 지적: 안전장치 필요).
+let quickViewSnapshot_ = null;
+function quickViewCurrentSignature_(){
+  const ids = ['ccEditName', 'ccEditPhone', 'ccEditType', 'ccEditBiz', 'ccEditMemo'];
+  return ids.map(id => { const el = document.getElementById(id); return el ? el.value : ''; }).join('');
+}
+
 async function openClientQuickView_(clientId){
   if (!clientId){ showToast('이 사건에 연결된 고객 정보가 없습니다.', 'warning'); return; }
   let found = clients.find(c => c.id === clientId);
@@ -350,9 +392,14 @@ async function openClientQuickView_(clientId){
   document.getElementById('clientQuickViewMount').appendChild(clientDetail);
   overlay.style.display = 'flex';
   await renderClientDetail(found);
+  quickViewSnapshot_ = quickViewCurrentSignature_();
 }
 
 function closeClientQuickView_(){
+  if (quickViewSnapshot_ !== null && quickViewCurrentSignature_() !== quickViewSnapshot_){
+    if (!confirm('저장하지 않은 수정 내용이 있습니다. 저장하지 않고 닫을까요?')) return;
+  }
+  quickViewSnapshot_ = null;
   document.getElementById('clientQuickViewOverlay').style.display = 'none';
   const clientDetailCol = document.getElementById('clientDetailCol');
   if (clientDetailCol) clientDetailCol.appendChild(clientDetail);

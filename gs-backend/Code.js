@@ -2937,7 +2937,8 @@ const DRIVE_TOOLS = [
         content: { type: 'string', description: '상담 내용' },
         relation: { type: 'string', description: '실제 상담자와 결제자가 다를 때 그 관계(선택, 예: 배우자·모친)' },
         amount: { type: 'number', description: '수임료/자문료 금액(선택, 원단위 숫자)' },
-        source: { type: 'string', description: '유입경로(선택, 예: 네이버·구글·소개)' }
+        source: { type: 'string', description: '유입경로(선택, 예: 네이버·구글·소개)' },
+        receiptType: { type: 'string', enum: ['현금영수증', '세금계산서', '신용카드'], description: '수취증빙 종류(선택)' }
       },
       required: ['customerName', 'content']
     }
@@ -15355,7 +15356,7 @@ const CLIENT_SHEET_ID = '1nHf4PK1F1-Ao5jZ-s43PB1A3eF85YVRcI7T1kK_ooBI';
 const CLIENT_SHEET_CLIENTS = 'Clients';
 const CLIENT_SHEET_LOG = 'ConsultLog';
 const CLIENT_HEADERS = ['id', '성명', '전화번호', '구분', '사업자번호', '메모', '등록일', '수정일'];
-const CONSULT_HEADERS = ['id', '고객ID', '고객명', '날짜', '담당자', '유형', '내용', '관계', '금액', '리뷰', '생성일'];
+const CONSULT_HEADERS = ['id', '고객ID', '고객명', '날짜', '담당자', '유형', '내용', '관계', '금액', '수취증빙', '리뷰', '생성일'];
 
 function client_getSheets_() {
   const ss = SpreadsheetApp.openById(CLIENT_SHEET_ID);
@@ -15412,7 +15413,7 @@ function client_readLog_(col, row) {
   return {
     id: row[col.id], 고객ID: row[col.고객ID], 고객명: row[col.고객명],
     날짜: client_dateStr_(row[col.날짜]), 담당자: row[col.담당자], 유형: row[col.유형],
-    내용: row[col.내용], 관계: row[col.관계], 금액: row[col.금액], 리뷰: row[col.리뷰],
+    내용: row[col.내용], 관계: row[col.관계], 금액: row[col.금액], 수취증빙: row[col.수취증빙], 리뷰: row[col.리뷰],
     생성일: row[col.생성일]
   };
 }
@@ -15544,6 +15545,7 @@ function client_addConsultLog(params) {
     newRow[col.내용] = String(params.내용 || '').trim();
     newRow[col.관계] = String(params.관계 || '').trim();
     newRow[col.금액] = params.금액 !== undefined && params.금액 !== '' ? Number(params.금액) || 0 : '';
+    newRow[col.수취증빙] = String(params.수취증빙 || '').trim();
     newRow[col.리뷰] = String(params.리뷰 || '').trim();
     newRow[col.생성일] = now;
     sheets.log.appendRow(newRow);
@@ -15559,7 +15561,7 @@ function client_updateConsultLog(params) {
     const found = client_findRow_(sheets.log, col, params.id);
     if (!found) return { success: false, message: '존재하지 않는 자문내역입니다.' };
     const row = found.row;
-    ['날짜', '담당자', '유형', '내용', '관계', '리뷰'].forEach(function (key) {
+    ['날짜', '담당자', '유형', '내용', '관계', '수취증빙', '리뷰'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
     if (params.금액 !== undefined) row[col.금액] = params.금액 !== '' ? Number(params.금액) || 0 : '';
@@ -15640,7 +15642,8 @@ function toolUpdateClient(input) {
 function toolAddConsultLog(input) {
   return client_addConsultLog({
     고객명: input.customerName, 고객ID: input.clientId, 날짜: input.date, 담당자: input.staff,
-    유형: input.type, 내용: input.content, 관계: input.relation, 금액: input.amount, 리뷰: input.source
+    유형: input.type, 내용: input.content, 관계: input.relation, 금액: input.amount, 리뷰: input.source,
+    수취증빙: input.receiptType
   });
 }
 
