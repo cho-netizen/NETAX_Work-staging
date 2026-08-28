@@ -367,11 +367,15 @@
   // 앞으로는 이 함수 하나로 통일한다. window.open의 두 번째 인자로 매번 다른 이름('_blank')이
   // 아니라 view별 고정 이름을 주면, 이미 열려있는 창은 새로 또 만들지 않고 그 창에 포커스만
   // 주므로 버튼을 여러 번 눌러도 창이 계속 늘어나지 않는다.
-  // view: 'workclient' — 작업관리+고객관리를 한 창 안에 좌우로 반씩 나눠 동시에 보여준다
-  // (client-manage.js의 openWorkClientSplitView_ 참고). 화면 전체 너비를 쓴다.
+  // [2026.08 재수정] 한때 작업관리+고객관리를 한 창에 좌우로 나눠 동시에 보여주는 실험을
+  // 했었는데("workclient" 뷰), 실제로 필요했던 건 그게 아니라 "작업관리 안에서 의뢰인 이름을
+  // 클릭하면 그 고객 한 명만 빠르게 보고 고칠 수 있는 것"이었다(client-manage.js의
+  // openClientQuickView_ 참고) — 그래서 각자 화면은 다시 예전처럼 따로따로 창으로 연다.
   function openStandaloneManageWindow_(view){
     const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
+    const w = Math.round(sw / 2), h = sh;
+    const left = view === 'clientmanage' ? w : 0;
     window.open(location.origin + location.pathname + '?view=' + view, 'nx_' + view,
-      'width=' + sw + ',height=' + sh + ',left=0,top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
+      'width=' + w + ',height=' + h + ',left=' + left + ',top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
   }
 

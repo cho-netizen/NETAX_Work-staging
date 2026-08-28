@@ -103,12 +103,11 @@
   // [2026.08] 작업관리·고객관리는 항상 새 창으로 열려야 하는데(work-manage.js/client-manage.js
   // 참고) 여기서는 openWorkManageView/openClientManageView를 직접 불러서 탐색창 자리에
   // 그대로 열리고 있었다 — 상단 버튼만 고치고 이 도구 메뉴는 놓쳤던 실수. core.js의
-  // openStandaloneManageWindow_()로 통일한다. 둘 다 같은 "workclient"(좌우 반씩 동시 표시)
-  // 창을 연다 — 어느 쪽을 눌러도 결국 같은 합쳐진 창으로 가면 되므로.
+  // openStandaloneManageWindow_()로 통일한다.
   const WORK_TOOLS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '🗂', label: '작업관리', handler: () => openStandaloneManageWindow_('workclient') },
-    { icon: '👤', label: '고객관리', handler: () => openStandaloneManageWindow_('workclient') },
+    { icon: '🗂', label: '작업관리', handler: () => openStandaloneManageWindow_('workmanage') },
+    { icon: '👤', label: '고객관리', handler: () => openStandaloneManageWindow_('clientmanage') },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '📐', label: '세액계산', handler: openTaxCalcView },

@@ -209,6 +209,7 @@ const workManageView = document.getElementById('workManageView');
       '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
       '<div style="display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0;">' +
       '<input type="text" id="wcEditCustomerName" placeholder="고객명" value="' + escapeHtml(c.고객명 || '') + '" style="font-weight:700; font-size:15px; width:120px;">' +
+      '<button type="button" id="wcViewCustomer" class="ghost-btn" title="이 고객 정보 빠르게 보기·수정" style="padding:4px 8px;">👤</button>' +
       '<input type="text" id="wcEditCaseName" placeholder="사건명" value="' + escapeHtml(c.사건명 || '') + '" style="font-weight:700; font-size:15px; flex:1; min-width:120px;">' +
       '</div>' +
       '<button type="button" id="wcDeleteCase" class="ghost-btn" title="사건 삭제">🗑 사건삭제</button>' +
@@ -236,6 +237,8 @@ const workManageView = document.getElementById('workManageView');
       '</div>';
 
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
+
+    document.getElementById('wcViewCustomer').addEventListener('click', () => openClientQuickView_(c.고객ID));
 
     const editSemokSel = document.getElementById('wcEditSemok');
     const editUptypeSel = document.getElementById('wcEditUptype');
@@ -406,15 +409,14 @@ const workManageView = document.getElementById('workManageView');
   }
 
 // [2026.08] 지시: 작업관리는 탐색창(같은 화면 안 패널 전환) 대신 항상 새 창으로 연다 —
-// 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 처음엔 각각 별도 창으로
-// 열었는데, 다시 생각해보니 어느 버튼을 누르든 "한 창 안에서 좌우로 반씩 나눠 둘 다 동시에"
-// 보여주는 게 낫다는 지시를 받아, 이제 두 버튼(여기·client-manage.js) 다 같은 "workclient"
-// 뷰(하나의 합쳐진 창, client-manage.js의 openWorkClientSplitView_)를 연다. 실제 창 열기는
-// core.js의 openStandaloneManageWindow_()로 통일했다 — 채팅창의 "도구" 팝업 메뉴에서도 같은
-// 화면을 여는데 그쪽은 안 고치고 여기만 고쳤다가 "여전히 안 된다"는 지적을 받은 적이 있다
-// (chat.js의 WORK_TOOLS 참고).
+// 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 실제 창 열기는 core.js의
+// openStandaloneManageWindow_()로 통일했다 — 채팅창의 "도구" 팝업 메뉴에서도 같은 화면을
+// 여는데 그쪽은 안 고치고 여기만 고쳤다가 "여전히 안 된다"는 지적을 받은 적이 있다
+// (chat.js의 WORK_TOOLS 참고). 고객 한 명만 빠르게 보고 싶을 땐 이 창을 새로 열 필요 없이
+// 사건 상세화면의 고객명 옆 👤 버튼으로 바로 확인·수정할 수 있다(client-manage.js의
+// openClientQuickView_ 참고).
 document.getElementById('btnOpenWorkManage').addEventListener('click', () => {
-  openStandaloneManageWindow_('workclient');
+  openStandaloneManageWindow_('workmanage');
 });
 document.getElementById('btnWorkManageBack').addEventListener('click', closeWorkManageView);
 document.getElementById('btnWorkCaseNew').addEventListener('click', renderNewCaseForm);

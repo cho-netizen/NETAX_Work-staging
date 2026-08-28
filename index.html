@@ -764,8 +764,6 @@
     border-bottom:1px solid var(--line); flex-shrink:0; background:#f9fafb;
   }
   .editor-filename{ font-size:12.5px; color:var(--sub); }
-  #workClientSplitView #workManageView{ min-width:0; border-right:1px solid var(--line); }
-  #workClientSplitView #clientManageView{ min-width:0; }
   .editor-frame{ flex:1; width:100%; border:none; background:#fff; }
   .back-btn{
     background:none; border:1px solid var(--line); border-radius:6px; padding:5px 10px;
@@ -1257,6 +1255,20 @@
     </div>
   </div>
 
+  <!-- [2026.08] 작업관리 사건 상세화면에서 의뢰인 이름 옆 👤을 누르면, 고객관리 전체를 새로
+       열지 않고 그 고객 한 명만 빠르게 보고 고칠 수 있는 팝업(client-manage.js의
+       openClientQuickView_). #clientQuickViewMount는 처음엔 비어있다가, 열 때 #clientDetail을
+       그대로 옮겨 넣는다(재사용) — 닫으면 원래 자리(#clientDetailCol)로 돌아간다. -->
+  <div class="modal-overlay" id="clientQuickViewOverlay" style="display:none;">
+    <div class="modal-panel" style="max-width:640px;">
+      <div class="modal-head">
+        <span>👤 고객정보 빠른보기</span>
+        <span class="modal-close" id="btnCloseClientQuickView" title="닫기">✕</span>
+      </div>
+      <div class="modal-body" id="clientQuickViewMount"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="scanOverlay" style="display:none;">
     <div class="modal-panel scan-panel">
       <div class="modal-head scan-modal-head">
@@ -1734,12 +1746,6 @@ graph TD
       </div>
       <datalist id="clientNameOptions"></datalist>
 
-      <!-- [2026.08] 독립 창에서 작업관리·고객관리를 좌우로 반씩 나눠 동시에 보여줄 때 이 안에
-           workManageView/clientManageView를 그대로 옮겨 넣는다(client-manage.js의
-           openWorkClientSplitView_ 참고) — 원래 부모(.panel.explorer)는 세로 배치라 그냥 둘 다
-           켜면 위아래로 쌓이므로, 가로(row) 컨테이너가 따로 필요하다. -->
-      <div id="workClientSplitView" style="display:none; flex:1; flex-direction:row; min-height:0;"></div>
-
       <div id="searchView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnSearchBack" title="닫기">✕</button>
@@ -1768,14 +1774,14 @@ graph TD
     </div>
   </div>
 
-<script src="/core.js?v=20260828f"></script>
+<script src="/core.js?v=20260828g"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
-<script src="/explorer.js?v=20260828b"></script>
-<script src="/work-manage.js?v=20260828f"></script>
-<script src="/client-manage.js?v=20260828f"></script>
+<script src="/explorer.js?v=20260828c"></script>
+<script src="/work-manage.js?v=20260828g"></script>
+<script src="/client-manage.js?v=20260828g"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
-<script src="/chat.js?v=20260828c"></script>
+<script src="/chat.js?v=20260828d"></script>
 <script src="/pwa.js?v=20260814a"></script>
 
 </body>
