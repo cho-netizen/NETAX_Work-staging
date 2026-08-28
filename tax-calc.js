@@ -2944,8 +2944,8 @@
       무신고가산세: penalties.unreportedPenalty, 과소신고가산세: penalties.underreportedPenalty, 납부지연가산세: penalties.latePenalty,
       납부세액: finalTax,
       안내: transferType === 'direct'
-        ? '증여로 추정되어 배우자등에게 증여세가 부과되면, 당초 양도자·양수자에게는 그 양도에 대한 소득세를 부과하지 않습니다(§44④).'
-        : '재양도 당시의 재산가액을 증여받은 것으로 추정합니다(§44②). 마찬가지로 소득세는 부과되지 않습니다(§44④).'
+        ? '증여로 추정되어 그 재산의 양도 자체가 증여로 재구성되므로(§44①), 애초에 소득세법상 "양도"라는 과세사건이 성립하지 않아 양도소득세가 부과되지 않습니다. (§44④는 문언상 "제2항 본문에 따라"로 한정되어 §44②의 우회양도 사안에만 적용되는 조문이라 직접양도(§44①)의 소득세 비과세 근거로는 인용하지 않습니다.)'
+        : '재양도 당시의 재산가액을 증여받은 것으로 추정합니다(§44②). 그 배우자등에게 증여세가 부과된 경우 당초 양도자·양수자에게는 그 재산 양도에 따른 소득세를 부과하지 않습니다(§44④, 이중과세 방지).'
     };
   };
 
@@ -4023,7 +4023,7 @@
       gates.push({
         항목: '감정가액 기준금액', 통과: meets,
         감정가액평균: appraisalAvg, 기준금액: hasThreshold ? thresholdBase : null,
-        사유: meets ? undefined : ('감정가액평균이 보충적평가액(§61·62·64·65)과 유사재산시가의 90% 중 적은 금액(기준금액, ' + thresholdBase + '원)에 미달합니다(시행령§49①2호 — 이 조항은 상장주식(§63①1호가목)·가상자산(§65②)에는 적용되지 않습니다). 세무서장등이 다른 감정기관에 재감정을 의뢰할 수 있으며, 그 재감정가액보다 납세자가 제시한 감정가액이 낮으면 원래 감정가액이 그대로 인정됩니다.')
+        사유: meets ? undefined : ('감정가액평균이 보충적평가액(§61·62·64·65)과 유사재산시가의 90% 중 적은 금액(기준금액, ' + thresholdBase + '원)에 미달합니다(시행령§49①2호 — 이 조항은 상장주식(§63①1호가목)·가상자산(§65②)에는 적용되지 않습니다). 세무서장등이 다른 감정기관에 재감정을 의뢰할 수 있으며, 그 재감정가액이 원래 납세자가 제시한 감정가액보다 낮으면 재감정가액을 적용하지 않고 원래 감정가액이 그대로 인정됩니다.')
       });
     }
 
@@ -6794,7 +6794,16 @@
   window.calculateMortgagedOrLeasedPropertyValueJS = function (p) {
     p = p || {};
     const baseValue = Number(p.baseValue) || 0;
-    const securedDebtAmount = Number(p.securedDebtAmount) || 0;
+    let securedDebtAmount = Number(p.securedDebtAmount) || 0;
+    let debtNote = '';
+    if (p.isRevolvingMortgage && Number(p.maxSecuredAmount) > 0 && Number(p.maxSecuredAmount) < securedDebtAmount) {
+      debtNote += ' 근저당 채권최고액(' + p.maxSecuredAmount + '원)이 실제 담보채권액보다 적어 채권최고액을 적용했습니다(시행령§63②).';
+      securedDebtAmount = Number(p.maxSecuredAmount);
+    }
+    if (Number(p.creditGuaranteeAmount) > 0) {
+      debtNote += ' 신용보증기관 보증금액(' + p.creditGuaranteeAmount + '원)을 차감했습니다(시행령§63②).';
+      securedDebtAmount = Math.max(0, securedDebtAmount - Number(p.creditGuaranteeAmount));
+    }
     const rentalConversionValue = (Number(p.annualRent) || 0) > 0 || (Number(p.deposit) || 0) > 0
       ? window.calculateRentalConversionValueJS(p.annualRent, p.deposit) : 0;
     const valueBeforeRatio = Math.max(baseValue, securedDebtAmount, rentalConversionValue);
@@ -6805,7 +6814,8 @@
       임대보증금환산가액: rentalConversionValue,
       평가액_지분적용전: valueBeforeRatio,
       지분율: ratio,
-      최종평가액: Math.round(valueBeforeRatio * ratio)
+      최종평가액: Math.round(valueBeforeRatio * ratio),
+      안내: debtNote + ' 동일 재산이 다수의 채권(전세금채권·임차보증금채권 포함)의 담보인 경우에는 그 합계액을, 공동저당인 경우에는 공동저당된 재산들의 평가기준일 현재 가액 비율로 안분한 금액을 securedDebtAmount로 미리 계산해 넣으세요(시행령§63②).'
     };
   };
 
@@ -6965,8 +6975,15 @@
     const RATE = 0.03;
     const annualBenefits = Array.isArray(p.annualBenefits) ? p.annualBenefits : [];
     let incomeInterestValue = 0;
+    let usedTimingSubstitution = false;
     const yearlyDetail = annualBenefits.map(function (item) {
-      const n = Number(item.yearsFromValuation) || 0;
+      let n;
+      if (item.isPaymentTimingUndetermined) {
+        usedTimingSubstitution = true;
+        n = Number(item.lifeExpectancyYears) > 0 ? Math.floor(Number(item.lifeExpectancyYears)) : 20;
+      } else {
+        n = Number(item.yearsFromValuation) || 0;
+      }
       const benefit = item.isRateUndetermined ? trustPropertyValue * RATE : (Number(item.annualBenefit) || 0);
       const withholding = Number(item.withholdingTaxEquivalent) || 0;
       const pv = (benefit - withholding) / Math.pow(1 + RATE, n);
@@ -6981,7 +6998,40 @@
       평가방법: beneficiaryType === 'income' ? '수익을 받을 권리(§61①2호나목)' : '원본을 받을 권리(§61①2호가목)',
       적용이자율: RATE, 연도별_현재가치_내역: yearlyDetail,
       수익권_평가액: incomeInterestValue, 원본권_평가액: principalInterestValue,
-      해지시일시금: cancellationValue, 평가액: value
+      해지시일시금: cancellationValue, 평가액: value,
+      안내: usedTimingSubstitution ? '시행령§61②에 따라 수익시기가 정해지지 않은 항목은 평가기준일부터 수익시기까지의 연수를 20년(또는 기대여명 연수가 입력된 경우 그 연수)으로 대체해 계산했습니다.' : ''
+    };
+  };
+
+  window.calculatePreIpoStockValueJS = function (p) {
+    p = p || {};
+    const offeringPrice = Number(p.publicOfferingPrice);
+    const regularValue = Number(p.regularValuationValue);
+    if (!(offeringPrice >= 0)) return { error: 'publicOfferingPrice(공모가격)가 필요합니다.' };
+    if (!(regularValue >= 0)) return { error: 'regularValuationValue(§63①1호가목·나목 평가액)가 필요합니다.' };
+    const value = Math.max(offeringPrice, regularValue);
+    return {
+      공모가격: offeringPrice, 일반평가액: regularValue, 평가액: value,
+      안내: '§63②1호·2호(시행령§57①②) — 공모가격(' + offeringPrice + '원)과 §63①1호가목·나목 방식 평가액(' + regularValue + '원) 중 큰 금액인 ' + value + '원을 적용했습니다.'
+    };
+  };
+
+  window.calculateVirtualAssetValueJS = function (p) {
+    p = p || {};
+    if (p.isDesignatedExchange) {
+      const values = Array.isArray(p.dailyAverageValues) ? p.dailyAverageValues.map(Number).filter(function (v) { return !isNaN(v); }) : [];
+      if (values.length === 0) return { error: 'isDesignatedExchange가 true이면 dailyAverageValues(평가기준일 전·후 각 1개월 일평균가액 배열)가 필요합니다.' };
+      const avg = values.reduce(function (a, b) { return a + b; }, 0) / values.length;
+      return {
+        평가액: Math.round(avg), 표본개수: values.length,
+        안내: '시행령§60②1호 — 국세청장이 고시하는 가상자산사업자 거래분은 평가기준일 전·후 각 1개월간 그 사업자가 공시한 일평균가액 ' + values.length + '개의 평균액(' + Math.round(avg) + '원)으로 평가합니다.'
+      };
+    }
+    const otherValue = Number(p.otherReasonableValue);
+    if (!(otherValue >= 0)) return { error: 'isDesignatedExchange가 false이면 otherReasonableValue(거래일 일평균가액 등)가 필요합니다.' };
+    return {
+      평가액: Math.round(otherValue),
+      안내: '시행령§60②2호 — 국세청장 고시 가상자산사업자 외의 사업장에서 거래되는 가상자산은 거래일의 일평균가액 또는 종료시각 공시 시세가액 등 합리적으로 인정되는 가액을 그대로 적용합니다.'
     };
   };
 
