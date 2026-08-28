@@ -444,6 +444,23 @@ if (clientQuickViewOverlay){
   if (view !== 'workmanage' && view !== 'clientmanage') return;
   if (typeof setWorkspaceMode === 'function') setWorkspaceMode('max');
   document.title = (view === 'workmanage' ? '작업관리' : '고객관리') + ' - NX-Work';
+  // [2026.08] 지적: 새 창이라면서 결국 기존 채팅앱 화면을 그대로 쓰고 있었다 — 상단바(작업폴더
+  // 검색·탐색작업창 배치·도구·메모 등 채팅앱 전용 버튼들)가 그대로 남아있었고, 창을 좁히면
+  // "커버화면모드"(원래 접힌 폰 화면을 흉내내는 로직, core.js의 nx:covermode)가 작동해서
+  // 작업관리 화면이 사라지고 채팅이 나타나버렸다. 새 창은 이 화면 하나만 보여주는 완전히
+  // 독립된 창이어야 하므로, 채팅앱 전용 상단바를 아예 숨긴다(코드는 core.js에서 URL을 직접
+  // 봐서 커버화면모드 로직 자체를 건너뛰게 처리 — 근본적으로 그 로직이 발동하지 않게 함).
+  const topbarEl = document.querySelector('.topbar');
+  if (topbarEl) topbarEl.style.display = 'none';
+  // [2026.08] 지적: window.open()으로 여는 이상 이 창도 index.html을 통째로 새로 불러온
+  // "완전한 NX 한 벌"일 수밖에 없다(웹 특성상 화면 하나만 따로 떼어 별도 창으로 여는 건
+  // 불가능 — 하려면 이 화면 전용의 완전히 별개인 축소판 페이지를 새로 만들어야 함). 그런데
+  // 원래 ✕(닫기) 버튼은 closeWorkManageView/closeClientManageView를 그대로 호출해서 "탐색기
+  // 화면으로 돌아가기"만 했다 — 즉 창은 안 닫히고, 상단바까지 숨긴 상태라 아무것도 없는
+  // 빈 화면만 남긴 채 이 복제된 NX 창이 계속 떠 있게 되는 문제였다. 독립 창에서는 ✕를
+  // 누르면 그 창 자체를 완전히 닫는다.
+  document.getElementById('btnWorkManageBack').addEventListener('click', () => window.close());
+  document.getElementById('btnClientManageBack').addEventListener('click', () => window.close());
   if (view === 'workmanage') openWorkManageView();
   else openClientManageView();
 })();

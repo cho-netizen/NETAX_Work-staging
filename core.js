@@ -338,6 +338,13 @@
   // 방법이 없었다. applyWorkspaceMode만 호출하고 setWorkspaceMode(localStorage 저장)는 쓰지
   // 않으므로, 펼쳤을 때의 원래 배치 설정 자체는 그대로 보존되며 폰을 다시 펼치면 복원된다.
   document.addEventListener('nx:covermode', (e)=>{
+    // [2026.08] 작업관리·고객관리를 독립된 새 창(?view=workmanage 또는 clientmanage)으로
+    // 열었을 때는 채팅이 아예 없는 전용 창이므로, 창을 좁혀서 커버화면모드가 되어도 탐색
+    // 작업창을 숨기고 채팅을 보여줄 이유가 없다 — 오히려 그러면 작업관리 화면이 사라지고
+    // 텅 빈 채팅만 남는 이상한 상황이 된다(사용자가 실제로 겪음). 그런 창에서는 이 로직을
+    // 통째로 건너뛴다.
+    const standaloneView = new URLSearchParams(location.search).get('view');
+    if (standaloneView === 'workmanage' || standaloneView === 'clientmanage') return;
     if (e.detail.on){
       applyWorkspaceMode('hide');
     } else {
