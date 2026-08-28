@@ -5230,6 +5230,20 @@ function renderAcquisitionPane(){
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atNationalMeritorious"><label for="atNationalMeritorious">국가유공자등 대부금 감면(§29①, 국가유공자법 등에 따른 대부금 수령자)</label></div>' +
         '<div class="taxcalc-field checkbox"><input type="checkbox" id="atSmallHouse85"><label for="atSmallHouse85">[위 체크시·주택만] 전용면적 85㎡ 이하 — 대부금 초과분 포함 전액 면제</label></div>' +
         '<div class="taxcalc-field"><label>[위 체크시·85㎡초과 주택 또는 그 외 부동산만] 대부금</label><input type="number" id="atMeritoriousLoan" placeholder="원 (대부금 한도까지만 비례 면제)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atChildbirthHousing"><label for="atChildbirthHousing">[주택만] 출산·양육 주택 취득 감면(§36의5, 출산일 전후 5년 이내 12억원 이하 주택, 유상·증여·상속 모두 가능) — 500만원 한도 공제/면제</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atJeonseFraudVictim"><label for="atJeonseFraudVictim">전세사기피해자 지원 감면(§36의4①, 전세사기피해주택 취득, 2026.12.31까지) — 200만원 한도 공제/면제</label></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atCommonHousing"><label for="atCommonHousing">[유상취득·주택만] 서민주택 감면(§33②, 취득가액 1억원 미만+연면적 40㎡ 이하+1가구1주택, 2027.12.31까지) — 전액 면제</label></div>' +
+        '<div class="taxcalc-field"><label>[주택만] 정비구역 원소유자 감면(§74④⑤)</label><select id="atRedevelopmentType">' +
+          '<option value="">해당 없음</option>' +
+          '<option value="improvement_self">주거환경개선사업(스스로개량 또는 전용85㎡이하) — 전액면제(200만원 초과시 85%만 감면)</option>' +
+          '<option value="redevelopment_60orless">재개발사업, 전용60㎡이하 — 75%경감</option>' +
+          '<option value="redevelopment_60to85">재개발사업, 전용60㎡초과~85㎡이하 — 50%경감</option>' +
+        '</select></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atDisasterRestoration"><label for="atDisasterRestoration">천재지변 등 재해복구 감면(§92①, 멸실·파손일부터 2년 이내 복구·대체취득) — 종전가액 초과분만 과세</label></div>' +
+        '<div class="taxcalc-field"><label>[위 체크시] 종전 건축물등 가액</label><input type="number" id="atPriorDisasterValue" placeholder="원 (이 금액을 초과하는 부분만 과세)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atEminentDomain"><label for="atEminentDomain">토지수용 등 대체취득 감면(§73①, 보상금 마지막 수령일부터 1년(농지2년) 이내 법정지역 내 대체취득) — 종전가액 초과분만 과세</label></div>' +
+        '<div class="taxcalc-field"><label>[위 체크시] 종전 부동산등 가액</label><input type="number" id="atPriorEminentDomainValue" placeholder="원 (이 금액을 초과하는 부분만 과세)"></div>' +
+        '<div class="taxcalc-field checkbox"><input type="checkbox" id="atAbsenteeOwner"><label for="atAbsenteeOwner">[위 체크시만] 부재부동산 소유자(§73②) — 해당시 감면 배제</label></div>' +
       '</div>' +
       '<div class="taxcalc-asset-head" style="margin-top:14px;"><b>사치성재산 중과(§13⑤, 표준세율+8%p)</b></div>' +
       '<div class="taxcalc-grid">' +
@@ -5823,7 +5837,16 @@ taxCalcView.addEventListener('click', function(e){
       isSelfFarmingFarmer: document.getElementById('atSelfFarmingFarmer').checked,
       isNationalMeritorious: document.getElementById('atNationalMeritorious').checked,
       isSmallHouse85sqmOrLess: document.getElementById('atSmallHouse85').checked,
-      meritoriousLoanAmount: numVal(document.getElementById('atMeritoriousLoan').value) || 0
+      meritoriousLoanAmount: numVal(document.getElementById('atMeritoriousLoan').value) || 0,
+      isChildbirthHousingPurchase: document.getElementById('atChildbirthHousing').checked,
+      isJeonseFraudVictimHousing: document.getElementById('atJeonseFraudVictim').checked,
+      isCommonPeopleHousingFirstHome: document.getElementById('atCommonHousing').checked,
+      redevelopmentOriginalOwnerType: document.getElementById('atRedevelopmentType').value,
+      isDisasterRestorationAcquisition: document.getElementById('atDisasterRestoration').checked,
+      priorPropertyValueBeforeDisaster: numVal(document.getElementById('atPriorDisasterValue').value) || 0,
+      isEminentDomainReplacementAcquisition: document.getElementById('atEminentDomain').checked,
+      priorPropertyValueBeforeEminentDomain: numVal(document.getElementById('atPriorEminentDomainValue').value) || 0,
+      isAbsenteeOwnerReplacement: document.getElementById('atAbsenteeOwner').checked
     };
     renderAcquisitionTaxResult(calculateAcquisitionTaxJS(input));
   } else if (action === 'run-industrial-complex-lot'){
