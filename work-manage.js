@@ -329,10 +329,7 @@ const workManageView = document.getElementById('workManageView');
 
   function renderWorkTree(nodes, container, caseId, depth){
     container.innerHTML = '';
-    if (!nodes.length && depth === 0){
-      container.innerHTML = '<div class="log-empty" style="padding:8px 0;">아직 하위업무가 없습니다.</div>';
-      return;
-    }
+    if (!nodes.length && depth === 0) return;
     nodes.forEach(node => {
       const row = document.createElement('div');
       row.style.marginLeft = (depth * 20) + 'px';
