@@ -223,18 +223,16 @@ const workManageView = document.getElementById('workManageView');
       '<span id="wcEditDeadlineAuto" style="display:' + (isManual ? 'none' : 'inline-block') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
       '<label id="wcEditManualDeadlineLabel" style="display:' + (isManual ? 'inline-block' : 'none') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
       '</div>' +
-      '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px; display:flex; align-items:center; gap:8px;">' +
-      '<span>하위업무 ' + prog.done + ' / ' + prog.total + '</span>' +
-      '<button type="button" id="wcAddRootToggle" class="ghost-btn" style="padding:2px 8px;">+ 추가</button>' +
-      '</div>' +
+      '<div id="wcAddRootToggle" style="font-size:12.5px; color:var(--sub); margin-bottom:8px; cursor:pointer; width:fit-content;" title="눌러서 새 하위업무 추가">➕ 하위업무 ' + prog.done + ' / ' + prog.total + '</div>' +
       '<div id="wcNewRootFormWrap" style="display:none; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>' +
       '<div id="wcTree"></div>';
 
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
 
     // [2026.08] 예전엔 항상 빈 입력칸(제목·마감일)이 트리 밑에 미리 깔려 있었는데, 사건에
-    // 하위업무가 아직 없을 때조차 늘 보여서 번잡했다 — "+ 추가"를 눌렀을 때만 입력칸이
-    // 나타나게(하위 항목 추가와 같은 방식) 바꿨다.
+    // 하위업무가 아직 없을 때조차 늘 보여서 번잡했다 — 처음엔 별도 "+ 추가" 버튼을 눌러야
+    // 나타나게 했다가, 그 버튼도 없애고 "하위업무" 표시 자체를 누르면 입력칸이 나타나게
+    // 한 번 더 단순화했다(제목 표시와 추가 트리거를 하나로 통합).
     const newRootFormWrap = document.getElementById('wcNewRootFormWrap');
     document.getElementById('wcAddRootToggle').addEventListener('click', () => {
       if (newRootFormWrap.style.display === 'none'){
