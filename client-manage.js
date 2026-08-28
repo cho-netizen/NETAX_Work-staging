@@ -235,7 +235,7 @@ async function loadClientLogs_(c){
 function renderLogRowView_(row, c, log){
   const amountText = log.금액 ? ' · ' + Number(log.금액).toLocaleString('ko-KR') + '원' : '';
   row.innerHTML =
-    '<div class="log-date">' + escapeHtml(log.날짜 || '') + '</div>' +
+    '<div class="log-date">' + escapeHtml(fmtDateShort_(log.날짜)) + '</div>' +
     '<div class="log-text">' +
     (log.유형 ? '<b>' + escapeHtml(log.유형) + '</b> · ' : '') + escapeHtml(log.담당자 || '') + amountText +
     (log.관계 ? ' · ' + escapeHtml(log.관계) : '') +

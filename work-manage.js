@@ -29,13 +29,6 @@ const workManageView = document.getElementById('workManageView');
     return WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1 ? '처리시한' : '법정일';
   }
 
-  // 법정일/처리시한을 텍스트로 보여줄 때만 쓰는 표시용 축약(YYYY-MM-DD → YY-MM-DD).
-  // <input type="date"> 값이나 서버로 보내는 값은 항상 원래의 YYYY-MM-DD를 그대로 쓴다.
-  function workFmtDateShort_(dateStr){
-    if (!dateStr || dateStr.length < 10) return dateStr || '';
-    return dateStr.slice(2);
-  }
-
   function workDefaultManualDeadline_(requestDateStr){
     const base = requestDateStr ? new Date(requestDateStr + 'T00:00:00') : new Date();
     if (isNaN(base.getTime())) return '';
@@ -118,7 +111,7 @@ const workManageView = document.getElementById('workManageView');
       if (c.id === workSelectedCaseId) row.style.outline = '2px solid var(--navy)';
       const noDeadlineText = workDeadlineFieldLabel_(c.업무유형) === '처리시한' ? '시한없음' : '기한없음';
       row.innerHTML =
-        '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? workFmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
+        '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? fmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
         '<div class="log-text"><b>' + escapeHtml(c.고객명 || '(고객명 없음)') + '</b> · ' + escapeHtml(c.사건명 || '') +
         '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(WORK_SEMOK_LABELS[c.세목] || c.세목 || '') + (c.업무유형 ? ' · ' + escapeHtml(c.업무유형) : '') + ' · ' + escapeHtml(c.상태 || '') +
         (prog.total ? (' · 하위업무 ' + prog.done + '/' + prog.total) : '') + '</span></div>';
@@ -225,18 +218,41 @@ const workManageView = document.getElementById('workManageView');
       '<label style="font-size:12px; color:var(--sub);">기준일 <input type="date" id="wcEditBaseDate" value="' + escapeHtml(c.기준일 || '') + '"></label>' +
       '<select id="wcEditStatus">' + WORK_STATUS_OPTIONS.map(s => '<option value="' + s + '"' + (s === c.상태 ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
       '<button type="button" id="wcSaveCase" class="ghost-btn">저장</button>' +
-      '<span id="wcEditDeadlineAuto" style="font-size:12.5px; color:var(--sub); display:' + (isManual ? 'none' : 'inline') + ';">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(workFmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
+      '<span id="wcEditDeadlineAuto" style="font-size:12.5px; color:var(--sub); display:' + (isManual ? 'none' : 'inline') + ';">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
       '<label id="wcEditManualDeadlineLabel" style="font-size:12px; color:var(--sub); display:' + (isManual ? 'inline' : 'none') + ';"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
       '</div>' +
-      '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px;">하위업무 진행 ' + prog.done + ' / ' + prog.total + '</div>' +
-      '<div id="wcTree"></div>' +
-      '<div style="margin-top:10px; display:flex; gap:6px;">' +
-      '<input type="text" id="wcNewRootTitle" placeholder="새 하위업무 (예: 자료수집)" style="flex:1; min-width:160px;">' +
-      '<input type="date" id="wcNewRootDue" title="마감일(선택)">' +
-      '<button type="button" id="wcAddRoot" class="ghost-btn">+ 추가</button>' +
-      '</div>';
+      '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px; display:flex; align-items:center; gap:8px;">' +
+      '<span>하위업무 ' + prog.done + ' / ' + prog.total + '</span>' +
+      '<button type="button" id="wcAddRootToggle" class="ghost-btn" style="padding:2px 8px;">+ 추가</button>' +
+      '</div>' +
+      '<div id="wcNewRootFormWrap" style="display:none; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>' +
+      '<div id="wcTree"></div>';
 
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
+
+    // [2026.08] 예전엔 항상 빈 입력칸(제목·마감일)이 트리 밑에 미리 깔려 있었는데, 사건에
+    // 하위업무가 아직 없을 때조차 늘 보여서 번잡했다 — "+ 추가"를 눌렀을 때만 입력칸이
+    // 나타나게(하위 항목 추가와 같은 방식) 바꿨다.
+    const newRootFormWrap = document.getElementById('wcNewRootFormWrap');
+    document.getElementById('wcAddRootToggle').addEventListener('click', () => {
+      if (newRootFormWrap.style.display === 'none'){
+        newRootFormWrap.style.display = 'flex';
+        newRootFormWrap.innerHTML =
+          '<input type="text" id="wcNewRootTitle" placeholder="새 하위업무 (예: 자료수집)" style="flex:1; min-width:160px;">' +
+          '<input type="date" id="wcNewRootDue" title="마감일(선택)">' +
+          '<button type="button" id="wcAddRoot" class="save-btn">추가</button>' +
+          '<button type="button" id="wcAddRootCancel" class="ghost-btn">취소</button>';
+        document.getElementById('wcAddRootCancel').addEventListener('click', () => { newRootFormWrap.style.display = 'none'; newRootFormWrap.innerHTML = ''; });
+        document.getElementById('wcAddRoot').addEventListener('click', () => {
+          const t = document.getElementById('wcNewRootTitle').value.trim();
+          if (!t){ showToast('항목 이름을 입력해주세요.', 'warning'); return; }
+          addWorkSubtask(c.id, null, t, document.getElementById('wcNewRootDue').value);
+        });
+      } else {
+        newRootFormWrap.style.display = 'none';
+        newRootFormWrap.innerHTML = '';
+      }
+    });
 
     document.getElementById('wcViewCustomer').addEventListener('click', () => openClientQuickView_(c.고객ID));
 
@@ -307,8 +323,6 @@ const workManageView = document.getElementById('workManageView');
         await loadWorkCases();
       }catch(err){ showToast('삭제 중 오류가 발생했습니다.', 'error'); }
     });
-
-    document.getElementById('wcAddRoot').addEventListener('click', () => addWorkSubtask(c.id, null));
   }
 
   function renderWorkTree(nodes, container, caseId, depth){
@@ -385,12 +399,7 @@ const workManageView = document.getElementById('workManageView');
     renderWorkCaseDetail(caseObj);
   }
 
-  async function addWorkSubtask(caseId, parentId, titleFromChildForm, dueFromChildForm){
-    let title = titleFromChildForm, dueDate = dueFromChildForm;
-    if (parentId === null && !titleFromChildForm){
-      title = document.getElementById('wcNewRootTitle').value.trim();
-      dueDate = document.getElementById('wcNewRootDue').value;
-    }
+  async function addWorkSubtask(caseId, parentId, title, dueDate){
     if (!title){ showToast('항목 이름을 입력해주세요.', 'warning'); return; }
     try{
       const res = await callGas('work_add_subtask', { id: caseId, parentId, title, dueDate });

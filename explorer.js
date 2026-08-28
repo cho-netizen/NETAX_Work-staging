@@ -550,6 +550,14 @@
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // [2026.08] 날짜를 화면에 텍스트로 보여줄 때만 쓰는 표시용 축약(YYYY-MM-DD → YY-MM-DD).
+  // <input type="date"> 값이나 서버로 보내는 값은 항상 원래의 YYYY-MM-DD를 그대로 써야 한다
+  // — 이건 어디까지나 "읽기 전용 텍스트" 자리에서만 쓰는 함수.
+  function fmtDateShort_(dateStr){
+    if (!dateStr || dateStr.length < 10) return dateStr || '';
+    return dateStr.slice(2);
+  }
+
   async function navigateTo(path){
     showExplorerStatus('불러오는 중…');
     try{
@@ -865,9 +873,9 @@
       const row = document.createElement('div');
       row.className = 'log-entry';
       const dueBadge = entry.dueDate
-        ? '<span class="due-badge' + (entry.dueDate < todayStr ? ' overdue' : (entry.dueDate === todayStr ? ' due-today' : '')) + '">📌 ' + escapeHtml(entry.dueDate) + '</span>'
+        ? '<span class="due-badge' + (entry.dueDate < todayStr ? ' overdue' : (entry.dueDate === todayStr ? ' due-today' : '')) + '">📌 ' + escapeHtml(fmtDateShort_(entry.dueDate)) + '</span>'
         : '';
-      row.innerHTML = '<div class="log-date">' + escapeHtml(entry.date || '') + dueBadge + '</div>'
+      row.innerHTML = '<div class="log-date">' + escapeHtml(fmtDateShort_(entry.date)) + dueBadge + '</div>'
         + '<div class="log-text">' + escapeHtml(entry.text || '') + '</div>'
         + '<button class="log-del" title="삭제">✕</button>';
       row.querySelector('.log-del').addEventListener('click', ()=>{
@@ -1603,8 +1611,8 @@
   function buildDashRow(entry, showDue){
     const row = document.createElement('div');
     row.className = 'log-entry dash-row';
-    const dueBadge = (showDue && entry.dueDate) ? '<span class="due-badge">📌 ' + escapeHtml(entry.dueDate) + '</span>' : '';
-    row.innerHTML = '<div class="log-date">' + escapeHtml(entry.date || '') + dueBadge + '</div>'
+    const dueBadge = (showDue && entry.dueDate) ? '<span class="due-badge">📌 ' + escapeHtml(fmtDateShort_(entry.dueDate)) + '</span>' : '';
+    row.innerHTML = '<div class="log-date">' + escapeHtml(fmtDateShort_(entry.date)) + dueBadge + '</div>'
       + '<div class="log-text"><span class="dash-path">' + escapeHtml((entry.path || []).join(' / ')) + '</span><br>' + escapeHtml(entry.text || '') + '</div>';
     row.style.cursor = 'pointer';
     row.title = '클릭하면 해당 폴더로 이동합니다';
