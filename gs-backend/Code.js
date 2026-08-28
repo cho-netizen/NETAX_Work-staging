@@ -2807,7 +2807,7 @@ const DRIVE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        status: { type: 'string', enum: ['진행중', '완료', '보류'], description: '이 상태인 사건만(선택)' },
+        status: { type: 'string', enum: ['진행', '보류', '완료'], description: '이 상태인 사건만(선택)' },
         customerName: { type: 'string', description: '고객명으로 필터링(선택, 부분일치)' }
       }
     }
@@ -2830,14 +2830,14 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'update_work_case_status',
-    description: '작업관리에 등록된 사건의 진행 상태(진행중/완료/보류)를 바꾼다. "이 사건 완료 처리해줘"처럼 요청했을 때 써라. 어느 사건인지는 caseId(list_work_cases로 얻은 값) 또는 customerName+caseName으로 특정한다 — 둘 다 없으면 지금 보고 있는 폴더를 기준으로 찾는다.',
+    description: '작업관리에 등록된 사건의 진행 상태(진행/보류/완료)를 바꾼다. "이 사건 완료 처리해줘"처럼 요청했을 때 써라. 어느 사건인지는 caseId(list_work_cases로 얻은 값) 또는 customerName+caseName으로 특정한다 — 둘 다 없으면 지금 보고 있는 폴더를 기준으로 찾는다.',
     input_schema: {
       type: 'object',
       properties: {
         caseId: { type: 'string', description: '사건 id(선택, list_work_cases 결과의 id)' },
         customerName: { type: 'string', description: '고객명(caseId 없을 때 사건을 찾는 데 사용, 선택)' },
         caseName: { type: 'string', description: '사건명(caseId 없을 때 사건을 찾는 데 사용, 선택)' },
-        status: { type: 'string', enum: ['진행중', '완료', '보류'], description: '바꿀 상태' }
+        status: { type: 'string', enum: ['진행', '보류', '완료'], description: '바꿀 상태' }
       },
       required: ['status']
     }
@@ -2861,7 +2861,7 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'update_work_subtask_status',
-    description: '작업관리 사건 안의 특정 하위업무 상태(대기/진행중/완료)를 바꾼다. "자료수집 끝났어", "등기부등본 확보 완료 처리해줘"처럼 요청했을 때 써라. title로 하위업무를 이름으로 찾는다(부분일치). 어느 사건인지는 add_work_subtask와 같은 방식(caseId 또는 customerName+caseName, 둘 다 없으면 지금 보고 있는 폴더)으로 특정한다.',
+    description: '작업관리 사건 안의 특정 하위업무 상태(대기/진행/보류/완료)를 바꾼다. "자료수집 끝났어", "등기부등본 확보 완료 처리해줘"처럼 요청했을 때 써라. title로 하위업무를 이름으로 찾는다(부분일치). 어느 사건인지는 add_work_subtask와 같은 방식(caseId 또는 customerName+caseName, 둘 다 없으면 지금 보고 있는 폴더)으로 특정한다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -2869,7 +2869,7 @@ const DRIVE_TOOLS = [
         customerName: { type: 'string', description: '고객명(선택)' },
         caseName: { type: 'string', description: '사건명(선택)' },
         title: { type: 'string', description: '상태를 바꿀 하위업무 이름(부분일치로 찾음)' },
-        status: { type: 'string', enum: ['대기', '진행중', '완료'], description: '바꿀 상태' }
+        status: { type: 'string', enum: ['대기', '진행', '보류', '완료'], description: '바꿀 상태' }
       },
       required: ['title', 'status']
     }
@@ -15816,7 +15816,7 @@ function work_createCase(params) {
       ? String(params.법정일 || '').trim()
       : work_calcDeadline_(seMok, upType, 기준일);
     newRow[col.납세자] = String(params.납세자 || '').trim();
-    newRow[col.상태] = params.상태 || '진행중';
+    newRow[col.상태] = params.상태 || '진행';
     newRow[col.하위업무] = '[]';
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;

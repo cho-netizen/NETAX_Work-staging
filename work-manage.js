@@ -9,7 +9,9 @@ const workManageView = document.getElementById('workManageView');
   const workCaseFilterStatus = document.getElementById('workCaseFilterStatus');
 
   const WORK_SEMOK_LABELS = { transfer: '양도', gift: '증여', inheritance: '상속', objection: '불복' };
-  const WORK_STATUS_OPTIONS = ['대기', '진행중', '완료'];
+  const WORK_STATUS_OPTIONS = ['진행', '보류', '완료'];
+  // 하위업무(할일)는 "아직 시작 전"이 사건 상태보다 더 자주 필요해서 대기를 남겨둔다.
+  const WORK_SUBTASK_STATUS_OPTIONS = ['대기', '진행', '보류', '완료'];
   // [2026.08] 신고 업무만 다루는 게 아니라 상담·불복도 다루므로, 세목 옆에 업무유형을 추가했다.
   // 세목이 양도/증여/상속이면 신고/상담 중 하나, 불복이면 그 세부유형(이의신청 등)을 고른다.
   // gs-backend/Code.js의 WORK_DEADLINE_DAYS_/YEARS_/MANUAL_DEADLINE_TYPES_와 항상 맞춰야 한다.
@@ -210,14 +212,12 @@ const workManageView = document.getElementById('workManageView');
       '<div style="display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0;">' +
       '<input type="text" id="wcEditCustomerName" placeholder="고객명" value="' + escapeHtml(c.고객명 || '') + '" style="font-weight:700; font-size:15px; width:120px;">' +
       '<button type="button" id="wcViewCustomer" class="ghost-btn" title="이 고객 정보 빠르게 보기·수정" style="padding:4px 8px;">👤</button>' +
-      '<input type="text" id="wcEditCaseName" placeholder="사건명" value="' + escapeHtml(c.사건명 || '') + '" style="font-weight:700; font-size:15px; flex:1; min-width:120px;">' +
+      '<input type="text" id="wcEditTaxpayer" placeholder="납세자(의뢰인과 다르면 입력)" value="' + escapeHtml(c.납세자 || '') + '" style="width:140px;">' +
+      '<input type="text" id="wcEditCaseName" placeholder="사건명" value="' + escapeHtml(c.사건명 || '') + '" style="font-weight:700; font-size:15px; width:160px;">' +
       '</div>' +
       '<button type="button" id="wcDeleteCase" class="ghost-btn" title="사건 삭제">🗑 사건삭제</button>' +
       '</div>' +
-      '<div style="margin-bottom:6px;">' +
-      '<input type="text" id="wcEditTaxpayer" placeholder="납세자(의뢰인과 다르면 입력)" value="' + escapeHtml(c.납세자 || '') + '" style="width:220px;">' +
-      '</div>' +
-      '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px;">' +
+      '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; margin-top:8px;">' +
       '<select id="wcEditSemok">' + Object.keys(WORK_SEMOK_LABELS).map(k => '<option value="' + k + '"' + (k === c.세목 ? ' selected' : '') + '>' + WORK_SEMOK_LABELS[k] + '</option>').join('') + '</select>' +
       '<select id="wcEditUptype"></select>' +
       '<input type="text" id="wcEditAssignee" placeholder="담당자" value="' + escapeHtml(c.담당자 || '') + '" style="width:100px;">' +
@@ -325,7 +325,7 @@ const workManageView = document.getElementById('workManageView');
       const overdue = node.dueDate && node.dueDate < new Date().toISOString().slice(0, 10) && node.status !== '완료';
       row.innerHTML =
         '<div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">' +
-        '<select class="wcNodeStatus" style="font-size:12px;">' + WORK_STATUS_OPTIONS.map(s => '<option value="' + s + '"' + (s === node.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
+        '<select class="wcNodeStatus" style="font-size:12px;">' + WORK_SUBTASK_STATUS_OPTIONS.map(s => '<option value="' + s + '"' + (s === node.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
         '<input type="text" class="wcNodeTitle" value="' + escapeHtml(node.title || '') + '" style="flex:1; min-width:120px; font-size:13px;">' +
         '<input type="text" class="wcNodeAssignee" value="' + escapeHtml(node.assignee || '') + '" placeholder="담당자" style="width:70px; font-size:12px;">' +
         '<input type="date" class="wcNodeDue" value="' + escapeHtml(node.dueDate || '') + '" style="font-size:12px;' + (overdue ? ' color:#a83232;' : '') + '">' +
