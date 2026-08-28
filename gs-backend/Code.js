@@ -15655,10 +15655,17 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '담당자', '의뢰일', '기준일', '법정일', '상태', '하위업무', '생성일', '수정일'];
-// 세목별 법정기한 규칙(개월수) — explorer.js의 CALC_DEADLINE_MONTHS_/기한계산 팝업과 동일 공식
-// ("기준일이 속한 달의 말일" 기준으로 N개월 뒤). 불복만 이번에 새로 추가.
-const WORK_DEADLINE_MONTHS_ = { transfer: 2, gift: 3, inheritance: 6, objection: 2 };
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '납세자', '상태', '하위업무', '생성일', '수정일'];
+// [2026.08] 신고 업무만 다루는 게 아니라 상담·불복(이의신청 등)도 다루므로, 세목(양도/증여/
+// 상속/불복)만으로는 부족해서 '업무유형'을 추가했다. 세목이 양도/증여/상속이면 업무유형은
+// 신고/상담 중 하나, 세목이 불복이면 업무유형이 그 세부유형(이의신청/심사청구/...)이 된다.
+// 신고 업무는 "기준일이 속한 달의 말일" 기준 N개월 뒤(말일)로 계산하고, 불복 세부유형은
+// 일/년 단위로 정해진 기간을 그대로 더한다(기준일=그 기간의 기산일, 예: 고지서 수령일).
+// 상담·해명자료는 정해진 법정기한이 없어 자동계산하지 않고 사용자가 직접 입력한 값을 쓴다.
+const WORK_DEADLINE_MONTHS_ = { transfer: 2, gift: 3, inheritance: 6 };
+const WORK_DEADLINE_DAYS_ = { 이의신청: 90, 심사청구: 90, 심판청구: 90, 행정소송: 90, 과세적부: 30 };
+const WORK_DEADLINE_YEARS_ = { 경정청구: 5 };
+const WORK_MANUAL_DEADLINE_TYPES_ = ['상담', '해명자료'];
 
 // 시트를 열고, 처음 만드는 거면 헤더까지 써준다. 이미 있는 시트인데 WORK_HEADERS에 새 컬럼이
 // 추가된 상태(예: 고객ID 신규 도입)면, 기존 데이터는 그대로 두고 빠진 헤더만 뒤에 이어붙인다
@@ -15697,12 +15704,26 @@ function work_addMonthsClamped_(date, months) {
   return new Date(targetYear, targetMonth, day);
 }
 
-function work_calcDeadline_(seMok, baseDateStr) {
+function work_calcDeadline_(seMok, upType, baseDateStr) {
   if (!baseDateStr) return '';
-  const months = WORK_DEADLINE_MONTHS_[seMok];
-  if (months === undefined) return '';
   const base = new Date(baseDateStr + 'T00:00:00');
   if (isNaN(base.getTime())) return '';
+
+  // 불복 세부유형(이의신청/심사청구/심판청구/행정소송/과세적부) — 기준일(기산일)로부터 며칠
+  // 이내인지가 정해져 있으므로, 말일 정렬 없이 그 일수만큼 그대로 더한다.
+  if (WORK_DEADLINE_DAYS_[upType] !== undefined) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + WORK_DEADLINE_DAYS_[upType]);
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  // 경정청구 — 법정신고기한(기준일)으로부터 N년이 되는 날(같은 월/일).
+  if (WORK_DEADLINE_YEARS_[upType] !== undefined) {
+    const d = new Date(base.getFullYear() + WORK_DEADLINE_YEARS_[upType], base.getMonth(), base.getDate());
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+
+  const months = WORK_DEADLINE_MONTHS_[seMok];
+  if (months === undefined) return '';
   const monthEnd = new Date(base.getFullYear(), base.getMonth() + 1, 0); // 기준일이 속한 달의 말일
   const rough = work_addMonthsClamped_(monthEnd, months);
   // [2026.08 버그수정] work_addMonthsClamped_는 day-of-month를 그대로 유지하며 개월수만 더하는
@@ -15729,10 +15750,12 @@ function work_readRow_(col, rowValues) {
     고객명: rowValues[col.고객명],
     사건명: rowValues[col.사건명],
     세목: rowValues[col.세목],
+    업무유형: rowValues[col.업무유형],
     담당자: rowValues[col.담당자],
     의뢰일: work_dateStr_(rowValues[col.의뢰일]),
     기준일: work_dateStr_(rowValues[col.기준일]),
     법정일: work_dateStr_(rowValues[col.법정일]),
+    납세자: rowValues[col.납세자],
     상태: rowValues[col.상태],
     하위업무: subtasks,
     생성일: rowValues[col.생성일],
@@ -15770,6 +15793,7 @@ function work_createCase(params) {
     const id = Utilities.getUuid();
     const now = new Date();
     const seMok = String(params.세목 || '').trim();
+    const upType = String(params.업무유형 || '').trim();
     const 기준일 = String(params.기준일 || '').trim();
     const 고객명 = String(params.고객명 || '').trim();
     // 고객ID를 직접 안 주면(화면에서 이름만 입력한 경우) 같은 이름의 고객을 고객관리에서 찾고,
@@ -15783,10 +15807,15 @@ function work_createCase(params) {
     newRow[col.고객명] = 고객명;
     newRow[col.사건명] = String(params.사건명 || '').trim();
     newRow[col.세목] = seMok;
+    newRow[col.업무유형] = upType;
     newRow[col.담당자] = String(params.담당자 || '').trim();
     newRow[col.의뢰일] = String(params.의뢰일 || '').trim();
     newRow[col.기준일] = 기준일;
-    newRow[col.법정일] = work_calcDeadline_(seMok, 기준일);
+    // 상담·해명자료는 법정기한이 없어 자동계산하지 않고 사용자가 입력한 처리시한을 그대로 저장한다.
+    newRow[col.법정일] = WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1
+      ? String(params.법정일 || '').trim()
+      : work_calcDeadline_(seMok, upType, 기준일);
+    newRow[col.납세자] = String(params.납세자 || '').trim();
     newRow[col.상태] = params.상태 || '진행중';
     newRow[col.하위업무] = '[]';
     newRow[col.생성일] = now;
@@ -15809,7 +15838,7 @@ function work_updateCase(params) {
     if (!found) return { success: false, message: '존재하지 않는 사건입니다.' };
 
     const row = found.row;
-    ['고객명', '사건명', '담당자', '상태'].forEach(function (key) {
+    ['고객명', '사건명', '담당자', '상태', '납세자'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
     if (params.고객명 !== undefined) {
@@ -15817,9 +15846,15 @@ function work_updateCase(params) {
     }
     let recalc = false;
     if (params.세목 !== undefined) { row[col.세목] = String(params.세목).trim(); recalc = true; }
+    if (params.업무유형 !== undefined) { row[col.업무유형] = String(params.업무유형).trim(); recalc = true; }
     if (params.기준일 !== undefined) { row[col.기준일] = String(params.기준일).trim(); recalc = true; }
-    if (recalc) {
-      row[col.법정일] = work_calcDeadline_(row[col.세목], row[col.기준일]);
+    const upType = row[col.업무유형];
+    if (WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1) {
+      // 상담·해명자료는 서버가 계산하지 않고, 사용자가 입력해 보낸 처리시한만 그대로 반영한다
+      // (업무유형만 바뀌고 값을 안 보냈으면 기존 값을 억지로 비우지 않는다).
+      if (params.법정일 !== undefined) row[col.법정일] = String(params.법정일).trim();
+    } else if (recalc) {
+      row[col.법정일] = work_calcDeadline_(row[col.세목], upType, row[col.기준일]);
     }
     row[col.수정일] = new Date();
 

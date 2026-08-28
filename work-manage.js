@@ -10,6 +10,41 @@ const workManageView = document.getElementById('workManageView');
 
   const WORK_SEMOK_LABELS = { transfer: '양도', gift: '증여', inheritance: '상속', objection: '불복' };
   const WORK_STATUS_OPTIONS = ['대기', '진행중', '완료'];
+  // [2026.08] 신고 업무만 다루는 게 아니라 상담·불복도 다루므로, 세목 옆에 업무유형을 추가했다.
+  // 세목이 양도/증여/상속이면 신고/상담 중 하나, 불복이면 그 세부유형(이의신청 등)을 고른다.
+  // gs-backend/Code.js의 WORK_DEADLINE_DAYS_/YEARS_/MANUAL_DEADLINE_TYPES_와 항상 맞춰야 한다.
+  const WORK_UPTYPE_OPTIONS_ = {
+    transfer: ['신고', '상담'],
+    gift: ['신고', '상담'],
+    inheritance: ['신고', '상담'],
+    objection: ['이의신청', '심사청구', '심판청구', '행정소송', '경정청구', '과세적부', '해명자료']
+  };
+  // 법정기한이 정해져 있지 않아 서버가 자동계산하지 않는 업무유형 — 사용자가 직접 처리시한을
+  // 입력한다(기본값: 의뢰일 + 7일).
+  const WORK_MANUAL_DEADLINE_TYPES_ = ['상담', '해명자료'];
+
+  function workDeadlineFieldLabel_(upType){
+    return WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1 ? '처리시한' : '법정일';
+  }
+
+  // 법정일/처리시한을 텍스트로 보여줄 때만 쓰는 표시용 축약(YYYY-MM-DD → YY-MM-DD).
+  // <input type="date"> 값이나 서버로 보내는 값은 항상 원래의 YYYY-MM-DD를 그대로 쓴다.
+  function workFmtDateShort_(dateStr){
+    if (!dateStr || dateStr.length < 10) return dateStr || '';
+    return dateStr.slice(2);
+  }
+
+  function workDefaultManualDeadline_(requestDateStr){
+    const base = requestDateStr ? new Date(requestDateStr + 'T00:00:00') : new Date();
+    if (isNaN(base.getTime())) return '';
+    base.setDate(base.getDate() + 7);
+    // [주의] toISOString()은 UTC로 바꿔서 자르므로 한국시간(UTC+9)에서는 하루 밀릴 수 있다
+    // (이 세션에서 이미 한 번 겪은 실수) — 로컬 날짜 그대로 문자열을 만든다.
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, '0');
+    const d = String(base.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
 
   let workCases = [];
   let workSelectedCaseId = null;
@@ -79,10 +114,11 @@ const workManageView = document.getElementById('workManageView');
       row.className = 'log-entry';
       row.style.cursor = 'pointer';
       if (c.id === workSelectedCaseId) row.style.outline = '2px solid var(--navy)';
+      const noDeadlineText = workDeadlineFieldLabel_(c.업무유형) === '처리시한' ? '시한없음' : '기한없음';
       row.innerHTML =
-        '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 || '기한없음') + '</div>' +
+        '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? workFmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
         '<div class="log-text"><b>' + escapeHtml(c.고객명 || '(고객명 없음)') + '</b> · ' + escapeHtml(c.사건명 || '') +
-        '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(WORK_SEMOK_LABELS[c.세목] || c.세목 || '') + ' · ' + escapeHtml(c.상태 || '') +
+        '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(WORK_SEMOK_LABELS[c.세목] || c.세목 || '') + (c.업무유형 ? ' · ' + escapeHtml(c.업무유형) : '') + ' · ' + escapeHtml(c.상태 || '') +
         (prog.total ? (' · 하위업무 ' + prog.done + '/' + prog.total) : '') + '</span></div>';
       row.addEventListener('click', () => { workShowingNewForm = false; workSelectedCaseId = c.id; renderWorkCaseList(); renderWorkCaseDetail(c); });
       workCaseList.appendChild(row);
@@ -96,18 +132,44 @@ const workManageView = document.getElementById('workManageView');
     workCaseDetail.innerHTML =
       '<h3 style="margin-top:0;">새 사건 등록</h3>' +
       '<div style="display:flex; flex-direction:column; gap:8px; max-width:420px;">' +
-      '<label>고객명<br><input type="text" id="wcNewCustomer" list="clientNameOptions" style="width:100%;" placeholder="고객명 (신규면 자동으로 고객관리에도 등록됩니다)"></label>' +
+      '<label>고객명(의뢰인)<br><input type="text" id="wcNewCustomer" list="clientNameOptions" style="width:100%;" placeholder="고객명 (신규면 자동으로 고객관리에도 등록됩니다)"></label>' +
+      '<label>납세자 <span style="color:var(--sub); font-weight:400;">(의뢰인과 다른 경우만 입력)</span><br><input type="text" id="wcNewTaxpayer" style="width:100%;" placeholder="(선택) 의뢰인과 같으면 비워두세요"></label>' +
       '<label>사건명<br><input type="text" id="wcNewCase" style="width:100%;" placeholder="예: 2026년 양도소득세 신고"></label>' +
       '<label>세목<br><select id="wcNewSemok" style="width:100%;">' +
         Object.keys(WORK_SEMOK_LABELS).map(k => '<option value="' + k + '">' + WORK_SEMOK_LABELS[k] + '</option>').join('') +
       '</select></label>' +
+      '<label>업무유형<br><select id="wcNewUptype" style="width:100%;"></select></label>' +
       '<label>담당자<br><input type="text" id="wcNewAssignee" style="width:100%;" placeholder="(선택)"></label>' +
       '<label>의뢰일<br><input type="date" id="wcNewRequestDate" style="width:100%;"></label>' +
-      '<label>기준일 (양도일·증여일·사망일 등)<br><input type="date" id="wcNewBaseDate" style="width:100%;"></label>' +
+      '<label>기준일 <span id="wcNewBaseDateHint" style="color:var(--sub); font-weight:400;">(양도일·증여일·사망일 등)</span><br><input type="date" id="wcNewBaseDate" style="width:100%;"></label>' +
+      '<label id="wcNewManualDeadlineLabel" style="display:none;"><span id="wcNewManualDeadlineText">처리시한</span><br><input type="date" id="wcNewManualDeadline" style="width:100%;"></label>' +
       '<div style="display:flex; gap:8px; margin-top:8px;">' +
       '<button type="button" id="wcNewSave" class="save-btn">저장</button>' +
       '<button type="button" id="wcNewCancel" class="ghost-btn">취소</button>' +
       '</div></div>';
+
+    const newSemokSel = document.getElementById('wcNewSemok');
+    const newUptypeSel = document.getElementById('wcNewUptype');
+
+    function refillNewUptype(){
+      const options = WORK_UPTYPE_OPTIONS_[newSemokSel.value] || [];
+      newUptypeSel.innerHTML = options.map(u => '<option value="' + u + '">' + u + '</option>').join('');
+      onNewUptypeChange();
+    }
+    function onNewUptypeChange(){
+      const manual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(newUptypeSel.value) !== -1;
+      document.getElementById('wcNewBaseDateHint').textContent = newSemokSel.value === 'objection' ? '(고지서 수령일 등 기산일)' : '(양도일·증여일·사망일 등)';
+      const manualLabel = document.getElementById('wcNewManualDeadlineLabel');
+      manualLabel.style.display = manual ? '' : 'none';
+      if (manual){
+        document.getElementById('wcNewManualDeadlineText').textContent = workDeadlineFieldLabel_(newUptypeSel.value);
+        const deadlineInput = document.getElementById('wcNewManualDeadline');
+        if (!deadlineInput.value) deadlineInput.value = workDefaultManualDeadline_(document.getElementById('wcNewRequestDate').value);
+      }
+    }
+    newSemokSel.addEventListener('change', refillNewUptype);
+    newUptypeSel.addEventListener('change', onNewUptypeChange);
+    refillNewUptype();
 
     document.getElementById('wcNewCancel').addEventListener('click', () => {
       workShowingNewForm = false;
@@ -117,13 +179,18 @@ const workManageView = document.getElementById('workManageView');
       const 고객명 = document.getElementById('wcNewCustomer').value.trim();
       const 사건명 = document.getElementById('wcNewCase').value.trim();
       if (!고객명 || !사건명){ showToast('고객명과 사건명을 입력해주세요.', 'warning'); return; }
+      const upType = newUptypeSel.value;
+      const manual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1;
       const payload = {
         고객명, 사건명,
-        세목: document.getElementById('wcNewSemok').value,
+        납세자: document.getElementById('wcNewTaxpayer').value.trim(),
+        세목: newSemokSel.value,
+        업무유형: upType,
         담당자: document.getElementById('wcNewAssignee').value.trim(),
         의뢰일: document.getElementById('wcNewRequestDate').value,
         기준일: document.getElementById('wcNewBaseDate').value
       };
+      if (manual) payload.법정일 = document.getElementById('wcNewManualDeadline').value;
       try{
         const res = await callGas('work_create_case', payload);
         if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
@@ -137,6 +204,7 @@ const workManageView = document.getElementById('workManageView');
 
   function renderWorkCaseDetail(c){
     const prog = workProgress(c);
+    const isManual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(c.업무유형) !== -1;
     workCaseDetail.innerHTML =
       '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
       '<div style="display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0;">' +
@@ -145,14 +213,19 @@ const workManageView = document.getElementById('workManageView');
       '</div>' +
       '<button type="button" id="wcDeleteCase" class="ghost-btn" title="사건 삭제">🗑 사건삭제</button>' +
       '</div>' +
+      '<div style="margin-bottom:6px;">' +
+      '<input type="text" id="wcEditTaxpayer" placeholder="납세자(의뢰인과 다르면 입력)" value="' + escapeHtml(c.납세자 || '') + '" style="width:220px;">' +
+      '</div>' +
       '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px;">' +
       '<select id="wcEditSemok">' + Object.keys(WORK_SEMOK_LABELS).map(k => '<option value="' + k + '"' + (k === c.세목 ? ' selected' : '') + '>' + WORK_SEMOK_LABELS[k] + '</option>').join('') + '</select>' +
+      '<select id="wcEditUptype"></select>' +
       '<input type="text" id="wcEditAssignee" placeholder="담당자" value="' + escapeHtml(c.담당자 || '') + '" style="width:100px;">' +
       '<label style="font-size:12px; color:var(--sub);">의뢰일 <input type="date" id="wcEditRequestDate" value="' + escapeHtml(c.의뢰일 || '') + '"></label>' +
       '<label style="font-size:12px; color:var(--sub);">기준일 <input type="date" id="wcEditBaseDate" value="' + escapeHtml(c.기준일 || '') + '"></label>' +
       '<select id="wcEditStatus">' + WORK_STATUS_OPTIONS.map(s => '<option value="' + s + '"' + (s === c.상태 ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
       '<button type="button" id="wcSaveCase" class="ghost-btn">저장</button>' +
-      '<span style="font-size:12.5px; color:var(--sub);">법정일: <b style="color:var(--navy);">' + escapeHtml(c.법정일 || '(기준일을 입력하면 자동 계산)') + '</b></span>' +
+      '<span id="wcEditDeadlineAuto" style="font-size:12.5px; color:var(--sub); display:' + (isManual ? 'none' : 'inline') + ';">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(workFmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
+      '<label id="wcEditManualDeadlineLabel" style="font-size:12px; color:var(--sub); display:' + (isManual ? 'inline' : 'none') + ';"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
       '</div>' +
       '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px;">하위업무 진행 ' + prog.done + ' / ' + prog.total + '</div>' +
       '<div id="wcTree"></div>' +
@@ -164,20 +237,48 @@ const workManageView = document.getElementById('workManageView');
 
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
 
+    const editSemokSel = document.getElementById('wcEditSemok');
+    const editUptypeSel = document.getElementById('wcEditUptype');
+
+    function refillEditUptype(keepCurrent){
+      const options = WORK_UPTYPE_OPTIONS_[editSemokSel.value] || [];
+      const current = keepCurrent && options.indexOf(c.업무유형) !== -1 ? c.업무유형 : options[0];
+      editUptypeSel.innerHTML = options.map(u => '<option value="' + u + '"' + (u === current ? ' selected' : '') + '>' + u + '</option>').join('');
+      onEditUptypeChange();
+    }
+    function onEditUptypeChange(){
+      const manual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(editUptypeSel.value) !== -1;
+      document.getElementById('wcEditDeadlineAuto').style.display = manual ? 'none' : 'inline';
+      document.getElementById('wcEditManualDeadlineLabel').style.display = manual ? 'inline' : 'none';
+      if (manual){
+        document.getElementById('wcEditManualDeadlineText').textContent = workDeadlineFieldLabel_(editUptypeSel.value);
+        const deadlineInput = document.getElementById('wcEditManualDeadline');
+        if (!deadlineInput.value) deadlineInput.value = workDefaultManualDeadline_(document.getElementById('wcEditRequestDate').value);
+      }
+    }
+    editSemokSel.addEventListener('change', () => refillEditUptype(false));
+    editUptypeSel.addEventListener('change', onEditUptypeChange);
+    refillEditUptype(true);
+
     document.getElementById('wcSaveCase').addEventListener('click', async () => {
       const customerName = document.getElementById('wcEditCustomerName').value.trim();
       const caseName = document.getElementById('wcEditCaseName').value.trim();
       if (!customerName || !caseName){ showToast('고객명과 사건명은 비워둘 수 없습니다.', 'warning'); return; }
+      const upType = editUptypeSel.value;
+      const manual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(upType) !== -1;
       const payload = {
         id: c.id,
         고객명: customerName,
         사건명: caseName,
-        세목: document.getElementById('wcEditSemok').value,
+        납세자: document.getElementById('wcEditTaxpayer').value.trim(),
+        세목: editSemokSel.value,
+        업무유형: upType,
         담당자: document.getElementById('wcEditAssignee').value.trim(),
         의뢰일: document.getElementById('wcEditRequestDate').value,
         기준일: document.getElementById('wcEditBaseDate').value,
         상태: document.getElementById('wcEditStatus').value
       };
+      if (manual) payload.법정일 = document.getElementById('wcEditManualDeadline').value;
       try{
         const res = await callGas('work_update_case', payload);
         if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
@@ -305,20 +406,15 @@ const workManageView = document.getElementById('workManageView');
   }
 
 // [2026.08] 지시: 작업관리는 탐색창(같은 화면 안 패널 전환) 대신 항상 새 창으로 연다 —
-// 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 새 창도 완전한 앱 한 벌이라
-// (index.html을 통째로 다시 연다) URL에 ?view=workmanage를 붙여서 열고, 이 파일 맨 아래의
-// 부트스트랩 코드가 그 값을 보고 새 창 안에서 자동으로 이 화면을 최대화해서 띄운다.
-// [실수 수정] window.open을 features 문자열 없이 부르면 크롬이 별도 창이 아니라 그냥 새
-// 탭으로 열어버려서 — 탭은 마우스로 끌어서 옮길 수가 없다(그 브라우저 창 안에 묶여있음).
-// width/height(+left/top)를 반드시 같이 줘야 진짜 독립된, 드래그로 옮기고 크기도 조절할
-// 수 있는 창으로 뜬다. 화면 왼쪽 절반에 기본 배치(오른쪽 절반은 고객관리용).
+// 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 처음엔 각각 별도 창으로
+// 열었는데, 다시 생각해보니 어느 버튼을 누르든 "한 창 안에서 좌우로 반씩 나눠 둘 다 동시에"
+// 보여주는 게 낫다는 지시를 받아, 이제 두 버튼(여기·client-manage.js) 다 같은 "workclient"
+// 뷰(하나의 합쳐진 창, client-manage.js의 openWorkClientSplitView_)를 연다. 실제 창 열기는
+// core.js의 openStandaloneManageWindow_()로 통일했다 — 채팅창의 "도구" 팝업 메뉴에서도 같은
+// 화면을 여는데 그쪽은 안 고치고 여기만 고쳤다가 "여전히 안 된다"는 지적을 받은 적이 있다
+// (chat.js의 WORK_TOOLS 참고).
 document.getElementById('btnOpenWorkManage').addEventListener('click', () => {
-  const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
-  const w = Math.round(sw / 2), h = sh;
-  // toolbar/location/menubar/status=no — 주소창·북마크바 등을 없애서 진짜 전용 프로그램
-  // 창처럼 보이게 한다(안 그러면 브라우저 껍데기가 그대로 남아 화면만 더 좁아짐).
-  window.open(location.origin + location.pathname + '?view=workmanage', '_blank',
-    'width=' + w + ',height=' + h + ',left=0,top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
+  openStandaloneManageWindow_('workclient');
 });
 document.getElementById('btnWorkManageBack').addEventListener('click', closeWorkManageView);
 document.getElementById('btnWorkCaseNew').addEventListener('click', renderNewCaseForm);

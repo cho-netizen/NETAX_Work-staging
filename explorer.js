@@ -72,6 +72,8 @@
     if (typeof dashboardView !== 'undefined' && dashboardView) dashboardView.style.display = 'none';
     if (typeof workManageView !== 'undefined' && workManageView) workManageView.style.display = 'none';
     if (typeof clientManageView !== 'undefined' && clientManageView) clientManageView.style.display = 'none';
+    const workClientSplitViewEl = document.getElementById('workClientSplitView');
+    if (workClientSplitViewEl) workClientSplitViewEl.style.display = 'none';
     if (typeof searchView !== 'undefined' && searchView) searchView.style.display = 'none';
     explorerPanelHead.style.display = 'none';
   }

@@ -100,10 +100,15 @@
   // ---- 업무도구 통합 팝업 — 예전엔 PC/탭(grouped)은 도구1/도구2 2그룹, 폰(compact)은 하단
   // 고정바의 기록·분석·도구 3그룹으로 나뉘어 있었는데, 어차피 같은 기능들이라 하나로 합쳤다.
   // (2026.08) 검색·휴지통은 여기 없다 — 탐색기 빈 공간 우클릭(길게 누르기) 메뉴로 옮겼다.
+  // [2026.08] 작업관리·고객관리는 항상 새 창으로 열려야 하는데(work-manage.js/client-manage.js
+  // 참고) 여기서는 openWorkManageView/openClientManageView를 직접 불러서 탐색창 자리에
+  // 그대로 열리고 있었다 — 상단 버튼만 고치고 이 도구 메뉴는 놓쳤던 실수. core.js의
+  // openStandaloneManageWindow_()로 통일한다. 둘 다 같은 "workclient"(좌우 반씩 동시 표시)
+  // 창을 연다 — 어느 쪽을 눌러도 결국 같은 합쳐진 창으로 가면 되므로.
   const WORK_TOOLS = [
     { icon: '📊', label: '현황판', handler: openDashboardView },
-    { icon: '🗂', label: '작업관리', handler: openWorkManageView },
-    { icon: '👤', label: '고객관리', handler: openClientManageView },
+    { icon: '🗂', label: '작업관리', handler: () => openStandaloneManageWindow_('workclient') },
+    { icon: '👤', label: '고객관리', handler: () => openStandaloneManageWindow_('workclient') },
     { icon: '📝', label: '경과지', handler: openLogView },
     { icon: '🧮', label: '계산기', handler: openCalcView },
     { icon: '📐', label: '세액계산', handler: openTaxCalcView },

@@ -287,15 +287,13 @@ function renderLogRowEdit_(row, c, log){
   });
 }
 
-// [2026.08] 작업관리와 같은 이유로 고객관리도 항상 새 창으로 연다 — 부트스트랩은 이 파일
-// 맨 아래에서 처리(work-manage.js 쪽 주석 참고). [실수 수정] features 문자열 없이 열면
-// 탭으로 열려서 드래그로 못 옮긴다 — width/height를 줘서 진짜 독립 창으로 열리게 함.
-// 화면 오른쪽 절반에 기본 배치(작업관리는 왼쪽 절반이라, 나란히 놓임).
+// [2026.08→2026.08 재수정] 처음엔 작업관리·고객관리를 각각 별도 창으로 열어 나란히 배치하고
+// 서로 넘어가는 "전환" 버튼을 뒀었는데, 다시 생각해보니 어느 쪽 버튼을 누르든 "한 창 안에서
+// 좌우로 반씩 나눠 둘 다 동시에" 보여주는 게 더 낫다는 지시를 받았다 — 전환 버튼 없이 항상
+// 같이 보이면 되므로. 그래서 이제 두 버튼 다 같은 "workclient" 뷰(하나의 합쳐진 창)를 연다
+// (core.js의 openStandaloneManageWindow_, 아래 openWorkClientSplitView_ 참고).
 document.getElementById('btnOpenClientManage').addEventListener('click', () => {
-  const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
-  const w = Math.round(sw / 2), h = sh;
-  window.open(location.origin + location.pathname + '?view=clientmanage', '_blank',
-    'width=' + w + ',height=' + h + ',left=' + w + ',top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
+  openStandaloneManageWindow_('workclient');
 });
 document.getElementById('btnClientManageBack').addEventListener('click', closeClientManageView);
 document.getElementById('btnClientNew').addEventListener('click', renderNewClientForm);
@@ -306,18 +304,38 @@ clientSearchInput.addEventListener('input', () => { loadClients(); });
 // 채워두는 것과 같은 이유).
 loadClients();
 
+// [2026.08] 작업관리+고객관리를 한 창 안에 좌우로 반씩 나눠 동시에 보여준다. workManageView·
+// clientManageView는 원래 .panel.explorer 안에서 "하나만 보이고 나머지는 display:none"으로
+// 관리되는 형제 요소들인데(explorer.js의 hideAllPanelViews 참고), 그 부모는 세로(column)
+// 배치라 둘 다 그냥 켜면 위아래로 쌓여버린다. 그래서 이 둘을 #workClientSplitView(가로 flex
+// 컨테이너, index.html)로 appendChild해 옮겨 넣는다 — DOM 노드를 그대로 옮기는 것이라 각
+// 파일에 이미 걸려있는 이벤트리스너·전역변수 참조는 전부 그대로 살아있다.
+async function openWorkClientSplitView_(){
+  ensureExplorerVisible();
+  hideAllPanelViews();
+  const splitView = document.getElementById('workClientSplitView');
+  splitView.style.display = 'flex';
+  splitView.appendChild(workManageView);
+  splitView.appendChild(clientManageView);
+  workManageView.style.display = 'flex';
+  clientManageView.style.display = 'flex';
+  workCaseList.innerHTML = '<div class="log-empty">불러오는 중…</div>';
+  clientList.innerHTML = '<div class="log-empty">불러오는 중…</div>';
+  await Promise.all([loadWorkCases(), loadClients()]);
+}
+
 // [2026.08] 새 창 부트스트랩 — 작업관리·고객관리 버튼이 이제 이 index.html을 통째로
-// ?view=workmanage 또는 ?view=clientmanage를 붙여서 새 창으로 연다. 이 파일이 두 화면의
-// open 함수를 모두 쓸 수 있는 마지막 시점(work-manage.js 다음에 로드됨)이라 여기서 처리한다.
-// 채팅창까지 같이 뜨면 두 창을 나란히 놓고 쓰기엔 좁으므로, 새 창에서는 탐색작업창을
-// 최대화(채팅 끔) 모드로 시작한다.
+// ?view=workclient를 붙여서 새 창으로 연다. 이 파일이 두 화면의 open 함수를 모두 쓸 수 있는
+// 마지막 시점(work-manage.js 다음에 로드됨)이라 여기서 처리한다. 채팅창까지 같이 뜨면 좁아서
+// 못 쓰므로, 새 창에서는 탐색작업창을 최대화(채팅 끔) 모드로 시작한다.
 (function bootstrapStandaloneView_(){
   const view = new URLSearchParams(location.search).get('view');
-  if (view !== 'workmanage' && view !== 'clientmanage') return;
+  if (view !== 'workclient') return;
   if (typeof setWorkspaceMode === 'function') setWorkspaceMode('max');
-  // [2026.08] 새 창의 제목이 계속 기본값("NX-Work")과 똑같으면, 창을 두 개 이상 띄웠을 때
-  // 작업표시줄·Alt+Tab에서 어느 게 어느 화면인지 구분이 안 된다 — 창을 만들면서 놓친 부분.
-  document.title = (view === 'workmanage' ? '작업관리' : '고객관리') + ' - NX-Work';
-  if (view === 'workmanage') openWorkManageView();
-  else openClientManageView();
+  document.title = '작업관리 · 고객관리 - NX-Work';
+  // 독립 창에서는 뒤로가기(✕)를 누르면 (텅 빈) 파일탐색기를 보여주는 대신 창 자체를 닫는다
+  // — 이 창은 애초에 작업·고객관리 둘만 보려고 띄운 것이라 탐색기로 돌아갈 이유가 없다.
+  document.getElementById('btnWorkManageBack').addEventListener('click', () => window.close());
+  document.getElementById('btnClientManageBack').addEventListener('click', () => window.close());
+  openWorkClientSplitView_();
 })();

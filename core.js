@@ -361,3 +361,17 @@
     }
   }
 
+  // [2026.08] 작업관리·고객관리를 새 창으로 여는 공용 함수 — 이 창을 여는 곳이 여러 군데라
+  // (상단 툴바의 두 버튼, 채팅창의 "도구" 팝업 메뉴) 하나만 고치고 다른 델 놓치는 실수가
+  // 있었다(도구 메뉴는 openWorkManageView를 직접 불러서 탐색창 자리에 그대로 열리고 있었음).
+  // 앞으로는 이 함수 하나로 통일한다. window.open의 두 번째 인자로 매번 다른 이름('_blank')이
+  // 아니라 view별 고정 이름을 주면, 이미 열려있는 창은 새로 또 만들지 않고 그 창에 포커스만
+  // 주므로 버튼을 여러 번 눌러도 창이 계속 늘어나지 않는다.
+  // view: 'workclient' — 작업관리+고객관리를 한 창 안에 좌우로 반씩 나눠 동시에 보여준다
+  // (client-manage.js의 openWorkClientSplitView_ 참고). 화면 전체 너비를 쓴다.
+  function openStandaloneManageWindow_(view){
+    const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
+    window.open(location.origin + location.pathname + '?view=' + view, 'nx_' + view,
+      'width=' + sw + ',height=' + sh + ',left=0,top=0,resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no,status=no');
+  }
+
