@@ -218,8 +218,10 @@ const workManageView = document.getElementById('workManageView');
       '<label style="font-size:12px; color:var(--sub);">기준일 <input type="date" id="wcEditBaseDate" value="' + escapeHtml(c.기준일 || '') + '"></label>' +
       '<select id="wcEditStatus">' + WORK_STATUS_OPTIONS.map(s => '<option value="' + s + '"' + (s === c.상태 ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
       '<button type="button" id="wcSaveCase" class="ghost-btn">저장</button>' +
-      '<span id="wcEditDeadlineAuto" style="font-size:12.5px; color:var(--sub); display:' + (isManual ? 'none' : 'inline') + ';">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
-      '<label id="wcEditManualDeadlineLabel" style="font-size:12px; color:var(--sub); display:' + (isManual ? 'inline' : 'none') + ';"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
+      '</div>' +
+      '<div style="margin-bottom:12px;">' +
+      '<span id="wcEditDeadlineAuto" style="display:' + (isManual ? 'none' : 'inline-block') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
+      '<label id="wcEditManualDeadlineLabel" style="display:' + (isManual ? 'inline-block' : 'none') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
       '</div>' +
       '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px; display:flex; align-items:center; gap:8px;">' +
       '<span>하위업무 ' + prog.done + ' / ' + prog.total + '</span>' +
@@ -273,8 +275,8 @@ const workManageView = document.getElementById('workManageView');
     }
     function onEditUptypeChange(){
       const manual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(editUptypeSel.value) !== -1;
-      document.getElementById('wcEditDeadlineAuto').style.display = manual ? 'none' : 'inline';
-      document.getElementById('wcEditManualDeadlineLabel').style.display = manual ? 'inline' : 'none';
+      document.getElementById('wcEditDeadlineAuto').style.display = manual ? 'none' : 'inline-block';
+      document.getElementById('wcEditManualDeadlineLabel').style.display = manual ? 'inline-block' : 'none';
       if (manual){
         document.getElementById('wcEditManualDeadlineText').textContent = workDeadlineFieldLabel_(editUptypeSel.value);
         const deadlineInput = document.getElementById('wcEditManualDeadline');
