@@ -1550,12 +1550,14 @@
   // ---- 현황판 (모든 폴더의 처리일지를 한 곳에서, 마감일 기준 강조) ----
   const dashboardView = document.getElementById('dashboardView');
   const dashboardList = document.getElementById('dashboardList');
+  const dashboardHome = document.getElementById('dashboardHome');
 
   async function openDashboardView(){
     ensureExplorerVisible();
     hideAllPanelViews();
     dashboardView.style.display = 'flex';
     dashboardList.innerHTML = '<div class="log-empty">불러오는 중…</div>';
+    renderDashboardHome_();
     try{
       const res = await callGas('getGlobalLog', {});
       if (res.error){
@@ -1565,6 +1567,146 @@
       renderDashboard(res.entries || []);
     }catch(err){
       dashboardList.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>';
+    }
+  }
+
+  // [2026.08] 작업관리 사건(고객명/사건명, 자유 텍스트 필드)과 실제 구글드라이브 폴더 이름은
+  // 서로 독립적으로 관리되고 있어서 1:1로 안 맞는 경우가 많다는 걸 실제로 확인했다 — 예를 들어
+  // 작업관리엔 "박연경/한영자"로 등록된 사건이 실제 폴더는 "한영자(박연경) 상속"이라는 이름으로
+  // 되어 있다(순서·형식이 다름). 그래서 정확한 경로로 바로 navigateTo하는 대신, 고객명·사건명이
+  // 폴더 이름에 포함되는지로 느슨하게 찾는다 — 정확히 하나만 찾으면 그리로 이동, 여러 개거나
+  // 하나도 없으면 사용자에게 알리고 목록(고객사건) 자리에 그대로 둔다(엉뚱한 폴더로 조용히
+  // 이동해버리지 않도록).
+  async function navigateToWorkCaseFolder_(customer, caseName){
+    closeDashboardView();
+    try{
+      const data = await listFolder(basePath);
+      const folders = data.folders || [];
+      const matches = folders.filter(f =>
+        (customer && f.name.indexOf(customer) !== -1) || (caseName && f.name.indexOf(caseName) !== -1)
+      );
+      if (matches.length === 1){
+        navigateTo(basePath.concat([matches[0].name]));
+      } else if (matches.length > 1){
+        showToast('"' + customer + '"와(과) 일치하는 폴더가 여러 개 있습니다 — 목록에서 직접 찾아주세요.', 'warning');
+      } else {
+        showToast('"' + customer + '"에 연결된 폴더를 찾지 못했습니다 — 작업관리 등록명과 폴더명이 다를 수 있습니다.', 'warning');
+      }
+    }catch(err){
+      showToast('폴더를 찾는 중 오류가 발생했습니다.', 'error');
+    }
+  }
+
+  // [2026.08] 홈 재설계 — 법정일 임박 사건 · 고객관리 바로가기 · 이번달 수금 요약 · 대기 중인
+  // 상담신청을 한눈에. 로그인 직후 맨 먼저 보는 화면이 "오늘 뭐부터 해야 하는지"가 되도록.
+  async function renderDashboardHome_(){
+    if (!dashboardHome) return;
+    dashboardHome.innerHTML = '<div class="log-empty">불러오는 중…</div>';
+    const [caseRes, paymentRes, bookingRes] = await Promise.all([
+      callGas('work_get_cases', {}).catch(() => ({ error: '불러오지 못했습니다.' })),
+      callGas('client_get_consult_logs', {}).catch(() => ({ error: '불러오지 못했습니다.' })),
+      callGas('list_bookings', {}).catch(() => ({ error: '불러오지 못했습니다.' }))
+    ]);
+
+    dashboardHome.innerHTML =
+      '<div id="dhDeadlines"></div>' +
+      '<div id="dhBookings"></div>' +
+      '<div style="display:flex; gap:10px; flex-wrap:wrap;">' +
+      '<div id="dhPayments" style="flex:1; min-width:220px;"></div>' +
+      '<button type="button" id="dhClientBtn" class="ghost-btn" style="align-self:flex-start;">👤 고객관리 바로가기</button>' +
+      '</div>';
+
+    document.getElementById('dhClientBtn').addEventListener('click', () => openStandaloneManageWindow_('clientmanage'));
+
+    // ---- 법정일 임박 사건 (완료 제외, 법정일 있는 것만, 최대 8건) ----
+    const dlBox = document.getElementById('dhDeadlines');
+    if (caseRes.error){
+      dlBox.innerHTML = '<div class="log-empty">' + escapeHtml(caseRes.error) + '</div>';
+    } else {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const cases = (caseRes.cases || [])
+        .filter(c => c.법정일 && c.상태 !== '완료')
+        .sort((a, b) => a.법정일.localeCompare(b.법정일))
+        .slice(0, 8);
+      let html = '<div class="dash-section-head">📌 법정일 임박 사건 (' + cases.length + ')</div>';
+      if (!cases.length){
+        html += '<div class="log-empty">임박한 사건이 없습니다.</div>';
+      } else {
+        cases.forEach(c => {
+          const overdue = c.법정일 < todayStr;
+          const semokLabel = (typeof WORK_SEMOK_LABELS !== 'undefined' && WORK_SEMOK_LABELS[c.세목]) || c.세목 || '';
+          html += '<div class="log-entry dash-row" data-customer="' + escapeHtml(c.고객명 || '') + '" data-case="' + escapeHtml(c.사건명 || '') + '" style="cursor:pointer;" title="클릭하면 이 사건의 채팅·탐색기로 이동합니다">' +
+            '<div class="log-date">' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(fmtDateShort_(c.법정일)) + '</div>' +
+            '<div class="log-text"><b>' + escapeHtml(c.고객명 || '') + '</b> · ' + escapeHtml(c.사건명 || '') +
+            '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(semokLabel) + (c.업무유형 ? ' · ' + escapeHtml(c.업무유형) : '') + '</span></div>' +
+            '</div>';
+        });
+      }
+      dlBox.innerHTML = html;
+      dlBox.querySelectorAll('.dash-row').forEach(row => {
+        row.addEventListener('click', () => navigateToWorkCaseFolder_(row.dataset.customer, row.dataset.case));
+      });
+    }
+
+    // ---- 대기 중인 상담신청 ----
+    const bkBox = document.getElementById('dhBookings');
+    if (bookingRes.error){
+      bkBox.innerHTML = '<div class="log-empty">' + escapeHtml(bookingRes.error) + '</div>';
+    } else {
+      const pending = (bookingRes.bookings || [])
+        .map((b, idx) => Object.assign({}, b, { rowIndex: idx + 2 })) // 시트 1행=헤더라 데이터는 2행부터
+        .filter(b => b.status === '신청');
+      let html = '<div class="dash-section-head">📅 대기 중인 상담신청 (' + pending.length + ')</div>';
+      if (!pending.length){
+        html += '<div class="log-empty">대기 중인 신청이 없습니다.</div>';
+      } else {
+        pending.forEach(b => {
+          html += '<div class="log-entry" data-row="' + b.rowIndex + '" data-event="' + escapeHtml(b.eventId || '') + '" data-phone="' + escapeHtml(b.phone || '') + '" data-rdate="' + escapeHtml(b.reservedDate || '') + '" data-rtime="' + escapeHtml(b.reservedTime || '') + '">' +
+            '<div class="log-date">' + escapeHtml(b.reservedDate || '') + '<br>' + escapeHtml(b.reservedTime || '') + '</div>' +
+            '<div class="log-text"><b>' + escapeHtml(b.name || '') + '</b> · ' + escapeHtml(b.phone || '') +
+            (b.type ? ' · ' + escapeHtml(b.type) : '') + '<br>' + escapeHtml(b.situation || '') + '</div>' +
+            '<button type="button" class="ghost-btn dh-approve" style="padding:4px 8px;">승인</button>' +
+            '<button type="button" class="ghost-btn dh-reject" style="padding:4px 8px;">거절</button>' +
+            '</div>';
+        });
+      }
+      bkBox.innerHTML = html;
+      bkBox.querySelectorAll('.dh-approve').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('.log-entry');
+          try{
+            const res = await callGas('approve', { rowIndex: Number(row.dataset.row), eventId: row.dataset.event, phone: row.dataset.phone, reservedDate: row.dataset.rdate, reservedTime: row.dataset.rtime });
+            if (res.error || res.success === false){ showToast(res.error || res.message || '승인 실패', 'error'); return; }
+            showToast('승인했습니다.', 'success');
+            renderDashboardHome_();
+          }catch(err){ showToast('승인 중 오류가 발생했습니다.', 'error'); }
+        });
+      });
+      bkBox.querySelectorAll('.dh-reject').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const row = btn.closest('.log-entry');
+          if (!confirm('이 상담신청을 거절할까요?')) return;
+          try{
+            const res = await callGas('reject', { rowIndex: Number(row.dataset.row), phone: row.dataset.phone });
+            if (res.error || res.success === false){ showToast(res.error || res.message || '거절 실패', 'error'); return; }
+            showToast('거절했습니다.', 'success');
+            renderDashboardHome_();
+          }catch(err){ showToast('거절 중 오류가 발생했습니다.', 'error'); }
+        });
+      });
+    }
+
+    // ---- 이번달 수금 요약 ----
+    const payBox = document.getElementById('dhPayments');
+    if (paymentRes.error){
+      payBox.innerHTML = '<div class="log-empty">' + escapeHtml(paymentRes.error) + '</div>';
+    } else {
+      const ym = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const thisMonth = (paymentRes.logs || []).filter(l => (l.날짜 || '').indexOf(ym) === 0 && l.금액);
+      const total = thisMonth.reduce((sum, l) => sum + (Number(l.금액) || 0), 0);
+      payBox.innerHTML =
+        '<div class="dash-section-head">💰 이번달 수금 (' + thisMonth.length + '건)</div>' +
+        '<div class="log-entry" style="font-size:15px; font-weight:700; color:var(--navy);">' + total.toLocaleString('ko-KR') + '원</div>';
     }
   }
 

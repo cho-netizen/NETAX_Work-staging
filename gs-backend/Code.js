@@ -3067,6 +3067,12 @@ function doPost(e) {
     if (body.action === 'reject') {
       return jsonResponse(booking_rejectApplication(body));
     }
+    if (body.action === 'list_bookings') {
+      // [2026.08] NX-Work 홈 대시보드의 "대기 중인 상담신청" 위젯용 — booking_getBookings()는
+      // 이미 doGet에서도 쓰는 함수라 자체적으로 jsonResponse까지 반환하므로 그대로 리턴한다
+      // (다른 doPost 액션들처럼 다시 jsonResponse()로 한 번 더 감싸면 이중 래핑이 된다).
+      return booking_getBookings();
+    }
 
     // [2026.08] desk 모듈 — NETAX Desk(폴더/링크 관리) 이관
     const DESK_ACTIONS = ['listAll', 'addFolder', 'deleteFolder', 'addLink', 'deleteLink', 'reorderFolders', 'reorderLinks', 'moveLink'];
@@ -14150,7 +14156,13 @@ function booking_createApplication(body) {
     sheet.getRange(1, 12).setValue('이벤트ID');
   }
 
-  sheet.appendRow([new Date(), name, phone, type, (statuses || []).join(', '), situation, date, time, 'netax.kr', '신청', '', event.getId()]);
+  // [2026.08 버그수정] 전화번호가 대시 없이 순수 숫자면 구글시트가 숫자로 인식해 앞자리 0을
+  // 날려버리는 문제(client_createClient에서 실제로 겪은 것과 같은 문제)가 여기도 있었다 —
+  // 공개 신청폼(netax.kr)에서 들어오는 값이라 더 중요하다. 쓰기 전에 그 칸을 텍스트 서식으로
+  // 강제한다.
+  const newRowIndex = sheet.getLastRow() + 1;
+  sheet.getRange(newRowIndex, 3).setNumberFormat('@');
+  sheet.getRange(newRowIndex, 1, 1, 12).setValues([[new Date(), name, phone, type, (statuses || []).join(', '), situation, date, time, 'netax.kr', '신청', '', event.getId()]]);
 
   const ownerMsg = `[새 상담신청] ${name} (${phone})\n${date} ${time}\n상황: ${situation}`;
   booking_sendSMS(BOOKING_OWNER_PHONE, ownerMsg);
@@ -14168,6 +14180,10 @@ function booking_getBookings() {
   const bookings = [];
 
   for (let i = 1; i < data.length; i++) {
+    // [2026.08 버그수정] 예약일·예약시간 칸이 날짜/시간처럼 생긴 값이라 구글시트가 자동으로
+    // Date로 인식해버려서(전화번호가 숫자로 오인되던 것과 같은 종류의 문제), 그냥 그대로
+    // 돌려주면 "2026-07-19T15:00:00.000Z" 같은 원시 문자열이 그대로 나갔다 — 다른 곳에서
+    // 이 값을 그대로 표시하면 못 알아보므로, date 필드와 같은 방식으로 여기서 포맷해서 낸다.
     bookings.push({
       date: data[i][0] ? Utilities.formatDate(new Date(data[i][0]), 'Asia/Seoul', 'yyyy-MM-dd HH:mm') : '',
       name: data[i][1],
@@ -14175,8 +14191,8 @@ function booking_getBookings() {
       type: data[i][3],
       statuses: data[i][4],
       situation: data[i][5],
-      reservedDate: data[i][6],
-      reservedTime: data[i][7],
+      reservedDate: data[i][6] ? Utilities.formatDate(new Date(data[i][6]), 'Asia/Seoul', 'yyyy-MM-dd') : '',
+      reservedTime: data[i][7] ? Utilities.formatDate(new Date(data[i][7]), 'Asia/Seoul', 'HH:mm') : '',
       source: data[i][8],
       status: data[i][9],
       approvedDate: data[i][10],

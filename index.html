@@ -1699,8 +1699,12 @@ graph TD
       <div id="dashboardView" style="display:none; flex:1; flex-direction:column; min-height:0;">
         <div class="editor-toolbar">
           <button class="back-btn" id="btnDashboardBack" title="닫기">✕</button>
-          <span class="editor-filename">전체 처리일지 · 마감 현황판</span>
+          <span class="editor-filename">오늘의 현황</span>
         </div>
+        <!-- [2026.08] 홈 재설계 — 로그인 직후 맨 먼저 보이는 화면을 채팅/탐색기 대신 이 현황판으로
+             바꾸면서, 법정일 임박 사건·고객관리 바로가기·이번달 수금 요약·대기 중인 상담신청을
+             여기 추가했다(기존 처리일지 기반 마감현황은 dashboardList에 그대로 유지, 아래에서 스크롤). -->
+        <div id="dashboardHome" style="padding:16px; display:flex; flex-direction:column; gap:16px;"></div>
         <div id="dashboardList" class="log-list"></div>
       </div>
 
@@ -1776,12 +1780,12 @@ graph TD
 
 <script src="/core.js?v=20260828h"></script>
 <script src="/tax-calc.js?v=20260814a"></script>
-<script src="/explorer.js?v=20260828d"></script>
+<script src="/explorer.js?v=20260828e"></script>
 <script src="/work-manage.js?v=20260828p"></script>
 <script src="/client-manage.js?v=20260828m"></script>
 <script src="/document-tools.js?v=20260814a"></script>
 <script src="/tax-calculator.js?v=20260814a"></script>
-<script src="/chat.js?v=20260828d"></script>
+<script src="/chat.js?v=20260828e"></script>
 <script src="/pwa.js?v=20260814a"></script>
 
 </body>
