@@ -308,8 +308,15 @@ const workManageView = document.getElementById('workManageView');
 // 고객관리와 동시에 두 창을 띄워놓고 나란히 작업할 일이 있어서. 새 창도 완전한 앱 한 벌이라
 // (index.html을 통째로 다시 연다) URL에 ?view=workmanage를 붙여서 열고, 이 파일 맨 아래의
 // 부트스트랩 코드가 그 값을 보고 새 창 안에서 자동으로 이 화면을 최대화해서 띄운다.
+// [실수 수정] window.open을 features 문자열 없이 부르면 크롬이 별도 창이 아니라 그냥 새
+// 탭으로 열어버려서 — 탭은 마우스로 끌어서 옮길 수가 없다(그 브라우저 창 안에 묶여있음).
+// width/height(+left/top)를 반드시 같이 줘야 진짜 독립된, 드래그로 옮기고 크기도 조절할
+// 수 있는 창으로 뜬다. 화면 왼쪽 절반에 기본 배치(오른쪽 절반은 고객관리용).
 document.getElementById('btnOpenWorkManage').addEventListener('click', () => {
-  window.open(location.origin + location.pathname + '?view=workmanage', '_blank');
+  const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
+  const w = Math.round(sw / 2), h = sh;
+  window.open(location.origin + location.pathname + '?view=workmanage', '_blank',
+    'width=' + w + ',height=' + h + ',left=0,top=0,resizable=yes,scrollbars=yes');
 });
 document.getElementById('btnWorkManageBack').addEventListener('click', closeWorkManageView);
 document.getElementById('btnWorkCaseNew').addEventListener('click', renderNewCaseForm);

@@ -288,9 +288,14 @@ function renderLogRowEdit_(row, c, log){
 }
 
 // [2026.08] 작업관리와 같은 이유로 고객관리도 항상 새 창으로 연다 — 부트스트랩은 이 파일
-// 맨 아래에서 처리(work-manage.js 쪽 주석 참고).
+// 맨 아래에서 처리(work-manage.js 쪽 주석 참고). [실수 수정] features 문자열 없이 열면
+// 탭으로 열려서 드래그로 못 옮긴다 — width/height를 줘서 진짜 독립 창으로 열리게 함.
+// 화면 오른쪽 절반에 기본 배치(작업관리는 왼쪽 절반이라, 나란히 놓임).
 document.getElementById('btnOpenClientManage').addEventListener('click', () => {
-  window.open(location.origin + location.pathname + '?view=clientmanage', '_blank');
+  const sw = screen.availWidth || 1600, sh = screen.availHeight || 900;
+  const w = Math.round(sw / 2), h = sh;
+  window.open(location.origin + location.pathname + '?view=clientmanage', '_blank',
+    'width=' + w + ',height=' + h + ',left=' + w + ',top=0,resizable=yes,scrollbars=yes');
 });
 document.getElementById('btnClientManageBack').addEventListener('click', closeClientManageView);
 document.getElementById('btnClientNew').addEventListener('click', renderNewClientForm);
