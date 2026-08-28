@@ -15473,7 +15473,13 @@ function client_createClient(params) {
     newRow[col.메모] = String(params.메모 || '').trim();
     newRow[col.등록일] = now;
     newRow[col.수정일] = now;
-    sheets.clients.appendRow(newRow);
+    const rowIndex = sheets.clients.getLastRow() + 1;
+    // [2026.08 버그수정] 전화번호·납세번호를 대시 없이 순수 숫자로 입력하면 구글시트가
+    // 그 값을 숫자로 인식해 앞자리 0을 날려버리는 문제가 실제로 있었다(사용자가 직접 겪음)
+    // — 쓰기 전에 그 두 칸을 강제로 텍스트 서식("@")으로 잡아두면 숫자로 오인되지 않는다.
+    sheets.clients.getRange(rowIndex, col.전화번호 + 1).setNumberFormat('@');
+    sheets.clients.getRange(rowIndex, col.사업자번호 + 1).setNumberFormat('@');
+    sheets.clients.getRange(rowIndex, 1, 1, newRow.length).setValues([newRow]);
     SpreadsheetApp.flush();
     return { success: true, client: client_readClient_(col, newRow) };
   });
@@ -15490,6 +15496,9 @@ function client_updateClient(params) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
     row[col.수정일] = new Date();
+    // 전화번호·납세번호 칸은 저장할 때마다 텍스트 서식으로 다시 잡아둔다(create와 같은 이유).
+    sheets.clients.getRange(found.rowIndex, col.전화번호 + 1).setNumberFormat('@');
+    sheets.clients.getRange(found.rowIndex, col.사업자번호 + 1).setNumberFormat('@');
     sheets.clients.getRange(found.rowIndex, 1, 1, row.length).setValues([row]);
     SpreadsheetApp.flush();
     return { success: true, client: client_readClient_(col, row) };
@@ -15658,7 +15667,9 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '하위업무', '생성일', '수정일'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일'];
+// 개요: 진행/보류 중이면 "처리방향"(어떻게 처리할 계획인지), 완료면 "처리내용"(실제 어떻게
+// 처리했는지)이라는 뜻으로 화면에서 라벨만 상태에 따라 바꿔 보여준다 — 컬럼 자체는 하나.
 // 완료전법정일: 완료 처리하는 순간 법정일을 완료일(오늘)로 덮어쓰기 직전의 원래 값을 잠깐
 // 보관해두는 내부용 컬럼(화면에는 안 보여줌) — 나중에 완료를 취소(진행/보류로 되돌림)하면
 // 이 값으로 법정일을 원상복구하기 위함.
@@ -15763,6 +15774,7 @@ function work_readRow_(col, rowValues) {
     법정일: work_dateStr_(rowValues[col.법정일]),
     납세자: rowValues[col.납세자],
     상태: rowValues[col.상태],
+    개요: rowValues[col.개요],
     하위업무: subtasks,
     생성일: rowValues[col.생성일],
     수정일: rowValues[col.수정일]
@@ -15823,6 +15835,7 @@ function work_createCase(params) {
       : work_calcDeadline_(seMok, upType, 기준일);
     newRow[col.납세자] = String(params.납세자 || '').trim();
     newRow[col.상태] = params.상태 || '진행';
+    newRow[col.개요] = String(params.개요 || '').trim();
     newRow[col.하위업무] = '[]';
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
@@ -15845,7 +15858,7 @@ function work_updateCase(params) {
 
     const row = found.row;
     const wasCompleted = row[col.상태] === '완료'; // 아래서 덮어쓰기 전에 미리 기억해둔다
-    ['고객명', '사건명', '담당자', '상태', '납세자'].forEach(function (key) {
+    ['고객명', '사건명', '담당자', '상태', '납세자', '개요'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
     if (params.고객명 !== undefined) {

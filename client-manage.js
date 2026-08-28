@@ -16,6 +16,24 @@ let clientShowingNewForm = false;
 
 const CLIENT_TIER_OPTIONS_ = ['로얄', '우수', '보통', '영세'];
 
+// [2026.08] 전화번호를 대시 없이 숫자만("01012345678") 입력해서 저장하면, 구글시트가 그
+// 값을 숫자로 잘못 인식해 앞자리 0이 날아가는 문제가 있었다(사용자가 직접 겪음) — 입력
+// 즉시 000-0000-0000 형식으로 자동 정리해서 애초에 순수 숫자 문자열이 시트로 넘어가지
+// 않게 막는다(대시가 있으면 시트가 숫자로 오인하지 않음).
+function formatPhoneInput_(raw){
+  const digits = String(raw || '').replace(/\D/g, '').slice(0, 11);
+  if (digits.length < 4) return digits;
+  if (digits.length < 8) return digits.slice(0, 3) + '-' + digits.slice(3);
+  if (digits.indexOf('02') === 0){
+    // 서울 지역번호(2자리) — 02-XXX(X)-XXXX
+    if (digits.length <= 9) return digits.slice(0, 2) + '-' + digits.slice(2, 5) + '-' + digits.slice(5);
+    return digits.slice(0, 2) + '-' + digits.slice(2, 6) + '-' + digits.slice(6, 10);
+  }
+  // 010 등 3자리 국번 — 0XX-XXXX-XXXX
+  if (digits.length <= 10) return digits.slice(0, 3) + '-' + digits.slice(3, 6) + '-' + digits.slice(6);
+  return digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7, 11);
+}
+
 async function openClientManageView(){
   ensureExplorerVisible();
   hideAllPanelViews();
@@ -109,6 +127,8 @@ function renderNewClientForm(){
     '<button type="button" id="ccNewCancel" class="ghost-btn">취소</button>' +
     '</div></div>';
 
+  document.getElementById('ccNewPhone').addEventListener('input', (e) => { e.target.value = formatPhoneInput_(e.target.value); });
+
   document.getElementById('ccNewCancel').addEventListener('click', () => {
     clientShowingNewForm = false;
     clientDetail.innerHTML = '<div class="explorer-status">왼쪽에서 고객을 선택하거나 "+ 새 고객"을 눌러주세요.</div>';
@@ -150,6 +170,8 @@ async function renderClientDetail(c){
     '<h4 id="ccPaymentToggle" style="margin-bottom:6px; margin-top:18px; cursor:pointer; width:fit-content;" title="눌러서 수금 내역 추가">➕ 수금관리</h4>' +
     '<div id="ccPaymentList" class="log-list"><div class="log-empty">불러오는 중…</div></div>' +
     '<div id="ccNewPaymentFormWrap" style="display:none; margin-top:10px; gap:6px; flex-wrap:wrap; align-items:center;"></div>';
+
+  document.getElementById('ccEditPhone').addEventListener('input', (e) => { e.target.value = formatPhoneInput_(e.target.value); });
 
   document.getElementById('ccSaveClient').addEventListener('click', async () => {
     const name = document.getElementById('ccEditName').value.trim();

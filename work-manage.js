@@ -141,6 +141,7 @@ const workManageView = document.getElementById('workManageView');
       '<label>의뢰일<br><input type="date" id="wcNewRequestDate" style="width:100%;"></label>' +
       '<label>기준일 <span id="wcNewBaseDateHint" style="color:var(--sub); font-weight:400;">(양도일·증여일·사망일 등)</span><br><input type="date" id="wcNewBaseDate" style="width:100%;"></label>' +
       '<label id="wcNewManualDeadlineLabel" style="display:none;"><span id="wcNewManualDeadlineText">처리시한</span><br><input type="date" id="wcNewManualDeadline" style="width:100%;"></label>' +
+      '<label>처리방향<br><textarea id="wcNewOverview" style="width:100%; min-height:60px; font-family:inherit; box-sizing:border-box;" placeholder="어떻게 처리할 계획인지"></textarea></label>' +
       '<div style="display:flex; gap:8px; margin-top:8px;">' +
       '<button type="button" id="wcNewSave" class="save-btn">저장</button>' +
       '<button type="button" id="wcNewCancel" class="ghost-btn">취소</button>' +
@@ -186,7 +187,8 @@ const workManageView = document.getElementById('workManageView');
         업무유형: upType,
         담당자: document.getElementById('wcNewAssignee').value.trim(),
         의뢰일: document.getElementById('wcNewRequestDate').value,
-        기준일: document.getElementById('wcNewBaseDate').value
+        기준일: document.getElementById('wcNewBaseDate').value,
+        개요: document.getElementById('wcNewOverview').value.trim()
       };
       if (manual) payload.법정일 = document.getElementById('wcNewManualDeadline').value;
       try{
@@ -225,6 +227,10 @@ const workManageView = document.getElementById('workManageView');
       '<div style="margin-bottom:12px;">' +
       '<span id="wcEditDeadlineAuto" style="display:' + (isManual ? 'none' : 'inline-block') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
       '<label id="wcEditManualDeadlineLabel" style="display:' + (isManual ? 'inline-block' : 'none') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
+      '</div>' +
+      '<div style="margin-bottom:14px;">' +
+      '<label id="wcEditOverviewLabel" style="font-size:12.5px; color:var(--sub); display:block; margin-bottom:4px;">' + (c.상태 === '완료' ? '처리내용' : '처리방향') + '</label>' +
+      '<textarea id="wcEditOverview" placeholder="' + (c.상태 === '완료' ? '실제로 어떻게 처리했는지' : '어떻게 처리할 계획인지') + '" style="width:100%; max-width:600px; min-height:60px; font-family:inherit; font-size:13px; box-sizing:border-box;">' + escapeHtml(c.개요 || '') + '</textarea>' +
       '</div>' +
       '<div id="wcAddRootToggle" style="font-size:12.5px; color:var(--sub); margin-bottom:8px; cursor:pointer; width:fit-content;" title="눌러서 새 하위업무 추가">➕ 하위업무 ' + prog.done + ' / ' + prog.total + '</div>' +
       '<div id="wcNewRootFormWrap" style="display:none; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>' +
@@ -305,7 +311,8 @@ const workManageView = document.getElementById('workManageView');
         담당자: document.getElementById('wcEditAssignee').value.trim(),
         의뢰일: document.getElementById('wcEditRequestDate').value,
         기준일: document.getElementById('wcEditBaseDate').value,
-        상태: document.getElementById('wcEditStatus').value
+        상태: document.getElementById('wcEditStatus').value,
+        개요: document.getElementById('wcEditOverview').value.trim()
       };
       if (manual) payload.법정일 = document.getElementById('wcEditManualDeadline').value;
       try{
