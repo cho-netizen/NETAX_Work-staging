@@ -243,6 +243,12 @@ const workManageView = document.getElementById('workManageView');
     const editSemokSel = document.getElementById('wcEditSemok');
     const editUptypeSel = document.getElementById('wcEditUptype');
 
+    // 신고처럼 자동계산되던 업무유형에서 상담·해명자료(수동입력)로 바꾸면, 처리시한 입력칸에
+    // "그때 자동계산됐던 옛 법정일"이 이미 들어가 있어서(값이 비어있지 않으니) 새 기본값으로
+    // 안 갈아끼워지고 그대로 고정돼 보이는 문제가 있었다. 그 값은 상담·해명자료와는 무관한
+    // 옛 신고 법정일이므로, "자동계산 유형에서 방금 넘어온 경우"에만 새 기본값으로 갈아끼우고
+    // (상담↔해명자료처럼 수동유형끼리 왔다갔다 할 때는 사용자가 손댄 값을 그대로 둔다).
+    let editUptypePrevWasManual = WORK_MANUAL_DEADLINE_TYPES_.indexOf(c.업무유형) !== -1;
     function refillEditUptype(keepCurrent){
       const options = WORK_UPTYPE_OPTIONS_[editSemokSel.value] || [];
       const current = keepCurrent && options.indexOf(c.업무유형) !== -1 ? c.업무유형 : options[0];
@@ -256,8 +262,9 @@ const workManageView = document.getElementById('workManageView');
       if (manual){
         document.getElementById('wcEditManualDeadlineText').textContent = workDeadlineFieldLabel_(editUptypeSel.value);
         const deadlineInput = document.getElementById('wcEditManualDeadline');
-        if (!deadlineInput.value) deadlineInput.value = workDefaultManualDeadline_(document.getElementById('wcEditRequestDate').value);
+        if (!editUptypePrevWasManual || !deadlineInput.value) deadlineInput.value = workDefaultManualDeadline_(document.getElementById('wcEditRequestDate').value);
       }
+      editUptypePrevWasManual = manual;
     }
     editSemokSel.addEventListener('change', () => refillEditUptype(false));
     editUptypeSel.addEventListener('change', onEditUptypeChange);
