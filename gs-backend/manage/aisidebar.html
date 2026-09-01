@@ -1,0 +1,164 @@
+<div class="ai-sb-head">
+  <b>🤖 AI 도우미</b>
+  <button type="button" class="ai-sb-collapse" id="aiSbCollapseBtn" title="접기">≫</button>
+</div>
+<div class="ai-sb-body" id="aiSbBody">
+  <div class="ai-sb-empty" id="aiSbEmpty">궁금한 걸 물어보세요 — 지금 켜진 화면 밖의 자료(작업/고객/파일 등)도 필요하면 알아서 찾아봅니다.</div>
+</div>
+<div class="ai-sb-foot">
+  <textarea id="aiSbInput" rows="1" placeholder="메시지 입력…"></textarea>
+  <button type="button" id="aiSbSendBtn" title="보내기">➤</button>
+</div>
+
+<script>
+  // ============================================================
+  // 자체 AI 사이드바 — chat.js의 runChatTurn_()(짧은 라운드 반복) 로직을 그대로 이식.
+  // 서버(doPost의 messages 분기)는 전혀 손대지 않았다 — 기존 채팅과 완전히 같은 프로토콜이라
+  // 기존 도구(파일탐색·작업관리·세액조회 등)가 전부 그대로 동작한다.
+  // ============================================================
+  var aiSbMessages = [];       // {role, content:문자열} — 화면표시+다음 요청에 그대로 재사용
+  var aiSbApiSecret = null;
+  var aiSbBusy = false;
+  var aiSbAbortController = null;
+  var AI_SB_MAX_ROUNDS = 14;   // chat.js의 CLIENT_MAX_TOOL_ROUNDS 그대로 승계
+
+  // [2026.09] 여기서 실행되는 JS는 이 화면 자체의 URL(script.google.com/.../exec)이 아니라,
+  // Apps Script가 HtmlService 콘텐츠를 격리해서 띄우는 별도 샌드박스 iframe
+  // (…googleusercontent.com) 안에서 돈다 — location.origin으로 주소를 유도하려던 첫 시도가
+  // 실제로 이 문제 때문에 실패했다(엉뚱한 주소로 fetch해서 HTML 응답을 JSON으로 파싱하려다 오류).
+  // 그래서 기존 앱의 config.js와 동일하게, 이 배포의 실제 GAS_URL을 직접 박아 넣는다.
+  var AI_SB_GAS_URL = 'https://script.google.com/macros/s/AKfycbyFbvXiV6rSzCvhtc_T2WrzNF5ZxhOFWtSSsgzSavzPbjv4LBGhjXhu_Q2_8m-PDj8s/exec';
+  function aiSbGasUrl_(){
+    return AI_SB_GAS_URL;
+  }
+
+  function initAiSidebar(){
+    if (aiSbApiSecret !== null) return;
+    google.script.run.withSuccessHandler(function(secret){ aiSbApiSecret = secret || ''; })
+      .withFailureHandler(function(){ aiSbApiSecret = ''; })
+      .manageApp_getApiSecret();
+  }
+
+  function aiSbAppendBubble_(role, text){
+    var empty = document.getElementById('aiSbEmpty');
+    if (empty) empty.remove();
+    var body = document.getElementById('aiSbBody');
+    var div = document.createElement('div');
+    div.className = 'ai-sb-msg ' + (role === 'user' ? 'me' : 'ai');
+    div.textContent = text;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+    return div;
+  }
+
+  function aiSbSetBusy_(busy){
+    aiSbBusy = busy;
+    var btn = document.getElementById('aiSbSendBtn');
+    var input = document.getElementById('aiSbInput');
+    if (busy){
+      btn.textContent = '⏹'; btn.classList.add('stop'); btn.title = '중지';
+      input.disabled = true;
+    } else {
+      btn.textContent = '➤'; btn.classList.remove('stop'); btn.title = '보내기';
+      input.disabled = false;
+    }
+  }
+
+  // chat.js runChatTurn_ 이식 — 라운드마다 별도 요청(서버가 Claude/Gemini API를 라운드당 1번만 호출),
+  // done:false면 그 라운드의 assistant/tool 결과를 이어붙여 바로 다음 라운드를 요청한다.
+  async function aiSbRunTurn_(initialMessages, thinkingBubble){
+    var turnMessages = initialMessages.slice();
+    var round = 0;
+    aiSbAbortController = new AbortController();
+
+    while (true){
+      var forceWrapUp = round >= AI_SB_MAX_ROUNDS;
+      thinkingBubble.textContent = round === 0 ? '생각 중…' : (forceWrapUp ? '마무리하는 중…' : '🔧 확인하는 중… (' + (round + 1) + '단계)');
+
+      var requestBody = JSON.stringify({
+        _key: aiSbApiSecret || '',
+        messages: turnMessages,
+        context: { currentView: (window._currentViewLabel || '') },
+        forceWrapUp: forceWrapUp
+      });
+
+      var data;
+      for (var netAttempt = 0; netAttempt < 2; netAttempt++){
+        try{
+          var res = await fetch(aiSbGasUrl_(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            signal: aiSbAbortController.signal,
+            body: requestBody
+          });
+          data = await res.json();
+          break;
+        }catch(err){
+          if (err && err.name === 'AbortError'){
+            thinkingBubble.remove();
+            return;
+          }
+          if (netAttempt === 0){
+            thinkingBubble.textContent = '네트워크가 불안정해서 다시 시도하는 중…';
+            await new Promise(function(r){ setTimeout(r, 1500); });
+            continue;
+          }
+          thinkingBubble.textContent = '네트워크 오류: ' + (err && err.message ? err.message : err);
+          return;
+        }
+      }
+
+      if (data.error){ thinkingBubble.textContent = '오류: ' + data.error; return; }
+
+      if (data.done === false){
+        turnMessages = turnMessages.concat([
+          { role: 'assistant', content: data.assistantContent },
+          { role: 'user', content: data.toolResults }
+        ]);
+        round++;
+        continue;
+      }
+
+      var replyText = data.reply || '이번 요청에 답변을 받지 못했습니다. 다시 한 번 보내주세요.';
+      thinkingBubble.textContent = replyText;
+      aiSbMessages.push({ role: 'assistant', content: replyText });
+      return;
+    }
+  }
+
+  function aiSbSend_(){
+    var input = document.getElementById('aiSbInput');
+    var text = input.value.trim();
+    if (!text) return;
+    if (aiSbApiSecret === null){ toast('아직 준비 중입니다 — 잠시 후 다시 시도해주세요.'); return; }
+
+    aiSbAppendBubble_('user', text);
+    aiSbMessages.push({ role: 'user', content: text });
+    input.value = '';
+    input.style.height = 'auto';
+
+    var thinkingBubble = aiSbAppendBubble_('assistant', '생각 중…');
+    aiSbSetBusy_(true);
+    aiSbRunTurn_(aiSbMessages, thinkingBubble).finally(function(){
+      aiSbSetBusy_(false);
+      aiSbAbortController = null;
+    });
+  }
+
+  document.getElementById('aiSbSendBtn').addEventListener('click', function(){
+    if (aiSbBusy){ if (aiSbAbortController) aiSbAbortController.abort(); return; }
+    aiSbSend_();
+  });
+  document.getElementById('aiSbInput').addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); if (!aiSbBusy) aiSbSend_(); }
+  });
+  document.getElementById('aiSbInput').addEventListener('input', function(e){
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(100, e.target.scrollHeight) + 'px';
+  });
+
+  document.getElementById('aiSbCollapseBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    document.getElementById('sideAI').classList.remove('expanded');
+  });
+</script>

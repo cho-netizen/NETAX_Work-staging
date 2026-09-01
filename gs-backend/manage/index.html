@@ -86,7 +86,7 @@
 
     <aside id="sideAI">
       <div id="sideAIInner">
-        <div class="ai-soon">🤖<br>AI 사이드바는<br>다음 단계에서 추가됩니다.</div>
+        <?!= include_('manage/aisidebar') ?>
       </div>
     </aside>
   </div>
@@ -99,6 +99,13 @@
     var REPORT_WRITER_URL = 'https://work.netax.kr/report-writer/';
     document.querySelectorAll('.menu-item[data-action="open-report-writer"]').forEach(function(el){
       el.addEventListener('click', function(){ window.open(REPORT_WRITER_URL, '_blank'); });
+    });
+
+    // AI 사이드바 — 접힌 14px 스트립을 클릭하면 펼쳐진다(펼친 뒤에는 안의 입력창·버튼
+    // 클릭이 다시 접히지 않도록, 이미 펼쳐진 상태면 이 리스너는 아무것도 하지 않는다 —
+    // 접는 건 패널 안의 ≫ 버튼(aisidebar.html)만 담당).
+    document.getElementById('sideAI').addEventListener('click', function(){
+      if (!this.classList.contains('expanded')) this.classList.add('expanded');
     });
   </script>
 

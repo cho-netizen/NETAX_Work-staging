@@ -3323,6 +3323,18 @@ function buildContextSystemPrompt(basePrompt, body) {
     dynamicExtra += '\n\n[현재 화면 상태] 사용자는 지금 파일탐색기에서 "' + ctx.currentPath.join(' / ') + '" 위치를 보고 있다.';
   }
 
+  // [2026.09] my.netax.kr 관리 앱의 자체 AI 사이드바 — 파일탐색기 대신 메뉴 화면(대시보드/
+  // 작업관리/고객관리 등) 단위로 컨텍스트를 준다. 이 사이드바는 화면 옆 좁은 패널에서 빠르게
+  // 확인하는 용도라, 실사용 중 "몇 건이야?"라고만 물었는데 표까지 만들어 전부 나열하고 안
+  // 물어본 마감임박 안내까지 덧붙이는("오지랍") 문제가 확인됐다 — 요청한 것만 간결히 답하라고
+  // 명시한다. ctx.currentView가 있을 때만(=이 사이드바에서 온 요청일 때만) 적용되므로 기존
+  // 채팅앱(work.netax.kr)의 답변 스타일에는 영향이 없다.
+  if (ctx.currentView) {
+    dynamicExtra += '\n\n[현재 화면] 사용자는 지금 관리 앱(my.netax.kr)의 "' + ctx.currentView + '" 화면을 보고 있다.';
+    dynamicExtra += '\n[답변 스타일] 이건 화면 옆 좁은 사이드바 대화다 — 물어본 것에만 짧고 간결하게 답하라. ' +
+      '개수·여부를 물었으면 숫자·결론부터 말하고, 표·전체 목록·추가 분석·안 물어본 주의사항은 사용자가 더 요청하기 전엔 먼저 나열하지 마라.';
+  }
+
   if (ctx.openFile && ctx.openFile.name) {
     dynamicExtra += '\n현재 편집기/뷰어에 열려 있는 파일: "' + ctx.openFile.name + '" (fileId: ' + ctx.openFile.id + ')';
 
@@ -14242,6 +14254,13 @@ function include_(filename) {
 function manageApp_checkPassword(pw) {
   const expected = PropertiesService.getScriptProperties().getProperty('MANAGE_APP_PASSWORD');
   return !!expected && pw === expected;
+}
+
+// [2026.09] 자체 AI 사이드바 — doPost의 messages 분기(기존 채팅 프로토콜)를 그대로 fetch로
+// 호출하려면 _key(API_SECRET)가 필요하다. 이미 로그인 게이트를 통과한 뒤에만 호출되고,
+// 같은 값이 GitHub Pages의 공개 정적 파일(config.js)에도 평문으로 있어 새로운 노출이 아니다.
+function manageApp_getApiSecret() {
+  return PropertiesService.getScriptProperties().getProperty('API_SECRET') || '';
 }
 
 // [2026.09] 설정 화면 — 비밀번호 변경. 이미 로그인된 상태라도 현재 비밀번호를 한 번 더 확인해서,

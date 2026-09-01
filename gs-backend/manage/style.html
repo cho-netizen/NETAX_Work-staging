@@ -51,10 +51,26 @@
   .view-head h2{ margin:0; font-size:19px; color:var(--navy); }
   .view-body{ padding:0 22px 24px; }
 
-  #sideAI{ width:14px; flex-shrink:0; background:#f1f2f5; border-left:1px solid var(--line); position:relative; transition:width .15s ease; z-index:40; }
-  #sideAI.expanded{ width:320px; }
+  #sideAI{ width:14px; flex-shrink:0; background:#f1f2f5; border-left:1px solid var(--line); position:relative; transition:width .15s ease; z-index:40; cursor:pointer; }
+  #sideAI.expanded{ width:320px; cursor:default; }
   #sideAI:hover{ width:320px; }
-  #sideAIInner{ position:absolute; inset:0; width:320px; overflow-y:auto; padding:14px; }
+  #sideAIInner{ position:absolute; inset:0; width:320px; display:flex; flex-direction:column; }
+
+  /* ===== 자체 AI 사이드바 ===== */
+  .ai-sb-head{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .ai-sb-head b{ flex:1; font-size:13px; color:var(--navy); }
+  .ai-sb-collapse{ border:none; background:none; cursor:pointer; font-size:14px; color:var(--sub); padding:2px 6px; }
+  .ai-sb-collapse:hover{ color:var(--ink); }
+  .ai-sb-body{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .ai-sb-msg{ width:100%; box-sizing:border-box; padding:9px 11px; border-radius:9px; font-size:13px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+  .ai-sb-msg.ai{ background:#f0f2f6; color:var(--ink); border-top-left-radius:2px; }
+  .ai-sb-msg.me{ background:var(--navy); color:#fff; border-top-left-radius:2px; }
+  .ai-sb-empty{ color:var(--sub); font-size:12.5px; text-align:center; margin-top:40px; line-height:1.7; }
+  .ai-sb-foot{ border-top:1px solid var(--line); padding:10px; flex-shrink:0; display:flex; gap:6px; align-items:flex-end; }
+  .ai-sb-foot textarea{ flex:1; resize:none; border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-family:inherit; font-size:13px; max-height:100px; }
+  .ai-sb-foot button{ flex-shrink:0; border:none; border-radius:8px; background:var(--navy); color:#fff; width:34px; height:34px; cursor:pointer; font-size:14px; }
+  .ai-sb-foot button:hover{ background:var(--navy-deep); }
+  .ai-sb-foot button.stop{ background:var(--danger); }
   .ai-soon{ color:var(--sub); font-size:13px; text-align:center; margin-top:60px; line-height:1.7; }
 
   /* ===== 공용 위젯 ===== */

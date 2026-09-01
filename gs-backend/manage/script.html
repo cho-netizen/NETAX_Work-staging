@@ -66,6 +66,18 @@
     return (bytes/1024/1024).toFixed(1) + ' MB';
   }
 
+  // AI 사이드바의 요청 context.currentView로 그대로 실려나가는 라벨 — 대화 중 화면을 옮겨도
+  // AI가 "지금 어느 화면을 보고 있는지" 알 수 있게 한다.
+  // [주의] 아래 로그인 게이트 IIFE가 이미 로그인된 세션이면 곧바로 enterApp()→showView()를
+  // 동기 호출하므로, 이 선언은 반드시 그 IIFE보다 앞에 있어야 한다(뒤에 두면 아직 정의되지
+  // 않은 변수를 참조해 TypeError가 나고, 그 여파로 initDashboard 등 나머지 초기화가 전부
+  // 실행되지 않는 버그가 실제로 발생했었다).
+  var VIEW_LABELS_ = {
+    dashboard: '대시보드', booking: '예약관리', workmanage: '작업관리', clientmanage: '고객관리',
+    docs: '증빙관리', taxcalc: '세액계산', reports: '열람관리',
+    'memo-text': '일반메모', 'memo-hand': '필기메모', settings: '설정'
+  };
+
   // ---- 로그인 게이트 ----
   (function(){
     var gate = document.getElementById('loginGate');
@@ -116,6 +128,7 @@
       initNav();
       showView('dashboard');
       if (typeof initDashboard === 'function') initDashboard();
+      if (typeof initAiSidebar === 'function') initAiSidebar();
       // 작업관리 "새 사건" 폼의 고객명 자동완성(clientNameOptions)이 처음부터 채워져 있도록,
       // 고객관리 화면을 열지 않아도 미리 한 번 받아온다(client-manage.js 원본과 동일한 이유).
       if (typeof loadClients === 'function'){ clientManageLoaded = true; loadClients(); }
@@ -143,6 +156,7 @@
     document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
     var target = document.getElementById('view-' + name);
     if (target) target.classList.add('active');
+    window._currentViewLabel = VIEW_LABELS_[name] || name;
     if (name === 'booking' && typeof initBooking === 'function') initBooking();
     if (name === 'workmanage' && typeof initWorkManage === 'function') initWorkManage();
     if (name === 'clientmanage' && typeof initClientManage === 'function') initClientManage();
