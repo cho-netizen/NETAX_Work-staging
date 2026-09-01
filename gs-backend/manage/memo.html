@@ -1,0 +1,674 @@
+<div class="view" id="view-memo-text">
+  <div class="memo-toolbar">
+    <div class="memo-search-wrap">
+      <input type="text" id="memoSearch" placeholder="🔍 저장된 일반메모 검색·열기" autocomplete="off">
+      <div class="memo-search-dropdown" id="memoSearchDropdown"></div>
+    </div>
+    <button type="button" id="memoBtnNew" class="ghost-btn">🆕 새 메모</button>
+    <button type="button" id="memoBtnSave" class="save-btn">💾 저장</button>
+  </div>
+  <textarea id="memoText" placeholder="통화하면서 바로 타이핑하세요…"></textarea>
+</div>
+
+<div class="view" id="view-memo-hand">
+  <div class="note-tb">
+    <button type="button" id="btnNoteToolMode" class="note-tb-btn" title="펜">✏️</button>
+    <input type="color" id="notePenColor" value="#1a1a2e" title="색상" style="width:28px; height:28px; padding:0; border:none; border-radius:6px;">
+    <input type="range" id="notePenSize" min="1" max="10" value="3" title="굵기" style="width:60px;">
+    <button type="button" id="btnNoteUndo" class="note-tb-btn" title="되돌리기">↩</button>
+    <button type="button" id="btnNoteRedo" class="note-tb-btn" title="다시실행">↪</button>
+    <button type="button" id="btnNoteClear" class="note-tb-btn" title="전체지우기">🗑</button>
+    <button type="button" id="btnNoteBgImage" class="note-tb-btn" title="배경 이미지">📎</button>
+    <input type="file" id="noteBgFileInput" accept="image/*" style="display:none;">
+    <button type="button" id="btnNoteBgPattern" class="note-tb-btn" title="배경 무늬">▦</button>
+    <button type="button" id="btnNoteZoom" class="note-tb-btn" title="확대">🔍</button>
+    <button type="button" id="btnNotePrevPage" class="note-tb-btn" title="이전 페이지">◀</button>
+    <span id="notePageIndicator" class="note-tb-page">1/1</span>
+    <button type="button" id="btnNoteNextPage" class="note-tb-btn" title="다음 페이지">▶</button>
+    <button type="button" id="btnNoteSave" class="note-tb-btn note-tb-save" title="저장(고객 폴더에 PDF로 저장)">💾</button>
+  </div>
+  <div id="noteCanvasWrap">
+    <div id="noteZoomInner">
+      <canvas id="noteBgCanvas"></canvas>
+      <canvas id="noteCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<div id="memoSaveStep">
+  <div class="box">
+    <div id="memoSaveStepTitle" style="font-weight:700; color:var(--navy); font-size:14px;">고객명을 입력하세요</div>
+    <div id="memoSaveStepDesc" style="font-size:11.5px; color:var(--sub);">이미 있는 사건 폴더(예: "홍길동 양도")가 있으면 그 사건파일에 이어서 저장되고, 없으면 고객명만으로 새 폴더가 만들어집니다. <b>비워두고 저장하면</b> 일반메모로 분류되어 파일명을 따로 입력받습니다.</div>
+    <input type="text" id="memoFolderInput" placeholder="예: 김철수 (비워두면 일반메모)">
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button type="button" id="memoSaveCancel" class="ghost-btn">취소</button>
+      <button type="button" id="memoSaveConfirm" class="save-btn">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // 메모 — document-tools.js의 quickMemo(일반메모)+note(필기메모) 이식본.
+  // 검색콤보의 "템플릿으로 사건개시" 기능은 이제 작업관리(새 사건)와 역할이 겹쳐서 뺐고,
+  // 필기메모 저장 시 AI로 자동 텍스트변환하던 단계도 뺐다(1단계는 AI 없이 GAS만 사용 —
+  // 손글씨는 PDF 그대로 저장하고, 텍스트 변환은 나중에 AI 단계에서 다룬다).
+  // ============================================================
+
+  // ---- 공용 저장 흐름 ----
+  var pendingSaveContent = '', pendingSaveExtraFile = null, pendingSaveOnDone = null;
+  var netaxRootPathCache = null;
+
+  function generalMemoParentPath_(){
+    if (netaxRootPathCache) return Promise.resolve(netaxRootPathCache);
+    return callGas('getNetaxRootPath', {}).then(function(data){
+      if (data && !data.error && Array.isArray(data.path)){
+        netaxRootPathCache = data.path;
+        return netaxRootPathCache;
+      }
+      toast('"0 NETAX" 폴더 위치를 확인하지 못해 기본 작업 폴더 아래에 저장합니다.');
+      return getCustomerRootPath_();
+    }).catch(function(){ return getCustomerRootPath_(); });
+  }
+  function generalMemoPath_(){
+    return generalMemoParentPath_().then(function(p){ return p.concat(['일반메모']); });
+  }
+
+  function formatMemoTimestamp_(){
+    var d = new Date();
+    function pad(n){ return String(n).padStart(2, '0'); }
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function findCustomerFolderMatches_(folders, customerName){
+    var nameEscaped = customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var re = new RegExp('^' + nameEscaped + '(\\d*)(?:\\s|$)');
+    var matches = [];
+    folders.forEach(function(f){
+      var m = f.name.match(re);
+      if (m) matches.push({ name: f.name, serial: m[1] ? parseInt(m[1], 10) : 1 });
+    });
+    return matches;
+  }
+
+  function writeMemoEntry_(basePath, targetFolderName, content, extraFile){
+    var targetPath = basePath.concat([targetFolderName]);
+    var fileName = targetFolderName + '사건.md';
+    return callGas('listFolder', { path: targetPath }).then(function(folderListing){
+      var existingFile = (folderListing.files || []).filter(function(f){ return f.name === fileName; })[0];
+      var entry = '## 상담기록 (' + formatMemoTimestamp_() + ')\n\n' + content.trim() + '\n';
+      var p;
+      if (existingFile){
+        p = callGas('readFile', { fileId: existingFile.id }).then(function(fileData){
+          var prevContent = (fileData && !fileData.error && typeof fileData.content === 'string') ? fileData.content : '';
+          var newContent = (prevContent.trim() ? prevContent.trim() + '\n\n---\n\n' : '') + entry;
+          return callGas('uploadFile', { fileId: existingFile.id, name: fileName, mimeType: 'text/markdown', base64Data: utf8ToBase64(newContent) });
+        });
+      } else {
+        p = callGas('uploadFile', { path: targetPath, name: fileName, mimeType: 'text/markdown', base64Data: utf8ToBase64(entry) });
+      }
+      return p.then(function(res){
+        if (res.error) throw new Error(res.error);
+        if (extraFile){
+          return callGas('uploadFile', { path: targetPath, name: extraFile.name, mimeType: extraFile.mimeType, base64Data: extraFile.base64Data }).then(function(res2){
+            if (res2 && res2.error) toast('본문은 저장됐지만 첨부(' + extraFile.name + ') 저장은 실패했습니다: ' + res2.error);
+          });
+        }
+      }).then(function(){
+        toast('"' + targetFolderName + '" 폴더에 저장했습니다.');
+        if (typeof docsNavigate === 'function' && docsPath.join('/') === targetPath.join('/')) docsNavigate(docsPath);
+        if (typeof loadClientsQuiet_ === 'function') loadClientsQuiet_();
+      });
+    });
+  }
+
+  function saveAsCustomerMemo_(content, customerName, extraFile){
+    return getCustomerRootPath_().then(function(basePath){
+      return callGas('listFolder', { path: basePath }).then(function(listing){
+        var matches = findCustomerFolderMatches_(listing.folders || [], customerName);
+        if (matches.length === 1){
+          var only = matches[0];
+          var same = confirm('기존에 "' + only.name + '" 폴더가 있습니다.\n같은 고객이 맞습니까?\n\n"취소"를 누르면 동명이인으로 보고 번호를 붙인 새 폴더를 만듭니다.');
+          if (same){
+            return writeMemoEntry_(basePath, only.name, content, extraFile).then(function(){ return true; });
+          }
+          var newName = customerName + (only.serial + 1);
+          return callGas('createFolder', { path: basePath, name: newName }).then(function(created){
+            if (created.error) throw new Error(created.error);
+            return writeMemoEntry_(basePath, newName, content, extraFile).then(function(){ return true; });
+          });
+        } else if (matches.length > 1){
+          var choice = prompt('"' + customerName + '"로 시작하는 폴더가 여러 개 있습니다. 저장할 정확한 폴더명을 입력하세요\n(동명이인 등 목록에 없는 새 사람이면, 새 이름을 그대로 입력하세요):\n' + matches.map(function(m){ return m.name; }).join('\n'));
+          if (!choice || !choice.trim()) return false;
+          var chosen = choice.trim();
+          var already = (listing.folders || []).some(function(f){ return f.name === chosen; });
+          var p = already ? Promise.resolve() : callGas('createFolder', { path: basePath, name: chosen }).then(function(created){ if (created.error) throw new Error(created.error); });
+          return p.then(function(){ return writeMemoEntry_(basePath, chosen, content, extraFile); }).then(function(){ return true; });
+        } else {
+          return callGas('createFolder', { path: basePath, name: customerName }).then(function(created){
+            if (created.error) throw new Error(created.error);
+            return writeMemoEntry_(basePath, customerName, content, extraFile).then(function(){ return true; });
+          });
+        }
+      });
+    });
+  }
+
+  function saveAsGeneralMemo_(content, extraFile){
+    var fileNameRaw = prompt('일반메모로 저장합니다. 파일명을 입력하세요:');
+    if (!fileNameRaw || !fileNameRaw.trim()) return Promise.resolve(false);
+    var fileName = fileNameRaw.trim();
+    if (!/\.md$/i.test(fileName)) fileName += '.md';
+
+    return generalMemoParentPath_().then(function(parentPath){
+      return callGas('listFolder', { path: parentPath }).then(function(parentListing){
+        var hasGeneralFolder = (parentListing.folders || []).some(function(f){ return f.name === '일반메모'; });
+        var p = hasGeneralFolder ? Promise.resolve() : callGas('createFolder', { path: parentPath, name: '일반메모' }).then(function(created){ if (created.error) throw new Error(created.error); });
+        return p.then(function(){
+          var targetPath = parentPath.concat(['일반메모']);
+          return callGas('uploadFile', { path: targetPath, name: fileName, mimeType: 'text/markdown', base64Data: utf8ToBase64(content.trim() + '\n') }).then(function(res){
+            if (res.error) throw new Error(res.error);
+            if (extraFile){
+              return callGas('uploadFile', { path: targetPath, name: extraFile.name, mimeType: extraFile.mimeType, base64Data: extraFile.base64Data }).then(function(res2){
+                if (res2 && res2.error) toast('본문은 저장됐지만 첨부(' + extraFile.name + ') 저장은 실패했습니다: ' + res2.error);
+              });
+            }
+          }).then(function(){
+            toast('일반메모로 "' + fileName + '"에 저장했습니다.');
+            if (typeof refreshGeneralMemoList === 'function') refreshGeneralMemoList();
+            return true;
+          });
+        });
+      });
+    });
+  }
+
+  var memoSaveStep = document.getElementById('memoSaveStep');
+  var memoSaveStepTitle = document.getElementById('memoSaveStepTitle');
+  var memoSaveStepDesc = document.getElementById('memoSaveStepDesc');
+  var memoFolderInput = document.getElementById('memoFolderInput');
+  var SAVE_STEP_LABELS_DEFAULT_ = {
+    title: '고객명을 입력하세요',
+    desc: '이미 있는 사건 폴더(예: "홍길동 양도")가 있으면 그 사건파일에 이어서 저장되고, 없으면 고객명만으로 새 폴더가 만들어집니다. <b>비워두고 저장하면</b> 일반메모로 분류되어 파일명을 따로 입력받습니다.',
+    placeholder: '예: 김철수 (비워두면 일반메모)'
+  };
+  function openSaveDialog(content, onDone, extraFile){
+    pendingSaveContent = content;
+    pendingSaveOnDone = onDone || null;
+    pendingSaveExtraFile = extraFile || null;
+    var L = SAVE_STEP_LABELS_DEFAULT_;
+    memoSaveStepTitle.textContent = L.title;
+    memoSaveStepDesc.innerHTML = L.desc;
+    memoFolderInput.placeholder = L.placeholder;
+    memoFolderInput.value = '';
+    memoSaveStep.style.display = 'flex';
+    setTimeout(function(){ memoFolderInput.focus(); }, 50);
+  }
+  document.getElementById('memoSaveCancel').addEventListener('click', function(){ memoSaveStep.style.display = 'none'; });
+  document.getElementById('memoSaveConfirm').addEventListener('click', function(){
+    var customerName = memoFolderInput.value.trim();
+    var btn = document.getElementById('memoSaveConfirm');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    var p = customerName ? saveAsCustomerMemo_(pendingSaveContent, customerName, pendingSaveExtraFile)
+                          : saveAsGeneralMemo_(pendingSaveContent, pendingSaveExtraFile);
+    p.then(function(saved){
+      if (saved){
+        memoSaveStep.style.display = 'none';
+        if (pendingSaveOnDone) pendingSaveOnDone();
+      }
+    }).catch(function(err){
+      toast('저장 중 오류: ' + (err && err.message ? err.message : err));
+    }).finally(function(){
+      btn.disabled = false; btn.textContent = '저장';
+    });
+  });
+
+  // ============================================================
+  // 일반메모
+  // ============================================================
+  var memoText = document.getElementById('memoText');
+  var memoSearch = document.getElementById('memoSearch');
+  var memoSearchDropdown = document.getElementById('memoSearchDropdown');
+  var memoTextLoaded = false;
+  var editingGeneralMemoFile = null;
+  var comboEntries = [];
+
+  function initMemoText(){
+    if (memoTextLoaded) return;
+    memoTextLoaded = true;
+    refreshGeneralMemoList();
+  }
+
+  function refreshGeneralMemoList(){
+    comboEntries = [];
+    return generalMemoPath_().then(function(path){
+      return callGas('listFolder', { path: path });
+    }).then(function(listing){
+      (listing.files || []).forEach(function(f){
+        comboEntries.push({ label: '📄 ' + f.name.replace(/\.md$/i, ''), file: f });
+      });
+    }).catch(function(){ /* 폴더가 아직 없으면 빈 목록 */ });
+  }
+
+  function renderMemoSearchDropdown_(results){
+    memoSearchDropdown.innerHTML = '';
+    if (!results.length){ memoSearchDropdown.style.display = 'none'; return; }
+    results.slice(0, 8).forEach(function(entry){
+      var row = document.createElement('div');
+      row.className = 'memo-search-row';
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = entry.label;
+      labelSpan.style.cssText = 'flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+      labelSpan.addEventListener('click', function(){ selectMemoEntry_(entry); });
+      row.appendChild(labelSpan);
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button'; delBtn.textContent = '🗑'; delBtn.title = '이 메모 삭제(휴지통으로 이동)';
+      delBtn.style.cssText = 'flex-shrink:0; border:none; background:none; cursor:pointer; font-size:13px; color:var(--sub);';
+      delBtn.addEventListener('mousedown', function(e){ e.preventDefault(); });
+      delBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (!confirm('"' + entry.file.name + '" 메모를 삭제할까요?(휴지통으로 이동)')) return;
+        callGas('deleteItem', { id: entry.file.id, type: 'file' }).then(function(res){
+          if (res && res.error) throw new Error(res.error);
+          toast('삭제했습니다.');
+          return refreshGeneralMemoList();
+        }).then(function(){ memoSearch.dispatchEvent(new Event('input')); })
+          .catch(function(err){ toast('삭제 실패: ' + (err && err.message ? err.message : err)); });
+      });
+      row.appendChild(delBtn);
+      memoSearchDropdown.appendChild(row);
+    });
+    memoSearchDropdown.style.display = 'block';
+  }
+  function comboResultsFor_(val){
+    if (!val) return comboEntries;
+    return comboEntries.filter(function(en){ return en.label.indexOf(val) !== -1; });
+  }
+  memoSearch.addEventListener('input', function(){ renderMemoSearchDropdown_(comboResultsFor_(memoSearch.value.trim())); });
+  memoSearch.addEventListener('focus', function(){ renderMemoSearchDropdown_(comboResultsFor_(memoSearch.value.trim())); });
+  document.addEventListener('click', function(e){
+    if (!memoSearchDropdown.contains(e.target) && e.target !== memoSearch) memoSearchDropdown.style.display = 'none';
+  });
+
+  function selectMemoEntry_(entry){
+    memoSearch.value = '';
+    memoSearchDropdown.style.display = 'none';
+    if (!entry) return;
+    callGas('readFile', { fileId: entry.file.id }).then(function(data){
+      memoText.value = (data && !data.error && typeof data.content === 'string') ? data.content : '';
+      editingGeneralMemoFile = entry.file;
+      toast('"' + entry.file.name + '"을(를) 불러왔습니다. 수정 후 저장하면 이 파일에 덮어씁니다.');
+    }).catch(function(err){ toast('불러오기 실패: ' + (err && err.message ? err.message : err)); });
+  }
+
+  document.getElementById('memoBtnNew').addEventListener('click', function(){
+    if (memoText.value.trim() && !confirm('저장하지 않은 내용이 있습니다. 새 메모를 시작할까요?')) return;
+    memoText.value = '';
+    editingGeneralMemoFile = null;
+    memoSearch.value = '';
+    memoSearchDropdown.style.display = 'none';
+    memoText.focus();
+  });
+
+  function saveOverExistingGeneralMemo_(){
+    var btn = document.getElementById('memoBtnSave');
+    btn.disabled = true;
+    return callGas('uploadFile', { fileId: editingGeneralMemoFile.id, name: editingGeneralMemoFile.name, mimeType: 'text/markdown', base64Data: utf8ToBase64(memoText.value.trim() + '\n') })
+      .then(function(res){
+        if (res.error) throw new Error(res.error);
+        toast('"' + editingGeneralMemoFile.name + '"에 저장했습니다.');
+      }).catch(function(err){ toast('저장 중 오류: ' + (err && err.message ? err.message : err)); })
+      .finally(function(){ btn.disabled = false; });
+  }
+
+  document.getElementById('memoBtnSave').addEventListener('click', function(){
+    if (editingGeneralMemoFile){ saveOverExistingGeneralMemo_(); return; }
+    if (!memoText.value.trim()){ toast('입력한 내용이 없습니다.'); return; }
+    openSaveDialog(memoText.value.trim(), function(){ memoText.value = ''; });
+  });
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+  // ============================================================
+  // 필기메모 — document-tools.js의 noteOverlay 캔버스 필기 로직을 그대로 이식.
+  // 원본은 저장 시 AI로 손글씨를 자동 텍스트변환했지만, 1단계는 AI를 쓰지 않으므로
+  // 필기 페이지를 그대로 PDF로 묶어 고객 폴더(또는 일반메모)에 저장한다.
+  // ============================================================
+  (function(){
+    var noteCanvasWrap = document.getElementById('noteCanvasWrap');
+    var noteZoomInner = document.getElementById('noteZoomInner');
+    var noteBgCanvas = document.getElementById('noteBgCanvas');
+    var bgCtx = noteBgCanvas.getContext('2d');
+    var noteCanvas = document.getElementById('noteCanvas');
+    var ctx = noteCanvas.getContext('2d');
+    var notePenColor = document.getElementById('notePenColor');
+    var notePenSize = document.getElementById('notePenSize');
+    var btnNoteToolMode = document.getElementById('btnNoteToolMode');
+    var btnNoteUndo = document.getElementById('btnNoteUndo');
+    var btnNoteRedo = document.getElementById('btnNoteRedo');
+    var btnNoteClear = document.getElementById('btnNoteClear');
+    var btnNoteBgImage = document.getElementById('btnNoteBgImage');
+    var noteBgFileInput = document.getElementById('noteBgFileInput');
+    var btnNoteBgPattern = document.getElementById('btnNoteBgPattern');
+    var btnNoteZoom = document.getElementById('btnNoteZoom');
+    var btnNotePrevPage = document.getElementById('btnNotePrevPage');
+    var btnNoteNextPage = document.getElementById('btnNoteNextPage');
+    var notePageIndicator = document.getElementById('notePageIndicator');
+    var btnNoteSave = document.getElementById('btnNoteSave');
+
+    var TOOL_MODES = ['pen', 'highlight', 'eraser', 'select', 'line', 'rect'];
+    var TOOL_MODE_ICON = { pen: '✏️', highlight: '🖍', eraser: '🧹', select: '✂️', line: '📏', rect: '▭' };
+    var TOOL_MODE_LABEL = { pen: '펜', highlight: '형광펜', eraser: '지우개', select: '영역삭제', line: '직선', rect: '사각형' };
+    var toolModeIndex = 0, toolMode = TOOL_MODES[0];
+
+    var drawing = false, lastX = 0, lastY = 0;
+    var lastPenTime = 0, PALM_REJECT_WINDOW_MS = 600;
+    var undoStack = [], redoStack = [];
+    var shapeSnapshotImageData = null, shapeStartPoint = null, shapeCurrentPoint = null;
+
+    var notePages = [''], notePageBackgrounds = [null], noteCurrentPageIndex = 0;
+    var bgPatternMode = 'none', zoomLevel = 1;
+    var noteInited = false;
+
+    function updatePageIndicator(){ notePageIndicator.textContent = (noteCurrentPageIndex + 1) + '/' + notePages.length; }
+    function saveCurrentPageSnapshot(){ notePages[noteCurrentPageIndex] = noteCanvas.toDataURL('image/png'); }
+
+    function renderCurrentBackground(){
+      bgCtx.clearRect(0, 0, noteBgCanvas.width, noteBgCanvas.height);
+      var bg = notePageBackgrounds[noteCurrentPageIndex];
+      if (bg){
+        var img = new Image();
+        img.onload = function(){ bgCtx.drawImage(img, 0, 0, noteCanvasWrap.clientWidth, noteCanvasWrap.clientHeight); };
+        img.src = bg;
+      }
+    }
+    function loadPage(index){
+      saveCurrentPageSnapshot();
+      noteCurrentPageIndex = index;
+      undoStack = []; redoStack = [];
+      var w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
+      var saved = notePages[noteCurrentPageIndex];
+      if (saved && saved.length > 100){
+        var img = new Image();
+        img.onload = function(){ ctx.drawImage(img, 0, 0, w, h); };
+        img.src = saved;
+      }
+      renderCurrentBackground();
+      updatePageIndicator();
+    }
+    function resizeCanvasToWrap(){
+      var prevInk = noteCanvas.toDataURL ? noteCanvas.toDataURL('image/png') : null;
+      var dpr = window.devicePixelRatio || 1;
+      var w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      noteCanvas.width = Math.max(1, Math.round(w * dpr));
+      noteCanvas.height = Math.max(1, Math.round(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (prevInk && prevInk.length > 100){
+        var img = new Image();
+        img.onload = function(){ ctx.drawImage(img, 0, 0, w, h); };
+        img.src = prevInk;
+      }
+      noteBgCanvas.width = Math.max(1, Math.round(w * dpr));
+      noteBgCanvas.height = Math.max(1, Math.round(h * dpr));
+      bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      renderCurrentBackground();
+    }
+    function getPoint(e){
+      var rect = noteCanvas.getBoundingClientRect();
+      var scaleX = rect.width ? (noteCanvasWrap.clientWidth / rect.width) : 1;
+      return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleX, pressure: (e.pressure && e.pressure > 0) ? e.pressure : 0.5 };
+    }
+    function pushUndoSnapshot(){
+      undoStack.push(noteCanvas.toDataURL('image/png'));
+      if (undoStack.length > 30) undoStack.shift();
+      redoStack = [];
+    }
+    function applyStrokeStyle(pressure){
+      var baseSize = Number(notePenSize.value) || 3;
+      if (toolMode === 'eraser'){
+        ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 1; ctx.lineWidth = baseSize * 3;
+      } else if (toolMode === 'highlight'){
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 0.35; ctx.strokeStyle = notePenColor.value; ctx.lineWidth = baseSize * 4;
+      } else {
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.strokeStyle = notePenColor.value;
+        ctx.lineWidth = Math.max(0.8, baseSize * (0.4 + (pressure || 0.5)));
+      }
+    }
+
+    noteCanvas.addEventListener('pointerdown', function(e){
+      if (e.pointerType === 'touch' && (Date.now() - lastPenTime) < PALM_REJECT_WINDOW_MS) return;
+      if (e.pointerType === 'pen') lastPenTime = Date.now();
+      drawing = true;
+      noteCanvas.setPointerCapture(e.pointerId);
+      var p = getPoint(e);
+      if (toolMode === 'line' || toolMode === 'rect' || toolMode === 'select'){
+        pushUndoSnapshot();
+        shapeSnapshotImageData = ctx.getImageData(0, 0, noteCanvas.width, noteCanvas.height);
+        shapeStartPoint = p; shapeCurrentPoint = p;
+        return;
+      }
+      pushUndoSnapshot();
+      lastX = p.x; lastY = p.y;
+    });
+    noteCanvas.addEventListener('pointermove', function(e){
+      if (!drawing) return;
+      if (e.pointerType === 'touch' && (Date.now() - lastPenTime) < PALM_REJECT_WINDOW_MS) return;
+      var p = getPoint(e);
+      if (toolMode === 'select'){
+        if (!shapeSnapshotImageData) return;
+        shapeCurrentPoint = p;
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e11d48'; ctx.lineWidth = 1.5;
+        var rx = shapeStartPoint.x, ry = shapeStartPoint.y, rw = p.x - shapeStartPoint.x, rh = p.y - shapeStartPoint.y;
+        ctx.strokeRect(rx, ry, rw, rh);
+        ctx.fillStyle = 'rgba(225, 29, 72, 0.1)'; ctx.fillRect(rx, ry, rw, rh);
+        ctx.restore();
+        return;
+      }
+      if (toolMode === 'line' || toolMode === 'rect'){
+        if (!shapeSnapshotImageData) return;
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        applyStrokeStyle(p.pressure);
+        ctx.beginPath();
+        if (toolMode === 'line'){ ctx.moveTo(shapeStartPoint.x, shapeStartPoint.y); ctx.lineTo(p.x, p.y); }
+        else { ctx.rect(shapeStartPoint.x, shapeStartPoint.y, p.x - shapeStartPoint.x, p.y - shapeStartPoint.y); }
+        ctx.stroke();
+        return;
+      }
+      applyStrokeStyle(p.pressure);
+      ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke();
+      lastX = p.x; lastY = p.y;
+    });
+    function endStroke(){
+      if (toolMode === 'select' && shapeSnapshotImageData && shapeStartPoint && shapeCurrentPoint){
+        ctx.putImageData(shapeSnapshotImageData, 0, 0);
+        var x = Math.min(shapeStartPoint.x, shapeCurrentPoint.x), y = Math.min(shapeStartPoint.y, shapeCurrentPoint.y);
+        var w = Math.abs(shapeCurrentPoint.x - shapeStartPoint.x), h = Math.abs(shapeCurrentPoint.y - shapeStartPoint.y);
+        if (w > 2 && h > 2) ctx.clearRect(x, y, w, h);
+      }
+      drawing = false; shapeSnapshotImageData = null; shapeStartPoint = null; shapeCurrentPoint = null;
+      ctx.globalAlpha = 1;
+    }
+    noteCanvas.addEventListener('pointerup', endStroke);
+    noteCanvas.addEventListener('pointercancel', endStroke);
+    noteCanvas.addEventListener('pointerleave', endStroke);
+
+    btnNoteToolMode.addEventListener('click', function(){
+      toolModeIndex = (toolModeIndex + 1) % TOOL_MODES.length;
+      toolMode = TOOL_MODES[toolModeIndex];
+      btnNoteToolMode.textContent = TOOL_MODE_ICON[toolMode];
+      btnNoteToolMode.title = TOOL_MODE_LABEL[toolMode];
+    });
+    btnNoteUndo.addEventListener('click', function(){
+      if (!undoStack.length){ toast('더 되돌릴 내용이 없습니다.'); return; }
+      redoStack.push(noteCanvas.toDataURL('image/png'));
+      var prev = undoStack.pop();
+      var img = new Image();
+      var w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      img.onload = function(){ ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height); ctx.drawImage(img, 0, 0, w, h); };
+      img.src = prev;
+    });
+    btnNoteRedo.addEventListener('click', function(){
+      if (!redoStack.length){ toast('다시 실행할 내용이 없습니다.'); return; }
+      undoStack.push(noteCanvas.toDataURL('image/png'));
+      var next = redoStack.pop();
+      var img = new Image();
+      var w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+      img.onload = function(){ ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height); ctx.drawImage(img, 0, 0, w, h); };
+      img.src = next;
+    });
+    btnNoteClear.addEventListener('click', function(){
+      if (!confirm('지금 페이지에 쓴 메모를 지웁니다. 계속할까요?')) return;
+      pushUndoSnapshot();
+      ctx.clearRect(0, 0, noteCanvas.width, noteCanvas.height);
+    });
+
+    btnNoteBgImage.addEventListener('click', function(){ noteBgFileInput.click(); });
+    noteBgFileInput.addEventListener('change', function(e){
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        notePageBackgrounds[noteCurrentPageIndex] = reader.result;
+        renderCurrentBackground();
+        toast('배경 이미지를 불러왔습니다.');
+      };
+      reader.readAsDataURL(file);
+      noteBgFileInput.value = '';
+    });
+
+    btnNoteBgPattern.addEventListener('click', function(){
+      var modes = ['none', 'ruled', 'grid'];
+      bgPatternMode = modes[(modes.indexOf(bgPatternMode) + 1) % modes.length];
+      noteCanvasWrap.classList.remove('note-bg-ruled', 'note-bg-grid');
+      if (bgPatternMode === 'ruled') noteCanvasWrap.classList.add('note-bg-ruled');
+      if (bgPatternMode === 'grid') noteCanvasWrap.classList.add('note-bg-grid');
+      btnNoteBgPattern.textContent = { none: '▦', ruled: '≡', grid: '⊞' }[bgPatternMode];
+    });
+
+    btnNoteZoom.addEventListener('click', function(){
+      var levels = [1, 1.5, 2];
+      zoomLevel = levels[(levels.indexOf(zoomLevel) + 1) % levels.length];
+      noteZoomInner.style.transform = 'scale(' + zoomLevel + ')';
+      noteZoomInner.style.width = (100 / zoomLevel) + '%';
+      noteZoomInner.style.height = (100 / zoomLevel) + '%';
+      noteCanvasWrap.classList.toggle('note-zoomed', zoomLevel > 1);
+      noteCanvas.style.touchAction = zoomLevel > 1 ? 'pan-x pan-y' : 'none';
+      if (zoomLevel > 1) toast('확대됨 — 손가락으로는 화면만 이동됩니다.');
+    });
+
+    btnNotePrevPage.addEventListener('click', function(){
+      if (noteCurrentPageIndex === 0) return;
+      loadPage(noteCurrentPageIndex - 1);
+    });
+    btnNoteNextPage.addEventListener('click', function(){
+      if (noteCurrentPageIndex < notePages.length - 1){ loadPage(noteCurrentPageIndex + 1); }
+      else {
+        saveCurrentPageSnapshot();
+        notePages.push(''); notePageBackgrounds.push(null);
+        loadPage(notePages.length - 1);
+      }
+    });
+
+    function resetUi(){
+      toolModeIndex = 0; toolMode = TOOL_MODES[0];
+      btnNoteToolMode.textContent = TOOL_MODE_ICON[toolMode];
+      zoomLevel = 1;
+      noteZoomInner.style.transform = 'scale(1)'; noteZoomInner.style.width = '100%'; noteZoomInner.style.height = '100%';
+      noteCanvasWrap.classList.remove('note-zoomed');
+      noteCanvas.style.touchAction = 'none';
+      btnNoteZoom.textContent = '🔍';
+      bgPatternMode = 'none';
+      noteCanvasWrap.classList.remove('note-bg-ruled', 'note-bg-grid');
+      btnNoteBgPattern.textContent = '▦';
+    }
+
+    function initMemoHand(){
+      if (!noteInited){
+        noteInited = true;
+        notePages = ['']; notePageBackgrounds = [null]; noteCurrentPageIndex = 0;
+        undoStack = []; redoStack = [];
+        resetUi();
+        updatePageIndicator();
+        requestAnimationFrame(function(){
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          noteCanvas.width = 0; noteCanvas.height = 0;
+          resizeCanvasToWrap();
+        });
+      }
+    }
+    window.initMemoHand = initMemoHand;
+    window.addEventListener('resize', function(){
+      var view = document.getElementById('view-memo-hand');
+      if (view && view.classList.contains('active')) resizeCanvasToWrap();
+    });
+
+    function flattenPage(inkDataUrl, bgDataUrl, w, h){
+      return new Promise(function(resolve){
+        var dpr = window.devicePixelRatio || 1;
+        var off = document.createElement('canvas');
+        off.width = Math.max(1, Math.round(w * dpr)); off.height = Math.max(1, Math.round(h * dpr));
+        var octx = off.getContext('2d');
+        octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        octx.fillStyle = '#fff'; octx.fillRect(0, 0, w, h);
+        function drawInkThenResolve(){
+          if (inkDataUrl && inkDataUrl.length > 100){
+            var inkImg = new Image();
+            inkImg.onload = function(){ octx.drawImage(inkImg, 0, 0, w, h); resolve(off.toDataURL('image/png')); };
+            inkImg.src = inkDataUrl;
+          } else { resolve(off.toDataURL('image/png')); }
+        }
+        if (bgDataUrl){
+          var bgImg = new Image();
+          bgImg.onload = function(){ octx.drawImage(bgImg, 0, 0, w, h); drawInkThenResolve(); };
+          bgImg.src = bgDataUrl;
+        } else { drawInkThenResolve(); }
+      });
+    }
+
+    btnNoteSave.addEventListener('click', async function(){
+      btnNoteSave.disabled = true; btnNoteSave.textContent = '⏳';
+      try{
+        saveCurrentPageSnapshot();
+        var w = noteCanvasWrap.clientWidth, h = noteCanvasWrap.clientHeight;
+        var pageIndexesToInclude = [];
+        for (var i = 0; i < notePages.length; i++){
+          var hasInk = notePages[i] && notePages[i].length > 100;
+          var hasBg = !!notePageBackgrounds[i];
+          if (hasInk || hasBg) pageIndexesToInclude.push(i);
+        }
+        if (!pageIndexesToInclude.length){ toast('작성된 내용이 없습니다.'); return; }
+
+        var outDoc = await PDFLib.PDFDocument.create();
+        for (var idx of pageIndexesToInclude){
+          var flatDataUrl = await flattenPage(notePages[idx], notePageBackgrounds[idx], w, h);
+          var base64Png = flatDataUrl.split(',')[1];
+          var pngBytes = Uint8Array.from(atob(base64Png), function(c){ return c.charCodeAt(0); });
+          var embedded = await outDoc.embedPng(pngBytes);
+          var page = outDoc.addPage([embedded.width, embedded.height]);
+          page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
+        }
+        var pdfBytes = await outDoc.save();
+        var base64Pdf = uint8ToBase64(pdfBytes);
+        var pdfName = '필기메모_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.pdf';
+
+        btnNoteSave.textContent = '💾';
+        openSaveDialog('(필기메모 — 첨부된 PDF 참고)', function(){
+          notePages = ['']; notePageBackgrounds = [null]; noteCurrentPageIndex = 0;
+          noteInited = false;
+          initMemoHand();
+        }, { name: pdfName, mimeType: 'application/pdf', base64Data: base64Pdf });
+      }catch(err){
+        toast('저장 준비 중 오류: ' + (err && err.message ? err.message : err));
+      }finally{
+        btnNoteSave.disabled = false; btnNoteSave.textContent = '💾';
+      }
+    });
+  })();
+</script>
+

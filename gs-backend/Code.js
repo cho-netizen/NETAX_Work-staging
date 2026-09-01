@@ -3071,6 +3071,123 @@ function getClientActionTools_(ctx) {
   return tools;
 }
 
+// [2026.09] my.netax.kr 신규 관리 앱용 — doPost의 "AI 대화 아닌 순수 액션" 분기를 그대로 뽑아냈다.
+// google.script.run 경로(manageApp_call)와 기존 fetch 경로(doPost) 양쪽에서 공유해서, 액션 종류가
+// 늘어나도 여기 한 곳만 고치면 된다. 매칭되는 action이 없으면 null을 반환해서(=AI 대화 요청이라는 뜻)
+// 호출부가 이어서 처리하게 한다.
+function dispatchClientAction_(body) {
+  // [2026.08] booking 모듈 — 원래 NETAX_Card 프로젝트에 있던 상담예약 기능(netax.kr 랜딩페이지가
+  // 실제 신청 접수처, Admin이 승인·관리). card.netax.kr(명함 페이지)과는 무관해서 booking_ 접두사로
+  // 분류. SMS는 이 프로젝트에 이미 있는 sendSolapiSms_/스크립트 속성을 그대로 재사용(계정 동일 확인됨).
+  if (body.action === 'apply') {
+    return jsonResponse(booking_createApplication(body));
+  }
+  if (body.action === 'approve') {
+    return jsonResponse(booking_approveApplication(body));
+  }
+  if (body.action === 'reject') {
+    return jsonResponse(booking_rejectApplication(body));
+  }
+  if (body.action === 'list_bookings') {
+    // [2026.08] NX-Work 홈 대시보드의 "대기 중인 상담신청" 위젯용 — booking_getBookings()는
+    // 이미 doGet에서도 쓰는 함수라 자체적으로 jsonResponse까지 반환하므로 그대로 리턴한다
+    // (다른 doPost 액션들처럼 다시 jsonResponse()로 한 번 더 감싸면 이중 래핑이 된다).
+    return booking_getBookings();
+  }
+
+  // [2026.08] desk 모듈 — NETAX Desk(폴더/링크 관리) 이관
+  const DESK_ACTIONS = ['listAll', 'addFolder', 'deleteFolder', 'addLink', 'deleteLink', 'reorderFolders', 'reorderLinks', 'moveLink'];
+  if (DESK_ACTIONS.indexOf(body.action) !== -1) {
+    return jsonResponse(desk_doPost(body));
+  }
+
+  // [2026.08] report 모듈 — 자문보고서 열람 시스템 이관
+  const REPORT_ACTIONS = ['admin_list', 'create_report', 'clear_password', 'delete_report', 'get_statute_mst', 'report_access'];
+  if (REPORT_ACTIONS.indexOf(body.action) !== -1) {
+    return jsonResponse(report_doPost(body));
+  }
+
+  // [2026.08] my 모듈 — my.netax.kr(고객 통합 페이지) 이관
+  const MY_ACTIONS = ['admin_create_case', 'login', 'get_checklist_status', 'upload_file', 'get_report_list', 'get_report_file', 'admin_add_checklist_item'];
+  if (MY_ACTIONS.indexOf(body.action) !== -1) {
+    return jsonResponse(my_doPost(body));
+  }
+
+  // [2026.08] work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) 신규
+  const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask'];
+  if (WORK_ACTIONS.indexOf(body.action) !== -1) {
+    return jsonResponse(work_doPost(body));
+  }
+
+  // [2026.08] client 모듈 — 고객관리(고객 명단 + 자문내역) 신규
+  const CLIENT_ACTIONS = ['client_get_clients', 'client_create_client', 'client_update_client', 'client_delete_client', 'client_get_consult_logs', 'client_add_consult_log', 'client_update_consult_log', 'client_delete_consult_log'];
+  if (CLIENT_ACTIONS.indexOf(body.action) !== -1) {
+    return jsonResponse(client_doPost(body));
+  }
+
+  if (body.action === 'listFolder') {
+    return jsonResponse(handleListFolder(body));
+  }
+  if (body.action === 'readFile') {
+    return jsonResponse(handleReadFile(body));
+  }
+  if (body.action === 'readFileBinary') {
+    return jsonResponse(handleReadFileBinary(body));
+  }
+  if (body.action === 'getNetaxRootPath') {
+    return jsonResponse(handleGetNetaxRootPath(body));
+  }
+  if (body.action === 'uploadFile') {
+    return jsonResponse(handleUploadFile(body));
+  }
+  if (body.action === 'deleteItem') {
+    return jsonResponse(handleDeleteItem(body));
+  }
+  if (body.action === 'renameItem') {
+    return jsonResponse(handleRenameItem(body));
+  }
+  if (body.action === 'createFolder') {
+    return jsonResponse(handleCreateFolder(body));
+  }
+  if (body.action === 'listTrash') {
+    return jsonResponse(handleListTrash(body));
+  }
+  if (body.action === 'restoreItem') {
+    return jsonResponse(handleRestoreItem(body));
+  }
+  if (body.action === 'syncGlobalLog') {
+    return jsonResponse(handleSyncGlobalLog(body));
+  }
+  if (body.action === 'getGlobalLog') {
+    return jsonResponse(handleGetGlobalLog(body));
+  }
+  if (body.action === 'searchFiles') {
+    return jsonResponse(handleSearchFiles(body));
+  }
+  if (body.action === 'listCaseTemplates') {
+    return jsonResponse(handleListCaseTemplates(body));
+  }
+  if (body.action === 'getCaseTemplateContent') {
+    return jsonResponse(handleGetCaseTemplateContent(body));
+  }
+  if (body.action === 'saveCaseFromTemplate') {
+    return jsonResponse(handleSaveCaseFromTemplate(body));
+  }
+  if (body.action === 'searchAddress') {
+    return jsonResponse(handleSearchAddress(body));
+  }
+  if (body.action === 'lookupRealPrice') {
+    return jsonResponse(handleLookupRealPrice(body));
+  }
+  if (body.action === 'lookupOfficialPrice') {
+    return jsonResponse(handleLookupOfficialPrice(body));
+  }
+  if (body.action === 'checkBusinessNumber') {
+    return jsonResponse(handleCheckBusinessNumber(body));
+  }
+  return null;
+}
+
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
@@ -3083,115 +3200,8 @@ function doPost(e) {
       return jsonResponse({ error: '인증 실패' });
     }
 
-    // [2026.08] booking 모듈 — 원래 NETAX_Card 프로젝트에 있던 상담예약 기능(netax.kr 랜딩페이지가
-    // 실제 신청 접수처, Admin이 승인·관리). card.netax.kr(명함 페이지)과는 무관해서 booking_ 접두사로
-    // 분류. SMS는 이 프로젝트에 이미 있는 sendSolapiSms_/스크립트 속성을 그대로 재사용(계정 동일 확인됨).
-    if (body.action === 'apply') {
-      return jsonResponse(booking_createApplication(body));
-    }
-    if (body.action === 'approve') {
-      return jsonResponse(booking_approveApplication(body));
-    }
-    if (body.action === 'reject') {
-      return jsonResponse(booking_rejectApplication(body));
-    }
-    if (body.action === 'list_bookings') {
-      // [2026.08] NX-Work 홈 대시보드의 "대기 중인 상담신청" 위젯용 — booking_getBookings()는
-      // 이미 doGet에서도 쓰는 함수라 자체적으로 jsonResponse까지 반환하므로 그대로 리턴한다
-      // (다른 doPost 액션들처럼 다시 jsonResponse()로 한 번 더 감싸면 이중 래핑이 된다).
-      return booking_getBookings();
-    }
-
-    // [2026.08] desk 모듈 — NETAX Desk(폴더/링크 관리) 이관
-    const DESK_ACTIONS = ['listAll', 'addFolder', 'deleteFolder', 'addLink', 'deleteLink', 'reorderFolders', 'reorderLinks', 'moveLink'];
-    if (DESK_ACTIONS.indexOf(body.action) !== -1) {
-      return jsonResponse(desk_doPost(body));
-    }
-
-    // [2026.08] report 모듈 — 자문보고서 열람 시스템 이관
-    const REPORT_ACTIONS = ['admin_list', 'create_report', 'clear_password', 'delete_report', 'get_statute_mst', 'report_access'];
-    if (REPORT_ACTIONS.indexOf(body.action) !== -1) {
-      return jsonResponse(report_doPost(body));
-    }
-
-    // [2026.08] my 모듈 — my.netax.kr(고객 통합 페이지) 이관
-    const MY_ACTIONS = ['admin_create_case', 'login', 'get_checklist_status', 'upload_file', 'get_report_list', 'get_report_file', 'admin_add_checklist_item'];
-    if (MY_ACTIONS.indexOf(body.action) !== -1) {
-      return jsonResponse(my_doPost(body));
-    }
-
-    // [2026.08] work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) 신규
-    const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask'];
-    if (WORK_ACTIONS.indexOf(body.action) !== -1) {
-      return jsonResponse(work_doPost(body));
-    }
-
-    // [2026.08] client 모듈 — 고객관리(고객 명단 + 자문내역) 신규
-    const CLIENT_ACTIONS = ['client_get_clients', 'client_create_client', 'client_update_client', 'client_delete_client', 'client_get_consult_logs', 'client_add_consult_log', 'client_update_consult_log', 'client_delete_consult_log'];
-    if (CLIENT_ACTIONS.indexOf(body.action) !== -1) {
-      return jsonResponse(client_doPost(body));
-    }
-
-    if (body.action === 'listFolder') {
-      return jsonResponse(handleListFolder(body));
-    }
-    if (body.action === 'readFile') {
-      return jsonResponse(handleReadFile(body));
-    }
-    if (body.action === 'readFileBinary') {
-      return jsonResponse(handleReadFileBinary(body));
-    }
-    if (body.action === 'getNetaxRootPath') {
-      return jsonResponse(handleGetNetaxRootPath(body));
-    }
-    if (body.action === 'uploadFile') {
-      return jsonResponse(handleUploadFile(body));
-    }
-    if (body.action === 'deleteItem') {
-      return jsonResponse(handleDeleteItem(body));
-    }
-    if (body.action === 'renameItem') {
-      return jsonResponse(handleRenameItem(body));
-    }
-    if (body.action === 'createFolder') {
-      return jsonResponse(handleCreateFolder(body));
-    }
-    if (body.action === 'listTrash') {
-      return jsonResponse(handleListTrash(body));
-    }
-    if (body.action === 'restoreItem') {
-      return jsonResponse(handleRestoreItem(body));
-    }
-    if (body.action === 'syncGlobalLog') {
-      return jsonResponse(handleSyncGlobalLog(body));
-    }
-    if (body.action === 'getGlobalLog') {
-      return jsonResponse(handleGetGlobalLog(body));
-    }
-    if (body.action === 'searchFiles') {
-      return jsonResponse(handleSearchFiles(body));
-    }
-    if (body.action === 'listCaseTemplates') {
-      return jsonResponse(handleListCaseTemplates(body));
-    }
-    if (body.action === 'getCaseTemplateContent') {
-      return jsonResponse(handleGetCaseTemplateContent(body));
-    }
-    if (body.action === 'saveCaseFromTemplate') {
-      return jsonResponse(handleSaveCaseFromTemplate(body));
-    }
-    if (body.action === 'searchAddress') {
-      return jsonResponse(handleSearchAddress(body));
-    }
-    if (body.action === 'lookupRealPrice') {
-      return jsonResponse(handleLookupRealPrice(body));
-    }
-    if (body.action === 'lookupOfficialPrice') {
-      return jsonResponse(handleLookupOfficialPrice(body));
-    }
-    if (body.action === 'checkBusinessNumber') {
-      return jsonResponse(handleCheckBusinessNumber(body));
-    }
+    const dispatched = dispatchClientAction_(body);
+    if (dispatched) return dispatched;
 
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -14179,6 +14189,17 @@ function installNightlySystemAuditTrigger() {
 }
 
 function doGet(e) {
+  // [2026.09] my.netax.kr 신규 관리 앱 — 기존 index.html(GitHub Pages 채팅앱)과 완전히 별개로,
+  // 이 GAS 프로젝트가 직접 HtmlService로 서빙하는 새 앱. ?app=manage로만 진입, 다른 쿼리스트링
+  // 동작(booking 등)은 그대로 아래에 유지.
+  if (e && e.parameter && e.parameter.app === 'manage') {
+    return HtmlService.createTemplateFromFile('manage/index')
+      .evaluate()
+      .setTitle('NETAX 관리')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
   // [2026.08] booking 모듈의 GET 액션(예약가능시간 조회, 신청목록 조회) — netax.kr 랜딩페이지와
   // Admin이 쿼리스트링으로 호출한다(POST body가 아니라 e.parameter).
   const action = e && e.parameter && e.parameter.action;
@@ -14200,6 +14221,39 @@ function doGet(e) {
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'NX Assistant 프록시가 정상 동작 중입니다.' }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// =========================================================
+// manage 모듈 — my.netax.kr 신규 관리 앱 (2026.09)
+// =========================================================
+
+// manage/index.html에서 <?!= include_('manage/xxx') ?>로 부분 HTML을 끼워넣기 위한 헬퍼.
+function include_(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// [2026.09] admin.netax.kr과 같은 패턴 — 계정 없이 공용 비밀번호 하나로 접근을 막는 얇은 게이트.
+// 스크립트 속성 MANAGE_APP_PASSWORD가 비어있으면(설정 전) 항상 거부한다.
+function manageApp_checkPassword(pw) {
+  const expected = PropertiesService.getScriptProperties().getProperty('MANAGE_APP_PASSWORD');
+  return !!expected && pw === expected;
+}
+
+// [2026.09] manage 앱의 모든 화면이 fetch 대신 google.script.run으로 호출하는 단일 진입점.
+// doPost의 action-dispatch 로직(dispatchClientAction_)을 그대로 재사용 — 이 경로는 이미
+// 로그인된 Apps Script 실행 컨텍스트 안이라 doPost처럼 _key HMAC 검증이 필요 없다.
+// 반환값은 google.script.run이 그대로 직렬화할 수 있도록 ContentService가 아닌 평범한 객체로 풀어서 준다.
+function manageApp_call(action, payload) {
+  const body = Object.assign({}, payload || {}, { action: action });
+  const dispatched = dispatchClientAction_(body);
+  if (!dispatched) {
+    return { error: '알 수 없는 작업: ' + action };
+  }
+  try {
+    return JSON.parse(dispatched.getContent());
+  } catch (err) {
+    return { error: '응답 파싱 실패: ' + err.message };
+  }
 }
 
 // =========================================================

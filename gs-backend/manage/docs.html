@@ -1,0 +1,680 @@
+<div class="view" id="view-docs">
+  <div class="docs-toolbar">
+    <button type="button" id="docsBtnUp" class="ghost-btn" title="상위 폴더">⬆ 상위</button>
+    <div class="docs-breadcrumb" id="docsBreadcrumb"></div>
+    <button type="button" id="docsBtnNewFolder" class="ghost-btn">📁 새 폴더</button>
+    <button type="button" id="docsBtnUpload" class="ghost-btn">⬆ 업로드</button>
+    <input type="file" id="docsUploadInput" multiple style="display:none;">
+    <button type="button" id="docsBtnScan" class="save-btn">📷 스캔</button>
+  </div>
+  <div class="docs-list" id="docsList" style="flex:1; overflow-y:auto;"><div class="spinner">불러오는 중…</div></div>
+</div>
+
+<div class="modal-overlay" id="scanOverlay" style="display:none;">
+  <div class="scan-modal-panel">
+    <div class="modal-head">
+      <span>📷 문서 스캔 · PDF 조립</span>
+      <span class="modal-close" id="btnCloseScan" title="닫기">✕</span>
+    </div>
+    <div class="scan-body">
+      <div id="scanTargetFolderLabel" style="font-size:12px; color:var(--sub);"></div>
+      <div class="scan-row">
+        <button type="button" id="btnScanCapture" class="ghost-btn">📷 촬영하기</button>
+        <button type="button" id="btnScanGallery" class="ghost-btn">🖼 갤러리에서 불러오기</button>
+        <button type="button" id="btnScanPdfInsert" class="ghost-btn">📄 기존 PDF 삽입</button>
+        <button type="button" id="btnSkipScanFile" class="ghost-btn" style="display:none;">다음 파일로 건너뛰기</button>
+      </div>
+      <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="scanGalleryInput" accept="image/*" multiple style="display:none;">
+      <input type="file" id="scanPdfInsertInput" accept="application/pdf" style="display:none;">
+
+      <div id="scanStageWrap">
+        <div id="scanStage">
+          <canvas id="scanPreviewCanvas"></canvas>
+          <svg id="scanQuadSvg" style="position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none;">
+            <polygon id="scanQuadPoly" fill="rgba(200,162,68,0.25)" stroke="var(--gold)" stroke-width="2"></polygon>
+          </svg>
+          <div class="scan-handle" id="handle-tl" data-corner="tl"></div>
+          <div class="scan-handle" id="handle-tr" data-corner="tr"></div>
+          <div class="scan-handle" id="handle-br" data-corner="br"></div>
+          <div class="scan-handle" id="handle-bl" data-corner="bl"></div>
+        </div>
+        <div class="scan-row">
+          <button type="button" id="btnRotateScanSource" class="ghost-btn">↻ 회전</button>
+          <button type="button" id="btnAutoDetect" class="ghost-btn">자동 인식</button>
+          <button type="button" id="btnUseWholeImage" class="ghost-btn">전체 사용</button>
+          <label style="font-size:12px; color:var(--sub);"><input type="checkbox" id="scanGrayscale"> 흑백</label>
+          <label style="font-size:12px; color:var(--sub);">대비 <input type="range" id="scanContrast" min="0" max="100" value="0" style="vertical-align:middle;"></label>
+          <button type="button" id="btnWarpAndAdd" class="save-btn">담기</button>
+        </div>
+      </div>
+
+      <div id="scanTray"></div>
+
+      <div class="scan-row" id="scanExportFoot" style="display:none; border-top:1px solid var(--line); padding-top:12px;">
+        <input type="text" id="scanOutputName" placeholder="파일명(확장자 제외)" style="flex:1; min-width:140px;">
+        <button type="button" id="btnDownloadPdf" class="ghost-btn">PC에 다운로드</button>
+        <button type="button" id="btnSaveToFolder" class="save-btn">현재 폴더에 저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+  // ============================================================
+  // 증빙관리 — 탐색창(폴더 이동)+보기창(구글드라이브 뷰어로 새 탭에서 열기)+스캔창.
+  // 스캔의 원근보정(호모그래피) 수학은 document-tools.js의 검증된 로직을 그대로 가져왔다.
+  // 탐색 자체는 explorer.js를 이식하지 않고, 이 앱에 맞게 가볍게 새로 짰다
+  // (explorer.js는 채팅 첨부·다중선택 등과 얽혀있어 그 부분까지 옮길 필요가 없었음).
+  // ============================================================
+  var docsPath = [];
+  var docsCurrentListing = null;
+  var docsLoaded = false;
+
+  function initDocs(){
+    if (docsLoaded) return;
+    docsLoaded = true;
+    docsNavigate([]);
+  }
+
+  function docsNavigate(path){
+    docsPath = path;
+    var listEl = document.getElementById('docsList');
+    listEl.innerHTML = '<div class="spinner">불러오는 중…</div>';
+    callGas('listFolder', { path: docsPath }).then(function(res){
+      if (res.error){ listEl.innerHTML = '<div class="log-empty">' + escapeHtml(res.error) + '</div>'; return; }
+      docsPath = res.path || docsPath;
+      docsCurrentListing = res;
+      renderDocsBreadcrumb();
+      renderDocsList();
+      updateScanTargetFolderLabel_();
+    }).catch(function(){ listEl.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>'; });
+  }
+
+  function renderDocsBreadcrumb(){
+    var el = document.getElementById('docsBreadcrumb');
+    var html = '<span data-i="-1">🏠 고객사건</span>';
+    docsPath.forEach(function(seg, i){ html += ' / <span data-i="' + i + '">' + escapeHtml(seg) + '</span>'; });
+    el.innerHTML = html;
+    el.querySelectorAll('span').forEach(function(sp){
+      sp.addEventListener('click', function(){
+        var i = Number(sp.dataset.i);
+        docsNavigate(i === -1 ? [] : docsPath.slice(0, i + 1));
+      });
+    });
+  }
+
+  function docsIconFor(mimeType, name){
+    if (mimeType === 'application/pdf') return '📕';
+    if (mimeType && mimeType.indexOf('image/') === 0) return '🖼';
+    if (mimeType && mimeType.indexOf('spreadsheet') !== -1) return '📊';
+    if (/\.md$/i.test(name || '')) return '📝';
+    return '📄';
+  }
+
+  function renderDocsList(){
+    var listEl = document.getElementById('docsList');
+    var data = docsCurrentListing;
+    var folders = data.folders || [], files = data.files || [];
+    if (!folders.length && !files.length){ listEl.innerHTML = '<div class="log-empty">빈 폴더입니다.</div>'; return; }
+    var html = '';
+    folders.forEach(function(f){
+      html += '<div class="docs-row" data-type="folder" data-id="' + escapeHtml(f.id) + '" data-name="' + escapeHtml(f.name) + '">' +
+        '<span class="docs-icon">📁</span><span class="docs-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="docs-actions"><span data-act="rename" title="이름변경">✏️</span><span data-act="delete" title="삭제">🗑</span></span>' +
+        '</div>';
+    });
+    files.forEach(function(f){
+      html += '<div class="docs-row" data-type="file" data-id="' + escapeHtml(f.id) + '" data-url="' + escapeHtml(f.url || '') + '">' +
+        '<span class="docs-icon">' + docsIconFor(f.mimeType, f.name) + '</span><span class="docs-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="docs-meta">' + escapeHtml(f.modifiedDate || '') + (f.sizeBytes ? ' · ' + formatFileSize(f.sizeBytes) : '') + '</span>' +
+        '<span class="docs-actions"><span data-act="rename" title="이름변경">✏️</span><span data-act="delete" title="삭제">🗑</span></span>' +
+        '</div>';
+    });
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('.docs-row').forEach(function(row){
+      row.addEventListener('click', function(e){
+        if (e.target.closest('.docs-actions')) return;
+        if (row.dataset.type === 'folder'){
+          docsNavigate(docsPath.concat([row.dataset.name]));
+        } else if (row.dataset.url){
+          window.open(row.dataset.url, '_blank');
+        }
+      });
+      row.querySelectorAll('.docs-actions span').forEach(function(actEl){
+        actEl.addEventListener('click', function(e){
+          e.stopPropagation();
+          var act = actEl.dataset.act;
+          var id = row.dataset.id, type = row.dataset.type;
+          var label = row.querySelector('.docs-name').textContent;
+          if (act === 'delete'){
+            if (!confirm('"' + label + '"을(를) 삭제할까요? (휴지통으로 이동)')) return;
+            callGas('deleteItem', { id: id, type: type }).then(function(res){
+              if (res.error){ toast('삭제 실패: ' + res.error); return; }
+              toast('삭제했습니다.');
+              docsNavigate(docsPath);
+            });
+          } else if (act === 'rename'){
+            var newName = prompt('새 이름을 입력하세요:', label);
+            if (!newName || !newName.trim() || newName.trim() === label) return;
+            callGas('renameItem', { id: id, type: type, newName: newName.trim() }).then(function(res){
+              if (res.error){ toast('이름변경 실패: ' + res.error); return; }
+              toast('이름을 변경했습니다.');
+              docsNavigate(docsPath);
+            });
+          }
+        });
+      });
+    });
+  }
+
+  document.getElementById('docsBtnUp').addEventListener('click', function(){
+    if (docsPath.length) docsNavigate(docsPath.slice(0, -1));
+  });
+  document.getElementById('docsBtnNewFolder').addEventListener('click', function(){
+    var name = prompt('새 폴더 이름을 입력하세요:');
+    if (!name || !name.trim()) return;
+    callGas('createFolder', { path: docsPath, name: name.trim() }).then(function(res){
+      if (res.error){ toast('폴더 생성 실패: ' + res.error); return; }
+      toast('폴더를 만들었습니다.');
+      docsNavigate(docsPath);
+    });
+  });
+  document.getElementById('docsBtnUpload').addEventListener('click', function(){
+    document.getElementById('docsUploadInput').click();
+  });
+  document.getElementById('docsUploadInput').addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    var remaining = files.length;
+    files.forEach(function(file){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var base64 = reader.result.split(',')[1];
+        callGas('uploadFile', { path: docsPath, name: file.name, mimeType: file.type || 'application/octet-stream', base64Data: base64 }).then(function(res){
+          remaining--;
+          if (res.error) toast('업로드 실패(' + file.name + '): ' + res.error);
+          if (remaining === 0){ toast('업로드를 마쳤습니다.'); docsNavigate(docsPath); }
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  });
+
+  // ============================================================
+  // 스캔 — document-tools.js의 원근보정(호모그래피)·자동인식·PDF조립 로직을 그대로 이식.
+  // ============================================================
+  var scanOverlay = document.getElementById('scanOverlay');
+  var scanFileInput = document.getElementById('scanFileInput');
+  var scanGalleryInput = document.getElementById('scanGalleryInput');
+  var scanStageWrap = document.getElementById('scanStageWrap');
+  var scanStage = document.getElementById('scanStage');
+  var scanPreviewCanvas = document.getElementById('scanPreviewCanvas');
+  var scanQuadPoly = document.getElementById('scanQuadPoly');
+  var scanGrayscale = document.getElementById('scanGrayscale');
+  var scanContrast = document.getElementById('scanContrast');
+  var btnAutoDetect = document.getElementById('btnAutoDetect');
+  var btnWarpAndAdd = document.getElementById('btnWarpAndAdd');
+  var scanPdfInsertInput = document.getElementById('scanPdfInsertInput');
+  var scanTray = document.getElementById('scanTray');
+  var scanOutputName = document.getElementById('scanOutputName');
+  var btnDownloadPdf = document.getElementById('btnDownloadPdf');
+  var btnSaveToFolder = document.getElementById('btnSaveToFolder');
+
+  var scanImageEl = null, scanDisplayScale = 1, scanDW = 0, scanDH = 0, scanCorners = null;
+  var docPages = [];
+  var scanFileQueue = [];
+
+  function updateScanTargetFolderLabel_(){
+    var label = document.getElementById('scanTargetFolderLabel');
+    if (!label) return;
+    label.textContent = docsPath.length
+      ? '📁 저장 위치: 고객사건 / ' + docsPath.join(' / ')
+      : '📁 저장 위치: 고객사건(최상위) — 하위 폴더로 들어간 뒤 스캔하는 것을 권장합니다.';
+  }
+
+  function openScanModal(){
+    scanOverlay.style.display = 'flex';
+    scanOutputName.value = '';
+    scanFileQueue = [];
+    document.getElementById('btnSkipScanFile').style.display = 'none';
+    updateScanExportFootVisibility();
+    updateScanTargetFolderLabel_();
+  }
+  function closeScanModal(){ scanOverlay.style.display = 'none'; }
+  document.getElementById('docsBtnScan').addEventListener('click', openScanModal);
+  document.getElementById('btnCloseScan').addEventListener('click', closeScanModal);
+  document.getElementById('btnScanCapture').addEventListener('click', function(){ scanFileInput.click(); });
+  document.getElementById('btnScanGallery').addEventListener('click', function(){ scanGalleryInput.click(); });
+  document.getElementById('btnScanPdfInsert').addEventListener('click', function(){ scanPdfInsertInput.click(); });
+
+  scanFileInput.addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if (file) loadScanImage(file);
+  });
+  scanGalleryInput.addEventListener('change', function(e){
+    var files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    scanFileQueue = files.slice(1);
+    loadScanImage(files[0]);
+    updateSkipButtonVisibility();
+    if (scanFileQueue.length) toast('총 ' + files.length + '개 파일 — "담기"를 누를 때마다 다음 파일로 자동으로 넘어갑니다.');
+  });
+
+  function loadNextQueuedFileIfAny(){
+    updateSkipButtonVisibility();
+    if (!scanFileQueue.length) return;
+    var next = scanFileQueue.shift();
+    loadScanImage(next);
+    toast(scanFileQueue.length ? ('다음 파일로 넘어갑니다 (남은 ' + scanFileQueue.length + '개)') : '마지막 파일입니다.');
+    updateSkipButtonVisibility();
+  }
+  function updateSkipButtonVisibility(){
+    document.getElementById('btnSkipScanFile').style.display = scanFileQueue.length ? '' : 'none';
+  }
+  document.getElementById('btnSkipScanFile').addEventListener('click', loadNextQueuedFileIfAny);
+
+  function loadScanImage(file){
+    if (!scanOutputName.value.trim() && file && file.name){
+      var base = file.name.replace(/\.[^.]+$/, '');
+      var digitsOnly = base.replace(/\D/g, '');
+      var looksLikeMeaninglessNumber = digitsOnly.length >= 10 && digitsOnly.length >= base.length * 0.7;
+      scanOutputName.value = looksLikeMeaninglessNumber
+        ? ('스캔_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, ''))
+        : base;
+    }
+    var reader = new FileReader();
+    reader.onload = function(){
+      var img = new Image();
+      img.onload = function(){ setupScanStage(img); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function setupScanStage(img){
+    scanImageEl = img;
+    scanStageWrap.style.display = 'flex';
+    var containerW = scanStageWrap.clientWidth || 400;
+    var maxW = containerW - 4;
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    scanDisplayScale = maxW / iw;
+    scanDW = Math.max(1, Math.round(iw * scanDisplayScale));
+    scanDH = Math.max(1, Math.round(ih * scanDisplayScale));
+    scanPreviewCanvas.width = scanDW;
+    scanPreviewCanvas.height = scanDH;
+    scanStage.style.width = scanDW + 'px';
+    scanStage.style.height = scanDH + 'px';
+    document.getElementById('scanQuadSvg').setAttribute('viewBox', '0 0 ' + scanDW + ' ' + scanDH);
+    var ctx = scanPreviewCanvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, scanDW, scanDH);
+    autoDetectCorners();
+  }
+
+  function toGrayscale(imageData){
+    var data = imageData.data, width = imageData.width, height = imageData.height;
+    var gray = new Float32Array(width * height);
+    for (var i = 0, p = 0; i < data.length; i += 4, p++){
+      gray[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+    return gray;
+  }
+  function scanEdgeLine(getVal, length){
+    var startSkip = Math.floor(length * 0.03);
+    var maxDiff = 0, bestIdx = Math.floor(length * 0.06);
+    for (var i = startSkip + 1; i < length * 0.5; i++){
+      var diff = Math.abs(getVal(i) - getVal(i - 1));
+      if (diff > maxDiff){ maxDiff = diff; bestIdx = i; }
+    }
+    return { idx: bestIdx, strength: maxDiff };
+  }
+  function detectEdgeInset(gray, width, height){
+    var marginLimit = 0.35, THRESH = 15;
+    var fallback = { top: height * 0.06, bottom: height * 0.06, left: width * 0.06, right: width * 0.06 };
+    var N_SAMPLES = 7;
+    function sampleMedian(getVal, perpLength, alongLength){
+      var hits = [];
+      for (var s = 1; s <= N_SAMPLES; s++){
+        var t = s / (N_SAMPLES + 1);
+        var along = Math.round(t * (alongLength - 1));
+        var r = scanEdgeLine(function(p){ return getVal(along, p); }, perpLength);
+        if (r.strength > THRESH && r.idx < perpLength * marginLimit) hits.push(r.idx);
+      }
+      if (!hits.length) return null;
+      hits.sort(function(a,b){ return a-b; });
+      return hits[Math.floor(hits.length / 2)];
+    }
+    var top = sampleMedian(function(along, p){ return gray[p * width + along]; }, height, width);
+    var bottom = sampleMedian(function(along, p){ return gray[(height - 1 - p) * width + along]; }, height, width);
+    var left = sampleMedian(function(along, p){ return gray[along * width + p]; }, width, height);
+    var right = sampleMedian(function(along, p){ return gray[along * width + (width - 1 - p)]; }, width, height);
+    return {
+      top: top !== null ? top : fallback.top, bottom: bottom !== null ? bottom : fallback.bottom,
+      left: left !== null ? left : fallback.left, right: right !== null ? right : fallback.right
+    };
+  }
+  function autoDetectCorners(){
+    if (!scanImageEl) return;
+    var ctx = scanPreviewCanvas.getContext('2d');
+    var imageData = ctx.getImageData(0, 0, scanDW, scanDH);
+    var gray = toGrayscale(imageData);
+    var inset = detectEdgeInset(gray, scanDW, scanDH);
+    scanCorners = {
+      tl: { x: inset.left, y: inset.top }, tr: { x: scanDW - inset.right, y: inset.top },
+      br: { x: scanDW - inset.right, y: scanDH - inset.bottom }, bl: { x: inset.left, y: scanDH - inset.bottom }
+    };
+    renderScanHandles();
+  }
+  btnAutoDetect.addEventListener('click', autoDetectCorners);
+
+  function useWholeImage(){
+    if (!scanImageEl) return;
+    scanCorners = { tl:{x:0,y:0}, tr:{x:scanDW,y:0}, br:{x:scanDW,y:scanDH}, bl:{x:0,y:scanDH} };
+    renderScanHandles();
+  }
+  document.getElementById('btnUseWholeImage').addEventListener('click', useWholeImage);
+
+  document.getElementById('btnRotateScanSource').addEventListener('click', function(){
+    if (!scanImageEl) return;
+    var off = document.createElement('canvas');
+    off.width = scanImageEl.naturalHeight; off.height = scanImageEl.naturalWidth;
+    var octx = off.getContext('2d');
+    octx.translate(off.width / 2, off.height / 2);
+    octx.rotate(90 * Math.PI / 180);
+    octx.drawImage(scanImageEl, -scanImageEl.naturalWidth / 2, -scanImageEl.naturalHeight / 2);
+    var rotated = new Image();
+    rotated.onload = function(){ setupScanStage(rotated); };
+    rotated.src = off.toDataURL('image/jpeg', 0.92);
+  });
+
+  function renderScanHandles(){
+    ['tl','tr','br','bl'].forEach(function(key){
+      var el = document.getElementById('handle-' + key);
+      el.style.left = scanCorners[key].x + 'px';
+      el.style.top = scanCorners[key].y + 'px';
+    });
+    scanQuadPoly.setAttribute('points', ['tl','tr','br','bl'].map(function(k){ return scanCorners[k].x + ',' + scanCorners[k].y; }).join(' '));
+  }
+
+  document.querySelectorAll('.scan-handle').forEach(function(handle){
+    handle.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      var corner = handle.dataset.corner;
+      function onMove(ev){
+        var rect = scanStage.getBoundingClientRect();
+        var scaleX = scanDW / rect.width, scaleY = scanDH / rect.height;
+        var x = (ev.clientX - rect.left) * scaleX, y = (ev.clientY - rect.top) * scaleY;
+        x = Math.max(0, Math.min(scanDW, x)); y = Math.max(0, Math.min(scanDH, y));
+        scanCorners[corner] = { x: x, y: y };
+        renderScanHandles();
+      }
+      function onUp(){
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+      }
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+    });
+  });
+
+  function solveLinearSystem(A, B){
+    var n = B.length;
+    for (var i = 0; i < n; i++) A[i] = A[i].concat([B[i]]);
+    for (var col = 0; col < n; col++){
+      var maxRow = col;
+      for (var r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[maxRow][col])) maxRow = r;
+      var tmp = A[col]; A[col] = A[maxRow]; A[maxRow] = tmp;
+      var pivot = A[col][col];
+      if (Math.abs(pivot) < 1e-12) continue;
+      for (var r2 = 0; r2 < n; r2++){
+        if (r2 === col) continue;
+        var factor = A[r2][col] / pivot;
+        for (var c = col; c <= n; c++) A[r2][c] -= factor * A[col][c];
+      }
+    }
+    var x = new Array(n);
+    for (var i2 = 0; i2 < n; i2++) x[i2] = A[i2][n] / (A[i2][i2] || 1e-12);
+    return x;
+  }
+  function computeHomography(srcPts, dstPts){
+    var A = [], B = [];
+    for (var i = 0; i < 4; i++){
+      var sx = srcPts[i].x, sy = srcPts[i].y, dx = dstPts[i].x, dy = dstPts[i].y;
+      A.push([sx, sy, 1, 0, 0, 0, -dx * sx, -dx * sy]); B.push(dx);
+      A.push([0, 0, 0, sx, sy, 1, -dy * sx, -dy * sy]); B.push(dy);
+    }
+    var s = solveLinearSystem(A, B);
+    return [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], 1];
+  }
+  function invert3x3(m){
+    var a=m[0],b=m[1],c=m[2], d=m[3],e=m[4],f=m[5], g=m[6],h=m[7],i=m[8];
+    var C00=e*i-f*h, C01=-(d*i-f*g), C02=d*h-e*g;
+    var C10=-(b*i-c*h), C11=a*i-c*g, C12=-(a*h-b*g);
+    var C20=b*f-c*e, C21=-(a*f-c*d), C22=a*e-b*d;
+    var det = a*C00 + b*C01 + c*C02;
+    var invDet = 1 / (det || 1e-12);
+    return [C00*invDet, C10*invDet, C20*invDet, C01*invDet, C11*invDet, C21*invDet, C02*invDet, C12*invDet, C22*invDet];
+  }
+  function bilinearSample(imgData, sx, sy){
+    var w = imgData.width, h = imgData.height, data = imgData.data;
+    if (sx < 0 || sy < 0 || sx > w - 1 || sy > h - 1) return [255, 255, 255];
+    var x0 = Math.floor(sx), y0 = Math.floor(sy);
+    var x1 = Math.min(x0 + 1, w - 1), y1 = Math.min(y0 + 1, h - 1);
+    var fx = sx - x0, fy = sy - y0;
+    var i00 = (y0*w+x0)*4, i10 = (y0*w+x1)*4, i01 = (y1*w+x0)*4, i11 = (y1*w+x1)*4;
+    var r = [];
+    for (var k = 0; k < 3; k++){
+      var top = data[i00+k]*(1-fx) + data[i10+k]*fx;
+      var bottom = data[i01+k]*(1-fx) + data[i11+k]*fx;
+      r.push(top*(1-fy) + bottom*fy);
+    }
+    return r;
+  }
+  function applyEnhance(ctx, w, h, grayscale, contrastPct){
+    if (!grayscale && !contrastPct) return;
+    var imgData = ctx.getImageData(0, 0, w, h);
+    var d = imgData.data;
+    var c = (contrastPct / 100) * 80;
+    var factor = (259 * (c + 255)) / (255 * (259 - c));
+    for (var p = 0; p < d.length; p += 4){
+      var r = d[p], g = d[p+1], b = d[p+2];
+      if (grayscale){ var gray = 0.299*r + 0.587*g + 0.114*b; r = g = b = gray; }
+      d[p]   = Math.max(0, Math.min(255, factor*(r-128)+128));
+      d[p+1] = Math.max(0, Math.min(255, factor*(g-128)+128));
+      d[p+2] = Math.max(0, Math.min(255, factor*(b-128)+128));
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  function warpAndAddPage(){
+    var scale = 1 / scanDisplayScale;
+    var srcPts = ['tl','tr','br','bl'].map(function(k){ return { x: scanCorners[k].x*scale, y: scanCorners[k].y*scale }; });
+    function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+    var outW = Math.round(Math.max(dist(srcPts[0],srcPts[1]), dist(srcPts[3],srcPts[2])));
+    var outH = Math.round(Math.max(dist(srcPts[0],srcPts[3]), dist(srcPts[1],srcPts[2])));
+    var MAX_DIM = 2000;
+    if (outW > MAX_DIM || outH > MAX_DIM){
+      var s = MAX_DIM / Math.max(outW, outH);
+      outW = Math.round(outW*s); outH = Math.round(outH*s);
+    }
+    outW = Math.max(50, outW); outH = Math.max(50, outH);
+
+    var dstPts = [{x:0,y:0},{x:outW,y:0},{x:outW,y:outH},{x:0,y:outH}];
+    var M = computeHomography(srcPts, dstPts);
+    var Minv = invert3x3(M);
+
+    var srcCanvas = document.createElement('canvas');
+    srcCanvas.width = scanImageEl.naturalWidth; srcCanvas.height = scanImageEl.naturalHeight;
+    var srcCtx = srcCanvas.getContext('2d');
+    srcCtx.drawImage(scanImageEl, 0, 0);
+    var srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+
+    var outCanvas = document.createElement('canvas');
+    outCanvas.width = outW; outCanvas.height = outH;
+    var outCtx = outCanvas.getContext('2d');
+    var outData = outCtx.createImageData(outW, outH);
+
+    for (var Y = 0; Y < outH; Y++){
+      for (var X = 0; X < outW; X++){
+        var w = Minv[6]*X + Minv[7]*Y + Minv[8];
+        var sx = (Minv[0]*X + Minv[1]*Y + Minv[2]) / w;
+        var sy = (Minv[3]*X + Minv[4]*Y + Minv[5]) / w;
+        var rgb = bilinearSample(srcData, sx, sy);
+        var di = (Y*outW+X)*4;
+        outData.data[di]=rgb[0]; outData.data[di+1]=rgb[1]; outData.data[di+2]=rgb[2]; outData.data[di+3]=255;
+      }
+    }
+    outCtx.putImageData(outData, 0, 0);
+    applyEnhance(outCtx, outW, outH, scanGrayscale.checked, Number(scanContrast.value));
+
+    var dataUrl = outCanvas.toDataURL('image/jpeg', 0.88);
+    docPages.push({ type:'image', dataUrl: dataUrl, rotation:0, name: String(docPages.length + 1).padStart(3, '0') });
+    renderTray();
+
+    scanFileInput.value = ''; scanGalleryInput.value = '';
+    scanStageWrap.style.display = 'none';
+    scanImageEl = null;
+  }
+
+  btnWarpAndAdd.addEventListener('click', function(){
+    if (!scanImageEl || !scanCorners){ toast('먼저 이미지를 불러와주세요.'); return; }
+    btnWarpAndAdd.disabled = true; btnWarpAndAdd.textContent = '처리 중…';
+    setTimeout(function(){
+      try{
+        warpAndAddPage();
+        loadNextQueuedFileIfAny();
+      }catch(err){ toast('처리 중 오류: ' + (err && err.message ? err.message : err)); }
+      finally{ btnWarpAndAdd.disabled = false; btnWarpAndAdd.textContent = '담기'; }
+    }, 20);
+  });
+
+  scanPdfInsertInput.addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    file.arrayBuffer().then(function(buf){
+      var bytes = new Uint8Array(buf);
+      return PDFLib.PDFDocument.load(bytes).then(function(doc){
+        docPages.push({ type:'pdf', name:file.name, bytes:bytes, pageCount: doc.getPageCount() });
+        renderTray();
+      });
+    }).catch(function(err){ toast('PDF를 읽는 중 오류: ' + (err && err.message ? err.message : err)); });
+    e.target.value = '';
+  });
+
+  function updateScanExportFootVisibility(){
+    document.getElementById('scanExportFoot').style.display = docPages.length ? 'flex' : 'none';
+  }
+
+  function renderTray(){
+    updateScanExportFootVisibility();
+    scanTray.innerHTML = '';
+    docPages.forEach(function(item, idx){
+      var row = document.createElement('div');
+      row.className = 'scan-tray-item';
+      row.dataset.idx = idx;
+      if (item.type === 'image'){
+        row.innerHTML = '<div class="scan-tray-grip"><img src="' + item.dataUrl + '" style="transform:rotate(' + item.rotation + 'deg)">' +
+          '<span class="name">' + escapeHtml(item.name) + '</span></div>' +
+          '<button data-act="rotate" title="90도 회전">↻</button><button data-act="del" title="삭제">✕</button>';
+      } else {
+        row.innerHTML = '<div class="scan-tray-grip"><span class="pdf-chip-icon">📄</span>' +
+          '<span class="name">' + escapeHtml(item.name) + ' (' + item.pageCount + 'p)</span></div>' +
+          '<button data-act="del" title="삭제">✕</button>';
+      }
+      row.querySelectorAll('button').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var act = btn.dataset.act;
+          if (act === 'del') docPages.splice(idx, 1);
+          else if (act === 'rotate') item.rotation = (item.rotation + 90) % 360;
+          renderTray();
+        });
+      });
+      scanTray.appendChild(row);
+    });
+  }
+
+  function dataUrlToUint8(dataUrl){
+    var base64 = dataUrl.split(',')[1];
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  function getRotatedJpegBytes(item){
+    if (!item.rotation) return Promise.resolve(dataUrlToUint8(item.dataUrl));
+    return new Promise(function(resolve){
+      var img = new Image();
+      img.onload = function(){
+        var swapped = item.rotation % 180 !== 0;
+        var cw = swapped ? img.height : img.width, ch = swapped ? img.width : img.height;
+        var canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        var ctx = canvas.getContext('2d');
+        ctx.translate(cw/2, ch/2);
+        ctx.rotate(item.rotation * Math.PI/180);
+        ctx.drawImage(img, -img.width/2, -img.height/2);
+        canvas.toBlob(function(blob){ blob.arrayBuffer().then(function(buf){ resolve(new Uint8Array(buf)); }); }, 'image/jpeg', 0.9);
+      };
+      img.src = item.dataUrl;
+    });
+  }
+  async function buildPdfBytes(){
+    if (scanImageEl && scanCorners && scanStageWrap.style.display !== 'none'){
+      try{ warpAndAddPage(); }catch(err){}
+    }
+    if (!docPages.length) return null;
+    var outDoc = await PDFLib.PDFDocument.create();
+    for (var item of docPages){
+      if (item.type === 'image'){
+        var jpegBytes = await getRotatedJpegBytes(item);
+        var embedded = await outDoc.embedJpg(jpegBytes);
+        var page = outDoc.addPage([embedded.width, embedded.height]);
+        page.drawImage(embedded, { x:0, y:0, width: embedded.width, height: embedded.height });
+      } else {
+        var srcDoc = await PDFLib.PDFDocument.load(item.bytes);
+        var copied = await outDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+        copied.forEach(function(p){ outDoc.addPage(p); });
+      }
+    }
+    return await outDoc.save();
+  }
+
+  btnDownloadPdf.addEventListener('click', async function(){
+    btnDownloadPdf.disabled = true; btnDownloadPdf.textContent = '만드는 중…';
+    try{
+      var bytes = await buildPdfBytes();
+      if (!bytes){ toast('담긴 페이지가 없습니다.'); return; }
+      var blob = new Blob([bytes], { type:'application/pdf' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = (scanOutputName.value.trim() || '문서') + '.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+    }catch(err){ toast('PDF 생성 중 오류: ' + (err && err.message ? err.message : err)); }
+    finally{ btnDownloadPdf.disabled = false; btnDownloadPdf.textContent = 'PC에 다운로드'; }
+  });
+
+  btnSaveToFolder.addEventListener('click', async function(){
+    if (!confirm('"고객사건' + (docsPath.length ? ' / ' + docsPath.join(' / ') : '') + '" 폴더에 저장합니다. 맞나요?')) return;
+    btnSaveToFolder.disabled = true; btnSaveToFolder.textContent = '저장 중…';
+    try{
+      var bytes = await buildPdfBytes();
+      if (!bytes){ toast('담긴 페이지가 없습니다.'); return; }
+      var base64 = uint8ToBase64(bytes);
+      var name = (scanOutputName.value.trim() || '문서') + '.pdf';
+      var res = await callGas('uploadFile', { path: docsPath, name: name, mimeType: 'application/pdf', base64Data: base64 });
+      if (res.error){ toast('저장 실패: ' + res.error); }
+      else {
+        toast('저장했습니다: ' + name);
+        docPages = [];
+        renderTray();
+        docsNavigate(docsPath);
+      }
+    }catch(err){ toast('저장 중 오류: ' + (err && err.message ? err.message : err)); }
+    finally{ btnSaveToFolder.disabled = false; btnSaveToFolder.textContent = '현재 폴더에 저장'; }
+  });
+</script>

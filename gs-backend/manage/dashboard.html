@@ -1,0 +1,81 @@
+<div class="view" id="view-dashboard">
+  <div class="view-head"><h2>오늘의 현황</h2></div>
+  <div class="view-body">
+    <div class="card">
+      <h3>⏰ 마감임박 작업 (법정일 임박순, 완료 제외)</h3>
+      <div id="dashDeadlines"><div class="spinner">불러오는 중…</div></div>
+    </div>
+    <div class="card">
+      <h3>📅 대기중인 상담신청</h3>
+      <div id="dashBookings"><div class="spinner">불러오는 중…</div></div>
+    </div>
+    <div class="card">
+      <h3>💰 최근 수금내역</h3>
+      <div id="dashPayments"><div class="spinner">불러오는 중…</div></div>
+    </div>
+  </div>
+</div>
+<script>
+  var dashboardLoaded = false;
+  function initDashboard(){
+    if (dashboardLoaded) return;
+    dashboardLoaded = true;
+    loadDashDeadlines();
+    loadDashBookings();
+    loadDashPayments();
+  }
+
+  function loadDashDeadlines(){
+    callGas('work_get_cases', {}).then(function(res){
+      var cases = (res.cases || []).filter(function(c){ return c.상태 !== '완료' && c.법정일; });
+      cases.sort(function(a,b){ return String(a.법정일).localeCompare(String(b.법정일)); });
+      cases = cases.slice(0, 8);
+      var box = document.getElementById('dashDeadlines');
+      if (!cases.length){ box.innerHTML = '<div class="empty-row">마감이 임박한 작업이 없습니다.</div>'; return; }
+      var html = '<table class="list-table"><tr><th>법정일</th><th>고객명</th><th>사건명</th><th>업무유형</th><th>상태</th></tr>';
+      cases.forEach(function(c){
+        html += '<tr><td>' + esc(c.법정일) + '</td><td>' + esc(c.고객명) + '</td><td>' + esc(c.사건명) +
+          '</td><td>' + esc(c.업무유형||c.세목||'') + '</td><td>' + esc(c.상태) + '</td></tr>';
+      });
+      html += '</table>';
+      box.innerHTML = html;
+    }).catch(function(e){ document.getElementById('dashDeadlines').innerHTML = '<div class="empty-row">오류: '+esc(e.message)+'</div>'; });
+  }
+
+  function loadDashBookings(){
+    callGas('list_bookings', {}).then(function(res){
+      var list = (res.bookings || []).filter(function(b){ return b.status === '신청'; });
+      var box = document.getElementById('dashBookings');
+      if (!list.length){ box.innerHTML = '<div class="empty-row">대기중인 신청이 없습니다.</div>'; return; }
+      var html = '<table class="list-table"><tr><th>희망일시</th><th>이름</th><th>연락처</th><th>유형</th></tr>';
+      list.forEach(function(b){
+        html += '<tr><td>' + esc(b.reservedDate) + ' ' + esc(b.reservedTime) + '</td><td>' + esc(b.name) +
+          '</td><td>' + esc(b.phone) + '</td><td>' + esc(b.type) + '</td></tr>';
+      });
+      html += '</table>';
+      box.innerHTML = html;
+    }).catch(function(e){ document.getElementById('dashBookings').innerHTML = '<div class="empty-row">오류: '+esc(e.message)+'</div>'; });
+  }
+
+  function loadDashPayments(){
+    callGas('client_get_consult_logs', {}).then(function(res){
+      var logs = (res.logs || []).slice(0, 8);
+      var box = document.getElementById('dashPayments');
+      if (!logs.length){ box.innerHTML = '<div class="empty-row">수금 내역이 없습니다.</div>'; return; }
+      var html = '<table class="list-table"><tr><th>날짜</th><th>고객명</th><th>금액</th><th>수취증빙</th></tr>';
+      logs.forEach(function(l){
+        html += '<tr><td>' + esc(l.날짜) + '</td><td>' + esc(l.고객명) + '</td><td>' +
+          (l.금액 ? Number(l.금액).toLocaleString() : '') + '</td><td>' + esc(l.수취증빙) + '</td></tr>';
+      });
+      html += '</table>';
+      box.innerHTML = html;
+    }).catch(function(e){ document.getElementById('dashPayments').innerHTML = '<div class="empty-row">오류: '+esc(e.message)+'</div>'; });
+  }
+
+  function esc(s){
+    if (s === undefined || s === null) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+</script>

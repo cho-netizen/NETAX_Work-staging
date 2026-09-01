@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include_('manage/style') ?>
+</head>
+<body>
+
+  <div id="loginGate">
+    <div class="login-box">
+      <h1>NETAX 관리</h1>
+      <p>비밀번호를 입력하세요.</p>
+      <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="off">
+      <button type="button" id="loginBtn">입장</button>
+      <div class="login-err" id="loginErr"></div>
+    </div>
+  </div>
+
+  <div id="appRoot">
+    <nav id="sideMenu">
+      <div id="sideMenuInner">
+        <div class="menu-brand">NETAX 관리</div>
+
+        <div class="menu-group-label">관리</div>
+        <div class="menu-item active" data-view="dashboard">📊 대시보드</div>
+        <div class="menu-item" data-view="booking">📅 예약관리</div>
+        <div class="menu-item" data-view="workmanage">🗂 작업관리</div>
+        <div class="menu-item" data-view="clientmanage">👤 고객관리</div>
+
+        <div class="menu-group-label">처리</div>
+        <div class="menu-item" data-view="docs">📁 증빙관리</div>
+        <div class="menu-item soon" data-view="taxcalc">🧮 세액계산</div>
+        <div class="menu-item" data-action="open-report-writer">✍ 작성관리</div>
+        <div class="menu-item soon" data-view="reports">📖 열람관리</div>
+
+        <div class="menu-group-label">메모</div>
+        <div class="menu-item" data-view="memo-text">📝 일반메모</div>
+        <div class="menu-item" data-view="memo-hand">✍ 필기메모</div>
+
+        <div class="menu-group-label">&nbsp;</div>
+        <div class="menu-item soon" data-view="settings">⚙️ 설정</div>
+      </div>
+    </nav>
+
+    <main id="centerWork">
+      <?!= include_('manage/dashboard') ?>
+      <?!= include_('manage/booking') ?>
+      <?!= include_('manage/workmanage') ?>
+      <?!= include_('manage/clientmanage') ?>
+
+      <?!= include_('manage/docs') ?>
+
+      <div class="view" id="view-taxcalc">
+        <div class="view-head"><h2>세액계산</h2></div>
+        <div class="view-body"><div class="empty-row">다음 단계에서 이 화면에 이식됩니다.</div></div>
+      </div>
+      <div class="view" id="view-reports">
+        <div class="view-head"><h2>열람관리</h2></div>
+        <div class="view-body"><div class="empty-row">준비 중입니다.</div></div>
+      </div>
+      <?!= include_('manage/memo') ?>
+
+      <div class="view" id="view-settings">
+        <div class="view-head"><h2>설정</h2></div>
+        <div class="view-body"><div class="empty-row">준비 중입니다.</div></div>
+      </div>
+    </main>
+
+    <aside id="sideAI">
+      <div id="sideAIInner">
+        <div class="ai-soon">🤖<br>AI 사이드바는<br>다음 단계에서 추가됩니다.</div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // report-writer 편집기 — 기존 채팅앱과 같은 GAS 백엔드를 공유하는 별도 정적 페이지.
+    // 이 관리 앱은 script.google.com에서 서빙되어 origin이 다르므로 절대주소로 연다.
+    var REPORT_WRITER_URL = 'https://work.netax.kr/report-writer/';
+    document.querySelectorAll('.menu-item[data-action="open-report-writer"]').forEach(function(el){
+      el.addEventListener('click', function(){ window.open(REPORT_WRITER_URL, '_blank'); });
+    });
+  </script>
+
+  <?!= include_('manage/script') ?>
+</body>
+</html>

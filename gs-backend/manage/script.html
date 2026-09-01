@@ -1,0 +1,153 @@
+<script>
+  // ============================================================
+  // 공용 인프라 — google.script.run 래퍼, 로그인 게이트, 메뉴 라우팅
+  // ============================================================
+
+  // manageApp_call(action, payload)를 프라미스로 감싼다. 기존 앱의 callGas(action, payload)와
+  // 시그니처를 맞춰서, work-manage.js/client-manage.js 등을 이식할 때 호출부 코드를 그대로 쓸 수 있게 한다.
+  function callGas(action, payload){
+    return new Promise(function(resolve, reject){
+      google.script.run
+        .withSuccessHandler(function(res){
+          if (res && res.error) reject(new Error(res.error));
+          else resolve(res);
+        })
+        .withFailureHandler(function(err){ reject(err); })
+        .manageApp_call(action, payload || {});
+    });
+  }
+
+  function toast(msg){
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('shown');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ el.classList.remove('shown'); }, 2200);
+  }
+  // work-manage.js/client-manage.js 이식본이 그대로 부르는 이름(showToast(msg, type))으로도 동작하게.
+  function showToast(msg, type){ toast(msg); }
+
+  function escapeHtml(s){
+    if (s === undefined || s === null) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // explorer.js의 짧은 날짜 표시(YYYY-MM-DD → YY-MM-DD) — 표시 전용, 저장값은 그대로 유지.
+  function fmtDateShort_(dateStr){
+    if (!dateStr) return '';
+    return String(dateStr).slice(2);
+  }
+
+  // explorer.js/document-tools.js와 동일한 base64 변환 헬퍼 — 증빙관리·메모 이식본에서 공용으로 사용.
+  function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
+  function uint8ToBase64(bytes){
+    var binary = '';
+    var chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    return btoa(binary);
+  }
+  // "고객사건"(기본 작업 폴더) 루트 경로 — 메모의 고객명 매칭 저장, 작업관리 새 사건 등에서
+  // 공용으로 쓰는 기준점. listFolder({})는 서버의 기본 폴더(DEFAULT_FOLDER_ID_PROPERTY) 경로를 준다.
+  var _customerRootPathCache = null;
+  function getCustomerRootPath_(){
+    if (_customerRootPathCache) return Promise.resolve(_customerRootPathCache);
+    return callGas('listFolder', {}).then(function(res){
+      _customerRootPathCache = res.path || [];
+      return _customerRootPathCache;
+    });
+  }
+
+  function formatFileSize(bytes){
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/1024/1024).toFixed(1) + ' MB';
+  }
+
+  // ---- 로그인 게이트 ----
+  (function(){
+    var gate = document.getElementById('loginGate');
+    var input = document.getElementById('loginPw');
+    var btn = document.getElementById('loginBtn');
+    var err = document.getElementById('loginErr');
+    var STORAGE_KEY = 'nxManageAuthed';
+
+    function tryLogin(){
+      var pw = input.value;
+      if (!pw){ return; }
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function(ok){
+          btn.disabled = false;
+          if (ok){
+            try{ sessionStorage.setItem(STORAGE_KEY, '1'); }catch(e){}
+            enterApp();
+          } else {
+            err.textContent = '비밀번호가 올바르지 않습니다.';
+            input.value = '';
+            input.focus();
+          }
+        })
+        .withFailureHandler(function(e){
+          btn.disabled = false;
+          err.textContent = '확인 중 오류: ' + (e && e.message ? e.message : e);
+        })
+        .manageApp_checkPassword(pw);
+    }
+    btn.addEventListener('click', tryLogin);
+    input.addEventListener('keydown', function(e){ if (e.key === 'Enter') tryLogin(); });
+
+    var already = false;
+    try{ already = sessionStorage.getItem(STORAGE_KEY) === '1'; }catch(e){}
+    if (already){
+      enterApp();
+    } else {
+      input.focus();
+    }
+  })();
+
+  function enterApp(){
+    document.getElementById('loginGate').classList.add('hidden');
+    document.getElementById('appRoot').classList.add('shown');
+    if (!enterApp._inited){
+      enterApp._inited = true;
+      initNav();
+      showView('dashboard');
+      if (typeof initDashboard === 'function') initDashboard();
+      // 작업관리 "새 사건" 폼의 고객명 자동완성(clientNameOptions)이 처음부터 채워져 있도록,
+      // 고객관리 화면을 열지 않아도 미리 한 번 받아온다(client-manage.js 원본과 동일한 이유).
+      if (typeof loadClients === 'function'){ clientManageLoaded = true; loadClients(); }
+    }
+  }
+
+  // ---- 메뉴 라우팅 ----
+  function initNav(){
+    var items = document.querySelectorAll('.menu-item[data-view]');
+    items.forEach(function(item){
+      item.addEventListener('click', function(){
+        var view = item.getAttribute('data-view');
+        if (item.classList.contains('soon')){
+          toast('이 화면은 다음 단계에서 추가됩니다.');
+          return;
+        }
+        showView(view);
+        items.forEach(function(i){ i.classList.remove('active'); });
+        item.classList.add('active');
+      });
+    });
+  }
+
+  function showView(name){
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+    var target = document.getElementById('view-' + name);
+    if (target) target.classList.add('active');
+    if (name === 'booking' && typeof initBooking === 'function') initBooking();
+    if (name === 'workmanage' && typeof initWorkManage === 'function') initWorkManage();
+    if (name === 'clientmanage' && typeof initClientManage === 'function') initClientManage();
+    if (name === 'docs' && typeof initDocs === 'function') initDocs();
+    if (name === 'memo-text' && typeof initMemoText === 'function') initMemoText();
+    if (name === 'memo-hand' && typeof initMemoHand === 'function') initMemoHand();
+  }
+</script>

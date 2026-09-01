@@ -1,0 +1,71 @@
+<div class="view" id="view-booking">
+  <div class="view-head"><h2>예약관리</h2></div>
+  <div class="view-body">
+    <div class="card">
+      <h3>상담신청 목록</h3>
+      <div id="bookingList"><div class="spinner">불러오는 중…</div></div>
+    </div>
+  </div>
+</div>
+<script>
+  var bookingLoaded = false;
+  function initBooking(force){
+    if (bookingLoaded && !force) return;
+    bookingLoaded = true;
+    loadBookingList();
+  }
+
+  var BOOKING_STATUS_ORDER = { '신청':0, '승인':1, '거절':2 };
+
+  function loadBookingList(){
+    var box = document.getElementById('bookingList');
+    box.innerHTML = '<div class="spinner">불러오는 중…</div>';
+    callGas('list_bookings', {}).then(function(res){
+      var list = (res.bookings || []).map(function(b, idx){
+        b._rowIndex = idx + 2; // 시트 1행=헤더, 배열 0번째 = 2행
+        return b;
+      });
+      list.sort(function(a,b){
+        var oa = BOOKING_STATUS_ORDER[a.status]!==undefined ? BOOKING_STATUS_ORDER[a.status] : 9;
+        var ob = BOOKING_STATUS_ORDER[b.status]!==undefined ? BOOKING_STATUS_ORDER[b.status] : 9;
+        if (oa !== ob) return oa - ob;
+        return String(b.reservedDate+b.reservedTime).localeCompare(String(a.reservedDate+a.reservedTime));
+      });
+      if (!list.length){ box.innerHTML = '<div class="empty-row">신청 내역이 없습니다.</div>'; return; }
+      var html = '<table class="list-table"><tr><th>희망일시</th><th>이름</th><th>연락처</th><th>유형</th>' +
+        '<th>상황</th><th>상태</th><th>처리</th></tr>';
+      list.forEach(function(b){
+        var badge = b.status === '신청' ? '🔴 신청' : (b.status === '승인' ? '🟢 승인' : (b.status === '거절' ? '⚪ 거절' : esc(b.status)));
+        var actions = '-';
+        if (b.status === '신청'){
+          actions = '<button type="button" class="btn success" onclick="bookingApprove(' + b._rowIndex + ')">승인</button> ' +
+            '<button type="button" class="btn danger" onclick="bookingReject(' + b._rowIndex + ')">거절</button>';
+        }
+        html += '<tr><td>' + esc(b.reservedDate) + ' ' + esc(b.reservedTime) + '</td><td>' + esc(b.name) +
+          '</td><td>' + esc(b.phone) + '</td><td>' + esc(b.type) + '</td><td style="max-width:260px;">' + esc(b.situation) +
+          '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
+      });
+      html += '</table>';
+      box.innerHTML = html;
+      window._bookingCache = list;
+    }).catch(function(e){ box.innerHTML = '<div class="empty-row">오류: '+esc(e.message)+'</div>'; });
+  }
+
+  function bookingApprove(rowIndex){
+    var b = (window._bookingCache||[]).filter(function(x){ return x._rowIndex === rowIndex; })[0];
+    if (!b) return;
+    if (!confirm(b.name + '님의 신청을 승인할까요?')) return;
+    callGas('approve', { rowIndex: rowIndex, eventId: b.eventId, phone: b.phone, reservedDate: b.reservedDate, reservedTime: b.reservedTime })
+      .then(function(){ toast('승인되었습니다.'); initBooking(true); if (typeof dashboardLoaded !== 'undefined') { dashboardLoaded = false; } })
+      .catch(function(e){ toast('오류: ' + e.message); });
+  }
+
+  function bookingReject(rowIndex){
+    var b = (window._bookingCache||[]).filter(function(x){ return x._rowIndex === rowIndex; })[0];
+    if (!b) return;
+    if (!confirm(b.name + '님의 신청을 거절할까요?')) return;
+    callGas('reject', { rowIndex: rowIndex, phone: b.phone })
+      .then(function(){ toast('거절되었습니다.'); initBooking(true); })
+      .catch(function(e){ toast('오류: ' + e.message); });
+  }
+</script>
