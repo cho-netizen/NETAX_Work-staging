@@ -1,3 +1,4 @@
+<div class="ai-sb-resize-handle" id="aiSbResizeHandle" title="끌어서 너비 조절"></div>
 <div class="ai-sb-head">
   <b>🤖 AI 도우미</b>
   <button type="button" class="ai-sb-collapse" id="aiSbCollapseBtn" title="접기">≫</button>
@@ -161,4 +162,52 @@
     e.stopPropagation();
     document.getElementById('sideAI').classList.remove('expanded');
   });
+
+  // ---- 너비 조절(드래그) — 왼쪽 가장자리를 끌어서 크기를 조절하고, 브라우저(이 기기)에만
+  // 기억해둔다(다른 기기·사람에게 영향 없음, 서버에 저장할 정도로 중요한 값도 아님). ----
+  (function(){
+    var AI_SB_WIDTH_KEY = 'nxAiSbWidth';
+    var AI_SB_MIN_WIDTH = 180;
+    var sideAI = document.getElementById('sideAI');
+    var handle = document.getElementById('aiSbResizeHandle');
+
+    function maxWidth_(){ return Math.max(AI_SB_MIN_WIDTH, window.innerWidth * 0.88); }
+
+    function applySavedWidth_(){
+      var saved = null;
+      try{ saved = parseInt(localStorage.getItem(AI_SB_WIDTH_KEY), 10); }catch(e){}
+      if (saved && !isNaN(saved)){
+        sideAI.style.width = Math.min(Math.max(saved, AI_SB_MIN_WIDTH), maxWidth_()) + 'px';
+      }
+    }
+    // 펼칠 때는 저장된 너비를 적용하고, 접을 때는 인라인 너비를 지운다(안 지우면 조절한
+    // 값이 그대로 남아 접힌 상태의 14px 규칙을 덮어써서 안 접히는 문제가 생긴다) —
+    // MutationObserver로 index.html의 토글 클릭 로직과 이 파일을 서로 몰라도 되게 분리한다.
+    new MutationObserver(function(){
+      if (sideAI.classList.contains('expanded')) applySavedWidth_();
+      else sideAI.style.width = '';
+    }).observe(sideAI, { attributes: true, attributeFilter: ['class'] });
+
+    handle.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      e.stopPropagation(); // 이 클릭이 index.html의 "바깥 클릭→접기" 로직에 바깥 클릭으로 오인되지 않도록
+      handle.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+
+      function onMove(ev){
+        // 오른쪽 패널이라 "뷰포트 오른쪽 끝까지 거리"가 곧 원하는 너비.
+        var w = window.innerWidth - ev.clientX;
+        w = Math.min(Math.max(w, AI_SB_MIN_WIDTH), maxWidth_());
+        sideAI.style.width = w + 'px';
+      }
+      function onUp(){
+        handle.classList.remove('dragging');
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        try{ localStorage.setItem(AI_SB_WIDTH_KEY, parseInt(sideAI.style.width, 10)); }catch(e){}
+      }
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+    });
+  })();
 </script>
