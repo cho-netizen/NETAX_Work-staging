@@ -148,15 +148,17 @@
     });
   }
 
-  function renderNewCaseForm(){
+  function renderNewCaseForm(prefill){
     workShowingNewForm = true;
     workSelectedCaseId = null;
     renderWorkCaseList();
+    prefill = prefill || {};
     workCaseDetail.innerHTML =
       '<h3 style="margin-top:0;">새 사건 등록</h3>' +
+      (prefill.bookingRowIndex ? '<div style="font-size:12px; color:var(--sub); margin-bottom:8px;">🗂 예약에서 시작 — 저장하면 그 예약에 이 사건이 연결됩니다.</div>' : '') +
       '<div style="display:flex; flex-direction:column; gap:8px; max-width:420px;">' +
-      '<label>고객명(의뢰인)<br><input type="text" id="wcNewCustomer" list="clientNameOptions" style="width:100%;" placeholder="고객명 (신규면 자동으로 고객관리에도 등록됩니다)"></label>' +
-      '<label>납세자 <span style="color:var(--sub); font-weight:400;">(의뢰인과 다른 경우만 입력)</span><br><input type="text" id="wcNewTaxpayer" style="width:100%;" placeholder="(선택) 의뢰인과 같으면 비워두세요"></label>' +
+      '<label>고객명(의뢰인)<br><input type="text" id="wcNewCustomer" list="clientNameOptions" value="' + escapeHtml(prefill.고객명 || '') + '" style="width:100%;" placeholder="고객명 (신규면 자동으로 고객관리에도 등록됩니다)"></label>' +
+      '<label>납세자 <span style="color:var(--sub); font-weight:400;">(의뢰인과 다른 경우만 입력)</span><br><input type="text" id="wcNewTaxpayer" value="' + escapeHtml(prefill.납세자 || '') + '" style="width:100%;" placeholder="(선택) 의뢰인과 같으면 비워두세요"></label>' +
       '<label>사건명<br><input type="text" id="wcNewCase" style="width:100%;" placeholder="예: 2026년 양도소득세 신고"></label>' +
       '<label>세목<br><select id="wcNewSemok" style="width:100%;">' +
         Object.keys(WORK_SEMOK_LABELS).map(function(k){ return '<option value="' + k + '">' + WORK_SEMOK_LABELS[k] + '</option>'; }).join('') +
@@ -166,7 +168,7 @@
       '<label>의뢰일<br><input type="date" id="wcNewRequestDate" style="width:100%;"></label>' +
       '<label>기준일 <span id="wcNewBaseDateHint" style="color:var(--sub); font-weight:400;">(양도일·증여일·사망일 등)</span><br><input type="date" id="wcNewBaseDate" style="width:100%;"></label>' +
       '<label id="wcNewManualDeadlineLabel" style="display:none;"><span id="wcNewManualDeadlineText">처리시한</span><br><input type="date" id="wcNewManualDeadline" style="width:100%;"></label>' +
-      '<label>처리방향<br><textarea id="wcNewOverview" style="width:100%; min-height:60px; font-family:inherit; box-sizing:border-box;" placeholder="어떻게 처리할 계획인지"></textarea></label>' +
+      '<label>진행메모<br><textarea id="wcNewOverview" style="width:100%; min-height:60px; font-family:inherit; box-sizing:border-box;" placeholder="어떻게 처리할 계획인지">' + escapeHtml(prefill.개요 || '') + '</textarea></label>' +
       '<div style="display:flex; gap:8px; margin-top:8px;">' +
       '<button type="button" id="wcNewSave" class="save-btn">저장</button>' +
       '<button type="button" id="wcNewCancel" class="ghost-btn">취소</button>' +
@@ -223,6 +225,11 @@
         workSelectedCaseId = res.case.id;
         loadWorkCases();
         if (typeof loadClientsQuiet_ === 'function') loadClientsQuiet_();
+        if (prefill.bookingRowIndex){
+          callGas('link_booking_case', { rowIndex: prefill.bookingRowIndex, caseId: res.case.id })
+            .then(function(){ if (typeof loadBookingList === 'function') loadBookingList(); })
+            .catch(function(){});
+        }
       }).catch(function(){ showToast('저장 중 오류가 발생했습니다.', 'error'); });
     });
   }

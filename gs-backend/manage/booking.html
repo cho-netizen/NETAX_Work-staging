@@ -2,6 +2,20 @@
   <div class="view-head"><h2>예약관리</h2></div>
   <div class="view-body">
     <div class="card">
+      <button type="button" id="bkAdminToggle" class="ghost-btn">+ 직권등록</button>
+      <div id="bkAdminForm" style="display:none; flex-direction:column; gap:8px; max-width:420px; margin-top:12px;">
+        <label style="font-size:12px; color:var(--sub);">이름 *<br><input type="text" id="bkNewName" style="width:100%;" placeholder="예: 홍길동"></label>
+        <label style="font-size:12px; color:var(--sub);">연락처<br><input type="text" id="bkNewPhone" style="width:100%;" placeholder="010-1234-5678"></label>
+        <label style="font-size:12px; color:var(--sub);">유형<br><input type="text" id="bkNewType" style="width:100%;" placeholder="예: 양도소득세 상담"></label>
+        <div style="display:flex; gap:8px;">
+          <label style="font-size:12px; color:var(--sub); flex:1;">날짜<br><input type="date" id="bkNewDate" style="width:100%;"></label>
+          <label style="font-size:12px; color:var(--sub); flex:1;">시간<br><input type="time" id="bkNewTime" style="width:100%;"></label>
+        </div>
+        <label style="font-size:12px; color:var(--sub);">상황(의뢰 내용)<br><textarea id="bkNewSituation" rows="3" style="width:100%; font-family:inherit; box-sizing:border-box;" placeholder="상담 내용을 적어두면 사건 시작 시 그대로 넘어갑니다"></textarea></label>
+        <div><button type="button" id="bkNewSubmit" class="save-btn">등록</button></div>
+      </div>
+    </div>
+    <div class="card">
       <h3>상담신청 목록</h3>
       <div id="bookingList"><div class="spinner">불러오는 중…</div></div>
     </div>
@@ -33,17 +47,23 @@
       });
       if (!list.length){ box.innerHTML = '<div class="empty-row">신청 내역이 없습니다.</div>'; return; }
       var html = '<table class="list-table"><tr><th>희망일시</th><th>이름</th><th>연락처</th><th>유형</th>' +
-        '<th>상황</th><th>상태</th><th>처리</th></tr>';
+        '<th>상황</th><th>상태</th><th>처리</th><th>사건</th></tr>';
       list.forEach(function(b){
-        var badge = b.status === '신청' ? '🔴 신청' : (b.status === '승인' ? '🟢 승인' : (b.status === '거절' ? '⚪ 거절' : esc(b.status)));
+        var badge = b.status === '신청' ? '🔴 신청' : (b.status === '확정' ? '🟢 확정' : (b.status === '거절' ? '⚪ 거절' : esc(b.status)));
         var actions = '-';
         if (b.status === '신청'){
           actions = '<button type="button" class="btn success" onclick="bookingApprove(' + b._rowIndex + ')">승인</button> ' +
             '<button type="button" class="btn danger" onclick="bookingReject(' + b._rowIndex + ')">거절</button>';
         }
+        var caseCell = '-';
+        if (b.caseId){
+          caseCell = '<button type="button" class="btn" onclick="bookingGoToCase(\'' + esc(b.caseId) + '\')">🔗 사건 연결됨</button>';
+        } else if (b.status === '확정'){
+          caseCell = '<button type="button" class="btn" onclick="bookingStartCase(' + b._rowIndex + ')">🗂 사건 시작</button>';
+        }
         html += '<tr><td>' + esc(b.reservedDate) + ' ' + esc(b.reservedTime) + '</td><td>' + esc(b.name) +
           '</td><td>' + esc(b.phone) + '</td><td>' + esc(b.type) + '</td><td style="max-width:260px;">' + esc(b.situation) +
-          '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
+          '</td><td>' + badge + '</td><td>' + actions + '</td><td>' + caseCell + '</td></tr>';
       });
       html += '</table>';
       box.innerHTML = html;
@@ -67,5 +87,54 @@
     callGas('reject', { rowIndex: rowIndex, phone: b.phone })
       .then(function(){ toast('거절되었습니다.'); initBooking(true); })
       .catch(function(e){ toast('오류: ' + e.message); });
+  }
+
+  // ============================================================
+  // 5단계 — 직권등록(고객 신청 없이 운영자가 바로 예약 확정) + 이 예약으로 사건 시작.
+  // ============================================================
+  document.getElementById('bkAdminToggle').addEventListener('click', function(){
+    var form = document.getElementById('bkAdminForm');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  document.getElementById('bkNewSubmit').addEventListener('click', function(){
+    var name = document.getElementById('bkNewName').value.trim();
+    var date = document.getElementById('bkNewDate').value;
+    var time = document.getElementById('bkNewTime').value;
+    if (!name || !date || !time){ toast('이름·날짜·시간은 필수입니다.'); return; }
+    var payload = {
+      name: name,
+      phone: document.getElementById('bkNewPhone').value.trim(),
+      type: document.getElementById('bkNewType').value.trim(),
+      date: date, time: time,
+      situation: document.getElementById('bkNewSituation').value.trim()
+    };
+    var btn = document.getElementById('bkNewSubmit');
+    btn.disabled = true; btn.textContent = '등록 중…';
+    callGas('admin_apply', payload).then(function(res){
+      btn.disabled = false; btn.textContent = '등록';
+      if (res.error || res.success === false){ toast(res.error || res.message || '등록 실패'); return; }
+      toast('예약을 등록했습니다.');
+      document.getElementById('bkNewName').value = '';
+      document.getElementById('bkNewPhone').value = '';
+      document.getElementById('bkNewType').value = '';
+      document.getElementById('bkNewSituation').value = '';
+      document.getElementById('bkAdminForm').style.display = 'none';
+      initBooking(true);
+    }).catch(function(e){ btn.disabled = false; btn.textContent = '등록'; toast('오류: ' + e.message); });
+  });
+
+  // 예약의 "상황"(의뢰 내용)을 진행메모 초안으로 넘기면서 작업관리 새 사건 폼을 연다.
+  function bookingStartCase(rowIndex){
+    var b = (window._bookingCache||[]).filter(function(x){ return x._rowIndex === rowIndex; })[0];
+    if (!b) return;
+    if (typeof goToView_ === 'function') goToView_('workmanage');
+    if (typeof renderNewCaseForm === 'function'){
+      renderNewCaseForm({ 고객명: b.name, 개요: b.situation || '', bookingRowIndex: b._rowIndex });
+    }
+  }
+
+  function bookingGoToCase(caseId){
+    if (typeof goToCaseHandling_ === 'function') goToCaseHandling_(caseId);
   }
 </script>

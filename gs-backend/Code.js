@@ -3088,6 +3088,12 @@ function dispatchClientAction_(body) {
   if (body.action === 'reject') {
     return jsonResponse(booking_rejectApplication(body));
   }
+  if (body.action === 'admin_apply') {
+    return jsonResponse(booking_adminCreate(body));
+  }
+  if (body.action === 'link_booking_case') {
+    return jsonResponse(booking_linkCase(body));
+  }
   if (body.action === 'list_bookings') {
     // [2026.08] NX-Work 홈 대시보드의 "대기 중인 상담신청" 위젯용 — booking_getBookings()는
     // 이미 doGet에서도 쓰는 함수라 자체적으로 jsonResponse까지 반환하므로 그대로 리턴한다
@@ -14465,11 +14471,72 @@ function booking_getBookings() {
       source: data[i][8],
       status: data[i][9],
       approvedDate: data[i][10],
-      eventId: data[i][11] || ''
+      eventId: data[i][11] || '',
+      caseId: data[i][12] || ''
     });
   }
 
   return jsonResponse({ bookings });
+}
+
+// [2026.09] 5단계 — 예약 직권등록: 운영자가 고객 신청 없이 예약을 직접 만든다. 승인 절차 없이
+// 바로 "확정" 상태로 저장하고 캘린더 색상도 확정색으로 만든다(booking_createApplication +
+// booking_finalizeApproval을 합쳐서 승인 단계를 생략한 것과 같음).
+function booking_adminCreate(body) {
+  const { date, time, name, phone, type, situation } = body;
+  if (!date || !time || !name) {
+    return { success: false, error: '날짜·시간·이름은 필수입니다.' };
+  }
+  const cal = CalendarApp.getCalendarById(BOOKING_CALENDAR_ID);
+  const start = new Date(`${date}T${time}:00+09:00`);
+  const end = new Date(start.getTime() + BOOKING_CONSULT_DURATION_MIN * 60000);
+
+  const conflict = cal.getEvents(start, end).length > 0;
+  if (conflict) {
+    return { success: false, error: '그 시간에 이미 다른 일정이 있습니다.' };
+  }
+
+  const desc = [
+    `연락처: ${phone || '-'}`,
+    `고객유형: ${type || '-'}`,
+    `상황: ${situation || '-'}`,
+    `출처: 직권등록`
+  ].join('\n');
+
+  const event = cal.createEvent(`${name}`, start, end, { description: desc });
+  event.setColor(BOOKING_COLOR_CONFIRMED);
+
+  const ss = SpreadsheetApp.openById(BOOKING_SHEET_ID);
+  const sheet = ss.getSheetByName('Applications') || ss.insertSheet('Applications');
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['신청일시', '성함', '전화', '고객유형', '현재 세무처리', '상황', '예약일', '예약시간', '출처', '상태', '확정일', '이벤트ID', '연결사건ID']);
+  }
+  if (sheet.getRange(1, 12).getValue() === '') sheet.getRange(1, 12).setValue('이벤트ID');
+  if (sheet.getRange(1, 13).getValue() === '') sheet.getRange(1, 13).setValue('연결사건ID');
+
+  const newRowIndex = sheet.getLastRow() + 1;
+  sheet.getRange(newRowIndex, 3).setNumberFormat('@');
+  const now = new Date();
+  sheet.getRange(newRowIndex, 1, 1, 12).setValues([[now, name, phone || '', type || '', '', situation || '', date, time, '직권등록', '확정', now, event.getId()]]);
+
+  if (phone) {
+    booking_sendSMS(phone, `상담 예약이 등록되었습니다. ${date} ${time}`);
+  }
+
+  return { success: true, eventId: event.getId(), rowIndex: newRowIndex };
+}
+
+// [2026.09] 5단계 — "이 예약으로 사건 시작" 저장 후 그 예약 행에 새 사건 id를 적어둔다(같은
+// 예약으로 사건을 중복 생성하지 않도록 화면에서 이 값을 확인용으로 씀).
+function booking_linkCase(body) {
+  const rowIndex = Number(body.rowIndex);
+  const caseId = String(body.caseId || '').trim();
+  if (!rowIndex || !caseId) return { success: false, message: 'rowIndex와 caseId가 필요합니다.' };
+  const ss = SpreadsheetApp.openById(BOOKING_SHEET_ID);
+  const sheet = ss.getSheetByName('Applications');
+  if (sheet.getRange(1, 13).getValue() === '') sheet.getRange(1, 13).setValue('연결사건ID');
+  sheet.getRange(rowIndex, 13).setValue(caseId);
+  return { success: true };
 }
 
 // ===== 신청 승인 (공통 처리 로직) =====
