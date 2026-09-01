@@ -73,7 +73,7 @@
   // 않은 변수를 참조해 TypeError가 나고, 그 여파로 initDashboard 등 나머지 초기화가 전부
   // 실행되지 않는 버그가 실제로 발생했었다).
   var VIEW_LABELS_ = {
-    dashboard: '대시보드', booking: '예약관리', workmanage: '작업관리', clientmanage: '고객관리',
+    dashboard: '대시보드', booking: '예약관리', workmanage: '작업관리', casehandling: '사건처리', clientmanage: '고객관리',
     docs: '증빙관리', taxcalc: '세액계산', reports: '열람관리',
     'memo-text': '일반메모', 'memo-hand': '필기메모', settings: '설정'
   };
@@ -159,6 +159,7 @@
     window._currentViewLabel = VIEW_LABELS_[name] || name;
     if (name === 'booking' && typeof initBooking === 'function') initBooking();
     if (name === 'workmanage' && typeof initWorkManage === 'function') initWorkManage();
+    if (name === 'casehandling' && typeof initCaseHandling === 'function') initCaseHandling();
     if (name === 'clientmanage' && typeof initClientManage === 'function') initClientManage();
     if (name === 'docs' && typeof initDocs === 'function') initDocs();
     if (name === 'memo-text' && typeof initMemoText === 'function') initMemoText();
@@ -166,5 +167,15 @@
     if (name === 'taxcalc' && typeof initTaxCalc === 'function') initTaxCalc();
     if (name === 'reports' && typeof initReports === 'function') initReports();
     if (name === 'settings' && typeof initSettings === 'function') initSettings();
+  }
+
+  // 다른 화면의 버튼에서 메뉴를 직접 클릭한 것처럼 화면을 전환할 때 씀(예: 작업관리 사건
+  // 상세의 "이 사건 처리하기" 버튼 → 사건처리 화면으로 이동). showView만 부르면 좌측 메뉴의
+  // active 표시가 안 바뀌므로 같이 처리한다.
+  function goToView_(name){
+    showView(name);
+    document.querySelectorAll('.menu-item[data-view]').forEach(function(i){
+      i.classList.toggle('active', i.getAttribute('data-view') === name);
+    });
   }
 </script>
