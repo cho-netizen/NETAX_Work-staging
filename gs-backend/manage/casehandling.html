@@ -511,6 +511,7 @@
         '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">' +
         '<code style="background:var(--panel); padding:3px 8px; border-radius:6px;">' + escapeHtml(mc.report_id) + '</code>' +
         '<button type="button" id="chMyCopyLinkBtn" class="ghost-btn" style="font-size:12px;">🔗 링크복사</button>' +
+        '<button type="button" id="chMySendSmsBtn" class="ghost-btn" style="font-size:12px;">📱 문자로 전달</button>' +
         (mc.has_password ? '' : '<span style="font-size:11px; color:var(--danger); border:1px solid var(--danger); border-radius:10px; padding:1px 7px;">비밀번호 미설정</span>') +
         '</div>' +
         '<div style="font-size:12px; color:var(--sub); margin-bottom:6px;">체크리스트 제출현황</div>' +
@@ -524,6 +525,16 @@
       document.getElementById('chMyCopyLinkBtn').addEventListener('click', function(){
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ showToast('링크를 복사했습니다.', 'success'); });
         else showToast(url, 'success');
+      });
+      document.getElementById('chMySendSmsBtn').addEventListener('click', function(){
+        if (!confirm(c.고객명 + '님께 my.netax.kr 주소와 접근번호를 문자로 보낼까요?')) return;
+        var btn = document.getElementById('chMySendSmsBtn');
+        btn.disabled = true; btn.textContent = '전송 중…';
+        callGas('send_my_portal_sms', { caseId: c.id }).then(function(res){
+          btn.disabled = false; btn.textContent = '📱 문자로 전달';
+          if (res.success === false){ showToast(res.message || '전송 실패', 'error'); return; }
+          showToast('문자를 전송했습니다.', 'success');
+        }).catch(function(err){ btn.disabled = false; btn.textContent = '📱 문자로 전달'; showToast('전송 중 오류: ' + (err && err.message ? err.message : err), 'error'); });
       });
       document.getElementById('chMyAddItemBtn').addEventListener('click', function(){
         var label = document.getElementById('chMyNewItem').value.trim();

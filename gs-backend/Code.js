@@ -3120,7 +3120,7 @@ function dispatchClientAction_(body) {
   }
 
   // [2026.08] work 모듈 — 작업관리(사건별 세부업무 트리 + 법정기한 자동계산 + 캘린더 연동) 신규
-  const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask'];
+  const WORK_ACTIONS = ['work_get_cases', 'work_create_case', 'work_update_case', 'work_delete_case', 'work_add_subtask', 'work_update_subtask', 'work_delete_subtask', 'send_my_portal_sms'];
   if (WORK_ACTIONS.indexOf(body.action) !== -1) {
     return jsonResponse(work_doPost(body));
   }
@@ -16551,8 +16551,42 @@ function work_doPost(body) {
     case 'work_add_subtask': return work_addSubtask(body);
     case 'work_update_subtask': return work_updateSubtask(body);
     case 'work_delete_subtask': return work_deleteSubtask(body);
+    case 'send_my_portal_sms': return work_sendMyPortalSms(body);
     default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
+}
+
+// [2026.09] 5단계 — my.netax.kr 주소+열람번호를 고객 휴대폰으로 문자 발송. 전화번호는
+// 클라이언트로 절대 내려주지 않고 서버 안에서만 조회·발송한다(work_ 사건엔 전화번호가 없어
+// 고객관리(client_)에서 고객ID로 찾는다).
+function work_sendMyPortalSms(params) {
+  const caseId = String(params.caseId || '').trim();
+  if (!caseId) return { success: false, message: 'caseId가 필요합니다.' };
+
+  const sheet = work_getSheet_();
+  const col = work_colMap_(sheet.getDataRange().getValues()[0]);
+  const found = work_findCaseRow_(sheet, col, caseId);
+  if (!found) return { success: false, message: '사건을 찾을 수 없습니다.' };
+  const caseObj = work_readRow_(col, found.row);
+  if (!caseObj.my_report_id) return { success: false, message: '아직 my.netax.kr에 연결되지 않았습니다.' };
+
+  let phone = '';
+  const 고객ID = String(caseObj.고객ID || '').trim();
+  if (고객ID) {
+    const sheets = client_getSheets_();
+    const data = sheets.clients.getDataRange().getValues();
+    const ccol = client_colMap_(data[0], CLIENT_HEADERS);
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][ccol.id]).trim() === 고객ID) { phone = String(data[i][ccol.전화번호] || '').trim(); break; }
+    }
+  }
+  if (!phone) return { success: false, message: '연락처를 찾을 수 없습니다(고객관리에 전화번호를 등록해주세요).' };
+
+  // [2026.09] 링크에 report_id를 쿼리로 넣어두면 my.netax.kr(NETAX_My/index.html)이 열람번호
+  // 입력칸을 자동으로 채워준다 — 고객이 직접 타이핑하지 않아도 됨.
+  const message = '이음세무컨설팅 고객포털을 안내드립니다.\nhttps://my.netax.kr/?report_id=' + caseObj.my_report_id;
+  booking_sendSMS(phone, message);
+  return { success: true };
 }
 
 // ---- AI 채팅(넥스) 도구 연동 — DRIVE_TOOLS의 list_work_cases 등에서 호출됨 ----
