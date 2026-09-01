@@ -230,15 +230,28 @@
       '<span id="wcEditDeadlineAuto" style="display:' + (isManual ? 'none' : 'inline-block') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
       '<label id="wcEditManualDeadlineLabel" style="display:' + (isManual ? 'inline-block' : 'none') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
       '</div>' +
+      '<div style="margin-bottom:14px; padding:10px 12px; background:var(--panel); border:1px solid var(--line); border-radius:8px; max-width:600px;">' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">📋 사건처리개시 — 처리대상 · 처리방향</div>' +
+      '<label style="font-size:12px; color:var(--sub); display:block; margin-bottom:3px;">처리대상 <span style="font-weight:400;">(무엇을 처리하는지)</span></label>' +
+      '<input type="text" id="wcEditTarget" placeholder="예: OO아파트 매각건의 양도소득세 신고" value="' + escapeHtml(c.처리대상 || '') + '" style="width:100%; box-sizing:border-box; margin-bottom:8px;">' +
+      '<label style="font-size:12px; color:var(--sub); display:block; margin-bottom:3px;">처리방향 <span style="font-weight:400;">(법령·예규·판례를 검토해 어떻게 처리할지)</span></label>' +
+      '<textarea id="wcEditDirection" placeholder="예: 1세대1주택 비과세 요건 충족 여부 검토 후 신고" style="width:100%; min-height:50px; font-family:inherit; font-size:13px; box-sizing:border-box;">' + escapeHtml(c.처리방향 || '') + '</textarea>' +
+      '</div>' +
       '<div style="margin-bottom:14px;">' +
-      '<label id="wcEditOverviewLabel" style="font-size:12.5px; color:var(--sub); display:block; margin-bottom:4px;">' + (c.상태 === '완료' ? '처리내용' : '처리방향') + '</label>' +
-      '<textarea id="wcEditOverview" placeholder="' + (c.상태 === '완료' ? '실제로 어떻게 처리했는지' : '어떻게 처리할 계획인지') + '" style="width:100%; max-width:600px; min-height:60px; font-family:inherit; font-size:13px; box-sizing:border-box;">' + escapeHtml(c.개요 || '') + '</textarea>' +
+      '<label id="wcEditOverviewLabel" style="font-size:12.5px; color:var(--sub); display:block; margin-bottom:4px;">' + (c.상태 === '완료' ? '처리내용' : '진행메모') + '</label>' +
+      '<textarea id="wcEditOverview" placeholder="' + (c.상태 === '완료' ? '실제로 어떻게 처리했는지' : '진행하면서 남길 메모') + '" style="width:100%; max-width:600px; min-height:60px; font-family:inherit; font-size:13px; box-sizing:border-box;">' + escapeHtml(c.개요 || '') + '</textarea>' +
       '</div>' +
       '<div id="wcAddRootToggle" style="font-size:12.5px; color:var(--sub); margin-bottom:8px; cursor:pointer; width:fit-content;" title="눌러서 새 하위업무 추가">➕ 하위업무 ' + prog.done + ' / ' + prog.total + '</div>' +
       '<div id="wcNewRootFormWrap" style="display:none; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>' +
-      '<div id="wcTree"></div>';
+      '<div id="wcTree"></div>' +
+      '<div style="margin-top:20px; padding-top:14px; border-top:1px solid var(--line);">' +
+      '<div id="wcLogToggle" style="font-size:12.5px; color:var(--sub); margin-bottom:8px; cursor:pointer; width:fit-content;" title="눌러서 작업일지 추가">📓 작업일지 ' + (c.작업일지 || []).length + '건</div>' +
+      '<div id="wcNewLogFormWrap" style="display:none; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>' +
+      '<div id="wcLogList"></div>' +
+      '</div>';
 
     renderWorkTree(c.하위업무 || [], document.getElementById('wcTree'), c.id, 0);
+    renderWorkLog_(c);
 
     var newRootFormWrap = document.getElementById('wcNewRootFormWrap');
     document.getElementById('wcAddRootToggle').addEventListener('click', function(){
@@ -263,6 +276,36 @@
 
     document.getElementById('wcViewCustomer').addEventListener('click', function(){
       if (typeof openClientQuickView_ === 'function') openClientQuickView_(c.고객ID);
+    });
+
+    var newLogFormWrap = document.getElementById('wcNewLogFormWrap');
+    document.getElementById('wcLogToggle').addEventListener('click', function(){
+      if (newLogFormWrap.style.display === 'none'){
+        newLogFormWrap.style.display = 'flex';
+        var todayStr = new Date().toISOString().slice(0, 10);
+        newLogFormWrap.innerHTML =
+          '<input type="date" id="wcNewLogDate" value="' + todayStr + '" style="width:130px;">' +
+          '<input type="text" id="wcNewLogText" placeholder="진행 내용 · 다음 할일" style="flex:1; min-width:160px;">' +
+          '<input type="date" id="wcNewLogDue" title="다음 일정(선택) — 입력하면 캘린더에 등록됩니다">' +
+          '<button type="button" id="wcAddLog" class="save-btn">추가</button>' +
+          '<button type="button" id="wcAddLogCancel" class="ghost-btn">취소</button>';
+        document.getElementById('wcAddLogCancel').addEventListener('click', function(){ newLogFormWrap.style.display = 'none'; newLogFormWrap.innerHTML = ''; });
+        document.getElementById('wcAddLog').addEventListener('click', function(){
+          var text = document.getElementById('wcNewLogText').value.trim();
+          if (!text){ showToast('내용을 입력해주세요.', 'warning'); return; }
+          var entry = {
+            id: 'log_' + Date.now(),
+            date: document.getElementById('wcNewLogDate').value || todayStr,
+            text: text,
+            dueDate: document.getElementById('wcNewLogDue').value || ''
+          };
+          var newLog = (c.작업일지 || []).concat([entry]);
+          saveWorkLog_(c.id, newLog);
+        });
+      } else {
+        newLogFormWrap.style.display = 'none';
+        newLogFormWrap.innerHTML = '';
+      }
     });
 
     var editSemokSel = document.getElementById('wcEditSemok');
@@ -307,7 +350,9 @@
         의뢰일: document.getElementById('wcEditRequestDate').value,
         기준일: document.getElementById('wcEditBaseDate').value,
         상태: document.getElementById('wcEditStatus').value,
-        개요: document.getElementById('wcEditOverview').value.trim()
+        개요: document.getElementById('wcEditOverview').value.trim(),
+        처리대상: document.getElementById('wcEditTarget').value.trim(),
+        처리방향: document.getElementById('wcEditDirection').value.trim()
       };
       if (manual) payload.법정일 = document.getElementById('wcEditManualDeadline').value;
       callGas('work_update_case', payload).then(function(res){
@@ -327,6 +372,38 @@
         showToast('삭제했습니다.', 'success');
         loadWorkCases();
       }).catch(function(){ showToast('삭제 중 오류가 발생했습니다.', 'error'); });
+    });
+  }
+
+  function saveWorkLog_(caseId, newLog){
+    callGas('work_update_case', { id: caseId, 작업일지: newLog }).then(function(res){
+      if (res.error || res.success === false){ showToast(res.error || res.message || '저장 실패', 'error'); return; }
+      loadWorkCases();
+    }).catch(function(){ showToast('저장 중 오류가 발생했습니다.', 'error'); });
+  }
+
+  function renderWorkLog_(c){
+    var list = document.getElementById('wcLogList');
+    if (!list) return;
+    var entries = (c.작업일지 || []).slice().sort(function(a, b){ return (b.date || '').localeCompare(a.date || ''); });
+    if (!entries.length){
+      list.innerHTML = '<div class="log-empty">아직 작업일지가 없습니다.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    entries.forEach(function(entry){
+      var row = document.createElement('div');
+      row.className = 'log-entry';
+      row.innerHTML =
+        '<div class="log-date">' + escapeHtml(fmtDateShort_(entry.date) || entry.date || '') + '</div>' +
+        '<div class="log-text">' + escapeHtml(entry.text || '') +
+        (entry.dueDate ? ' <span style="color:var(--sub); font-size:12px;">— 다음: ' + escapeHtml(fmtDateShort_(entry.dueDate)) + '</span>' : '') + '</div>' +
+        '<span class="log-del" title="삭제">✕</span>';
+      row.querySelector('.log-del').addEventListener('click', function(){
+        var newLog = (c.작업일지 || []).filter(function(e){ return e.id !== entry.id; });
+        saveWorkLog_(c.id, newLog);
+      });
+      list.appendChild(row);
     });
   }
 

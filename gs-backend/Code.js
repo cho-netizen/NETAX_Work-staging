@@ -15921,7 +15921,13 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지'];
+// [2026.09] 사건처리 워크플로우 보강 — "개요" 한 칸으로는 처리방향(어떻게 처리할지)과
+// 처리대상(무엇을 대상으로 하는지)이 뒤섞여서 사건처리개시문서 역할을 못 했다. 두 필드로
+// 나누되 기존 "개요" 컬럼은 그대로 두고 건드리지 않는다(과거 데이터 보존, 화면에서도 당분간
+// 같이 보여줌). 작업일지: 경과지(옛 기능, GLOBAL_LOG_INDEX 등)와 같은 모양({id,date,text,dueDate})
+// 의 JSON 배열 — 사건 하나에 쌓이는 진행기록. dueDate가 있으면 work_syncCaseCalendar_가
+// 법정일·하위업무와 함께 구글캘린더에 반영한다(같은 [NX:work:사건ID] 태그로 묶여서 전체재생성됨).
 // 개요: 진행/보류 중이면 "처리방향"(어떻게 처리할 계획인지), 완료면 "처리내용"(실제 어떻게
 // 처리했는지)이라는 뜻으로 화면에서 라벨만 상태에 따라 바꿔 보여준다 — 컬럼 자체는 하나.
 // 완료전법정일: 완료 처리하는 순간 법정일을 완료일(오늘)로 덮어쓰기 직전의 원래 값을 잠깐
@@ -16015,6 +16021,9 @@ function work_readRow_(col, rowValues) {
   let subtasks = [];
   try { subtasks = JSON.parse(rowValues[col.하위업무] || '[]'); } catch (e) { subtasks = []; }
   if (!Array.isArray(subtasks)) subtasks = [];
+  let workLog = [];
+  try { workLog = JSON.parse(rowValues[col.작업일지] || '[]'); } catch (e) { workLog = []; }
+  if (!Array.isArray(workLog)) workLog = [];
   return {
     id: rowValues[col.id],
     고객ID: rowValues[col.고객ID],
@@ -16029,7 +16038,10 @@ function work_readRow_(col, rowValues) {
     납세자: rowValues[col.납세자],
     상태: rowValues[col.상태],
     개요: rowValues[col.개요],
+    처리방향: rowValues[col.처리방향],
+    처리대상: rowValues[col.처리대상],
     하위업무: subtasks,
+    작업일지: workLog,
     생성일: rowValues[col.생성일],
     수정일: rowValues[col.수정일]
   };
@@ -16090,7 +16102,10 @@ function work_createCase(params) {
     newRow[col.납세자] = String(params.납세자 || '').trim();
     newRow[col.상태] = params.상태 || '진행';
     newRow[col.개요] = String(params.개요 || '').trim();
+    newRow[col.처리방향] = String(params.처리방향 || '').trim();
+    newRow[col.처리대상] = String(params.처리대상 || '').trim();
     newRow[col.하위업무] = '[]';
+    newRow[col.작업일지] = '[]';
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
 
@@ -16112,9 +16127,16 @@ function work_updateCase(params) {
 
     const row = found.row;
     const wasCompleted = row[col.상태] === '완료'; // 아래서 덮어쓰기 전에 미리 기억해둔다
-    ['고객명', '사건명', '담당자', '상태', '납세자', '개요'].forEach(function (key) {
+    ['고객명', '사건명', '담당자', '상태', '납세자', '개요', '처리방향', '처리대상'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
+    // 작업일지는 하위업무처럼 배열 통째로 다시 저장한다(화면에서 항목을 더하거나 지운 뒤
+    // 전체 배열을 그대로 보내는 방식 — work_saveTree_와 같은 방식이라 별도 액션을 안 만들었다).
+    if (params.작업일지 !== undefined) {
+      let workLog = params.작업일지;
+      if (typeof workLog === 'string') { try { workLog = JSON.parse(workLog); } catch (e) { workLog = null; } }
+      if (Array.isArray(workLog)) row[col.작업일지] = JSON.stringify(workLog);
+    }
     if (params.고객명 !== undefined) {
       row[col.고객ID] = params.고객명 ? client_findOrCreateByName_(row[col.고객명]).id : '';
     }
@@ -16296,6 +16318,11 @@ function work_syncCaseCalendar_(caseObj) {
         work_createAllDayEvent_(cal, '[NX] ' + label + ' — ' + String(node.title || '').slice(0, 60), node.dueDate, tag);
       }
       (node.children || []).forEach(visit);
+    });
+    (caseObj.작업일지 || []).forEach(function (entry) {
+      if (entry.dueDate) {
+        work_createAllDayEvent_(cal, '[NX] ' + label + ' — 다음할일: ' + String(entry.text || '').slice(0, 50), entry.dueDate, tag);
+      }
     });
   } catch (err) {
     // 캘린더 접근 권한이 없거나 오류가 나도 사건/하위업무 저장 자체는 계속 진행돼야 함
