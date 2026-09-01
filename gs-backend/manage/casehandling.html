@@ -90,6 +90,33 @@
       '<div style="font-size:12px; color:var(--sub); margin-bottom:6px;">이 사건에 첨부된 자료</div>' +
       '<div id="chLawAttached"></div>' +
       '</div>' +
+      '</div>' +
+      '<div class="card">' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:10px;">📁 증빙</div>' +
+      '<div style="margin-bottom:18px;">' +
+      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">자동확보</div>' +
+      '<button type="button" id="chEvAutoAddrBtn" class="ghost-btn" style="margin-bottom:8px;">🏠 주소로 자동조회(실거래가·공시가격)</button>' +
+      '<div id="chEvAutoPicked"></div>' +
+      '<div id="chEvListAuto"></div>' +
+      '</div>' +
+      '<div style="margin-bottom:18px;">' +
+      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">추가확보</div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
+      '<input type="text" id="chEvManualLabel" placeholder="자료명 (예: 등기부등본)" style="flex:1; min-width:140px;">' +
+      '<input type="text" id="chEvManualNote" placeholder="메모·링크(선택)" style="flex:1; min-width:140px;">' +
+      '<button type="button" id="chEvManualAddBtn" class="save-btn">추가</button>' +
+      '</div>' +
+      '<div id="chEvListManual"></div>' +
+      '</div>' +
+      '<div>' +
+      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">요청자료 <span style="font-weight:400;">(고객에게 요청)</span></div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
+      '<input type="text" id="chEvReqLabel" placeholder="요청할 자료명 (예: 매매계약서)" style="flex:1; min-width:140px;">' +
+      '<input type="text" id="chEvReqNote" placeholder="메모(선택)" style="flex:1; min-width:140px;">' +
+      '<button type="button" id="chEvReqAddBtn" class="save-btn">추가</button>' +
+      '</div>' +
+      '<div id="chEvListRequested"></div>' +
+      '</div>' +
       '</div>';
 
     document.getElementById('chSaveTarget').addEventListener('click', function(){
@@ -107,6 +134,7 @@
 
     chRenderLog_(c);
     chInitLawSection_(c);
+    chInitEvidenceSection_(c);
   }
 
   function chSaveLog_(caseId, newLog){
@@ -276,5 +304,140 @@
     if (typeof goToView_ === 'function') goToView_('casehandling');
     chSelectedId = caseId;
     loadChCases_(caseId);
+  }
+
+  // ============================================================
+  // 3단계 — 증빙 3분류(자동확보/추가확보/요청자료). 자동확보는 세액계산 화면이 이미 쓰고 있는
+  // 주소검색(openAddressSearchModal_)·실거래가(openRealPriceModal_) 모달과 searchAddress/
+  // lookupRealPrice/lookupOfficialPrice 액션을 그대로 재사용한다(같은 화면 안에서 전역으로
+  // 공유되므로 새로 만들지 않음). 추가확보·요청자료는 수동 입력 + 확보상태 토글.
+  // ============================================================
+  function chSaveEvidence_(caseId, newList){
+    callGas('work_update_case', { id: caseId, 증빙목록: newList }).then(function(res){
+      if (res.success === false){ showToast(res.message || '저장 실패', 'error'); return; }
+      loadChCases_();
+      if (typeof loadWorkCases === 'function') loadWorkCases();
+    }).catch(function(err){ showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error'); });
+  }
+
+  function chAddEvidence_(c, entryPartial){
+    var entry = Object.assign({ id: 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) }, entryPartial);
+    var newList = (c.증빙목록 || []).concat([entry]);
+    chSaveEvidence_(c.id, newList);
+  }
+
+  function chRenderEvidenceList_(c, source, containerId){
+    var box = document.getElementById(containerId);
+    if (!box) return;
+    var entries = (c.증빙목록 || []).filter(function(e){ return e.source === source; });
+    if (!entries.length){
+      box.innerHTML = '<div class="log-empty">없습니다.</div>';
+      return;
+    }
+    box.innerHTML = '';
+    entries.forEach(function(entry){
+      var row = document.createElement('div');
+      row.className = 'log-entry';
+      var got = entry.status === '확보됨';
+      row.innerHTML =
+        '<div class="log-date" style="color:' + (got ? 'var(--navy)' : 'var(--sub)') + ';">' + escapeHtml(entry.status || '') + '</div>' +
+        '<div class="log-text"><b>' + escapeHtml(entry.label || '') + '</b>' +
+        (entry.note ? '<br><span style="color:var(--sub); font-size:12.5px;">' + escapeHtml(entry.note) + '</span>' : '') + '</div>' +
+        (source !== 'auto' ? '<button type="button" class="ghost-btn chEvToggleBtn" style="padding:3px 8px; font-size:12px;">' + (got ? '미확보로' : '확보완료') + '</button>' : '') +
+        '<span class="log-del" title="삭제">✕</span>';
+      if (source !== 'auto'){
+        row.querySelector('.chEvToggleBtn').addEventListener('click', function(){
+          var newList = (c.증빙목록 || []).map(function(e){
+            if (e.id !== entry.id) return e;
+            var nowGot = e.status !== '확보됨';
+            return Object.assign({}, e, { status: nowGot ? '확보됨' : '미확보', 확보일: nowGot ? new Date().toISOString().slice(0, 10) : e.확보일 });
+          });
+          chSaveEvidence_(c.id, newList);
+        });
+      }
+      row.querySelector('.log-del').addEventListener('click', function(){
+        var newList = (c.증빙목록 || []).filter(function(e){ return e.id !== entry.id; });
+        chSaveEvidence_(c.id, newList);
+      });
+      box.appendChild(row);
+    });
+  }
+
+  function chRenderEvAutoPicked_(c, picked){
+    var box = document.getElementById('chEvAutoPicked');
+    if (!box) return;
+    var lawdCd = (picked.admCd || '').slice(0, 5);
+    box.innerHTML =
+      '<div style="background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px;">' +
+      '<div style="font-size:12.5px; margin-bottom:6px;"><b>' + escapeHtml(picked.roadAddr || picked.jibunAddr || '') + '</b></div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px;">' +
+      '<button type="button" id="chEvRealPriceBtn" class="ghost-btn" style="font-size:12px;">실거래가 조회(참고)</button>' +
+      '</div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">' +
+      '<select id="chEvPriceKind" style="width:140px;"><option value="land">개별공시지가(토지)</option><option value="apartment">공동주택가격</option><option value="house">개별주택가격</option></select>' +
+      '<input type="text" id="chEvDong" placeholder="동(선택)" style="width:70px;">' +
+      '<input type="text" id="chEvHo" placeholder="호" style="width:70px;">' +
+      '<button type="button" id="chEvPriceBtn" class="ghost-btn" style="font-size:12px;">공시가격 조회</button>' +
+      '</div>' +
+      '</div>';
+
+    document.getElementById('chEvRealPriceBtn').addEventListener('click', function(){
+      if (!lawdCd){ showToast('이 주소는 법정동코드를 확인할 수 없습니다.', 'error'); return; }
+      if (typeof openRealPriceModal_ !== 'function'){ showToast('실거래가 조회 기능을 불러오지 못했습니다.', 'error'); return; }
+      openRealPriceModal_(lawdCd, function(item){
+        chAddEvidence_(c, {
+          source: 'auto',
+          label: '실거래가: ' + (item.aptNm || '') + ' ' + (item.dong || '') + ' ' + (item.jibun || ''),
+          note: (item.area || '') + '㎡ · ' + (item.floor || '') + '층 · ' + (item.dealDate || '') + ' · ' + Number(item.dealAmount || 0).toLocaleString() + '원',
+          status: '확보됨', 확보일: new Date().toISOString().slice(0, 10)
+        });
+      });
+    });
+
+    document.getElementById('chEvPriceBtn').addEventListener('click', function(){
+      var priceKind = document.getElementById('chEvPriceKind').value;
+      var dong = document.getElementById('chEvDong').value.trim();
+      var ho = document.getElementById('chEvHo').value.trim();
+      if (!picked.admCd || !picked.lnbrMnnm){ showToast('이 주소는 지번 정보가 부족해 공시가격을 조회할 수 없습니다.', 'error'); return; }
+      var san = String(picked.mtYn) === '1' ? '2' : '1';
+      var mnnm = ('0000' + picked.lnbrMnnm).slice(-4);
+      var slno = ('0000' + (picked.lnbrSlno || '0')).slice(-4);
+      var pnu = picked.admCd + san + mnnm + slno;
+      callGas('lookupOfficialPrice', { pnu: pnu, priceKind: priceKind, dong: dong, ho: ho }).then(function(data){
+        if (data.error){ showToast(data.error, 'error'); return; }
+        var kindLabel = priceKind === 'apartment' ? '공동주택가격' : priceKind === 'house' ? '개별주택가격' : '개별공시지가';
+        chAddEvidence_(c, {
+          source: 'auto',
+          label: kindLabel + ': ' + Number(data.price).toLocaleString() + '원',
+          note: (picked.roadAddr || picked.jibunAddr || '') + (dong ? ' ' + dong + '동' : '') + (ho ? ' ' + ho + '호' : '') + ' (기준연도 ' + data.stdrYear + ')',
+          status: '확보됨', 확보일: new Date().toISOString().slice(0, 10)
+        });
+      }).catch(function(err){ showToast('조회 중 오류: ' + (err && err.message ? err.message : err), 'error'); });
+    });
+  }
+
+  function chInitEvidenceSection_(c){
+    chRenderEvidenceList_(c, 'auto', 'chEvListAuto');
+    chRenderEvidenceList_(c, 'manual', 'chEvListManual');
+    chRenderEvidenceList_(c, 'requested', 'chEvListRequested');
+
+    document.getElementById('chEvAutoAddrBtn').addEventListener('click', function(){
+      if (typeof openAddressSearchModal_ !== 'function'){ showToast('주소검색 기능을 불러오지 못했습니다.', 'error'); return; }
+      openAddressSearchModal_(function(picked){ chRenderEvAutoPicked_(c, picked); });
+    });
+
+    document.getElementById('chEvManualAddBtn').addEventListener('click', function(){
+      var label = document.getElementById('chEvManualLabel').value.trim();
+      if (!label){ showToast('자료명을 입력해주세요.', 'warning'); return; }
+      var note = document.getElementById('chEvManualNote').value.trim();
+      chAddEvidence_(c, { source: 'manual', label: label, note: note, status: '확보됨', 확보일: new Date().toISOString().slice(0, 10) });
+    });
+
+    document.getElementById('chEvReqAddBtn').addEventListener('click', function(){
+      var label = document.getElementById('chEvReqLabel').value.trim();
+      if (!label){ showToast('요청할 자료명을 입력해주세요.', 'warning'); return; }
+      var note = document.getElementById('chEvReqNote').value.trim();
+      chAddEvidence_(c, { source: 'requested', label: label, note: note, status: '미확보', 요청일: new Date().toISOString().slice(0, 10) });
+    });
   }
 </script>

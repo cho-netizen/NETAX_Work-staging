@@ -15935,7 +15935,10 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례', '증빙목록'];
+// [2026.09] 3단계 — 증빙목록: {source:'auto'|'manual'|'requested', label, note, status:'확보됨'|'미확보',
+// 요청일, 확보일} 배열. 자동확보는 이미 있는 searchAddress/lookupRealPrice/lookupOfficialPrice(세액계산
+// 화면이 쓰는 것과 동일한 함수)로 조회한 결과를 그대로 담는다.
 // [2026.09] 2단계 — 법령예규판례: toolSearchTaxPrecedent/toolGetTaxPrecedentDetail(law.go.kr 조회,
 // 원래 AI 도구용으로만 쓰던 상태없는 함수)를 화면에서 직접 호출해 검색하고, "이 사건에 첨부"하면
 // 이 컬럼에 {category,id,제목,요약,첨부일} 배열로 쌓인다. 작업일지와 같은 "배열 통째로 저장" 방식.
@@ -16044,6 +16047,9 @@ function work_readRow_(col, rowValues) {
   let precedents = [];
   try { precedents = JSON.parse(rowValues[col.법령예규판례] || '[]'); } catch (e) { precedents = []; }
   if (!Array.isArray(precedents)) precedents = [];
+  let evidenceList = [];
+  try { evidenceList = JSON.parse(rowValues[col.증빙목록] || '[]'); } catch (e) { evidenceList = []; }
+  if (!Array.isArray(evidenceList)) evidenceList = [];
   return {
     id: rowValues[col.id],
     고객ID: rowValues[col.고객ID],
@@ -16063,6 +16069,7 @@ function work_readRow_(col, rowValues) {
     하위업무: subtasks,
     작업일지: workLog,
     법령예규판례: precedents,
+    증빙목록: evidenceList,
     생성일: rowValues[col.생성일],
     수정일: rowValues[col.수정일]
   };
@@ -16128,6 +16135,7 @@ function work_createCase(params) {
     newRow[col.하위업무] = '[]';
     newRow[col.작업일지] = '[]';
     newRow[col.법령예규판례] = '[]';
+    newRow[col.증빙목록] = '[]';
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
 
@@ -16163,6 +16171,11 @@ function work_updateCase(params) {
       let precedents = params.법령예규판례;
       if (typeof precedents === 'string') { try { precedents = JSON.parse(precedents); } catch (e) { precedents = null; } }
       if (Array.isArray(precedents)) row[col.법령예규판례] = JSON.stringify(precedents);
+    }
+    if (params.증빙목록 !== undefined) {
+      let evidenceList = params.증빙목록;
+      if (typeof evidenceList === 'string') { try { evidenceList = JSON.parse(evidenceList); } catch (e) { evidenceList = null; } }
+      if (Array.isArray(evidenceList)) row[col.증빙목록] = JSON.stringify(evidenceList);
     }
     if (params.고객명 !== undefined) {
       row[col.고객ID] = params.고객명 ? client_findOrCreateByName_(row[col.고객명]).id : '';
