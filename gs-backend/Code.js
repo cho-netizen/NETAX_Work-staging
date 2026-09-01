@@ -3119,6 +3119,16 @@ function dispatchClientAction_(body) {
     return jsonResponse(work_doPost(body));
   }
 
+  // [2026.09] law 모듈 — 법령예규판례 검색(AI 경유 없이 화면에서 직접 조회). toolSearchTaxPrecedent/
+  // toolGetTaxPrecedentDetail은 원래 AI 도구용 상태없는 함수라 그대로 재사용, 사건 첨부는
+  // work_update_case의 법령예규판례 배열 저장으로 처리(law 모듈은 조회 전용).
+  if (body.action === 'law_search_precedent') {
+    return jsonResponse(toolSearchTaxPrecedent(body.category, body.query));
+  }
+  if (body.action === 'law_get_precedent_detail') {
+    return jsonResponse(toolGetTaxPrecedentDetail(body.category, body.id));
+  }
+
   // [2026.08] client 모듈 — 고객관리(고객 명단 + 자문내역) 신규
   const CLIENT_ACTIONS = ['client_get_clients', 'client_create_client', 'client_update_client', 'client_delete_client', 'client_get_consult_logs', 'client_add_consult_log', 'client_update_consult_log', 'client_delete_consult_log'];
   if (CLIENT_ACTIONS.indexOf(body.action) !== -1) {
@@ -3836,7 +3846,11 @@ function toolGetTaxPrecedentDetail(category, id) {
     Object.keys(conf.detailFields).forEach(function (key) {
       item[key] = (root.getChildText(conf.detailFields[key]) || '').trim();
     });
-    if (!item[Object.keys(conf.detailFields)[0]]) return { error: '해당 항목을 찾을 수 없습니다(id를 다시 확인해주세요).' };
+    // [2026.09] 국세법령정보시스템 등 일부 출처의 판례·해석례는 검색 목록에는 잡히지만 law.go.kr에
+    // 원문 자체가 없는 경우가 실제로 많다(법원이 직접 낸 것만 원문이 있음) — id가 잘못된 게 아니라
+    // 정부 데이터베이스에 없는 것이므로, 호출부(work_doPost 등)가 검색결과의 기본정보만으로라도
+    // 첨부할 수 있도록 명확한 이유를 담아 반환한다.
+    if (!item[Object.keys(conf.detailFields)[0]]) return { error: '이 항목은 원문이 제공되지 않습니다(국세법령정보시스템 등 일부 출처는 목록에는 있어도 law.go.kr에 상세 원문이 없는 경우가 있습니다).' };
     return item;
   } catch (err) {
     return { error: '원문 조회 중 오류: ' + err.message };
@@ -15921,7 +15935,10 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례'];
+// [2026.09] 2단계 — 법령예규판례: toolSearchTaxPrecedent/toolGetTaxPrecedentDetail(law.go.kr 조회,
+// 원래 AI 도구용으로만 쓰던 상태없는 함수)를 화면에서 직접 호출해 검색하고, "이 사건에 첨부"하면
+// 이 컬럼에 {category,id,제목,요약,첨부일} 배열로 쌓인다. 작업일지와 같은 "배열 통째로 저장" 방식.
 // [2026.09] 사건처리 워크플로우 보강 — "개요" 한 칸으로는 처리방향(어떻게 처리할지)과
 // 처리대상(무엇을 대상으로 하는지)이 뒤섞여서 사건처리개시문서 역할을 못 했다. 두 필드로
 // 나누되 기존 "개요" 컬럼은 그대로 두고 건드리지 않는다(과거 데이터 보존, 화면에서도 당분간
@@ -16024,6 +16041,9 @@ function work_readRow_(col, rowValues) {
   let workLog = [];
   try { workLog = JSON.parse(rowValues[col.작업일지] || '[]'); } catch (e) { workLog = []; }
   if (!Array.isArray(workLog)) workLog = [];
+  let precedents = [];
+  try { precedents = JSON.parse(rowValues[col.법령예규판례] || '[]'); } catch (e) { precedents = []; }
+  if (!Array.isArray(precedents)) precedents = [];
   return {
     id: rowValues[col.id],
     고객ID: rowValues[col.고객ID],
@@ -16042,6 +16062,7 @@ function work_readRow_(col, rowValues) {
     처리대상: rowValues[col.처리대상],
     하위업무: subtasks,
     작업일지: workLog,
+    법령예규판례: precedents,
     생성일: rowValues[col.생성일],
     수정일: rowValues[col.수정일]
   };
@@ -16106,6 +16127,7 @@ function work_createCase(params) {
     newRow[col.처리대상] = String(params.처리대상 || '').trim();
     newRow[col.하위업무] = '[]';
     newRow[col.작업일지] = '[]';
+    newRow[col.법령예규판례] = '[]';
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
 
@@ -16136,6 +16158,11 @@ function work_updateCase(params) {
       let workLog = params.작업일지;
       if (typeof workLog === 'string') { try { workLog = JSON.parse(workLog); } catch (e) { workLog = null; } }
       if (Array.isArray(workLog)) row[col.작업일지] = JSON.stringify(workLog);
+    }
+    if (params.법령예규판례 !== undefined) {
+      let precedents = params.법령예규판례;
+      if (typeof precedents === 'string') { try { precedents = JSON.parse(precedents); } catch (e) { precedents = null; } }
+      if (Array.isArray(precedents)) row[col.법령예규판례] = JSON.stringify(precedents);
     }
     if (params.고객명 !== undefined) {
       row[col.고객ID] = params.고객명 ? client_findOrCreateByName_(row[col.고객명]).id : '';
