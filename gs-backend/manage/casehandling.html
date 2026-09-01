@@ -520,7 +520,12 @@
         '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:12px;">' +
         '<input type="text" id="chMyNewItem" placeholder="추가로 요청할 자료명" style="flex:1; min-width:140px;">' +
         '<button type="button" id="chMyAddItemBtn" class="save-btn">추가</button>' +
+        '</div>' +
+        '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed var(--line);">' +
+        '<div style="font-size:12px; color:var(--sub); margin-bottom:6px;">보고서 열람 <span style="font-weight:400;">(고객이 my.netax.kr에서 이 폴더의 .html 파일을 봅니다)</span></div>' +
+        '<div id="chMyReports"><div class="log-empty">불러오는 중…</div></div>' +
         '</div>';
+      chLoadMyReports_(c);
 
       document.getElementById('chMyCopyLinkBtn').addEventListener('click', function(){
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ showToast('링크를 복사했습니다.', 'success'); });
@@ -542,5 +547,30 @@
         chAddRequestedItem_(c, label, '');
       });
     }).catch(function(err){ box.innerHTML = '<div class="log-empty">불러오는 중 오류: ' + escapeHtml(err && err.message ? err.message : '') + '</div>'; });
+  }
+
+  // my.netax.kr 케이스 폴더 안 "보고서" 하위폴더(5-A에서 사건 폴더와 통합됨) 안의 파일 목록을
+  // 보여준다 — 여기 .html 파일을 넣어두면 고객이 my.netax.kr에서 바로 본다(my_handleGetReportList
+  // 가 .html/.htm만 필터링해서 보여줌). listFolder는 이미 있는 범용 Drive 탐색 액션을 그대로 씀.
+  function chLoadMyReports_(c){
+    var box = document.getElementById('chMyReports');
+    if (!box) return;
+    var folderName = (c.고객명 + ' ' + c.사건명).trim();
+    callGas('listFolder', { path: [folderName, '보고서'] }).then(function(res){
+      if (res.error){ box.innerHTML = '<div class="log-empty">' + escapeHtml(res.error) + '</div>'; return; }
+      var files = res.files || [];
+      var openLink = '<a href="https://drive.google.com/drive/folders/' + encodeURIComponent(res.folderId) + '" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block; font-size:12px; margin-bottom:8px;">📁 보고서 폴더 열기</a>';
+      if (!files.length){
+        box.innerHTML = openLink + '<div class="log-empty">아직 올린 보고서가 없습니다. 위 폴더에 .html 파일을 넣으면 고객이 my.netax.kr에서 봅니다.</div>';
+        return;
+      }
+      var htmlFiles = files.filter(function(f){ return /\.html?$/i.test(f.name); });
+      var otherFiles = files.filter(function(f){ return !/\.html?$/i.test(f.name); });
+      var rows = htmlFiles.map(function(f){
+        return '<div class="log-entry"><div class="log-date" style="color:var(--navy);">열람가능</div><div class="log-text">' + escapeHtml(f.name) + '</div></div>';
+      }).join('');
+      box.innerHTML = openLink + rows +
+        (otherFiles.length ? '<div style="font-size:12px; color:var(--sub); margin-top:6px;">그 외 파일(.html 아님, 고객에게 안 보임) ' + otherFiles.length + '건: ' + escapeHtml(otherFiles.map(function(f){ return f.name; }).join(', ')) + '</div>' : '');
+    }).catch(function(){ box.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>'; });
   }
 </script>
