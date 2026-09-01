@@ -3108,7 +3108,7 @@ function dispatchClientAction_(body) {
   }
 
   // [2026.08] my 모듈 — my.netax.kr(고객 통합 페이지) 이관
-  const MY_ACTIONS = ['admin_create_case', 'login', 'get_checklist_status', 'upload_file', 'get_report_list', 'get_report_file', 'admin_add_checklist_item'];
+  const MY_ACTIONS = ['admin_create_case', 'login', 'get_checklist_status', 'upload_file', 'get_report_list', 'get_report_file', 'admin_add_checklist_item', 'admin_get_case'];
   if (MY_ACTIONS.indexOf(body.action) !== -1) {
     return jsonResponse(my_doPost(body));
   }
@@ -14277,6 +14277,15 @@ function manageApp_getApiSecret() {
   return PropertiesService.getScriptProperties().getProperty('API_SECRET') || '';
 }
 
+// [2026.09] 열람관리 "미리보기"용 — rpt.netax.kr은 고객용 페이지라 원래 비밀번호를 입력해야
+// 열리는데, admin.netax.kr(구 어드민)이 하던 것처럼 URL에 &admin=RPT_ADMIN_CODE를 붙이면
+// rpt.netax.kr 자체가 그 값을 보고 비밀번호 확인을 건너뛴다(관리자 직권 미리보기). 이 관리
+// 앱은 이미 자체 비밀번호로 로그인한 신뢰된 컨텍스트라 manageApp_getApiSecret과 같은 방식으로
+// 그대로 내려준다.
+function manageApp_getRptAdminCode() {
+  return PropertiesService.getScriptProperties().getProperty('RPT_ADMIN_CODE') || '';
+}
+
 // [2026.09] 설정 화면 — 비밀번호 변경. 이미 로그인된 상태라도 현재 비밀번호를 한 번 더 확인해서,
 // 자리를 비운 사이 누가 열려있는 화면으로 바로 비밀번호를 바꿔버리는 것을 막는다.
 function manageApp_changePassword(currentPw, newPw) {
@@ -14292,6 +14301,10 @@ function manageApp_changePassword(currentPw, newPw) {
 // 것과 달리, 이 관리 앱은 이미 자체 비밀번호(MANAGE_APP_PASSWORD)로 로그인한 신뢰된 컨텍스트라
 // 이중으로 다시 입력받지 않고 서버가 RPT_ADMIN_CODE를 대신 채워 넣는다.
 const MANAGE_APP_RPT_ADMIN_ACTIONS_ = ['admin_list', 'clear_password', 'delete_report'];
+// [2026.09] my 모듈(my.netax.kr)의 관리자 전용 액션들 — report 모듈과 완전히 다른 스크립트
+// 속성(ADMIN_CODE, RPT_ADMIN_CODE와는 다른 값)을 쓴다. admin_list는 report/my 두 모듈이
+// action 이름을 공유하는 특이 케이스라(body.module로 구분) 아래서 따로 처리한다.
+const MANAGE_APP_MY_ADMIN_ACTIONS_ = ['admin_create_case', 'admin_add_checklist_item', 'admin_get_case'];
 
 // [2026.09] manage 앱의 모든 화면이 fetch 대신 google.script.run으로 호출하는 단일 진입점.
 // doPost의 action-dispatch 로직(dispatchClientAction_)을 그대로 재사용 — 이 경로는 이미
@@ -14299,8 +14312,12 @@ const MANAGE_APP_RPT_ADMIN_ACTIONS_ = ['admin_list', 'clear_password', 'delete_r
 // 반환값은 google.script.run이 그대로 직렬화할 수 있도록 ContentService가 아닌 평범한 객체로 풀어서 준다.
 function manageApp_call(action, payload) {
   const body = Object.assign({}, payload || {}, { action: action });
-  if (MANAGE_APP_RPT_ADMIN_ACTIONS_.indexOf(action) !== -1) {
+  if (action === 'admin_list' && body.module === 'my') {
+    body.admin_code = PropertiesService.getScriptProperties().getProperty('ADMIN_CODE');
+  } else if (MANAGE_APP_RPT_ADMIN_ACTIONS_.indexOf(action) !== -1) {
     body.admin_code = PropertiesService.getScriptProperties().getProperty('RPT_ADMIN_CODE');
+  } else if (MANAGE_APP_MY_ADMIN_ACTIONS_.indexOf(action) !== -1) {
+    body.admin_code = PropertiesService.getScriptProperties().getProperty('ADMIN_CODE');
   }
   const dispatched = dispatchClientAction_(body);
   if (!dispatched) {
@@ -15456,14 +15473,19 @@ function my_handleAdminCreateCase(params) {
   }
 
   try {
-    const folderName = (name + ' ' + caseName).trim();
-    const rootFolder = DriveApp.getFolderById(MY_ROOT_FOLDER_ID);
+    // [2026.09] 5단계 — folderId가 주어지면(사건처리 화면이 이미 만들어둔 work_ 사건의 폴더ID)
+    // MY_ROOT_FOLDER_ID 밑에 별도 폴더를 새로 만들지 않고 그 폴더를 그대로 재사용한다 — 그래야
+    // 고객이 my.netax.kr로 올리는 파일이 증빙관리가 보는 것과 같은 폴더에 쌓인다. folderId가 없으면
+    // (work_ 사건과 무관하게 만드는 예전 방식) 기존처럼 MY_ROOT_FOLDER_ID 밑에 새로 만든다.
+    const givenFolderId = String(params.folder_id || '').trim();
     let caseFolder = null;
-    const existing = rootFolder.getFoldersByName(folderName);
-    if (existing.hasNext()) {
-      caseFolder = existing.next();
+    if (givenFolderId) {
+      caseFolder = DriveApp.getFolderById(givenFolderId);
     } else {
-      caseFolder = rootFolder.createFolder(folderName);
+      const folderName = (name + ' ' + caseName).trim();
+      const rootFolder = DriveApp.getFolderById(MY_ROOT_FOLDER_ID);
+      const existing = rootFolder.getFoldersByName(folderName);
+      caseFolder = existing.hasNext() ? existing.next() : rootFolder.createFolder(folderName);
     }
     my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_UPLOAD);
     my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_REPORT);
@@ -15533,6 +15555,40 @@ function my_handleAdminList(adminCode) {
     });
   }
   return { success: true, cases: cases };
+}
+
+// [2026.09] 4단계 — 사건처리 화면이 연결된 my.netax.kr 케이스 하나만 빠르게 조회할 때 씀
+// (my_handleAdminList는 전체 케이스를 다 가져와야 해서 사건 하나 보려고 매번 쓰기엔 낭비).
+function my_handleAdminGetCase(params) {
+  if (!my_isValidAdminCode(params.admin_code || '')) {
+    return { success: false, message: '관리자 코드가 올바르지 않습니다.' };
+  }
+  const reportId = String(params.report_id || '').trim();
+  if (!reportId) return { success: false, message: 'report_id가 필요합니다.' };
+  const ss = SpreadsheetApp.openById(MY_SHEET_ID);
+  const sheet = ss.getSheetByName(MY_SHEET_CASES);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const col = my_colMap_(headers);
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[col.report_id]).trim() === reportId) {
+      let checklist = [];
+      try { checklist = JSON.parse(row[col.체크리스트] || '[]'); } catch (e) { checklist = []; }
+      let status = {};
+      try { status = JSON.parse(row[col.제출상태] || '{}'); } catch (e) { status = {}; }
+      return {
+        success: true,
+        case: {
+          name: row[col.고객명], case_name: row[col.사건명], report_id: row[col.report_id],
+          issued: row[col.발급일], expiry: row[col.만료일],
+          has_password: String(row[col.비밀번호해시]).trim().length > 0,
+          checklist: checklist, submission_status: status
+        }
+      };
+    }
+  }
+  return { success: false, message: '연결된 my.netax.kr 케이스를 찾을 수 없습니다(삭제되었을 수 있습니다).' };
 }
 
 function my_handleAdminAddChecklistItem(params) {
@@ -15610,6 +15666,7 @@ function my_doPost(body) {
     case 'get_report_list': return my_withAuth_(body, my_handleGetReportList);
     case 'get_report_file': return my_withAuth_(body, my_handleGetReportFile);
     case 'admin_add_checklist_item': return my_handleAdminAddChecklistItem(body);
+    case 'admin_get_case': return my_handleAdminGetCase(body);
     default: return { success: false, message: '알 수 없는 action: ' + body.action };
   }
 }
@@ -15935,7 +15992,13 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례', '증빙목록'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례', '증빙목록', 'my_report_id', '폴더ID'];
+// [2026.09] 5단계 — 폴더ID: 사건 시작 시 증빙관리(getDefaultFolder(), "고객사건" 루트)에 자동으로
+// 만드는 "고객명 사건명" Drive 폴더. my.netax.kr 연결 시 별도 폴더를 새로 만들지 않고 이 폴더를
+// 그대로 재사용해서, 고객이 my.netax.kr로 올리는 파일이 증빙관리에서 바로 보이게 한다.
+// [2026.09] 4단계 — my_report_id: my.netax.kr(my_ 모듈) Cases 시트의 report_id를 저장하는 외래키.
+// work_ 사건과 my_ 케이스는 원래 완전히 별개(다른 스프레드시트, 다른 ID체계)였는데, 이 필드로만
+// 연결한다(양쪽 시트 구조는 그대로 두고 최소 침습으로 연동).
 // [2026.09] 3단계 — 증빙목록: {source:'auto'|'manual'|'requested', label, note, status:'확보됨'|'미확보',
 // 요청일, 확보일} 배열. 자동확보는 이미 있는 searchAddress/lookupRealPrice/lookupOfficialPrice(세액계산
 // 화면이 쓰는 것과 동일한 함수)로 조회한 결과를 그대로 담는다.
@@ -16070,6 +16133,8 @@ function work_readRow_(col, rowValues) {
     작업일지: workLog,
     법령예규판례: precedents,
     증빙목록: evidenceList,
+    my_report_id: rowValues[col.my_report_id],
+    폴더ID: rowValues[col.폴더ID],
     생성일: rowValues[col.생성일],
     수정일: rowValues[col.수정일]
   };
@@ -16097,6 +16162,22 @@ function work_getCases(params) {
   return { success: true, cases: cases };
 }
 
+// [2026.09] 5단계 — 사건 시작 시 증빙관리(getDefaultFolder(), "고객사건" 루트)에 자동으로 폴더를
+// 만든다. 이미 같은 이름 폴더가 있으면(예: 메모에서 먼저 만들어졌거나 재시도) 그대로 재사용한다.
+// 실패해도(Drive 권한 등) 사건 생성 자체는 막지 않는다 — 폴더ID가 빈 채로 저장될 뿐이다.
+function work_getOrCreateCaseFolder_(고객명, 사건명) {
+  try {
+    const folderName = (고객명 + ' ' + 사건명).trim();
+    if (!folderName) return '';
+    const root = getDefaultFolder();
+    const existing = root.getFoldersByName(folderName);
+    if (existing.hasNext()) return existing.next().getId();
+    return root.createFolder(folderName).getId();
+  } catch (err) {
+    return '';
+  }
+}
+
 function work_createCase(params) {
   return withLock_(8000, function () {
     const sheet = work_getSheet_();
@@ -16112,12 +16193,13 @@ function work_createCase(params) {
     // 없으면 그 자리에서 새 고객으로 등록해서 연결한다 — 사건 등록 흐름이 예전과 똑같이
     // 이름만 입력하면 되도록 유지하면서도 자동으로 고객관리 명단이 쌓이게 하기 위함.
     const 고객ID = String(params.고객ID || '').trim() || (고객명 ? client_findOrCreateByName_(고객명).id : '');
+    const 사건명 = String(params.사건명 || '').trim();
 
     const newRow = [];
     newRow[col.id] = id;
     newRow[col.고객ID] = 고객ID;
     newRow[col.고객명] = 고객명;
-    newRow[col.사건명] = String(params.사건명 || '').trim();
+    newRow[col.사건명] = 사건명;
     newRow[col.세목] = seMok;
     newRow[col.업무유형] = upType;
     newRow[col.담당자] = String(params.담당자 || '').trim();
@@ -16136,6 +16218,7 @@ function work_createCase(params) {
     newRow[col.작업일지] = '[]';
     newRow[col.법령예규판례] = '[]';
     newRow[col.증빙목록] = '[]';
+    newRow[col.폴더ID] = work_getOrCreateCaseFolder_(고객명, 사건명);
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
 
@@ -16157,7 +16240,7 @@ function work_updateCase(params) {
 
     const row = found.row;
     const wasCompleted = row[col.상태] === '완료'; // 아래서 덮어쓰기 전에 미리 기억해둔다
-    ['고객명', '사건명', '담당자', '상태', '납세자', '개요', '처리방향', '처리대상'].forEach(function (key) {
+    ['고객명', '사건명', '담당자', '상태', '납세자', '개요', '처리방향', '처리대상', 'my_report_id'].forEach(function (key) {
       if (params[key] !== undefined) row[col[key]] = String(params[key]).trim();
     });
     // 작업일지는 하위업무처럼 배열 통째로 다시 저장한다(화면에서 항목을 더하거나 지운 뒤

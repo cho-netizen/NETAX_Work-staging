@@ -57,6 +57,7 @@
   var workSelectedCaseId = null;
   var workShowingNewForm = false;
   var workManageLoaded = false;
+  var workMyPortalByReportId = {}; // report_id -> my.netax.kr 케이스(체크리스트·제출현황) — 현황 배지 표시용
 
   function initWorkManage(){
     if (workManageLoaded) return;
@@ -83,6 +84,16 @@
     }).catch(function(){
       workCaseList.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>';
     });
+    // my.netax.kr 연결·제출현황 배지용 — 실패해도 목록 자체는 정상 동작해야 하므로 별도·조용히 시도.
+    callGas('admin_list', { module: 'my' }).then(function(res){
+      workMyPortalByReportId = {};
+      (res.cases || []).forEach(function(c){ workMyPortalByReportId[c.report_id] = c; });
+      renderWorkCaseList();
+      if (workSelectedCaseId){
+        var still2 = workCases.filter(function(c){ return c.id === workSelectedCaseId; })[0];
+        if (still2) renderWorkCaseDetail(still2);
+      }
+    }).catch(function(){});
   }
 
   function workProgress(caseObj){
@@ -95,6 +106,18 @@
       });
     })(caseObj.하위업무);
     return { total: total, done: done };
+  }
+
+  // my.netax.kr 연결·체크리스트 제출현황을 짧은 문구로 — 작업관리는 현황만 보여주는 화면이라
+  // (실제 연결·항목추가는 사건처리 화면에서) 여기서는 읽기전용 배지만 붙인다.
+  function workMyPortalBadgeText_(c){
+    if (!c.my_report_id) return '';
+    var mc = workMyPortalByReportId[c.my_report_id];
+    if (!mc) return ' · 🔗 포털연결됨';
+    var checklist = mc.checklist || [];
+    var status = mc.submission_status || {};
+    var done = checklist.filter(function(item){ return status[item] && status[item].submitted; }).length;
+    return checklist.length ? (' · 🔗 포털 ' + done + '/' + checklist.length) : ' · 🔗 포털연결됨';
   }
 
   function renderWorkCaseList(){
@@ -119,7 +142,7 @@
         '<div class="log-date"' + dateStyle + '>' + (overdue ? '<span style="color:#a83232;">⏰</span> ' : '') + escapeHtml(c.법정일 ? fmtDateShort_(c.법정일) : noDeadlineText) + '</div>' +
         '<div class="log-text"><b>' + escapeHtml(c.고객명 || '(고객명 없음)') + '</b> · ' + escapeHtml(c.사건명 || '') +
         '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(WORK_SEMOK_LABELS[c.세목] || c.세목 || '') + (c.업무유형 ? ' · ' + escapeHtml(c.업무유형) : '') + ' · ' + escapeHtml(c.상태 || '') +
-        (prog.total ? (' · 하위업무 ' + prog.done + '/' + prog.total) : '') + '</span></div>';
+        (prog.total ? (' · 하위업무 ' + prog.done + '/' + prog.total) : '') + workMyPortalBadgeText_(c) + '</span></div>';
       row.addEventListener('click', function(){ workShowingNewForm = false; workSelectedCaseId = c.id; renderWorkCaseList(); renderWorkCaseDetail(c); });
       workCaseList.appendChild(row);
     });
@@ -232,6 +255,7 @@
       '<div style="margin-bottom:12px;">' +
       '<span id="wcEditDeadlineAuto" style="display:' + (isManual ? 'none' : 'inline-block') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + workDeadlineFieldLabel_(c.업무유형) + ': <b style="color:var(--navy);">' + (c.법정일 ? escapeHtml(fmtDateShort_(c.법정일)) : '(기준일을 입력하면 자동 계산)') + '</b></span>' +
       '<label id="wcEditManualDeadlineLabel" style="display:' + (isManual ? 'inline-block' : 'none') + '; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);"><span id="wcEditManualDeadlineText">처리시한</span> <input type="date" id="wcEditManualDeadline" value="' + escapeHtml(c.법정일 || '') + '"></label>' +
+      (workMyPortalBadgeText_(c) ? ' <span style="background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; font-size:12.5px; color:var(--sub);">' + escapeHtml(workMyPortalBadgeText_(c).replace(/^ · /, '')) + '</span>' : '') +
       '</div>' +
       '<div style="margin-bottom:14px;">' +
       '<label id="wcEditOverviewLabel" style="font-size:12.5px; color:var(--sub); display:block; margin-bottom:4px;">' + (c.상태 === '완료' ? '처리내용' : '진행메모') + '</label>' +

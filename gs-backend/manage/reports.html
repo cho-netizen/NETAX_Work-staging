@@ -56,7 +56,8 @@
         html += '<tr><td>' + esc_(r.name) + '</td><td>' + esc_(r.title) + '</td><td><code>' + esc_(r.report_id) + '</code></td>' +
           '<td>' + esc_(fmtIssuedDate_(r.issued)) + '</td><td>' + esc_(fmtIssuedDate_(r.expiry)) + expiredBadge + '</td>' +
           '<td style="font-size:12px; color:var(--sub);">' + esc_(accessInfo) + '</td>' +
-          '<td><button type="button" class="btn" data-act="copy" data-id="' + esc_(r.report_id) + '">🔗 링크복사</button> ' +
+          '<td><button type="button" class="btn" data-act="preview" data-id="' + esc_(r.report_id) + '" data-name="' + esc_(r.name) + '">👁 미리보기</button> ' +
+          '<button type="button" class="btn" data-act="copy" data-id="' + esc_(r.report_id) + '">🔗 링크복사</button> ' +
           '<button type="button" class="btn" data-act="reset" data-id="' + esc_(r.report_id) + '">비번초기화</button> ' +
           '<button type="button" class="btn danger" data-act="del" data-id="' + esc_(r.report_id) + '">삭제</button></td></tr>';
       });
@@ -66,7 +67,11 @@
       box.querySelectorAll('button[data-act]').forEach(function(btn){
         btn.addEventListener('click', function(){
           var act = btn.dataset.act, id = btn.dataset.id;
-          if (act === 'copy'){
+          if (act === 'preview'){
+            reportsGetRptAdminCode_().then(function(adminCode){
+              openReportPreviewModal_('https://rpt.netax.kr/?report_id=' + id + '&admin=' + encodeURIComponent(adminCode), (btn.dataset.name || '') + ' 보고서');
+            });
+          } else if (act === 'copy'){
             var url = 'https://rpt.netax.kr/?report_id=' + id;
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ toast('열람 링크를 복사했습니다: ' + url); });
             else toast(url);
@@ -88,6 +93,59 @@
       });
     }).catch(function(){ box.innerHTML = '<div class="empty-row">불러오지 못했습니다.</div>'; });
   }
+
+  // rpt.netax.kr은 고객용 페이지라 원래 비밀번호가 있어야 열리는데, URL에 &admin=RPT_ADMIN_CODE를
+  // 붙이면 report_handleReportAccess가 관리자로 인식해 비밀번호 확인을 건너뛴다(admin.netax.kr이
+  // 하던 것과 동일한 방식). 이 값은 한 번만 받아 캐시해둔다.
+  var _reportsRptAdminCodeCache = null;
+  function reportsGetRptAdminCode_(){
+    if (_reportsRptAdminCodeCache !== null) return Promise.resolve(_reportsRptAdminCodeCache);
+    return new Promise(function(resolve){
+      google.script.run.withSuccessHandler(function(code){ _reportsRptAdminCodeCache = code || ''; resolve(_reportsRptAdminCodeCache); })
+        .withFailureHandler(function(){ _reportsRptAdminCodeCache = ''; resolve(''); })
+        .manageApp_getRptAdminCode();
+    });
+  }
+
+  // admin.netax.kr(구 어드민 페이지)의 보고서 미리보기 모달을 그대로 이식 — rpt.netax.kr을
+  // 새 탭 없이 화면 안에서 바로 확인할 수 있게 한다(위의 &admin= 덕분에 비밀번호 없이 직권으로 보임).
+  // [주의] 모달을 열 때 history.pushState로 가짜 기록을 하나 쌓아두지 않으면, 사용자가 브라우저의
+  // "뒤로" 버튼(또는 모바일 뒤로가기 제스처)을 눌렀을 때 모달만 닫히는 게 아니라 이 앱 자체를
+  // 벗어나 이전 페이지로 나가버린다(admin.netax.kr도 이 문제 때문에 popstate로 처리했었음) —
+  // 그래서 "닫기" 버튼도 overlay.remove() 대신 history.back()을 호출해 popstate 쪽 한 곳에서만
+  // 정리하도록 통일한다.
+  var _reportPreviewOpen = false;
+  var _reportPreviewOverlay = null;
+  function openReportPreviewModal_(url, title){
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:500; background:#fff; display:flex; flex-direction:column;';
+    overlay.innerHTML =
+      '<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--navy); color:#fff; flex:0 0 auto;">' +
+      '<button type="button" id="repPreviewBack" style="background:transparent; border:1px solid rgba(255,255,255,0.4); color:#fff; padding:6px 12px; border-radius:4px; font-size:13px; cursor:pointer;">← 닫기</button>' +
+      '<span style="flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(title) + '</span>' +
+      '<a href="' + url + '" target="_blank" rel="noopener" style="color:#DCC17E; font-size:12.5px; text-decoration:none; border:1px solid rgba(255,255,255,0.3); padding:6px 10px; border-radius:4px;">새 탭 ↗</a>' +
+      '</div>' +
+      '<iframe src="' + url + '" style="flex:1; border:none; width:100%; background:#fff;"></iframe>';
+    document.body.appendChild(overlay);
+    _reportPreviewOverlay = overlay;
+    if (!_reportPreviewOpen){
+      history.pushState({ reportPreview: true }, '');
+      _reportPreviewOpen = true;
+    }
+    overlay.querySelector('#repPreviewBack').addEventListener('click', function(){
+      if (_reportPreviewOpen) history.back();
+      else closeReportPreviewInternal_();
+    });
+  }
+  function closeReportPreviewInternal_(){
+    if (_reportPreviewOverlay){ _reportPreviewOverlay.remove(); _reportPreviewOverlay = null; }
+  }
+  window.addEventListener('popstate', function(){
+    if (_reportPreviewOpen){
+      _reportPreviewOpen = false;
+      closeReportPreviewInternal_();
+    }
+  });
 
   function esc_(s){ return escapeHtml(s == null ? '' : s); }
   function fmtIssuedDate_(v){

@@ -65,6 +65,9 @@
       return;
     }
     chBodyEl.innerHTML =
+      (c.폴더ID
+        ? '<div style="margin-bottom:10px;"><a href="https://drive.google.com/drive/folders/' + encodeURIComponent(c.폴더ID) + '" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block;">📁 이 사건 폴더 열기</a></div>'
+        : '') +
       '<div class="card">' +
       '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">📋 사건처리개시 — 처리대상 · 처리방향</div>' +
       '<label style="font-size:12px; color:var(--sub); display:block; margin-bottom:3px;">처리대상 <span style="font-weight:400;">(무엇을 처리하는지)</span></label>' +
@@ -117,6 +120,10 @@
       '</div>' +
       '<div id="chEvListRequested"></div>' +
       '</div>' +
+      '</div>' +
+      '<div class="card">' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:10px;">🔗 my.netax.kr 고객포털</div>' +
+      '<div id="chMyPortalBody">불러오는 중…</div>' +
       '</div>';
 
     document.getElementById('chSaveTarget').addEventListener('click', function(){
@@ -135,6 +142,7 @@
     chRenderLog_(c);
     chInitLawSection_(c);
     chInitEvidenceSection_(c);
+    chInitMyPortal_(c);
   }
 
   function chSaveLog_(caseId, newLog){
@@ -437,7 +445,91 @@
       var label = document.getElementById('chEvReqLabel').value.trim();
       if (!label){ showToast('요청할 자료명을 입력해주세요.', 'warning'); return; }
       var note = document.getElementById('chEvReqNote').value.trim();
-      chAddEvidence_(c, { source: 'requested', label: label, note: note, status: '미확보', 요청일: new Date().toISOString().slice(0, 10) });
+      chAddRequestedItem_(c, label, note);
     });
+  }
+
+  // ============================================================
+  // 4단계 — my.netax.kr 고객포털 연동. "요청자료"는 곧 my.netax.kr의 체크리스트 항목과 같은
+  // 개념이라(예약의 직권등록과 같은 구조 — 직원이 대신 자료를 올릴 수도, 고객이 my페이지로
+  // 들어와 스스로 올릴 수도 있음), 사건에 연결된 my_report_id가 있으면 요청자료를 추가할 때
+  // 자동으로 그쪽 체크리스트에도 반영한다(반대 방향은 my포털 카드 자체에서 추가할 때도 동일
+  // 함수를 태워 한쪽만 구현하지 않는다).
+  // ============================================================
+  function chAddRequestedItem_(c, label, note){
+    chAddEvidence_(c, { source: 'requested', label: label, note: note || '', status: '미확보', 요청일: new Date().toISOString().slice(0, 10) });
+    if (c.my_report_id){
+      callGas('admin_add_checklist_item', { report_id: c.my_report_id, item: label }).catch(function(){});
+    }
+  }
+
+  function chInitMyPortal_(c){
+    var box = document.getElementById('chMyPortalBody');
+    if (!box) return;
+
+    if (!c.my_report_id){
+      box.innerHTML =
+        '<div style="font-size:12.5px; color:var(--sub); margin-bottom:8px;">아직 고객포털에 연결되지 않았습니다. 연결하면 위 "요청자료"가 고객 체크리스트로 자동 전달되고, 고객이 my.netax.kr로 들어와 직접 자료를 올리고 진행상황·결과보고서를 확인할 수 있습니다.</div>' +
+        '<label style="font-size:12px; color:var(--sub); display:block; margin-bottom:8px;">보고서 다운로드 권한 ' +
+        '<select id="chMyNewPermission" style="margin-left:4px;"><option value="허용">허용(다운로드 가능)</option><option value="차단">차단(다운로드 불가)</option></select></label>' +
+        '<button type="button" id="chMyConnectBtn" class="save-btn">🔗 고객포털 연결하기</button>';
+      document.getElementById('chMyConnectBtn').addEventListener('click', function(){
+        if (!confirm(c.고객명 + '님을 위한 my.netax.kr 고객포털을 새로 만들까요?')) return;
+        var requestedLabels = (c.증빙목록 || []).filter(function(e){ return e.source === 'requested'; }).map(function(e){ return e.label; });
+        var permission = document.getElementById('chMyNewPermission').value;
+        // 사건 시작 때 이미 만들어둔 폴더(c.폴더ID)를 그대로 넘겨서 my.netax.kr이 별도 폴더를
+        // 새로 만들지 않고 재사용하게 한다 — 그래야 고객 업로드가 증빙관리와 같은 폴더에 쌓인다.
+        callGas('admin_create_case', { name: c.고객명, case_name: c.사건명, checklist: requestedLabels, permission: permission, folder_id: c.폴더ID || '' }).then(function(res){
+          if (res.success === false){ showToast(res.message || '연결 실패', 'error'); return; }
+          callGas('work_update_case', { id: c.id, my_report_id: res.report_id }).then(function(){
+            showToast('고객포털을 연결했습니다 — 열람번호 ' + res.report_id, 'success');
+            loadChCases_();
+            if (typeof loadWorkCases === 'function') loadWorkCases();
+          });
+        }).catch(function(err){ showToast('연결 중 오류: ' + (err && err.message ? err.message : err), 'error'); });
+      });
+      return;
+    }
+
+    box.innerHTML = '<div class="log-empty">불러오는 중…</div>';
+    callGas('admin_get_case', { report_id: c.my_report_id }).then(function(res){
+      if (res.success === false){
+        box.innerHTML = '<div class="log-empty">' + escapeHtml(res.message || '불러오지 못했습니다.') + '</div>';
+        return;
+      }
+      var mc = res.case;
+      var url = 'https://my.netax.kr/?report_id=' + mc.report_id;
+      var checklist = mc.checklist || [];
+      var status = mc.submission_status || {};
+      var rows = checklist.map(function(item){
+        var done = status[item] && status[item].submitted;
+        return '<div class="log-entry"><div class="log-date" style="color:' + (done ? 'var(--navy)' : 'var(--sub)') + ';">' + (done ? '제출완료' : '미제출') + '</div>' +
+          '<div class="log-text">' + escapeHtml(item) + '</div></div>';
+      }).join('');
+      var extra = status._extra || [];
+      box.innerHTML =
+        '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">' +
+        '<code style="background:var(--panel); padding:3px 8px; border-radius:6px;">' + escapeHtml(mc.report_id) + '</code>' +
+        '<button type="button" id="chMyCopyLinkBtn" class="ghost-btn" style="font-size:12px;">🔗 링크복사</button>' +
+        (mc.has_password ? '' : '<span style="font-size:11px; color:var(--danger); border:1px solid var(--danger); border-radius:10px; padding:1px 7px;">비밀번호 미설정</span>') +
+        '</div>' +
+        '<div style="font-size:12px; color:var(--sub); margin-bottom:6px;">체크리스트 제출현황</div>' +
+        (rows || '<div class="log-empty">체크리스트가 없습니다.</div>') +
+        (extra.length ? '<div style="font-size:12px; color:var(--sub); margin-top:8px;">기타 제출 ' + extra.length + '건: ' + escapeHtml(extra.map(function(f){ return f.fileName; }).join(', ')) + '</div>' : '') +
+        '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:12px;">' +
+        '<input type="text" id="chMyNewItem" placeholder="추가로 요청할 자료명" style="flex:1; min-width:140px;">' +
+        '<button type="button" id="chMyAddItemBtn" class="save-btn">추가</button>' +
+        '</div>';
+
+      document.getElementById('chMyCopyLinkBtn').addEventListener('click', function(){
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ showToast('링크를 복사했습니다.', 'success'); });
+        else showToast(url, 'success');
+      });
+      document.getElementById('chMyAddItemBtn').addEventListener('click', function(){
+        var label = document.getElementById('chMyNewItem').value.trim();
+        if (!label){ showToast('자료명을 입력해주세요.', 'warning'); return; }
+        chAddRequestedItem_(c, label, '');
+      });
+    }).catch(function(err){ box.innerHTML = '<div class="log-empty">불러오는 중 오류: ' + escapeHtml(err && err.message ? err.message : '') + '</div>'; });
   }
 </script>
