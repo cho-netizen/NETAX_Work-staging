@@ -32,14 +32,14 @@
         <div class="menu-item" data-view="docs">📁 증빙관리</div>
         <div class="menu-item" data-view="taxcalc">🧮 세액계산</div>
         <div class="menu-item" data-action="open-report-writer">✍ 작성관리</div>
-        <div class="menu-item soon" data-view="reports">📖 열람관리</div>
+        <div class="menu-item" data-view="reports">📖 열람관리</div>
 
         <div class="menu-group-label">메모</div>
         <div class="menu-item" data-view="memo-text">📝 일반메모</div>
         <div class="menu-item" data-view="memo-hand">✍ 필기메모</div>
 
         <div class="menu-group-label">&nbsp;</div>
-        <div class="menu-item soon" data-view="settings">⚙️ 설정</div>
+        <div class="menu-item" data-view="settings">⚙️ 설정</div>
       </div>
     </nav>
 
@@ -78,16 +78,10 @@
       <?!= include_('manage/taxcalc-engine') ?>
       <?!= include_('manage/taxcalc') ?>
 
-      <div class="view" id="view-reports">
-        <div class="view-head"><h2>열람관리</h2></div>
-        <div class="view-body"><div class="empty-row">준비 중입니다.</div></div>
-      </div>
+      <?!= include_('manage/reports') ?>
       <?!= include_('manage/memo') ?>
 
-      <div class="view" id="view-settings">
-        <div class="view-head"><h2>설정</h2></div>
-        <div class="view-body"><div class="empty-row">준비 중입니다.</div></div>
-      </div>
+      <?!= include_('manage/settings') ?>
     </main>
 
     <aside id="sideAI">

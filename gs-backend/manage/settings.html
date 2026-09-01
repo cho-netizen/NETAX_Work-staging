@@ -1,0 +1,53 @@
+<div class="view" id="view-settings">
+  <div class="view-head"><h2>설정</h2></div>
+  <div class="view-body">
+    <div class="card" style="max-width:360px;">
+      <h3>비밀번호 변경</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div><label style="display:block; font-size:12px; color:var(--sub); margin-bottom:3px;">현재 비밀번호</label>
+          <input type="password" id="setCurPw" style="width:100%;" autocomplete="off"></div>
+        <div><label style="display:block; font-size:12px; color:var(--sub); margin-bottom:3px;">새 비밀번호</label>
+          <input type="password" id="setNewPw" style="width:100%;" autocomplete="off"></div>
+        <div><label style="display:block; font-size:12px; color:var(--sub); margin-bottom:3px;">새 비밀번호 확인</label>
+          <input type="password" id="setNewPw2" style="width:100%;" autocomplete="off"></div>
+        <button type="button" id="setBtnChangePw" class="save-btn" style="align-self:flex-start;">변경</button>
+        <div id="setPwMsg" style="font-size:12px; min-height:16px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function initSettings(){}
+
+  document.getElementById('setBtnChangePw').addEventListener('click', function(){
+    var cur = document.getElementById('setCurPw').value;
+    var next = document.getElementById('setNewPw').value;
+    var next2 = document.getElementById('setNewPw2').value;
+    var msg = document.getElementById('setPwMsg');
+    msg.style.color = 'var(--danger)';
+    if (!cur){ msg.textContent = '현재 비밀번호를 입력해주세요.'; return; }
+    if (!next || next.length < 4){ msg.textContent = '새 비밀번호는 4자 이상이어야 합니다.'; return; }
+    if (next !== next2){ msg.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
+    var btn = document.getElementById('setBtnChangePw');
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function(res){
+        btn.disabled = false;
+        if (res && res.success){
+          msg.style.color = 'var(--success)';
+          msg.textContent = '변경했습니다.';
+          document.getElementById('setCurPw').value = '';
+          document.getElementById('setNewPw').value = '';
+          document.getElementById('setNewPw2').value = '';
+        } else {
+          msg.textContent = (res && res.message) || '변경 실패';
+        }
+      })
+      .withFailureHandler(function(err){
+        btn.disabled = false;
+        msg.textContent = '오류: ' + (err && err.message ? err.message : err);
+      })
+      .manageApp_changePassword(cur, next);
+  });
+</script>

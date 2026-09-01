@@ -3185,6 +3185,11 @@ function dispatchClientAction_(body) {
   if (body.action === 'checkBusinessNumber') {
     return jsonResponse(handleCheckBusinessNumber(body));
   }
+  // [2026.09] my.netax.kr 관리 앱의 열람관리 — 기존 AI 도구(register_report_to_rpt)가 하던
+  // "공유설정 자동 변경 + 등록"을 그대로 재사용(중복 구현하지 않음).
+  if (body.action === 'report_register') {
+    return jsonResponse(toolRegisterReportToRpt(body.name, body.title, body.type, body.link, body.permission));
+  }
   return null;
 }
 
@@ -14239,12 +14244,31 @@ function manageApp_checkPassword(pw) {
   return !!expected && pw === expected;
 }
 
+// [2026.09] 설정 화면 — 비밀번호 변경. 이미 로그인된 상태라도 현재 비밀번호를 한 번 더 확인해서,
+// 자리를 비운 사이 누가 열려있는 화면으로 바로 비밀번호를 바꿔버리는 것을 막는다.
+function manageApp_changePassword(currentPw, newPw) {
+  const props = PropertiesService.getScriptProperties();
+  const expected = props.getProperty('MANAGE_APP_PASSWORD');
+  if (!expected || currentPw !== expected) return { success: false, message: '현재 비밀번호가 올바르지 않습니다.' };
+  if (!newPw || String(newPw).length < 4) return { success: false, message: '새 비밀번호는 4자 이상이어야 합니다.' };
+  props.setProperty('MANAGE_APP_PASSWORD', String(newPw));
+  return { success: true };
+}
+
+// report 모듈의 관리자 전용 액션들 — 원래 admin.netax.kr에서 admin_code를 직접 입력받아 쓰던
+// 것과 달리, 이 관리 앱은 이미 자체 비밀번호(MANAGE_APP_PASSWORD)로 로그인한 신뢰된 컨텍스트라
+// 이중으로 다시 입력받지 않고 서버가 RPT_ADMIN_CODE를 대신 채워 넣는다.
+const MANAGE_APP_RPT_ADMIN_ACTIONS_ = ['admin_list', 'clear_password', 'delete_report'];
+
 // [2026.09] manage 앱의 모든 화면이 fetch 대신 google.script.run으로 호출하는 단일 진입점.
 // doPost의 action-dispatch 로직(dispatchClientAction_)을 그대로 재사용 — 이 경로는 이미
 // 로그인된 Apps Script 실행 컨텍스트 안이라 doPost처럼 _key HMAC 검증이 필요 없다.
 // 반환값은 google.script.run이 그대로 직렬화할 수 있도록 ContentService가 아닌 평범한 객체로 풀어서 준다.
 function manageApp_call(action, payload) {
   const body = Object.assign({}, payload || {}, { action: action });
+  if (MANAGE_APP_RPT_ADMIN_ACTIONS_.indexOf(action) !== -1) {
+    body.admin_code = PropertiesService.getScriptProperties().getProperty('RPT_ADMIN_CODE');
+  }
   const dispatched = dispatchClientAction_(body);
   if (!dispatched) {
     return { error: '알 수 없는 작업: ' + action };
