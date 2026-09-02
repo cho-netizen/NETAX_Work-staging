@@ -34,7 +34,7 @@
         <div class="menu-item" data-view="lawsearch">⚖️ 법령관리</div>
         <div class="menu-item" data-view="docs">📁 증빙관리</div>
         <div class="menu-item" data-view="taxcalc">🧮 세액계산</div>
-        <div class="menu-item" data-action="open-report-writer">✍ 작성관리</div>
+        <div class="menu-item" data-view="reportwriter">✍ 작성관리</div>
         <div class="menu-item" data-view="reports">📖 열람관리</div>
 
         <div class="menu-group-label">메모</div>
@@ -72,6 +72,7 @@
             <button type="button" class="taxcalc-tab" data-tab="inheritance">상속세</button>
             <button type="button" class="taxcalc-tab" data-tab="acquisition">취득세</button>
           </div>
+          <div id="taxCalcCaseBar" style="display:flex; flex-direction:column; gap:8px; padding:10px 14px; border-bottom:1px solid var(--taxcalc-border); flex-shrink:0;"></div>
           <div class="taxcalc-body">
             <div id="taxCalcTransferPane" class="taxcalc-pane"></div>
             <div id="taxCalcGiftPane" class="taxcalc-pane" style="display:none;"></div>
@@ -82,6 +83,8 @@
       </div>
       <?!= include_('manage/taxcalc-engine') ?>
       <?!= include_('manage/taxcalc') ?>
+
+      <?!= include_('manage/reportwriter') ?>
 
       <?!= include_('manage/reports') ?>
       <?!= include_('manage/memo') ?>
@@ -99,12 +102,10 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // report-writer 편집기 — 기존 채팅앱과 같은 GAS 백엔드를 공유하는 별도 정적 페이지.
-    // 이 관리 앱은 script.google.com에서 서빙되어 origin이 다르므로 절대주소로 연다.
-    var REPORT_WRITER_URL = 'https://work.netax.kr/report-writer/';
-    document.querySelectorAll('.menu-item[data-action="open-report-writer"]').forEach(function(el){
-      el.addEventListener('click', function(){ window.open(REPORT_WRITER_URL, '_blank'); });
-    });
+    // [2026.09] 작성관리(report-writer)는 더 이상 work.netax.kr을 새 창으로 여는 링크가 아니라
+    // gs-backend/manage/reportwriter.html로 완전히 이식된 네이티브 화면이다(data-view="reportwriter",
+    // 다른 화면들과 동일하게 script.html의 showView()가 처리) — 예전에 여기 있던
+    // REPORT_WRITER_URL/window.open 코드는 삭제했다.
 
     // 좌측 메뉴·우측 AI 패널 — 처음엔 hover(마우스가 스치기만 해도 펴짐)로 만들었는데,
     // 인식 범위가 너무 넓어서 화면 데이터에 마우스가 가까이 가기만 해도 패널이 펴져

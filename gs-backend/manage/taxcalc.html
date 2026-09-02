@@ -6760,8 +6760,133 @@ taxCalcView.addEventListener('click', function(e){
 
 var taxCalcInited = false;
 function initTaxCalc(){
-  if (taxCalcInited) return;
-  taxCalcInited = true;
-  initTaxCalcOnce_();
+  if (!taxCalcInited){
+    taxCalcInited = true;
+    initTaxCalcOnce_();
+  }
+  loadTcCases_();
+}
+
+// ============================================================
+// 사건 연결 — 사건처리 화면(casehandling.html)의 "🧮 세액계산 열기" 버튼에서 goToTaxCalc_로
+// 넘어오면 그 사건이 바로 선택되고, 좌측 메뉴에서 세액계산을 직접 눌러 들어오면 사건 미선택
+// 상태로 시작한다(둘 다 지원). work_get_cases는 이 화면에서 독립적으로 불러온다
+// (lawsearch.html/casehandling.html과 같은 이유 — 이 화면만 먼저 열어도 동작해야 함).
+// 저장은 계산 로직을 다시 손대지 않고, "지금 활성 탭(양도/증여/상속/취득)의 메인 결과 박스"
+// 텍스트를 그대로 캡처해 work_update_case의 세액계산결과 배열에 통째로 재저장한다
+// (작업일지/법령예규판례와 같은 "배열 통째로 저장" 패턴).
+// ============================================================
+var tcCases = [];
+var tcSelectedId = null;
+var tcCurrentCase = null;
+var TC_TAB_LABELS_ = { transfer: '양도소득세', gift: '증여세', inheritance: '상속세', acquisition: '취득세' };
+var TC_RESULT_BOX_IDS_ = { transfer: 'taxCalcTransferResult', gift: 'taxCalcGiftResult', inheritance: 'taxCalcInheritanceResult', acquisition: 'taxCalcAcquisitionResult' };
+var tcCaseBarEl = document.getElementById('taxCalcCaseBar');
+
+function loadTcCases_(preselectId){
+  if (!tcCaseBarEl) return;
+  callGas('work_get_cases', {}).then(function(res){
+    tcCases = res.cases || [];
+    var wantId = preselectId || tcSelectedId;
+    if (wantId && !tcCases.some(function(c){ return c.id === wantId; })) wantId = null;
+    tcSelectedId = wantId;
+    tcCurrentCase = wantId ? tcCases.filter(function(c){ return c.id === wantId; })[0] : null;
+    renderTcCaseBar_();
+  }).catch(function(){
+    tcCaseBarEl.innerHTML = '<div class="log-empty">사건 목록을 불러오지 못했습니다.</div>';
+  });
+}
+
+function renderTcCaseBar_(){
+  if (!tcCaseBarEl) return;
+  var options = '<option value="">사건 선택 안 함</option>' +
+    tcCases.slice().sort(function(a, b){ return (a.고객명 || '').localeCompare(b.고객명 || ''); }).map(function(c){
+      return '<option value="' + c.id + '"' + (c.id === tcSelectedId ? ' selected' : '') + '>' + escapeHtml(c.고객명 || '') + ' · ' + escapeHtml(c.사건명 || '') + ' (' + escapeHtml(c.상태 || '') + ')</option>';
+    }).join('');
+  tcCaseBarEl.innerHTML =
+    '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+    '<label style="font-size:12px; color:var(--sub);">🔗 사건연결</label>' +
+    '<select id="tcCaseSelect" style="min-width:220px; max-width:360px;">' + options + '</select>' +
+    '<button type="button" id="tcSaveBtn" class="save-btn"' + (tcSelectedId ? '' : ' disabled') + '>💾 이 사건에 저장</button>' +
+    '</div>' +
+    (tcSelectedId ? '<div id="tcSavedList" style="display:flex; flex-direction:column; gap:6px;"></div>' : '');
+
+  document.getElementById('tcCaseSelect').addEventListener('change', function(){
+    tcSelectedId = this.value || null;
+    tcCurrentCase = tcSelectedId ? tcCases.filter(function(c){ return c.id === tcSelectedId; })[0] : null;
+    renderTcCaseBar_();
+  });
+  document.getElementById('tcSaveBtn').addEventListener('click', tcSaveCurrentResult_);
+  if (tcSelectedId) renderTcSavedList_(tcCurrentCase ? (tcCurrentCase.세액계산결과 || []) : []);
+}
+
+function renderTcSavedList_(list){
+  var wrap = document.getElementById('tcSavedList');
+  if (!wrap) return;
+  if (!list.length){
+    wrap.innerHTML = '<div class="log-empty">아직 저장된 계산 결과가 없습니다.</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  list.slice().reverse().forEach(function(entry){
+    var preview = String(entry.요약 || '');
+    if (preview.length > 300) preview = preview.slice(0, 300) + '…';
+    var row = document.createElement('div');
+    row.className = 'log-entry';
+    row.innerHTML =
+      '<div class="log-date">' + escapeHtml(fmtDateShort_(entry.계산일) || entry.계산일 || '') + '</div>' +
+      '<div class="log-text"><b>' + escapeHtml(entry.세목 || '') + ' · ' + escapeHtml(entry.구분 || '') + '</b><br>' +
+      '<span style="color:var(--sub); font-size:12.5px;">' + escapeHtml(preview) + '</span></div>' +
+      '<span class="log-del" title="삭제">✕</span>';
+    row.querySelector('.log-del').addEventListener('click', function(){
+      var newList = (tcCurrentCase.세액계산결과 || []).filter(function(e){ return e.id !== entry.id; });
+      tcSaveList_(newList);
+    });
+    wrap.appendChild(row);
+  });
+}
+
+function tcSaveList_(newList){
+  return callGas('work_update_case', { id: tcCurrentCase.id, 세액계산결과: newList }).then(function(res){
+    if (res.success === false){ showToast(res.message || '저장 실패', 'error'); return false; }
+    tcCurrentCase.세액계산결과 = newList;
+    var cached = tcCases.filter(function(c){ return c.id === tcCurrentCase.id; })[0];
+    if (cached) cached.세액계산결과 = newList;
+    renderTcSavedList_(newList);
+    if (typeof loadWorkCases === 'function') loadWorkCases();
+    return true;
+  }).catch(function(err){ showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error'); return false; });
+}
+
+// 지금 활성화된 메인 탭(양도/증여/상속/취득)의 메인 결과 박스 텍스트를 그대로 캡처한다. 각
+// 탭 안에는 이월과세·특례 등 부속 계산기가 여러 개 더 있지만(taxCalcCarryoverResult 등 별도
+// id), 신고서 자체의 최종 세액은 항상 이 4개 메인 박스(taxCalcTransferResult 등)에 표시되므로
+// 이것만 캡처한다 — 부속 계산기 결과까지 다 모으면 요약이 아니라 화면 전체 덤프가 된다.
+function tcSaveCurrentResult_(){
+  if (!tcSelectedId || !tcCurrentCase){ showToast('먼저 사건을 선택해주세요.', 'warning'); return; }
+  var activeTabEl = document.querySelector('.taxcalc-tab.active');
+  var tab = activeTabEl ? activeTabEl.dataset.tab : 'transfer';
+  var boxId = TC_RESULT_BOX_IDS_[tab];
+  var box = boxId ? document.getElementById(boxId) : null;
+  var text = box ? box.innerText.trim() : '';
+  if (!text){ showToast('먼저 세액 계산을 실행해주세요.', 'warning'); return; }
+  var entry = {
+    id: 'tc_' + Date.now(),
+    세목: TC_TAB_LABELS_[tab] || tab,
+    구분: taxCalcTier === 'simple' ? '간편계산' : '정밀계산',
+    요약: text,
+    계산일: new Date().toISOString().slice(0, 10)
+  };
+  var newList = (tcCurrentCase.세액계산결과 || []).concat([entry]);
+  tcSaveList_(newList).then(function(ok){ if (ok) showToast('이 사건에 저장했습니다.', 'success'); });
+}
+
+// 사건처리 카드의 "🧮 세액계산 열기" 버튼에서 호출 — goToLawSearch_/goToCaseHandling_과 같은
+// 패턴(goToView_가 showView를 태워 initTaxCalc를 자동으로 한 번 더 부르지만, lawsearch·
+// casehandling도 마찬가지로 그 뒤에 preselectId로 자기 목록을 다시 불러온다).
+function goToTaxCalc_(caseId){
+  if (typeof goToView_ === 'function') goToView_('taxcalc');
+  tcSelectedId = caseId;
+  loadTcCases_(caseId);
 }
 </script>

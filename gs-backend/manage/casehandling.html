@@ -87,6 +87,11 @@
       '<button type="button" id="chLawOpenBtn" class="ghost-btn">⚖️ 법령관리에서 열기</button>' +
       '</div>' +
       '<div class="card">' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">🧮 세액계산</div>' +
+      '<div style="font-size:13px; color:var(--sub); margin-bottom:10px;">' + ((c.세액계산결과 || []).length ? ('저장된 계산 ' + (c.세액계산결과 || []).length + '건') : '아직 저장된 계산이 없습니다.') + '</div>' +
+      '<button type="button" id="chTaxCalcOpenBtn" class="ghost-btn">🧮 세액계산 열기</button>' +
+      '</div>' +
+      '<div class="card">' +
       '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">📁 증빙</div>' +
       '<div id="chEvSummary" style="font-size:13px; color:var(--sub); margin-bottom:10px;"></div>' +
       '<button type="button" id="chEvOpenDocsBtn" class="ghost-btn">📁 증빙관리에서 열기</button>' +
@@ -112,6 +117,9 @@
     chRenderLog_(c);
     document.getElementById('chLawOpenBtn').addEventListener('click', function(){
       if (typeof goToLawSearch_ === 'function') goToLawSearch_(c.id);
+    });
+    document.getElementById('chTaxCalcOpenBtn').addEventListener('click', function(){
+      if (typeof goToTaxCalc_ === 'function') goToTaxCalc_(c.id);
     });
     chRenderEvidenceSummary_(c);
     chInitMyPortal_(c);
@@ -353,17 +361,35 @@
       if (res.error){ box.innerHTML = '<div class="log-empty">' + escapeHtml(res.error) + '</div>'; return; }
       var files = res.files || [];
       var openLink = '<a href="https://drive.google.com/drive/folders/' + encodeURIComponent(res.folderId) + '" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block; font-size:12px; margin-bottom:8px;">📁 보고서 폴더 열기</a>';
+      // [2026.09] 작성관리(report-writer)가 work.netax.kr을 새 창으로 여는 링크가 아니라 이 앱
+      // 안의 네이티브 화면(reportwriter.html)으로 이식됐으므로, <a href> 대신 버튼 + goToReportWriter_
+      // 호출로 바꿨다. saveFolderId(이 폴더 ID)를 넘기면 작성관리가 처음 저장할 때 이 폴더 안에
+      // 파일을 새로 만들고, 그 다음부터는 그 파일을 덮어쓰기 저장한다.
+      var newDocLink = '<button type="button" id="chNewReportBtn" class="ghost-btn" style="font-size:12px; margin-bottom:8px; margin-left:6px;">✍ 새 문서 작성</button>';
       if (!files.length){
-        box.innerHTML = openLink + '<div class="log-empty">아직 올린 보고서가 없습니다. 위 폴더에 .html 파일을 넣으면 고객이 my.netax.kr에서 봅니다.</div>';
-        return;
+        box.innerHTML = openLink + newDocLink + '<div class="log-empty">아직 올린 보고서가 없습니다. 위 폴더에 .html 파일을 넣으면 고객이 my.netax.kr에서 봅니다.</div>';
+      } else {
+        var htmlFiles = files.filter(function(f){ return /\.html?$/i.test(f.name); });
+        var otherFiles = files.filter(function(f){ return !/\.html?$/i.test(f.name); });
+        var rows = htmlFiles.map(function(f){
+          return '<div class="log-entry"><div class="log-date" style="color:var(--navy);">열람가능</div><div class="log-text">' + escapeHtml(f.name) +
+            ' <button type="button" class="chEditReportBtn ghost-btn" data-file-id="' + escapeHtml(f.id) + '" style="font-size:11px; padding:1px 7px; margin-left:6px;">✍ 편집</button>' +
+            '</div></div>';
+        }).join('');
+        box.innerHTML = openLink + newDocLink + rows +
+          (otherFiles.length ? '<div style="font-size:12px; color:var(--sub); margin-top:6px;">그 외 파일(.html 아님, 고객에게 안 보임) ' + otherFiles.length + '건: ' + escapeHtml(otherFiles.map(function(f){ return f.name; }).join(', ')) + '</div>' : '');
       }
-      var htmlFiles = files.filter(function(f){ return /\.html?$/i.test(f.name); });
-      var otherFiles = files.filter(function(f){ return !/\.html?$/i.test(f.name); });
-      var rows = htmlFiles.map(function(f){
-        return '<div class="log-entry"><div class="log-date" style="color:var(--navy);">열람가능</div><div class="log-text">' + escapeHtml(f.name) + '</div></div>';
-      }).join('');
-      box.innerHTML = openLink + rows +
-        (otherFiles.length ? '<div style="font-size:12px; color:var(--sub); margin-top:6px;">그 외 파일(.html 아님, 고객에게 안 보임) ' + otherFiles.length + '건: ' + escapeHtml(otherFiles.map(function(f){ return f.name; }).join(', ')) + '</div>' : '');
+      var newBtn = document.getElementById('chNewReportBtn');
+      if (newBtn){
+        newBtn.addEventListener('click', function(){
+          if (typeof goToReportWriter_ === 'function') goToReportWriter_(c.id, { saveFolderId: res.folderId, saveFileName: folderName });
+        });
+      }
+      box.querySelectorAll('.chEditReportBtn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          if (typeof goToReportWriter_ === 'function') goToReportWriter_(c.id, { fileId: btn.getAttribute('data-file-id') });
+        });
+      });
     });
     }).catch(function(){ box.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>'; });
   }

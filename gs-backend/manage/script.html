@@ -74,7 +74,7 @@
   // 실행되지 않는 버그가 실제로 발생했었다).
   var VIEW_LABELS_ = {
     dashboard: '대시보드', booking: '예약관리', workmanage: '작업관리', casehandling: '사건처리', lawsearch: '법령관리', clientmanage: '고객관리',
-    docs: '증빙관리', taxcalc: '세액계산', reports: '열람관리',
+    docs: '증빙관리', taxcalc: '세액계산', reportwriter: '작성관리', reports: '열람관리',
     'memo-text': '일반메모', 'memo-hand': '필기메모', settings: '설정'
   };
 
@@ -166,6 +166,7 @@
     if (name === 'memo-text' && typeof initMemoText === 'function') initMemoText();
     if (name === 'memo-hand' && typeof initMemoHand === 'function') initMemoHand();
     if (name === 'taxcalc' && typeof initTaxCalc === 'function') initTaxCalc();
+    if (name === 'reportwriter' && typeof initReportWriter === 'function') initReportWriter();
     if (name === 'reports' && typeof initReports === 'function') initReports();
     if (name === 'settings' && typeof initSettings === 'function') initSettings();
   }

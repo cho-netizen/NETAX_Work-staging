@@ -4185,7 +4185,11 @@ function handleUploadFile(body) {
 
   let folder;
   try {
-    folder = resolveFolderByPath(body.path);
+    // [2026.09] folderId(실제 Drive 폴더ID)가 오면 그걸 그대로 쓴다 — path(이름을 절대루트부터
+    // 하나씩 따라가는 방식)는 "고객사건" 같은 기본폴더 이름까지 매번 정확히 붙여줘야 해서
+    // 실수하기 쉽다(실제로 이번 세션에 그 실수로 버그가 났었음). 사건 폴더ID를 이미 알고 있는
+    // 호출부(예: 작성관리가 사건의 "보고서" 폴더에 새 문서를 저장할 때)는 folderId를 직접 쓸 것.
+    folder = body.folderId ? DriveApp.getFolderById(body.folderId) : resolveFolderByPath(body.path);
   } catch (err) {
     return { error: err.message };
   }
@@ -16083,7 +16087,11 @@ function toolListConsultLogs(customerName) {
 // =========================================================
 const WORK_SHEET_ID = '1JtgBpcrlThAiYHU0m74wSxZmyZPxUtmSTspZzHycZX4';
 const WORK_SHEET_CASES = 'Cases';
-const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례', '증빙목록', 'my_report_id', '폴더ID'];
+const WORK_HEADERS = ['id', '고객ID', '고객명', '사건명', '세목', '업무유형', '담당자', '의뢰일', '기준일', '법정일', '완료전법정일', '납세자', '상태', '개요', '하위업무', '생성일', '수정일', '처리방향', '처리대상', '작업일지', '법령예규판례', '증빙목록', 'my_report_id', '폴더ID', '세액계산결과'];
+// [2026.09] 6단계 — 세액계산결과: 세액계산(taxcalc.html) 화면에서 "이 사건에 저장" 누르면
+// {id, 세목, 구분, 요약, 계산일} 배열로 쌓인다. 세목은 양도소득세/증여세/상속세/취득세, 구분은
+// 간편계산/정밀계산, 요약은 계산 결과 화면의 텍스트 그대로. 작업일지·법령예규판례와 같은
+// "배열 통째로 저장" 방식.
 // [2026.09] 5단계 — 폴더ID: 사건 시작 시 증빙관리(getDefaultFolder(), "고객사건" 루트)에 자동으로
 // 만드는 "고객명 사건명" Drive 폴더. my.netax.kr 연결 시 별도 폴더를 새로 만들지 않고 이 폴더를
 // 그대로 재사용해서, 고객이 my.netax.kr로 올리는 파일이 증빙관리에서 바로 보이게 한다.
@@ -16204,6 +16212,9 @@ function work_readRow_(col, rowValues) {
   let evidenceList = [];
   try { evidenceList = JSON.parse(rowValues[col.증빙목록] || '[]'); } catch (e) { evidenceList = []; }
   if (!Array.isArray(evidenceList)) evidenceList = [];
+  let taxCalcResults = [];
+  try { taxCalcResults = JSON.parse(rowValues[col.세액계산결과] || '[]'); } catch (e) { taxCalcResults = []; }
+  if (!Array.isArray(taxCalcResults)) taxCalcResults = [];
   return {
     id: rowValues[col.id],
     고객ID: rowValues[col.고객ID],
@@ -16224,6 +16235,7 @@ function work_readRow_(col, rowValues) {
     작업일지: workLog,
     법령예규판례: precedents,
     증빙목록: evidenceList,
+    세액계산결과: taxCalcResults,
     my_report_id: rowValues[col.my_report_id],
     폴더ID: rowValues[col.폴더ID],
     생성일: rowValues[col.생성일],
@@ -16314,6 +16326,7 @@ function work_createCase(params) {
     newRow[col.작업일지] = '[]';
     newRow[col.법령예규판례] = '[]';
     newRow[col.증빙목록] = '[]';
+    newRow[col.세액계산결과] = '[]';
     newRow[col.폴더ID] = work_getOrCreateCaseFolder_(고객명, 사건명);
     newRow[col.생성일] = now;
     newRow[col.수정일] = now;
@@ -16355,6 +16368,11 @@ function work_updateCase(params) {
       let evidenceList = params.증빙목록;
       if (typeof evidenceList === 'string') { try { evidenceList = JSON.parse(evidenceList); } catch (e) { evidenceList = null; } }
       if (Array.isArray(evidenceList)) row[col.증빙목록] = JSON.stringify(evidenceList);
+    }
+    if (params.세액계산결과 !== undefined) {
+      let taxCalcResults = params.세액계산결과;
+      if (typeof taxCalcResults === 'string') { try { taxCalcResults = JSON.parse(taxCalcResults); } catch (e) { taxCalcResults = null; } }
+      if (Array.isArray(taxCalcResults)) row[col.세액계산결과] = JSON.stringify(taxCalcResults);
     }
     if (params.고객명 !== undefined) {
       row[col.고객ID] = params.고객명 ? client_findOrCreateByName_(row[col.고객명]).id : '';
