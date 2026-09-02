@@ -200,7 +200,7 @@
       const 다목 = heirTaxableAmountShare - giftAmount;
       const ratio다나 = 나목 > 0 ? (다목 / 나목) : 0;
       const taxableBaseEquivalent = giftTaxableBase + 가목 * ratio다나; // 상속인별 상속세과세표준상당액
-      const grossTaxShare = overallCalculatedTax * actualValueRatio; // 그 상속인이 납부할 상속세액(§3조의2②)
+      const grossTaxShare = overallCalculatedTax * actualValueRatio; // 그 상속인이 납부할 상속세액(§3조의2①)
       const limit = taxableBaseEquivalent > 0 ? Math.round(grossTaxShare * Math.min(1, giftTaxableBase / taxableBaseEquivalent)) : 0;
       const credit = Math.min(giftTaxPaid, Math.round(grossTaxShare), limit);
       totalCredit += credit;
@@ -5274,8 +5274,13 @@
     const limitShares = totalIssuedShares * ratio;
     const combinedShares = donatedShares + priorRelatedShares;
     const excessShares = Math.max(0, combinedShares - limitShares);
-    const excessSharesFromThisDonation = Math.min(excessShares, donatedShares);
+    let excessSharesFromThisDonation = Math.min(excessShares, donatedShares);
     const valuePerShare = donatedAmount / donatedShares;
+    let exemptionNote = '';
+    if (p.isExemptFromExcessInclusion && excessSharesFromThisDonation > 0) {
+      exemptionNote = ' §16③(' + (p.exemptionGround === 'authority_approved' ? '1호, 주무관청이 목적사업 효율수행을 위해 필요하다고 인정' : p.exemptionGround === 'sold_within_3years' ? '2호, §48⑪요건 충족 공익법인이 초과보유일부터 3년 이내 초과분 매각' : p.exemptionGround === 'other_statute' ? '3호, 공익법인의 설립·운영에 관한 법률 등 다른 법령에 따른 출연' : '각 호') + ' 예외에 해당해 초과분(' + excessSharesFromThisDonation + '주 상당 ' + Math.round(valuePerShare * excessSharesFromThisDonation) + '원)을 과세가액에 산입하지 않습니다' + (taxType === 'gift' ? '(§48①단서가 §16③ 각 호를 그대로 인용).' : '.');
+      excessSharesFromThisDonation = 0;
+    }
     const taxableInclusionAmount = Math.round(valuePerShare * excessSharesFromThisDonation);
     const exclusionAmount = donatedAmount - taxableInclusionAmount;
 
@@ -5286,6 +5291,7 @@
       안내: (excessSharesFromThisDonation > 0
         ? '이번 출연분을 포함한 합산 주식수(' + combinedShares + '주)가 발행주식총수등의 ' + Math.round(ratio * 100) + '%(' + Math.round(limitShares) + '주)를 초과해, 그 초과분에 상당하는 가액(' + taxableInclusionAmount + '원)을 과세가액에 산입합니다(' + (taxType === 'inheritance' ? '§16②' : '§48①단서') + ').'
         : '합산 주식수가 한도(' + Math.round(ratio * 100) + '%, ' + Math.round(limitShares) + '주) 이내여서 전액 과세가액에 산입하지 않습니다.')
+        + exemptionNote
         + ' §48②의 8가지 사후관리 위반 사유(용도외사용·3년내미사용·초과주식취득·운용소득미사용 등)에 따른 즉시증여세 부과는 이 계산기가 다루지 않으니 해당 사안이면 별도로 확인하세요.'
     };
   };
