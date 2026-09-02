@@ -165,7 +165,7 @@
       '</select></label>' +
       '<label>업무유형<br><select id="wcNewUptype" style="width:100%;"></select></label>' +
       '<label>담당자<br><input type="text" id="wcNewAssignee" style="width:100%;" placeholder="(선택)"></label>' +
-      '<label>의뢰일<br><input type="date" id="wcNewRequestDate" style="width:100%;"></label>' +
+      '<label>의뢰일<br><div style="display:flex; gap:6px;"><input type="date" id="wcNewRequestDate" style="flex:1;"><button type="button" id="wcNewRequestDateToday" class="ghost-btn" style="padding:4px 10px; font-size:12px; white-space:nowrap;">오늘</button></div></label>' +
       '<label>기준일 <span id="wcNewBaseDateHint" style="color:var(--sub); font-weight:400;">(양도일·증여일·사망일 등)</span><br><input type="date" id="wcNewBaseDate" style="width:100%;"></label>' +
       '<label id="wcNewManualDeadlineLabel" style="display:none;"><span id="wcNewManualDeadlineText">처리시한</span><br><input type="date" id="wcNewManualDeadline" style="width:100%;"></label>' +
       '<label>진행메모<br><textarea id="wcNewOverview" style="width:100%; min-height:60px; font-family:inherit; box-sizing:border-box;" placeholder="어떻게 처리할 계획인지">' + escapeHtml(prefill.개요 || '') + '</textarea></label>' +
@@ -196,6 +196,10 @@
     newSemokSel.addEventListener('change', refillNewUptype);
     newUptypeSel.addEventListener('change', onNewUptypeChange);
     refillNewUptype();
+
+    document.getElementById('wcNewRequestDateToday').addEventListener('click', function(){
+      document.getElementById('wcNewRequestDate').value = new Date().toISOString().slice(0, 10);
+    });
 
     document.getElementById('wcNewCancel').addEventListener('click', function(){
       workShowingNewForm = false;
@@ -254,7 +258,7 @@
       '<select id="wcEditSemok">' + Object.keys(WORK_SEMOK_LABELS).map(function(k){ return '<option value="' + k + '"' + (k === c.세목 ? ' selected' : '') + '>' + WORK_SEMOK_LABELS[k] + '</option>'; }).join('') + '</select>' +
       '<select id="wcEditUptype"></select>' +
       '<input type="text" id="wcEditAssignee" placeholder="담당자" value="' + escapeHtml(c.담당자 || '') + '" style="width:100px;">' +
-      '<label style="font-size:12px; color:var(--sub);">의뢰일 <input type="date" id="wcEditRequestDate" value="' + escapeHtml(c.의뢰일 || '') + '"></label>' +
+      '<label style="font-size:12px; color:var(--sub);">의뢰일 <input type="date" id="wcEditRequestDate" value="' + escapeHtml(c.의뢰일 || '') + '"> <button type="button" id="wcEditRequestDateToday" class="ghost-btn" style="padding:2px 8px; font-size:11px;">오늘</button></label>' +
       '<label style="font-size:12px; color:var(--sub);">기준일 <input type="date" id="wcEditBaseDate" value="' + escapeHtml(c.기준일 || '') + '"></label>' +
       '<select id="wcEditStatus">' + WORK_STATUS_OPTIONS.map(function(s){ return '<option value="' + s + '"' + (s === c.상태 ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>' +
       '<button type="button" id="wcSaveCase" class="ghost-btn">저장</button>' +
@@ -327,6 +331,10 @@
     editSemokSel.addEventListener('change', function(){ refillEditUptype(false); });
     editUptypeSel.addEventListener('change', onEditUptypeChange);
     refillEditUptype(true);
+
+    document.getElementById('wcEditRequestDateToday').addEventListener('click', function(){
+      document.getElementById('wcEditRequestDate').value = new Date().toISOString().slice(0, 10);
+    });
 
     function saveCaseNow_(silent){
       var customerName = document.getElementById('wcEditCustomerName').value.trim();

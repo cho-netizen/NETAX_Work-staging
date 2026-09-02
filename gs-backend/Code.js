@@ -300,11 +300,11 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'search_tax_precedent',
-    description: '국가법령정보센터에서 판례·법령해석례(예규성격)·행정규칙(국세청 훈령·고시·예규)을 키워드로 검색한다. "이거 관련 판례 있어?", "예규 찾아줘"처럼 요청했을 때, 또는 세법 쟁점에 대한 실제 선례·해석이 필요할 때 써라. 검색 결과가 많을 수 있으니(수백 건도 흔함) 목록에서 가장 관련 있어 보이는 것을 골라 id를 get_tax_precedent_detail에 넘겨 원문을 가져와라. 결과가 너무 많거나 애매하면 검색어를 더 구체적으로 좁혀서 다시 검색하라.',
+    description: '국가법령정보센터에서 판례·법령해석례(예규성격)·행정규칙(국세청 훈령·고시·예규)·조세심판원 결정례·헌재결정례·법령(법률/시행령/시행규칙)·별표서식을 키워드로 검색한다. "이거 관련 판례 있어?", "예규 찾아줘", "심판례 있어?"처럼 요청했을 때, 또는 세법 쟁점에 대한 실제 선례·해석·근거법령이 필요할 때 써라. 검색 결과가 많을 수 있으니(수백 건도 흔함) 목록에서 가장 관련 있어 보이는 것을 골라 id를 get_tax_precedent_detail에 넘겨 원문을 가져와라(law·form은 검색결과 자체가 정보라 상세조회가 없다). 결과가 너무 많거나 애매하면 검색어를 더 구체적으로 좁혀서 다시 검색하라.',
     input_schema: {
       type: 'object',
       properties: {
-        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule'], description: 'precedent=판례(법원 판결, 세무 관련도 포함), interpretation=법령해석례(기획재정부·국세청 등의 질의에 대한 법제처 회신, 예규와 성격이 비슷함), administrative_rule=행정규칙(국세청 등의 훈령·고시·예규)' },
+        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule', 'tax_tribunal', 'constitutional', 'law', 'form'], description: 'precedent=법원 판례, interpretation=법령해석례(기획재정부·국세청 등의 질의에 대한 법제처 회신), administrative_rule=행정규칙(국세청 등의 훈령·고시·예규·집행기준·통칙 포함), tax_tribunal=조세심판원 결정례(심판청구), constitutional=헌법재판소 결정례, law=현행 법령(법률·시행령·시행규칙), form=법령·행정규칙에 딸린 별표·서식' },
         query: { type: 'string', description: '검색 키워드(예: "상속세 시가 매매사례가액", "공익법인 전용계좌")' }
       },
       required: ['category', 'query']
@@ -312,11 +312,11 @@ const DRIVE_TOOLS = [
   },
   {
     name: 'get_tax_precedent_detail',
-    description: 'search_tax_precedent로 찾은 판례·법령해석례·행정규칙의 id로 그 원문(전체 내용)을 가져온다. category와 id는 반드시 search_tax_precedent 결과에서 그대로 가져와야 한다(직접 지어내지 마라).',
+    description: 'search_tax_precedent로 찾은 항목의 id로 그 원문(전체 내용)을 가져온다. category와 id는 반드시 search_tax_precedent 결과에서 그대로 가져와야 한다(직접 지어내지 마라). law·form 카테고리는 상세조회가 없다 — 검색결과 필드 자체를 그대로 인용하라.',
     input_schema: {
       type: 'object',
       properties: {
-        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule'], description: 'search_tax_precedent에서 쓴 것과 같은 category' },
+        category: { type: 'string', enum: ['precedent', 'interpretation', 'administrative_rule', 'tax_tribunal', 'constitutional'], description: 'search_tax_precedent에서 쓴 것과 같은 category(law·form 제외 — 상세조회 없음)' },
         id: { type: 'string', description: 'search_tax_precedent 결과의 id(일련번호)' }
       },
       required: ['category', 'id']
@@ -3782,12 +3782,36 @@ const TAX_PRECEDENT_CATEGORY_ = {
     target: 'admrul',
     searchFields: { id: '행정규칙일련번호', 행정규칙명: '행정규칙명', 행정규칙종류: '행정규칙종류', 발령일자: '발령일자', 발령번호: '발령번호', 소관부처: '소관부처명' }
     // 행정규칙 상세는 기본정보+조문내용(배열)로 구조가 달라서 detailFields 없이 아래서 따로 처리.
+  },
+  // [2026.09] 법령관리 재설계 — 국세법령정보시스템(taxlaw.nts.go.kr)의 분류(법령/세법해석례/
+  // 판례·결정례/별표·서식)를 참고해 3개를 추가했다. 실제 호출로 확인한 것: 반복되는 항목의
+  // XML 태그명이 target 값과 다른 경우가 있어(예: target=eflaw인데 항목 태그는 <law>) itemTag를
+  // 따로 둔다(없으면 target과 같다고 본다).
+  tax_tribunal: {
+    target: 'ttSpecialDecc', itemTag: 'decc',
+    searchFields: { id: '특별행정심판재결례일련번호', 사건명: '사건명', 청구번호: '청구번호', 의결일자: '의결일자', 재결청: '재결청', 재결구분명: '재결구분명' },
+    detailFields: { 사건명: '사건명', 재결요지: '재결요지', 이유: '이유', 주문: '주문' }
+  },
+  constitutional: {
+    target: 'detc', itemTag: 'Detc',
+    searchFields: { id: '헌재결정례일련번호', 사건명: '사건명', 사건번호: '사건번호', 종국일자: '종국일자' },
+    detailFields: { 사건명: '사건명', 판시사항: '판시사항', 결정요지: '결정요지' }
+  },
+  law: {
+    target: 'eflaw', itemTag: 'law',
+    // 법령은 상세본문이 조문 단위라 복잡해서 검색결과 필드만으로 첨부한다(상세조회 없음 — 프론트에서 안 부름).
+    searchFields: { id: '법령일련번호', 법령명: '법령명한글', 법령구분: '법령구분명', 소관부처: '소관부처명', 공포일자: '공포일자', 시행일자: '시행일자' }
+  },
+  form: {
+    target: 'licbyl',
+    // 별표·서식도 상세조회 없이 검색결과(파일링크 포함)만으로 첨부한다.
+    searchFields: { id: '별표일련번호', 별표명: '별표명', 관련법령명: '관련법령명', 별표종류: '별표종류', 소관부처: '소관부처명', 공포일자: '공포일자', 파일링크: '별표서식파일링크' }
   }
 };
 
 function toolSearchTaxPrecedent(category, query) {
   const conf = TAX_PRECEDENT_CATEGORY_[category];
-  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule 중 하나여야 합니다.' };
+  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule, tax_tribunal, constitutional, law, form 중 하나여야 합니다.' };
   if (!query || !String(query).trim()) return { error: '검색어가 없습니다.' };
 
   const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
@@ -3801,7 +3825,7 @@ function toolSearchTaxPrecedent(category, query) {
     const doc = XmlService.parse(res.getContentText('UTF-8'));
     const root = doc.getRootElement();
     const totalCnt = Number(root.getChildText('totalCnt')) || 0;
-    const items = root.getChildren(conf.target).map(function (el) {
+    const items = root.getChildren(conf.itemTag || conf.target).map(function (el) {
       const item = {};
       Object.keys(conf.searchFields).forEach(function (key) {
         item[key] = (el.getChildText(conf.searchFields[key]) || '').trim();
@@ -3820,7 +3844,7 @@ function toolSearchTaxPrecedent(category, query) {
 
 function toolGetTaxPrecedentDetail(category, id) {
   const conf = TAX_PRECEDENT_CATEGORY_[category];
-  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule 중 하나여야 합니다.' };
+  if (!conf) return { error: 'category는 precedent, interpretation, administrative_rule, tax_tribunal, constitutional 중 하나여야 합니다.' };
   if (!id) return { error: 'id가 없습니다(search_tax_precedent 결과의 id를 그대로 넘겨야 함).' };
 
   const ocKey = PropertiesService.getScriptProperties().getProperty('LAW_OC');
@@ -16231,6 +16255,9 @@ function work_getCases(params) {
 
 // [2026.09] 5단계 — 사건 시작 시 증빙관리(getDefaultFolder(), "고객사건" 루트)에 자동으로 폴더를
 // 만든다. 이미 같은 이름 폴더가 있으면(예: 메모에서 먼저 만들어졌거나 재시도) 그대로 재사용한다.
+// my.netax.kr 연결 여부와 상관없이 "제출자료"/"보고서" 하위폴더도 처음부터 같이 만들어둔다
+// (my_getOrCreateSubfolder_·MY_SUBFOLDER_UPLOAD/REPORT는 my_ 모듈이 이미 쓰던 것 그대로 재사용 —
+// 나중에 my.netax.kr에 연결해도 같은 이름이라 새로 안 만들고 이 폴더를 그대로 쓰게 된다).
 // 실패해도(Drive 권한 등) 사건 생성 자체는 막지 않는다 — 폴더ID가 빈 채로 저장될 뿐이다.
 function work_getOrCreateCaseFolder_(고객명, 사건명) {
   try {
@@ -16238,8 +16265,10 @@ function work_getOrCreateCaseFolder_(고객명, 사건명) {
     if (!folderName) return '';
     const root = getDefaultFolder();
     const existing = root.getFoldersByName(folderName);
-    if (existing.hasNext()) return existing.next().getId();
-    return root.createFolder(folderName).getId();
+    const caseFolder = existing.hasNext() ? existing.next() : root.createFolder(folderName);
+    my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_UPLOAD);
+    my_getOrCreateSubfolder_(caseFolder, MY_SUBFOLDER_REPORT);
+    return caseFolder.getId();
   } catch (err) {
     return '';
   }

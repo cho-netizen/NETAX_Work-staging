@@ -1,5 +1,5 @@
 <div class="view" id="view-casehandling">
-  <div class="view-head"><h2>🧭 사건처리</h2><p style="color:var(--sub); font-size:12.5px; margin:2px 0 0;">사건 하나를 골라 처리방향·처리대상을 정하고, 작업일지를 남기고, 법령예규판례를 찾아 첨부합니다. (작업관리는 목록·현황 확인용, 실제 처리는 여기서 합니다.)</p></div>
+  <div class="view-head"><h2>🧭 사건처리</h2><p style="color:var(--sub); font-size:12.5px; margin:2px 0 0;">사건 하나를 골라 처리방향·처리대상을 정하고, 작업일지를 남깁니다. 증빙·법령관리·my.netax.kr 연동은 각 카드에서 요약만 보고 실제 작업은 해당 화면에서 합니다.</p></div>
   <div class="view-body">
     <div class="card">
       <label style="display:block; font-size:12px; color:var(--sub); margin-bottom:5px;">처리할 사건</label>
@@ -82,44 +82,14 @@
       '<div id="chLogList"></div>' +
       '</div>' +
       '<div class="card">' +
-      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">⚖️ 법령예규판례</div>' +
-      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
-      '<select id="chLawCategory" style="width:120px;"><option value="precedent">판례</option><option value="interpretation">법령해석례</option><option value="administrative_rule">행정규칙</option></select>' +
-      '<input type="text" id="chLawQuery" placeholder="검색어 (예: 1세대1주택 비과세)" style="flex:1; min-width:160px;">' +
-      '<button type="button" id="chLawSearchBtn" class="ghost-btn">검색</button>' +
-      '</div>' +
-      '<div id="chLawResults"></div>' +
-      '<div style="margin-top:12px;">' +
-      '<div style="font-size:12px; color:var(--sub); margin-bottom:6px;">이 사건에 첨부된 자료</div>' +
-      '<div id="chLawAttached"></div>' +
-      '</div>' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">⚖️ 법령관리</div>' +
+      '<div style="font-size:13px; color:var(--sub); margin-bottom:10px;">' + ((c.법령예규판례 || []).length ? ('첨부된 자료 ' + (c.법령예규판례 || []).length + '건') : '아직 첨부된 자료가 없습니다.') + '</div>' +
+      '<button type="button" id="chLawOpenBtn" class="ghost-btn">⚖️ 법령관리에서 열기</button>' +
       '</div>' +
       '<div class="card">' +
-      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:10px;">📁 증빙</div>' +
-      '<div style="margin-bottom:18px;">' +
-      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">자동확보</div>' +
-      '<button type="button" id="chEvAutoAddrBtn" class="ghost-btn" style="margin-bottom:8px;">🏠 주소로 자동조회(실거래가·공시가격)</button>' +
-      '<div id="chEvAutoPicked"></div>' +
-      '<div id="chEvListAuto"></div>' +
-      '</div>' +
-      '<div style="margin-bottom:18px;">' +
-      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">추가확보</div>' +
-      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
-      '<input type="text" id="chEvManualLabel" placeholder="자료명 (예: 등기부등본)" style="flex:1; min-width:140px;">' +
-      '<input type="text" id="chEvManualNote" placeholder="메모·링크(선택)" style="flex:1; min-width:140px;">' +
-      '<button type="button" id="chEvManualAddBtn" class="save-btn">추가</button>' +
-      '</div>' +
-      '<div id="chEvListManual"></div>' +
-      '</div>' +
-      '<div>' +
-      '<div style="font-size:12px; font-weight:600; color:var(--sub); margin-bottom:6px;">요청자료 <span style="font-weight:400;">(고객에게 요청)</span></div>' +
-      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
-      '<input type="text" id="chEvReqLabel" placeholder="요청할 자료명 (예: 매매계약서)" style="flex:1; min-width:140px;">' +
-      '<input type="text" id="chEvReqNote" placeholder="메모(선택)" style="flex:1; min-width:140px;">' +
-      '<button type="button" id="chEvReqAddBtn" class="save-btn">추가</button>' +
-      '</div>' +
-      '<div id="chEvListRequested"></div>' +
-      '</div>' +
+      '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:8px;">📁 증빙</div>' +
+      '<div id="chEvSummary" style="font-size:13px; color:var(--sub); margin-bottom:10px;"></div>' +
+      '<button type="button" id="chEvOpenDocsBtn" class="ghost-btn">📁 증빙관리에서 열기</button>' +
       '</div>' +
       '<div class="card">' +
       '<div style="font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:10px;">🔗 my.netax.kr 고객포털</div>' +
@@ -140,8 +110,10 @@
     });
 
     chRenderLog_(c);
-    chInitLawSection_(c);
-    chInitEvidenceSection_(c);
+    document.getElementById('chLawOpenBtn').addEventListener('click', function(){
+      if (typeof goToLawSearch_ === 'function') goToLawSearch_(c.id);
+    });
+    chRenderEvidenceSummary_(c);
     chInitMyPortal_(c);
   }
 
@@ -208,103 +180,8 @@
     });
   }
 
-  var CH_LAW_CATEGORY_LABELS_ = { precedent: '판례', interpretation: '법령해석례', administrative_rule: '행정규칙' };
-
-  function chLawResultTitle_(category, item){
-    if (category === 'precedent') return { title: item.사건명 || '(제목 없음)', sub: [item.사건번호, item.선고일자, item.법원명].filter(Boolean).join(' · ') };
-    if (category === 'interpretation') return { title: item.안건명 || '(제목 없음)', sub: [item.안건번호, item.회신일자, item.질의기관].filter(Boolean).join(' · ') };
-    return { title: item.행정규칙명 || '(제목 없음)', sub: [item.행정규칙종류, item.발령일자, item.소관부처].filter(Boolean).join(' · ') };
-  }
-
-  function chLawDetailSummary_(category, detail){
-    var text = category === 'precedent' ? (detail.판결요지 || detail.판시사항 || '')
-      : category === 'interpretation' ? (detail.회답 || detail.질의요지 || '')
-      : (detail.내용 || '');
-    text = String(text).trim();
-    return text.length > 300 ? text.slice(0, 300) + '…' : text;
-  }
-
-  function chSavePrecedents_(caseId, newList){
-    return callGas('work_update_case', { id: caseId, 법령예규판례: newList }).then(function(res){
-      if (res.success === false){ showToast(res.message || '저장 실패', 'error'); return null; }
-      loadChCases_();
-      if (typeof loadWorkCases === 'function') loadWorkCases();
-      return res;
-    }).catch(function(err){ showToast('저장 중 오류: ' + (err && err.message ? err.message : err), 'error'); return null; });
-  }
-
-  function chRenderAttachedPrecedents_(c){
-    var wrap = document.getElementById('chLawAttached');
-    if (!wrap) return;
-    var list = c.법령예규판례 || [];
-    if (!list.length){
-      wrap.innerHTML = '<div class="log-empty">아직 첨부된 자료가 없습니다.</div>';
-      return;
-    }
-    wrap.innerHTML = '';
-    list.slice().reverse().forEach(function(entry){
-      var row = document.createElement('div');
-      row.className = 'log-entry';
-      row.innerHTML =
-        '<div class="log-date">' + escapeHtml(CH_LAW_CATEGORY_LABELS_[entry.category] || entry.category) + '</div>' +
-        '<div class="log-text"><b>' + escapeHtml(entry.제목 || '') + '</b>' +
-        (entry.요약 ? '<br><span style="color:var(--sub); font-size:12.5px;">' + escapeHtml(entry.요약) + '</span>' : '') + '</div>' +
-        '<span class="log-del" title="첨부 해제">✕</span>';
-      row.querySelector('.log-del').addEventListener('click', function(){
-        var newList = list.filter(function(e){ return !(e.category === entry.category && e.id === entry.id); });
-        chSavePrecedents_(c.id, newList);
-      });
-      wrap.appendChild(row);
-    });
-  }
-
-  function chInitLawSection_(c){
-    chRenderAttachedPrecedents_(c);
-    var resultsBox = document.getElementById('chLawResults');
-    var categorySel = document.getElementById('chLawCategory');
-    var queryInput = document.getElementById('chLawQuery');
-
-    function runSearch(){
-      var query = queryInput.value.trim();
-      if (!query){ showToast('검색어를 입력해주세요.', 'warning'); return; }
-      var category = categorySel.value;
-      resultsBox.innerHTML = '<div class="log-empty">검색 중…</div>';
-      callGas('law_search_precedent', { category: category, query: query }).then(function(res){
-        var items = res.results || [];
-        if (!items.length){ resultsBox.innerHTML = '<div class="log-empty">' + escapeHtml(res.message || '검색 결과가 없습니다.') + '</div>'; return; }
-        resultsBox.innerHTML = '';
-        items.forEach(function(item){
-          var t = chLawResultTitle_(category, item);
-          var row = document.createElement('div');
-          row.className = 'log-entry';
-          row.innerHTML =
-            '<div class="log-text" style="flex:1;"><b>' + escapeHtml(t.title) + '</b>' +
-            (t.sub ? '<br><span style="color:var(--sub); font-size:12px;">' + escapeHtml(t.sub) + '</span>' : '') + '</div>' +
-            '<button type="button" class="ghost-btn chLawAttachBtn" style="padding:3px 8px; font-size:12px;">➕ 첨부</button>';
-          row.querySelector('.chLawAttachBtn').addEventListener('click', function(){
-            var attachBtn = row.querySelector('.chLawAttachBtn');
-            attachBtn.disabled = true;
-            attachBtn.textContent = '조회 중…';
-            function doAttach_(요약){
-              var entry = { category: category, id: item.id, 제목: t.title, 요약: 요약, 첨부일: new Date().toISOString().slice(0, 10) };
-              var already = (c.법령예규판례 || []).some(function(e){ return e.category === entry.category && e.id === entry.id; });
-              if (already){ showToast('이미 첨부된 자료입니다.', 'warning'); attachBtn.disabled = false; attachBtn.textContent = '➕ 첨부'; return; }
-              var newList = (c.법령예규판례 || []).concat([entry]);
-              chSavePrecedents_(c.id, newList);
-            }
-            callGas('law_get_precedent_detail', { category: category, id: item.id }).then(function(detail){
-              doAttach_(chLawDetailSummary_(category, detail));
-            }).catch(function(){
-              doAttach_((t.sub || '') + '\n(원문 없음 — 검색결과 기본정보만 첨부됨)');
-            });
-          });
-          resultsBox.appendChild(row);
-        });
-      }).catch(function(err){ resultsBox.innerHTML = '<div class="log-empty">' + escapeHtml(err && err.message ? err.message : '검색 중 오류가 발생했습니다.') + '</div>'; });
-    }
-    document.getElementById('chLawSearchBtn').addEventListener('click', runSearch);
-    queryInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); runSearch(); } });
-  }
+  // 법령예규판례 검색·첨부 UI는 별도 탭(lawsearch.html)으로 옮겼다 — "사건처리=대시보드,
+  // 실제 작업은 각 처리 화면에서"라는 원칙에 맞춰 여기는 요약+이동 버튼만 남긴다.
 
   // 작업관리 사건 상세화면의 "🧭 이 사건 처리하기" 버튼에서 호출 — 사건처리 화면으로 이동하고
   // 그 사건을 바로 골라준다.
@@ -315,10 +192,11 @@
   }
 
   // ============================================================
-  // 3단계 — 증빙 3분류(자동확보/추가확보/요청자료). 자동확보는 세액계산 화면이 이미 쓰고 있는
-  // 주소검색(openAddressSearchModal_)·실거래가(openRealPriceModal_) 모달과 searchAddress/
-  // lookupRealPrice/lookupOfficialPrice 액션을 그대로 재사용한다(같은 화면 안에서 전역으로
-  // 공유되므로 새로 만들지 않음). 추가확보·요청자료는 수동 입력 + 확보상태 토글.
+  // 3단계였던 증빙 3분류(자동확보/추가확보/요청자료)의 실제 목록·검색·추가 UI는 증빙관리
+  // (docs.html)로 옮겼다 — "사건처리=이 사건의 대시보드, 실제 작업(파일)은 증빙관리"라는
+  // 원칙에 맞게, 여기서는 건수 요약과 증빙관리로 바로 이동하는 버튼만 둔다. 다만 저장
+  // 함수(chSaveEvidence_/chAddEvidence_)는 my포털 카드의 "요청자료 추가"(chAddRequestedItem_)가
+  // 여전히 써서 여기 남겨뒀다.
   // ============================================================
   function chSaveEvidence_(caseId, newList){
     callGas('work_update_case', { id: caseId, 증빙목록: newList }).then(function(res){
@@ -334,118 +212,30 @@
     chSaveEvidence_(c.id, newList);
   }
 
-  function chRenderEvidenceList_(c, source, containerId){
-    var box = document.getElementById(containerId);
-    if (!box) return;
-    var entries = (c.증빙목록 || []).filter(function(e){ return e.source === source; });
-    if (!entries.length){
-      box.innerHTML = '<div class="log-empty">없습니다.</div>';
-      return;
-    }
-    box.innerHTML = '';
-    entries.forEach(function(entry){
-      var row = document.createElement('div');
-      row.className = 'log-entry';
-      var got = entry.status === '확보됨';
-      row.innerHTML =
-        '<div class="log-date" style="color:' + (got ? 'var(--navy)' : 'var(--sub)') + ';">' + escapeHtml(entry.status || '') + '</div>' +
-        '<div class="log-text"><b>' + escapeHtml(entry.label || '') + '</b>' +
-        (entry.note ? '<br><span style="color:var(--sub); font-size:12.5px;">' + escapeHtml(entry.note) + '</span>' : '') + '</div>' +
-        (source !== 'auto' ? '<button type="button" class="ghost-btn chEvToggleBtn" style="padding:3px 8px; font-size:12px;">' + (got ? '미확보로' : '확보완료') + '</button>' : '') +
-        '<span class="log-del" title="삭제">✕</span>';
-      if (source !== 'auto'){
-        row.querySelector('.chEvToggleBtn').addEventListener('click', function(){
-          var newList = (c.증빙목록 || []).map(function(e){
-            if (e.id !== entry.id) return e;
-            var nowGot = e.status !== '확보됨';
-            return Object.assign({}, e, { status: nowGot ? '확보됨' : '미확보', 확보일: nowGot ? new Date().toISOString().slice(0, 10) : e.확보일 });
-          });
-          chSaveEvidence_(c.id, newList);
-        });
-      }
-      row.querySelector('.log-del').addEventListener('click', function(){
-        var newList = (c.증빙목록 || []).filter(function(e){ return e.id !== entry.id; });
-        chSaveEvidence_(c.id, newList);
+  function chRenderEvidenceSummary_(c){
+    var el = document.getElementById('chEvSummary');
+    if (!el) return;
+    var list = c.증빙목록 || [];
+    var auto = list.filter(function(e){ return e.source === 'auto'; }).length;
+    var manual = list.filter(function(e){ return e.source === 'manual'; }).length;
+    var requested = list.filter(function(e){ return e.source === 'requested'; });
+    var reqPending = requested.filter(function(e){ return e.status !== '확보됨'; }).length;
+    el.textContent = list.length
+      ? ('자동확보 ' + auto + '건 · 추가확보 ' + manual + '건 · 요청자료 ' + requested.length + '건(미확보 ' + reqPending + '건)')
+      : '아직 등록된 증빙이 없습니다.';
+    document.getElementById('chEvOpenDocsBtn').addEventListener('click', function(){
+      // listFolder는 path가 있으면 절대 루트부터 이름을 따라 내려가므로, "고객사건" 기본폴더
+      // 까지의 전체 경로(getCustomerRootPath_)를 먼저 구해서 사건명을 그 뒤에 붙여야 한다.
+      getCustomerRootPath_().then(function(basePath){
+        // [버그수정] 증빙관리를 이번 페이지에서 처음 여는 거면 goToView_('docs')가 내부적으로
+        // initDocs()를 불러 자기 나름의 기본 위치(고객사건 폴더 자체)로 또 이동시켜버린다 —
+        // 그게 우리가 지금 지정하는 사건 폴더 이동과 동시에 실행되면서 경쟁하다가, 매번
+        // "기본 위치"(=사건 폴더 바로 위)가 이겨서 그쪽으로 보였다. docsLoaded를 먼저 true로
+        // 표시해 initDocs()의 자체 이동을 막아둔다.
+        docsLoaded = true;
+        if (typeof goToView_ === 'function') goToView_('docs');
+        if (typeof docsNavigate === 'function') docsNavigate(basePath.concat([(c.고객명 + ' ' + c.사건명).trim()]));
       });
-      box.appendChild(row);
-    });
-  }
-
-  function chRenderEvAutoPicked_(c, picked){
-    var box = document.getElementById('chEvAutoPicked');
-    if (!box) return;
-    var lawdCd = (picked.admCd || '').slice(0, 5);
-    box.innerHTML =
-      '<div style="background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px;">' +
-      '<div style="font-size:12.5px; margin-bottom:6px;"><b>' + escapeHtml(picked.roadAddr || picked.jibunAddr || '') + '</b></div>' +
-      '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px;">' +
-      '<button type="button" id="chEvRealPriceBtn" class="ghost-btn" style="font-size:12px;">실거래가 조회(참고)</button>' +
-      '</div>' +
-      '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">' +
-      '<select id="chEvPriceKind" style="width:140px;"><option value="land">개별공시지가(토지)</option><option value="apartment">공동주택가격</option><option value="house">개별주택가격</option></select>' +
-      '<input type="text" id="chEvDong" placeholder="동(선택)" style="width:70px;">' +
-      '<input type="text" id="chEvHo" placeholder="호" style="width:70px;">' +
-      '<button type="button" id="chEvPriceBtn" class="ghost-btn" style="font-size:12px;">공시가격 조회</button>' +
-      '</div>' +
-      '</div>';
-
-    document.getElementById('chEvRealPriceBtn').addEventListener('click', function(){
-      if (!lawdCd){ showToast('이 주소는 법정동코드를 확인할 수 없습니다.', 'error'); return; }
-      if (typeof openRealPriceModal_ !== 'function'){ showToast('실거래가 조회 기능을 불러오지 못했습니다.', 'error'); return; }
-      openRealPriceModal_(lawdCd, function(item){
-        chAddEvidence_(c, {
-          source: 'auto',
-          label: '실거래가: ' + (item.aptNm || '') + ' ' + (item.dong || '') + ' ' + (item.jibun || ''),
-          note: (item.area || '') + '㎡ · ' + (item.floor || '') + '층 · ' + (item.dealDate || '') + ' · ' + Number(item.dealAmount || 0).toLocaleString() + '원',
-          status: '확보됨', 확보일: new Date().toISOString().slice(0, 10)
-        });
-      });
-    });
-
-    document.getElementById('chEvPriceBtn').addEventListener('click', function(){
-      var priceKind = document.getElementById('chEvPriceKind').value;
-      var dong = document.getElementById('chEvDong').value.trim();
-      var ho = document.getElementById('chEvHo').value.trim();
-      if (!picked.admCd || !picked.lnbrMnnm){ showToast('이 주소는 지번 정보가 부족해 공시가격을 조회할 수 없습니다.', 'error'); return; }
-      var san = String(picked.mtYn) === '1' ? '2' : '1';
-      var mnnm = ('0000' + picked.lnbrMnnm).slice(-4);
-      var slno = ('0000' + (picked.lnbrSlno || '0')).slice(-4);
-      var pnu = picked.admCd + san + mnnm + slno;
-      callGas('lookupOfficialPrice', { pnu: pnu, priceKind: priceKind, dong: dong, ho: ho }).then(function(data){
-        if (data.error){ showToast(data.error, 'error'); return; }
-        var kindLabel = priceKind === 'apartment' ? '공동주택가격' : priceKind === 'house' ? '개별주택가격' : '개별공시지가';
-        chAddEvidence_(c, {
-          source: 'auto',
-          label: kindLabel + ': ' + Number(data.price).toLocaleString() + '원',
-          note: (picked.roadAddr || picked.jibunAddr || '') + (dong ? ' ' + dong + '동' : '') + (ho ? ' ' + ho + '호' : '') + ' (기준연도 ' + data.stdrYear + ')',
-          status: '확보됨', 확보일: new Date().toISOString().slice(0, 10)
-        });
-      }).catch(function(err){ showToast('조회 중 오류: ' + (err && err.message ? err.message : err), 'error'); });
-    });
-  }
-
-  function chInitEvidenceSection_(c){
-    chRenderEvidenceList_(c, 'auto', 'chEvListAuto');
-    chRenderEvidenceList_(c, 'manual', 'chEvListManual');
-    chRenderEvidenceList_(c, 'requested', 'chEvListRequested');
-
-    document.getElementById('chEvAutoAddrBtn').addEventListener('click', function(){
-      if (typeof openAddressSearchModal_ !== 'function'){ showToast('주소검색 기능을 불러오지 못했습니다.', 'error'); return; }
-      openAddressSearchModal_(function(picked){ chRenderEvAutoPicked_(c, picked); });
-    });
-
-    document.getElementById('chEvManualAddBtn').addEventListener('click', function(){
-      var label = document.getElementById('chEvManualLabel').value.trim();
-      if (!label){ showToast('자료명을 입력해주세요.', 'warning'); return; }
-      var note = document.getElementById('chEvManualNote').value.trim();
-      chAddEvidence_(c, { source: 'manual', label: label, note: note, status: '확보됨', 확보일: new Date().toISOString().slice(0, 10) });
-    });
-
-    document.getElementById('chEvReqAddBtn').addEventListener('click', function(){
-      var label = document.getElementById('chEvReqLabel').value.trim();
-      if (!label){ showToast('요청할 자료명을 입력해주세요.', 'warning'); return; }
-      var note = document.getElementById('chEvReqNote').value.trim();
-      chAddRequestedItem_(c, label, note);
     });
   }
 
@@ -556,7 +346,10 @@
     var box = document.getElementById('chMyReports');
     if (!box) return;
     var folderName = (c.고객명 + ' ' + c.사건명).trim();
-    callGas('listFolder', { path: [folderName, '보고서'] }).then(function(res){
+    // listFolder는 path가 있으면 절대 루트부터 이름을 따라 내려가므로 "고객사건" 기본폴더까지의
+    // 전체 경로가 필요하다(위 "증빙관리에서 열기"와 같은 이유).
+    getCustomerRootPath_().then(function(basePath){
+    return callGas('listFolder', { path: basePath.concat([folderName, '보고서']) }).then(function(res){
       if (res.error){ box.innerHTML = '<div class="log-empty">' + escapeHtml(res.error) + '</div>'; return; }
       var files = res.files || [];
       var openLink = '<a href="https://drive.google.com/drive/folders/' + encodeURIComponent(res.folderId) + '" target="_blank" rel="noopener" class="ghost-btn" style="text-decoration:none; display:inline-block; font-size:12px; margin-bottom:8px;">📁 보고서 폴더 열기</a>';
@@ -571,6 +364,7 @@
       }).join('');
       box.innerHTML = openLink + rows +
         (otherFiles.length ? '<div style="font-size:12px; color:var(--sub); margin-top:6px;">그 외 파일(.html 아님, 고객에게 안 보임) ' + otherFiles.length + '건: ' + escapeHtml(otherFiles.map(function(f){ return f.name; }).join(', ')) + '</div>' : '');
+    });
     }).catch(function(){ box.innerHTML = '<div class="log-empty">불러오지 못했습니다.</div>'; });
   }
 </script>
