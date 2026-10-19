@@ -1,39 +1,12 @@
 {
-  "name": "NX-Work",
+  "name": "NX-Work (은퇴)",
   "short_name": "NX-Work",
-  "start_url": "/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0D1B3D",
   "theme_color": "#0D1B3D",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
-  ],
-  "shortcuts": [
-    {
-      "name": "새 메모",
-      "short_name": "새 메모",
-      "url": "/index.html?open=memo",
-      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
-    },
-    {
-      "name": "필기상담",
-      "short_name": "필기상담",
-      "url": "/index.html?open=note",
-      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
-    }
-  ],
-  "share_target": {
-    "action": "/index.html",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url",
-      "files": [
-        { "name": "files", "accept": ["image/*", "application/pdf", "text/plain"] }
-      ]
-    }
-  }
+  ]
 }

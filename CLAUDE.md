@@ -1,6 +1,9 @@
 # 이 저장소 전용 규칙
 # 전역 규칙(git 커밋/푸시, 운영 폴더 원칙 등)은 %USERPROFILE%\.claude\CLAUDE.md에서 항상 자동 적용됩니다.
 
+## 2026-10-20: work 은퇴
+work.netax.kr(이 저장소=dev.netax.kr 스테이징)은 2026-10-20 은퇴했다. index.html·report-writer/index.html·excel-viewer.html은 job.netax.kr/app/ 안내만 보여 주고 서버를 부르지 않는다. sw.js는 캐시를 지우고 스스로 해제하며, config.js의 API_SECRET은 비웠다. 옛 화면 코드는 git 기록에 있다.
+
 ## 2026-09-02: gs-backend 이전됨
 이 저장소 안에 있던 `gs-backend/`(새 관리 앱 코드, `?app=manage`로 접속하던 것)는
 `C:\GitHub\netax-job-redirect` 저장소로 옮겨갔다. 이 저장소는 원래 종전 채팅앱
